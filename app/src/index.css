@@ -1,0 +1,76 @@
+/* Schriften kommen self-hosted aus src/fonts.ts (@fontsource) — kein
+   Google-Fonts-CDN (DSGVO-Baseline). */
+@import "tailwindcss";
+
+/* ── A4 Print Layout ──────────────────────────────── */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f0ede8;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.cv-page {
+  width: 210mm;
+  background: #ffffff;
+  position: relative;
+}
+
+@media screen {
+  .cv-page {
+    box-shadow: 0 4px 40px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+}
+
+@media print {
+  body {
+    background: white;
+    padding: 0;
+    margin: 0;
+  }
+
+  [data-noprint] {
+    display: none !important;
+  }
+
+  #print-only-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .cv-scale-wrapper {
+    transform: none !important;
+    width: auto !important;
+  }
+
+  .cv-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .cv-page:last-of-type {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+}

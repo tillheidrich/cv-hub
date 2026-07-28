@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /share/
+Disallow: /pdfapi/
+
+# Sitemap is the canonical entry — /share/* tokens are personal and must
+# never end up in a public index.
+Sitemap: https://cv.example.com/sitemap.xml

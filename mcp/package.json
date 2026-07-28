@@ -1,0 +1,16 @@
+{
+  "name": "cv-hub-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP-Server für CV-Hub — Markdown-Brücke (Lesen/Schreiben von Lebensläufen & Anschreiben) für registrierte Nutzer via persönlichem API-Key.",
+  "bin": { "cv-hub-mcp": "cv-mcp.mjs" },
+  "scripts": {
+    "start": "node cv-mcp.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  }
+}

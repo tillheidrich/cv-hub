@@ -1,0 +1,28 @@
+CV-Hub
+Copyright (C) 2026 CV-Hub contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See the LICENSE file for the full text.
+
+──────────────────────────────────────────────────────────────────────────────
+Third-party components
+──────────────────────────────────────────────────────────────────────────────
+
+Fonts (self-hosted via @fontsource) are distributed under their own licenses,
+predominantly the SIL Open Font License 1.1 (OFL) and the Apache License 2.0.
+Each @fontsource package carries its own license and font copyright; those
+notices are retained in the respective node_modules packages and apply to the
+bundled font files. Font families include (non-exhaustive): Inter, Space
+Grotesk, IBM Plex (Mono/Sans/Serif), Playfair Display, Fraunces, JetBrains Mono,
+Lora, Source Sans 3, Source Serif 4, Merriweather, EB Garamond, Archivo, Libre
+Baskerville.
+
+Some résumé template layouts are inspired by the open-source project
+Reactive Resume (MIT-licensed). Any MIT-covered portions retain their original
+permission notice; the combined work is distributed under the AGPL-3.0 as
+permitted by the MIT license.
+
+All other dependencies are used under their respective open-source licenses
+(MIT / ISC / Apache-2.0 / BSD), as declared in the package manifests.

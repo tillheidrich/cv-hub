@@ -1,0 +1,611 @@
+/**
+ * i18n für die Editor-Chrome (obere Toolbar, Mobile-Tab-Bar, Aktionen).
+ * Folgt der UI-Sprache des Nutzers (uiLang) — unabhängig von der Sprache des
+ * bearbeiteten Lebenslaufs (settings.lang). Ein deutscher Nutzer, der einen
+ * französischen CV baut, will deutsche Bedienung + französischen Inhalt.
+ *
+ * Erste Scheibe: Navigations- und Aktions-Chrome. Feld-Labels/Placeholders
+ * innerhalb der Editor-Panels folgen in weiteren Scheiben.
+ */
+import { createContext, useContext } from 'react';
+import type { UiLang } from './i18n';
+
+export interface EditorStrings {
+  home: string;
+  // Mode-Tabs
+  edit: string; preview: string; export: string; tips: string;
+  // Dokumenttypen
+  resume: string; coverLetter: string;
+  // Speicherstatus
+  saved: string; saving: string; unsaved: string;
+  // Aktionen
+  font: string; versions: string; account: string; admin: string; demo: string;
+  createAccount: string; signOut: string;
+  // Tooltips (title=)
+  ttHome: string; ttFont: string; ttVersions: string; ttAccount: string;
+  ttAdmin: string; ttExitDemo: string; ttSignOut: string;
+  // Soft-Wall (Demo-Sperre)
+  swLimit: string; swTitle: string; swTitleAccent: string; swBody: string; swStay: string;
+}
+
+export const ET: Record<UiLang, EditorStrings> = {
+  de: {
+    home: 'HOME',
+    edit: 'Bearbeiten', preview: 'Vorschau', export: 'Export', tips: 'Tipps',
+    resume: 'Lebenslauf', coverLetter: 'Anschreiben',
+    saved: 'Gespeichert', saving: 'Speichert…', unsaved: 'Nicht gespeichert',
+    font: 'Schrift', versions: 'Versionen', account: 'Konto', admin: 'Admin', demo: 'DEMO',
+    createAccount: 'Konto anlegen →', signOut: 'Abmelden',
+    ttHome: 'Zurück zur Profilübersicht',
+    ttFont: 'Schrift & Seite',
+    ttVersions: 'Versionen — automatische Sicherungen vor Importen',
+    ttAccount: 'Einstellungen — Passwort, Daten, Konto',
+    ttAdmin: 'Admin-Bereich',
+    ttExitDemo: 'Demo verlassen und ein Konto anlegen',
+    ttSignOut: 'Abmelden',
+    swLimit: 'Demo-Limit', swTitle: 'Diese Funktion braucht ein', swTitleAccent: 'Konto.', swBody: 'Du bist gerade im Demo-Modus. Speichern, Sharelinks, Versionen und KI-Funktionen brauchen ein Konto — registrieren dauert 30 Sekunden, du bekommst einen Einladungscode von der Person, die dir das Tool gezeigt hat.', swStay: 'Weiter im Demo',
+  },
+  en: {
+    home: 'HOME',
+    edit: 'Edit', preview: 'Preview', export: 'Export', tips: 'Tips',
+    resume: 'Resume', coverLetter: 'Cover Letter',
+    saved: 'Saved', saving: 'Saving…', unsaved: 'Not saved',
+    font: 'Type', versions: 'Versions', account: 'Account', admin: 'Admin', demo: 'DEMO',
+    createAccount: 'Create account →', signOut: 'Sign out',
+    ttHome: 'Back to your profiles',
+    ttFont: 'Type & page',
+    ttVersions: 'Versions — automatic backups before imports',
+    ttAccount: 'Settings — password, data, account',
+    ttAdmin: 'Admin area',
+    ttExitDemo: 'Leave the demo and create an account',
+    ttSignOut: 'Sign out',
+    swLimit: 'Demo limit', swTitle: 'This feature needs an', swTitleAccent: 'account.', swBody: "You're in demo mode right now. Saving, sharelinks, versions and AI features require an account — signing up takes 30 seconds, you'll get an invite code from whoever showed you the tool.", swStay: 'Stay in the demo',
+  },
+  fr: {
+    home: 'ACCUEIL',
+    edit: 'Éditer', preview: 'Aperçu', export: 'Export', tips: 'Astuces',
+    resume: 'CV', coverLetter: 'Lettre',
+    saved: 'Enregistré', saving: 'Enregistrement…', unsaved: 'Non enregistré',
+    font: 'Police', versions: 'Versions', account: 'Compte', admin: 'Admin', demo: 'DÉMO',
+    createAccount: 'Créer un compte →', signOut: 'Déconnexion',
+    ttHome: 'Retour à vos profils',
+    ttFont: 'Police et page',
+    ttVersions: 'Versions — sauvegardes automatiques avant chaque import',
+    ttAccount: 'Paramètres — mot de passe, données, compte',
+    ttAdmin: 'Espace admin',
+    ttExitDemo: 'Quitter la démo et créer un compte',
+    ttSignOut: 'Déconnexion',
+    swLimit: 'Limite démo', swTitle: 'Cette fonction nécessite un', swTitleAccent: 'compte.', swBody: "Vous êtes en mode démo. L'enregistrement, les liens de partage, les versions et les fonctions IA nécessitent un compte — l'inscription prend 30 secondes, avec un code d'invitation fourni par la personne qui vous a montré l'outil.", swStay: 'Rester en démo',
+  },
+  es: {
+    home: 'INICIO',
+    edit: 'Editar', preview: 'Vista previa', export: 'Exportar', tips: 'Consejos',
+    resume: 'Currículum', coverLetter: 'Carta',
+    saved: 'Guardado', saving: 'Guardando…', unsaved: 'Sin guardar',
+    font: 'Fuente', versions: 'Versiones', account: 'Cuenta', admin: 'Admin', demo: 'DEMO',
+    createAccount: 'Crear cuenta →', signOut: 'Cerrar sesión',
+    ttHome: 'Volver a tus perfiles',
+    ttFont: 'Fuente y página',
+    ttVersions: 'Versiones — copias de seguridad automáticas antes de importar',
+    ttAccount: 'Ajustes — contraseña, datos, cuenta',
+    ttAdmin: 'Área de administración',
+    ttExitDemo: 'Salir de la demo y crear una cuenta',
+    ttSignOut: 'Cerrar sesión',
+    swLimit: 'Límite de la demo', swTitle: 'Esta función requiere una', swTitleAccent: 'cuenta.', swBody: 'Estás en modo demo. Guardar, los enlaces para compartir, las versiones y las funciones de IA requieren una cuenta — registrarse lleva 30 segundos y recibes un código de invitación de quien te enseñó la herramienta.', swStay: 'Seguir en la demo',
+  },
+};
+
+/**
+ * i18n für die Editor-Panels selbst (Formularfelder, Labels, Placeholders,
+ * Hinweise, Buttons, Tooltips, Alerts). Folgt ebenfalls der UI-Sprache.
+ * Produktnamen (LinkedIn, GitHub, React …) und die SOCIAL_PLATFORMS-Map
+ * bleiben unübersetzt.
+ */
+export interface PanelStrings {
+  // Section tabs
+  tabPersonal: string; tabProfil: string; tabErfahrung: string;
+  tabBildung: string; tabSkills: string; tabSprachen: string;
+
+  // Common
+  add: string;            // '+ Hinzufügen'
+  remove: string;         // Tooltip 'Entfernen'
+
+  // Socials
+  socialsLabel: string;
+  socialsEmpty: string;
+
+  // Personal — photo
+  photo: string;
+  photoUpload: string;
+  photoRemove: string;
+  photoDisabledTitle: string;
+  photoChooseTitle: string;
+  photoDemoHint: string;
+  photoUrlHint: string;
+  photoUrlPlaceholder: string;
+  alertTooLarge: string;
+  alertUploadFailed: string;
+  alertUnknown: string;
+  readerError: string;
+
+  // Personal — fields
+  name: string; jobTitle: string; email: string; phone: string;
+  locationAddress: string; website: string;
+  personalNote: string;
+  birthDate: string; birthDatePlaceholder: string;
+  birthPlace: string; maritalStatus: string; nationality: string; driversLicense: string;
+
+  // Profile
+  profileHint: string; profileLabel: string; profilePlaceholder: string;
+
+  // Experience
+  entries: string;
+  dragToReorder: string;
+  newPosition: string;
+  dragTitle: string;
+  moveUp: string; moveDown: string;
+  hideInResume: string;
+  expRole: string; expCompany: string; expLocation: string;
+  expFrom: string; expFromPlaceholder: string;
+  expTo: string; expToPlaceholder: string;
+  expBulletsLabel: string;
+  bulletsPlaceholder: string;
+
+  // Bullet hints
+  hintResponsible: string;
+  hintWorkedOn: string;
+  hintHelped: string;
+  hintTaskList: string;
+  hintResponsibleEn: string;
+  hintHelpedEn: string;
+  hintNoNumber: string;
+
+  // Education
+  newEntry: string;
+  eduDegree: string; eduInstitution: string;
+  eduFrom: string; eduTo: string; eduYearPlaceholder: string;
+  eduNotes: string; eduNotesPlaceholder: string;
+
+  // Skills
+  skillsHint: string;
+  newGroupLabel: string;
+  groupName: string;
+  removeGroup: string;
+  skillsItemsLabel: string;
+  addGroup: string;
+  skillsItemsPlaceholder: string;
+  additionalExpLabel: string;
+  additionalExpPlaceholder: string;
+
+  // Languages
+  langLanguage: string;
+  langLevel: string;
+  langLevelPlaceholder: string;
+  addLanguage: string;
+  scale: string;
+  scaleAria: string;
+  ofFive: string;
+  scaleClearTitle: string;
+  auto: string;
+
+  // Cover letter
+  clTitle: string; clSubtitle: string;
+  clRecipient: string; clRecipientHint: string;
+  clCompany: string; clCompanyPlaceholder: string;
+  clContact: string; clContactPlaceholder: string;
+  clAddress: string; clAddressPlaceholder: string;
+  clHead: string; clHeadHint: string;
+  clCity: string; clCityPlaceholder: string;
+  clDate: string; clDatePlaceholder: string;
+  clSubject: string; clSubjectPlaceholder: string;
+  clSalutation: string; clSalutationPlaceholder: string;
+  clBody: string; clBodyHint: string;
+  clIntro: string; clIntroPlaceholder: string;
+  clMain: string; clMainPlaceholder: string;
+  clCompanyRef: string; clCompanyRefPlaceholder: string;
+  clMotivation: string; clMotivationPlaceholder: string;
+  clClosing: string; clClosingPlaceholder: string;
+  clSignoffSection: string; clSignoffHint: string;
+  clSignoff: string; clSignoffPlaceholder: string;
+  clFooter: string;
+}
+
+export const EP: Record<UiLang, PanelStrings> = {
+  de: {
+    tabPersonal: 'Persönlich', tabProfil: 'Profil', tabErfahrung: 'Erfahrung',
+    tabBildung: 'Bildung', tabSkills: 'Skills', tabSprachen: 'Sprachen',
+
+    add: '+ Hinzufügen',
+    remove: 'Entfernen',
+
+    socialsLabel: 'Social-Profile',
+    socialsEmpty: 'Noch keine Profile. Klick auf „Hinzufügen", um z. B. LinkedIn, GitHub oder Bluesky einzutragen.',
+
+    photo: 'Foto',
+    photoUpload: '📁 Foto hochladen',
+    photoRemove: '× Entfernen',
+    photoDisabledTitle: 'Im Demo-Modus deaktiviert — Konto anlegen, um Fotos hochzuladen',
+    photoChooseTitle: 'Foto-Datei wählen',
+    photoDemoHint: 'Foto-Upload und URL-Eingabe sind im Demo-Modus deaktiviert. Lege ein Konto an, um eigene Fotos zu nutzen.',
+    photoUrlHint: 'Oder gib eine URL ein:',
+    photoUrlPlaceholder: 'https://... oder leer lassen',
+    alertTooLarge: 'Datei zu groß (max. 4 MB).',
+    alertUploadFailed: 'Foto-Upload fehlgeschlagen: ',
+    alertUnknown: 'unbekannt',
+    readerError: 'FileReader-Fehler',
+
+    name: 'Name', jobTitle: 'Berufsbezeichnung', email: 'E-Mail', phone: 'Telefon',
+    locationAddress: 'Ort / Adresse', website: 'Website',
+    personalNote: 'Hinweis: Familienstand, Geburtsort und Staatsangehörigkeit sind im deutschen Lebenslauf 2026 nicht mehr Standard und können weggelassen werden. Leere Felder werden nicht angezeigt.',
+    birthDate: 'Geburtsdatum', birthDatePlaceholder: 'z. B. 01.01.1990',
+    birthPlace: 'Geburtsort', maritalStatus: 'Familienstand', nationality: 'Nationalität', driversLicense: 'Führerschein',
+
+    profileHint: 'Das Kurzprofil erscheint direkt unter deinem Namen. 2–4 Sätze, spezifisch und wirkungsstark.',
+    profileLabel: 'Profil-Text',
+    profilePlaceholder: 'Kurze, wirkungsstarke Beschreibung deiner Kernkompetenzen...',
+
+    entries: 'Einträge',
+    dragToReorder: 'ziehen zum Sortieren',
+    newPosition: 'Neue Stelle',
+    dragTitle: 'Ziehen zum Sortieren',
+    moveUp: 'Nach oben', moveDown: 'Nach unten',
+    hideInResume: 'Im Lebenslauf ausblenden',
+    expRole: 'Position / Rolle', expCompany: 'Unternehmen', expLocation: 'Ort',
+    expFrom: 'Von', expFromPlaceholder: 'MM/JJJJ',
+    expTo: 'Bis (leer = aktuell)', expToPlaceholder: 'MM/JJJJ oder leer',
+    expBulletsLabel: 'Aufgaben & Erfolge (ein Punkt pro Zeile)',
+    bulletsPlaceholder: 'Verantwortlichkeit oder Erfolg\nNächster Punkt...\nAktion + Kontext + Ergebnis',
+
+    hintResponsible: 'Beginne mit einem aktiven Verb statt „Verantwortlich für…". Beispiel: „Führte…", „Skalierte…", „Reduzierte…".',
+    hintWorkedOn: 'Verb stärken: „Arbeitete an X" → „Implementierte X" oder „Lieferte X aus".',
+    hintHelped: '„Half/Unterstützte" macht dich kleiner als du bist. Was hast du konkret geliefert?',
+    hintTaskList: 'Statt einer Aufgaben-Liste pro Punkt einen Erfolg formulieren — Aktion + Kontext + messbares Ergebnis.',
+    hintResponsibleEn: 'Beginne mit einem aktiven Verb: „Führte…", „Lieferte…", „Reduzierte…", „Steigerte…".',
+    hintHelpedEn: '„Helped/Assisted" minimiert deinen Beitrag — was hast du konkret geliefert?',
+    hintNoNumber: 'Stärker mit Zahl/Wirkung: „… 30 % schneller", „… 2 → 14 Kunden", „… 4 Mio. €".',
+
+    newEntry: 'Neuer Eintrag',
+    eduDegree: 'Abschluss / Studiengang', eduInstitution: 'Hochschule / Institution',
+    eduFrom: 'Von', eduTo: 'Bis', eduYearPlaceholder: 'JJJJ',
+    eduNotes: 'Anmerkung (optional)', eduNotesPlaceholder: 'z. B. Schwerpunkte, Note, Auszeichnung...',
+
+    skillsHint: 'Gib Skills kommagetrennt oder zeilenweise ein. Jede Gruppe erscheint als eigener Abschnitt in der Seitenleiste.',
+    newGroupLabel: 'Neue Gruppe',
+    groupName: 'Gruppenname',
+    removeGroup: 'Gruppe entfernen',
+    skillsItemsLabel: 'Skills (kommagetrennt oder ein Skill pro Zeile)',
+    addGroup: '+ Gruppe hinzufügen',
+    skillsItemsPlaceholder: 'React, TypeScript, Node.js, ...',
+    additionalExpLabel: 'Zusätzliche Erfahrungen (ein Punkt pro Zeile)',
+    additionalExpPlaceholder: 'Ehrenamt, Projekte, Interessen...',
+
+    langLanguage: 'Sprache',
+    langLevel: 'Niveau',
+    langLevelPlaceholder: 'z. B. Muttersprache, C1, B2...',
+    addLanguage: '+ Sprache hinzufügen',
+    scale: 'Skala',
+    scaleAria: 'Sprach-Skala',
+    ofFive: 'von 5',
+    scaleClearTitle: 'Skala löschen — Template leitet sie aus dem Text-Niveau ab',
+    auto: 'Auto',
+
+    clTitle: 'Anschreiben bearbeiten', clSubtitle: 'Abschnitte aufklappen und ausfüllen',
+    clRecipient: 'Empfänger', clRecipientHint: 'Unternehmen, Kontaktperson, Adresse',
+    clCompany: 'Unternehmen', clCompanyPlaceholder: 'Musterag GmbH',
+    clContact: 'Kontaktperson', clContactPlaceholder: 'Frau Müller (optional)',
+    clAddress: 'Adresse', clAddressPlaceholder: 'Musterstraße 1, 20000 Hamburg',
+    clHead: 'Briefkopf', clHeadHint: 'Ort, Datum, Betreff, Anrede',
+    clCity: 'Absenderort', clCityPlaceholder: 'Hamburg',
+    clDate: 'Datum', clDatePlaceholder: '21. Mai 2026',
+    clSubject: 'Betreff', clSubjectPlaceholder: 'Bewerbung als Senior Marketing Manager',
+    clSalutation: 'Anrede', clSalutationPlaceholder: 'Sehr geehrte Damen und Herren,',
+    clBody: 'Brieftext', clBodyHint: 'Einstieg, Qualifikation, Bezug, Motivation, Abschluss',
+    clIntro: 'Einstieg', clIntroPlaceholder: 'Mit großem Interesse habe ich Ihre Stellenausschreibung gelesen…',
+    clMain: 'Qualifikationen & Erfahrungen', clMainPlaceholder: 'In meiner bisherigen Laufbahn habe ich…',
+    clCompanyRef: 'Unternehmensbezug', clCompanyRefPlaceholder: 'Ihr Unternehmen überzeugt mich durch…',
+    clMotivation: 'Motivation', clMotivationPlaceholder: 'Die ausgeschriebene Position bietet mir die Möglichkeit…',
+    clClosing: 'Abschluss', clClosingPlaceholder: 'Über die Möglichkeit, mich Ihnen persönlich vorzustellen…',
+    clSignoffSection: 'Grußformel', clSignoffHint: 'Schlussformel',
+    clSignoff: 'Grußformel', clSignoffPlaceholder: 'Mit freundlichen Grüßen',
+    clFooter: 'Absender (Name, Kontaktdaten) und Vorlage werden automatisch aus dem Lebenslauf übernommen.',
+  },
+  en: {
+    tabPersonal: 'Personal', tabProfil: 'Profile', tabErfahrung: 'Experience',
+    tabBildung: 'Education', tabSkills: 'Skills', tabSprachen: 'Languages',
+
+    add: '+ Add',
+    remove: 'Remove',
+
+    socialsLabel: 'Social profiles',
+    socialsEmpty: 'No profiles yet. Click "Add" to enter e.g. LinkedIn, GitHub or Bluesky.',
+
+    photo: 'Photo',
+    photoUpload: '📁 Upload photo',
+    photoRemove: '× Remove',
+    photoDisabledTitle: 'Disabled in demo mode — create an account to upload photos',
+    photoChooseTitle: 'Choose photo file',
+    photoDemoHint: 'Photo upload and URL entry are disabled in demo mode. Create an account to use your own photos.',
+    photoUrlHint: 'Or enter a URL:',
+    photoUrlPlaceholder: 'https://... or leave empty',
+    alertTooLarge: 'File too large (max. 4 MB).',
+    alertUploadFailed: 'Photo upload failed: ',
+    alertUnknown: 'unknown',
+    readerError: 'FileReader error',
+
+    name: 'Name', jobTitle: 'Job title', email: 'Email', phone: 'Phone',
+    locationAddress: 'City / Address', website: 'Website',
+    personalNote: 'Note: Marital status, place of birth and nationality are no longer standard on a German CV in 2026 and can be left out. Empty fields are not shown.',
+    birthDate: 'Date of birth', birthDatePlaceholder: 'e.g. 01/01/1990',
+    birthPlace: 'Place of birth', maritalStatus: 'Marital status', nationality: 'Nationality', driversLicense: 'Driving licence',
+
+    profileHint: 'The short profile appears right under your name. 2–4 sentences, specific and impactful.',
+    profileLabel: 'Profile text',
+    profilePlaceholder: 'Short, impactful description of your core strengths...',
+
+    entries: 'entries',
+    dragToReorder: 'drag to reorder',
+    newPosition: 'New position',
+    dragTitle: 'Drag to reorder',
+    moveUp: 'Move up', moveDown: 'Move down',
+    hideInResume: 'Hide in resume',
+    expRole: 'Position / Role', expCompany: 'Company', expLocation: 'Location',
+    expFrom: 'From', expFromPlaceholder: 'MM/YYYY',
+    expTo: 'To (empty = present)', expToPlaceholder: 'MM/YYYY or empty',
+    expBulletsLabel: 'Responsibilities & achievements (one point per line)',
+    bulletsPlaceholder: 'Responsibility or achievement\nNext point...\nAction + context + result',
+
+    hintResponsible: 'Start with an active verb instead of "Responsible for…". Example: "Led…", "Scaled…", "Reduced…".',
+    hintWorkedOn: 'Strengthen the verb: "Worked on X" → "Implemented X" or "Shipped X".',
+    hintHelped: '"Helped/Supported" makes you smaller than you are. What did you concretely deliver?',
+    hintTaskList: 'Instead of a task list, phrase each point as an achievement — action + context + measurable result.',
+    hintResponsibleEn: 'Lead with an active verb: "Led…", "Shipped…", "Cut…", "Grew…".',
+    hintHelpedEn: '"Helped/Assisted" minimizes your contribution — what did you concretely deliver?',
+    hintNoNumber: 'Stronger with a number/impact: "… 30% faster", "… 2 → 14 customers", "… €4M".',
+
+    newEntry: 'New entry',
+    eduDegree: 'Degree / Programme', eduInstitution: 'University / Institution',
+    eduFrom: 'From', eduTo: 'To', eduYearPlaceholder: 'YYYY',
+    eduNotes: 'Note (optional)', eduNotesPlaceholder: 'e.g. focus areas, grade, honours...',
+
+    skillsHint: 'Enter skills comma-separated or one per line. Each group appears as its own section in the sidebar.',
+    newGroupLabel: 'New group',
+    groupName: 'Group name',
+    removeGroup: 'Remove group',
+    skillsItemsLabel: 'Skills (comma-separated or one skill per line)',
+    addGroup: '+ Add group',
+    skillsItemsPlaceholder: 'React, TypeScript, Node.js, ...',
+    additionalExpLabel: 'Additional experience (one point per line)',
+    additionalExpPlaceholder: 'Volunteering, projects, interests...',
+
+    langLanguage: 'Language',
+    langLevel: 'Level',
+    langLevelPlaceholder: 'e.g. native, C1, B2...',
+    addLanguage: '+ Add language',
+    scale: 'Scale',
+    scaleAria: 'Language scale',
+    ofFive: 'of 5',
+    scaleClearTitle: 'Clear scale — template derives it from the text level',
+    auto: 'Auto',
+
+    clTitle: 'Edit cover letter', clSubtitle: 'Expand and fill in the sections',
+    clRecipient: 'Recipient', clRecipientHint: 'Company, contact person, address',
+    clCompany: 'Company', clCompanyPlaceholder: 'Example Ltd.',
+    clContact: 'Contact person', clContactPlaceholder: 'Ms. Smith (optional)',
+    clAddress: 'Address', clAddressPlaceholder: '123 Example St, London',
+    clHead: 'Letterhead', clHeadHint: 'City, date, subject, salutation',
+    clCity: 'Sender city', clCityPlaceholder: 'London',
+    clDate: 'Date', clDatePlaceholder: 'May 21, 2026',
+    clSubject: 'Subject', clSubjectPlaceholder: 'Application for Senior Marketing Manager',
+    clSalutation: 'Salutation', clSalutationPlaceholder: 'Dear Sir or Madam,',
+    clBody: 'Letter body', clBodyHint: 'Intro, qualifications, reference, motivation, closing',
+    clIntro: 'Introduction', clIntroPlaceholder: 'I read your job posting with great interest…',
+    clMain: 'Qualifications & experience', clMainPlaceholder: 'In my career so far I have…',
+    clCompanyRef: 'Company reference', clCompanyRefPlaceholder: 'Your company convinces me through…',
+    clMotivation: 'Motivation', clMotivationPlaceholder: 'The advertised position offers me the opportunity…',
+    clClosing: 'Closing', clClosingPlaceholder: 'I would welcome the opportunity to introduce myself in person…',
+    clSignoffSection: 'Sign-off', clSignoffHint: 'Closing phrase',
+    clSignoff: 'Sign-off', clSignoffPlaceholder: 'Kind regards',
+    clFooter: 'Sender (name, contact details) and template are taken automatically from the resume.',
+  },
+  fr: {
+    tabPersonal: 'Personnel', tabProfil: 'Profil', tabErfahrung: 'Expérience',
+    tabBildung: 'Formation', tabSkills: 'Compétences', tabSprachen: 'Langues',
+
+    add: '+ Ajouter',
+    remove: 'Supprimer',
+
+    socialsLabel: 'Profils sociaux',
+    socialsEmpty: 'Aucun profil pour l\'instant. Cliquez sur « Ajouter » pour saisir par ex. LinkedIn, GitHub ou Bluesky.',
+
+    photo: 'Photo',
+    photoUpload: '📁 Téléverser une photo',
+    photoRemove: '× Supprimer',
+    photoDisabledTitle: 'Désactivé en mode démo — créez un compte pour téléverser des photos',
+    photoChooseTitle: 'Choisir un fichier photo',
+    photoDemoHint: 'Le téléversement de photo et la saisie d\'URL sont désactivés en mode démo. Créez un compte pour utiliser vos propres photos.',
+    photoUrlHint: 'Ou saisissez une URL :',
+    photoUrlPlaceholder: 'https://... ou laisser vide',
+    alertTooLarge: 'Fichier trop volumineux (max. 4 Mo).',
+    alertUploadFailed: 'Échec du téléversement de la photo : ',
+    alertUnknown: 'inconnu',
+    readerError: 'Erreur FileReader',
+
+    name: 'Nom', jobTitle: 'Intitulé du poste', email: 'E-mail', phone: 'Téléphone',
+    locationAddress: 'Ville / Adresse', website: 'Site web',
+    personalNote: 'Remarque : la situation familiale, le lieu de naissance et la nationalité ne sont plus standard sur un CV allemand en 2026 et peuvent être omis. Les champs vides ne sont pas affichés.',
+    birthDate: 'Date de naissance', birthDatePlaceholder: 'p. ex. 01/01/1990',
+    birthPlace: 'Lieu de naissance', maritalStatus: 'Situation familiale', nationality: 'Nationalité', driversLicense: 'Permis de conduire',
+
+    profileHint: 'Le profil court apparaît juste sous votre nom. 2 à 4 phrases, précises et percutantes.',
+    profileLabel: 'Texte du profil',
+    profilePlaceholder: 'Description courte et percutante de vos compétences clés...',
+
+    entries: 'entrées',
+    dragToReorder: 'glisser pour réordonner',
+    newPosition: 'Nouveau poste',
+    dragTitle: 'Glisser pour réordonner',
+    moveUp: 'Monter', moveDown: 'Descendre',
+    hideInResume: 'Masquer dans le CV',
+    expRole: 'Poste / Rôle', expCompany: 'Entreprise', expLocation: 'Lieu',
+    expFrom: 'De', expFromPlaceholder: 'MM/YYYY',
+    expTo: 'À (vide = actuel)', expToPlaceholder: 'MM/YYYY ou vide',
+    expBulletsLabel: 'Missions et réussites (un point par ligne)',
+    bulletsPlaceholder: 'Responsabilité ou réussite\nPoint suivant...\nAction + contexte + résultat',
+
+    hintResponsible: 'Commencez par un verbe d\'action plutôt que « Responsable de… ». Exemple : « Dirigé… », « Développé… », « Réduit… ».',
+    hintWorkedOn: 'Renforcez le verbe : « Travaillé sur X » → « Implémenté X » ou « Livré X ».',
+    hintHelped: '« Aidé/Soutenu » vous diminue. Qu\'avez-vous concrètement livré ?',
+    hintTaskList: 'Plutôt qu\'une liste de tâches, formulez chaque point comme une réussite — action + contexte + résultat mesurable.',
+    hintResponsibleEn: 'Commencez par un verbe d\'action : « Dirigé… », « Livré… », « Réduit… », « Augmenté… ».',
+    hintHelpedEn: '« Helped/Assisted » minimise votre contribution — qu\'avez-vous concrètement livré ?',
+    hintNoNumber: 'Plus fort avec un chiffre/impact : « … 30 % plus vite », « … 2 → 14 clients », « … 4 M€ ».',
+
+    newEntry: 'Nouvelle entrée',
+    eduDegree: 'Diplôme / Filière', eduInstitution: 'Université / Établissement',
+    eduFrom: 'De', eduTo: 'À', eduYearPlaceholder: 'YYYY',
+    eduNotes: 'Remarque (facultatif)', eduNotesPlaceholder: 'p. ex. spécialisations, mention, distinction...',
+
+    skillsHint: 'Saisissez les compétences séparées par des virgules ou une par ligne. Chaque groupe apparaît comme une section distincte dans la barre latérale.',
+    newGroupLabel: 'Nouveau groupe',
+    groupName: 'Nom du groupe',
+    removeGroup: 'Supprimer le groupe',
+    skillsItemsLabel: 'Compétences (séparées par des virgules ou une par ligne)',
+    addGroup: '+ Ajouter un groupe',
+    skillsItemsPlaceholder: 'React, TypeScript, Node.js, ...',
+    additionalExpLabel: 'Expériences supplémentaires (un point par ligne)',
+    additionalExpPlaceholder: 'Bénévolat, projets, centres d\'intérêt...',
+
+    langLanguage: 'Langue',
+    langLevel: 'Niveau',
+    langLevelPlaceholder: 'p. ex. langue maternelle, C1, B2...',
+    addLanguage: '+ Ajouter une langue',
+    scale: 'Échelle',
+    scaleAria: 'Échelle de langue',
+    ofFive: 'sur 5',
+    scaleClearTitle: 'Effacer l\'échelle — le modèle la déduit du niveau textuel',
+    auto: 'Auto',
+
+    clTitle: 'Modifier la lettre de motivation', clSubtitle: 'Dépliez et remplissez les sections',
+    clRecipient: 'Destinataire', clRecipientHint: 'Entreprise, personne de contact, adresse',
+    clCompany: 'Entreprise', clCompanyPlaceholder: 'Exemple SARL',
+    clContact: 'Personne de contact', clContactPlaceholder: 'Mme Dupont (facultatif)',
+    clAddress: 'Adresse', clAddressPlaceholder: '1 rue Exemple, 75000 Paris',
+    clHead: 'En-tête', clHeadHint: 'Ville, date, objet, formule d\'appel',
+    clCity: 'Ville de l\'expéditeur', clCityPlaceholder: 'Paris',
+    clDate: 'Date', clDatePlaceholder: '21 mai 2026',
+    clSubject: 'Objet', clSubjectPlaceholder: 'Candidature au poste de Senior Marketing Manager',
+    clSalutation: 'Formule d\'appel', clSalutationPlaceholder: 'Madame, Monsieur,',
+    clBody: 'Corps de la lettre', clBodyHint: 'Introduction, qualifications, lien, motivation, conclusion',
+    clIntro: 'Introduction', clIntroPlaceholder: 'C\'est avec grand intérêt que j\'ai lu votre offre d\'emploi…',
+    clMain: 'Qualifications et expériences', clMainPlaceholder: 'Au cours de ma carrière, j\'ai…',
+    clCompanyRef: 'Lien avec l\'entreprise', clCompanyRefPlaceholder: 'Votre entreprise me convainc par…',
+    clMotivation: 'Motivation', clMotivationPlaceholder: 'Le poste proposé m\'offre la possibilité…',
+    clClosing: 'Conclusion', clClosingPlaceholder: 'Je serais ravi de me présenter à vous en personne…',
+    clSignoffSection: 'Formule de politesse', clSignoffHint: 'Formule finale',
+    clSignoff: 'Formule de politesse', clSignoffPlaceholder: 'Cordialement',
+    clFooter: 'L\'expéditeur (nom, coordonnées) et le modèle sont repris automatiquement du CV.',
+  },
+  es: {
+    tabPersonal: 'Personal', tabProfil: 'Perfil', tabErfahrung: 'Experiencia',
+    tabBildung: 'Formación', tabSkills: 'Competencias', tabSprachen: 'Idiomas',
+
+    add: '+ Añadir',
+    remove: 'Quitar',
+
+    socialsLabel: 'Perfiles sociales',
+    socialsEmpty: 'Aún no hay perfiles. Haz clic en «Añadir» para introducir p. ej. LinkedIn, GitHub o Bluesky.',
+
+    photo: 'Foto',
+    photoUpload: '📁 Subir foto',
+    photoRemove: '× Quitar',
+    photoDisabledTitle: 'Desactivado en el modo demo — crea una cuenta para subir fotos',
+    photoChooseTitle: 'Elegir archivo de foto',
+    photoDemoHint: 'La subida de fotos y la introducción de URL están desactivadas en el modo demo. Crea una cuenta para usar tus propias fotos.',
+    photoUrlHint: 'O introduce una URL:',
+    photoUrlPlaceholder: 'https://... o dejar vacío',
+    alertTooLarge: 'Archivo demasiado grande (máx. 4 MB).',
+    alertUploadFailed: 'Error al subir la foto: ',
+    alertUnknown: 'desconocido',
+    readerError: 'Error de FileReader',
+
+    name: 'Nombre', jobTitle: 'Puesto / Cargo', email: 'Correo electrónico', phone: 'Teléfono',
+    locationAddress: 'Ciudad / Dirección', website: 'Sitio web',
+    personalNote: 'Nota: el estado civil, el lugar de nacimiento y la nacionalidad ya no son estándar en un currículum alemán en 2026 y pueden omitirse. Los campos vacíos no se muestran.',
+    birthDate: 'Fecha de nacimiento', birthDatePlaceholder: 'p. ej. 01/01/1990',
+    birthPlace: 'Lugar de nacimiento', maritalStatus: 'Estado civil', nationality: 'Nacionalidad', driversLicense: 'Carné de conducir',
+
+    profileHint: 'El perfil breve aparece justo debajo de tu nombre. 2–4 frases, específicas y contundentes.',
+    profileLabel: 'Texto del perfil',
+    profilePlaceholder: 'Descripción breve y contundente de tus competencias clave...',
+
+    entries: 'entradas',
+    dragToReorder: 'arrastra para ordenar',
+    newPosition: 'Nuevo puesto',
+    dragTitle: 'Arrastra para ordenar',
+    moveUp: 'Subir', moveDown: 'Bajar',
+    hideInResume: 'Ocultar en el currículum',
+    expRole: 'Puesto / Rol', expCompany: 'Empresa', expLocation: 'Ubicación',
+    expFrom: 'Desde', expFromPlaceholder: 'MM/YYYY',
+    expTo: 'Hasta (vacío = actual)', expToPlaceholder: 'MM/YYYY o vacío',
+    expBulletsLabel: 'Funciones y logros (un punto por línea)',
+    bulletsPlaceholder: 'Responsabilidad o logro\nSiguiente punto...\nAcción + contexto + resultado',
+
+    hintResponsible: 'Empieza con un verbo activo en vez de «Responsable de…». Ejemplo: «Lideré…», «Escalé…», «Reduje…».',
+    hintWorkedOn: 'Refuerza el verbo: «Trabajé en X» → «Implementé X» o «Entregué X».',
+    hintHelped: '«Ayudé/Apoyé» te hace más pequeño de lo que eres. ¿Qué entregaste concretamente?',
+    hintTaskList: 'En vez de una lista de tareas, formula cada punto como un logro — acción + contexto + resultado medible.',
+    hintResponsibleEn: 'Empieza con un verbo activo: «Lideré…», «Entregué…», «Reduje…», «Aumenté…».',
+    hintHelpedEn: '«Helped/Assisted» minimiza tu contribución — ¿qué entregaste concretamente?',
+    hintNoNumber: 'Más fuerte con una cifra/impacto: «… 30 % más rápido», «… 2 → 14 clientes», «… 4 M€».',
+
+    newEntry: 'Nueva entrada',
+    eduDegree: 'Título / Carrera', eduInstitution: 'Universidad / Institución',
+    eduFrom: 'Desde', eduTo: 'Hasta', eduYearPlaceholder: 'YYYY',
+    eduNotes: 'Nota (opcional)', eduNotesPlaceholder: 'p. ej. especialidades, nota, distinción...',
+
+    skillsHint: 'Introduce las competencias separadas por comas o una por línea. Cada grupo aparece como una sección propia en la barra lateral.',
+    newGroupLabel: 'Nuevo grupo',
+    groupName: 'Nombre del grupo',
+    removeGroup: 'Quitar grupo',
+    skillsItemsLabel: 'Competencias (separadas por comas o una por línea)',
+    addGroup: '+ Añadir grupo',
+    skillsItemsPlaceholder: 'React, TypeScript, Node.js, ...',
+    additionalExpLabel: 'Experiencia adicional (un punto por línea)',
+    additionalExpPlaceholder: 'Voluntariado, proyectos, intereses...',
+
+    langLanguage: 'Idioma',
+    langLevel: 'Nivel',
+    langLevelPlaceholder: 'p. ej. nativo, C1, B2...',
+    addLanguage: '+ Añadir idioma',
+    scale: 'Escala',
+    scaleAria: 'Escala de idioma',
+    ofFive: 'de 5',
+    scaleClearTitle: 'Borrar escala — la plantilla la deduce del nivel de texto',
+    auto: 'Auto',
+
+    clTitle: 'Editar carta de presentación', clSubtitle: 'Despliega y rellena las secciones',
+    clRecipient: 'Destinatario', clRecipientHint: 'Empresa, persona de contacto, dirección',
+    clCompany: 'Empresa', clCompanyPlaceholder: 'Empresa Ejemplo S.L.',
+    clContact: 'Persona de contacto', clContactPlaceholder: 'Sra. García (opcional)',
+    clAddress: 'Dirección', clAddressPlaceholder: 'Calle Ejemplo 1, 28000 Madrid',
+    clHead: 'Encabezado', clHeadHint: 'Ciudad, fecha, asunto, saludo',
+    clCity: 'Ciudad del remitente', clCityPlaceholder: 'Madrid',
+    clDate: 'Fecha', clDatePlaceholder: '21 de mayo de 2026',
+    clSubject: 'Asunto', clSubjectPlaceholder: 'Candidatura para Senior Marketing Manager',
+    clSalutation: 'Saludo', clSalutationPlaceholder: 'Estimados señores:',
+    clBody: 'Cuerpo de la carta', clBodyHint: 'Introducción, cualificaciones, vínculo, motivación, cierre',
+    clIntro: 'Introducción', clIntroPlaceholder: 'He leído con gran interés su oferta de empleo…',
+    clMain: 'Cualificaciones y experiencia', clMainPlaceholder: 'A lo largo de mi trayectoria he…',
+    clCompanyRef: 'Vínculo con la empresa', clCompanyRefPlaceholder: 'Su empresa me convence por…',
+    clMotivation: 'Motivación', clMotivationPlaceholder: 'El puesto ofertado me brinda la oportunidad…',
+    clClosing: 'Cierre', clClosingPlaceholder: 'Agradecería la oportunidad de presentarme en persona…',
+    clSignoffSection: 'Despedida', clSignoffHint: 'Fórmula de cierre',
+    clSignoff: 'Despedida', clSignoffPlaceholder: 'Atentamente',
+    clFooter: 'El remitente (nombre, datos de contacto) y la plantilla se toman automáticamente del currículum.',
+  },
+};
+
+// React context so sub-components don't need prop-threading. createContext
+// works fine in a .ts module (no JSX here).
+export const PanelI18nCtx = createContext<PanelStrings>(EP.de);
+export function usePanelT() { return useContext(PanelI18nCtx); }

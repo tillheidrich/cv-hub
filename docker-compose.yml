@@ -1,0 +1,54 @@
+# CV-Hub — one-command self-host stack: Postgres + backend (cv-api) + frontend (nginx).
+# Quickstart:  cp .env.example .env  &&  edit .env  &&  docker compose up -d
+# Then open http://localhost:8080 — the first account you register becomes admin
+# (or set ADMIN_USERNAME/ADMIN_PASSWORD in .env for a bootstrapped admin).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cvhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cvhub}
+      POSTGRES_DB: ${POSTGRES_DB:-cvhub}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cvhub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Service name MUST be cv-api — the frontend nginx proxies /pdfapi -> cv-api:3000.
+  cv-api:
+    build: ./pdf-service
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cvhub}:${POSTGRES_PASSWORD:-cvhub}@postgres:5432/${POSTGRES_DB:-cvhub}
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      APP_NAME: ${APP_NAME:-CV-Hub}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./app
+    ports:
+      - "8080:80"
+    depends_on:
+      - cv-api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

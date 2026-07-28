@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- viewport-fit=cover handles iPhone notch; minimum-scale + maximum-scale prevent
+         double-tap zoom *and* the iOS-Safari auto-zoom-on-input behaviour that made
+         the editor feel "stuck" on phones. We compensate by ensuring input font-size
+         is ≥16px on mobile (see :root style below). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F5F4F1" />
+    <style>
+      /* Mobile-only: bump input/textarea/select font-size to 16px so iOS Safari
+         doesn't auto-zoom in when the field gains focus. The desktop sizes
+         (13.5px) stay intact above 720px where the auto-zoom isn't an issue. */
+      @media (max-width: 720px) {
+        input, textarea, select {
+          font-size: 16px !important;
+        }
+      }
+      /* Honor the iPhone safe-area at the bottom (gesture bar) so the mobile
+         tab bar isn't covered by the home-indicator strip. */
+      html, body { overscroll-behavior-y: none; }
+
+      /* A11y: keyboard users need to see where focus lives. App-wide inline
+         styles set outline:none everywhere, so this rule is the single source
+         of truth — only kicks in for keyboard focus (focus-visible), not the
+         pointer click ripple. Brown matches the editorial accent. */
+      :focus-visible {
+        outline: 2px solid oklch(0.55 0.216 264) !important;
+        outline-offset: 2px !important;
+        border-radius: 3px;
+      }
+
+      /* A11y: respect users who asked the OS to reduce motion. Kills every
+         transition + animation across the SPA — necessary because we use a
+         lot of inline `transition: …` declarations that bypass any opt-out
+         CSS the renderer might set. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      /* Mobile-Modal-Fullscreen: unter 640px werden zentrierte 680px-Modals
+         (AdminPanel, KeysPanel, VersionsPanel, SoftWall) zu Vollbild-Sheets.
+         Spart ~48px horizontal-padding und verhindert dass Action-Buttons
+         (z.B. "Konto endgültig löschen") rechts rausrutschen. */
+      @media (max-width: 640px) {
+        [data-modal="true"] {
+          inset: 0 !important;
+          max-width: 100vw !important;
+          max-height: 100dvh !important;
+          width: 100vw !important;
+          height: 100dvh !important;
+          border-radius: 0 !important;
+          padding: 16px !important;
+        }
+        [data-modal-backdrop="true"] {
+          padding: 0 !important;
+        }
+        [data-modal-actions="true"] {
+          flex-wrap: wrap !important;
+          gap: 8px !important;
+        }
+      }
+
+      /* Click-on-preview affordance: when the preview wrapper is clickable,
+         the nearest <section> the cursor is hovering inside gets a faint
+         editorial outline + bg tint so the user knows the area will jump
+         them to the editor. Falls back to no effect on touch devices. */
+      @media (hover: hover) {
+        .cv-clickable section { transition: background-color 120ms, box-shadow 120ms; }
+        .cv-clickable section:hover {
+          background-color: rgba(139, 115, 85, 0.04);
+          box-shadow: inset 0 0 0 1px rgba(139, 115, 85, 0.22);
+        }
+      }
+    </style>
+    <title>CV-Hub — editoriale Lebensläufe & Anschreiben</title>
+    <meta name="description" content="Selbst gehostetes Tool für Lebenslauf & Anschreiben: 28 Vorlagen, automatische A4-Anpassung, vier Sprachen (DE/EN/FR/ES), Markdown-Brücke & MCP-Server für KI-Lektorat statt eingebauter KI. Demo-Modus ohne Konto." />
+    <meta name="keywords" content="Lebenslauf, Anschreiben, Bewerbung, Editor, ATS, Markdown, MCP, Self-Hosted, mehrsprachig, CV-Hub" />
+    <meta property="og:title" content="CV-Hub — Lebensläufe & Anschreiben, self-hosted" />
+    <meta property="og:description" content="28 Vorlagen, vier Sprachen, automatische A4-Anpassung. Markdown-Brücke & MCP statt eingebauter KI. Demo-Modus ohne Konto." />
+    <meta property="og:type" content="website" />
+    <meta name="robots" content="index, follow" />
+    <!-- Schriften werden self-hosted via @fontsource geladen (src/fonts.ts),
+         NICHT vom Google-Fonts-CDN — DSGVO-Baseline: keine Google-Fonts-Calls. -->
+
+    <!-- JSON-LD: WebSite, SoftwareApplication, FAQPage. Crawler can pull these
+         directly without rendering React. Same content as the FAQ section. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "name": "CV-Hub",
+          "url": "https://cv.example.com/",
+          "inLanguage": ["de", "en", "fr", "es"],
+          "description": "Werkzeug für Lebenslauf & Anschreiben mit 28 Vorlagen, vier Sprachen, automatischer A4-Anpassung und Markdown-Brücke für KI-Lektorat."
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "CV-Hub",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "description": "Selbst gehostetes Tool zum Erstellen editorialer Lebensläufe und Anschreiben.",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+          "featureList": [
+            "28 Lebenslauf-Vorlagen in mehreren Layout-Archetypen",
+            "Automatische Schriftgrößen-Anpassung an A4",
+            "Markdown-Export und -Import für KI-Lektorat (ChatGPT, Claude, Perplexity)",
+            "MCP-Server für registrierte Nutzer (programmatischer KI-Zugriff, kein Vendor-Lock)",
+            "Versionshistorie mit Diff-Vorschau",
+            "Public Sharelinks mit optionalem Anschreiben-Toggle",
+            "Konten per Einladung, optional Zwei-Faktor-Login per E-Mail-Code",
+            "Demo-Modus ohne Registrierung (localStorage)",
+            "Single-Column-Vorlagen für ATS-Tauglichkeit",
+            "Vier Sprachvarianten: Deutsch, Englisch, Französisch, Spanisch"
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Was ist CV-Hub?",
+              "acceptedAnswer": { "@type": "Answer", "text": "CV-Hub ist ein selbst gehostetes Tool zum Erstellen von Lebensläufen und Anschreiben. Es erzeugt druckfertige PDFs mit 28 editorialen Vorlagen in vier Sprachen, passt die Schriftgröße automatisch an A4 an und erlaubt KI-Lektorat über eine Markdown-Brücke bzw. einen MCP-Server zu ChatGPT, Claude und ähnlichen Modellen — ohne eingebaute KI." }
+            },
+            {
+              "@type": "Question",
+              "name": "Brauche ich ein Konto?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Nein. Ein Demo-Modus speichert lokal im Browser und reicht für Lebenslauf, Anschreiben, HTML- und PDF-Export. Sharelinks, Versionshistorie und Cloud-Speicherung kommen mit einem Konto. Registrierung ist nur per Einladungscode möglich." }
+            },
+            {
+              "@type": "Question",
+              "name": "Welche Lebenslauf-Vorlagen sind enthalten?",
+              "acceptedAnswer": { "@type": "Answer", "text": "28 Vorlagen in mehreren Layout-Archetypen: Single-Column, Sidebar links, Sidebar rechts, Header-Band, Top-Centered (klassisch deutsch DIN) und Timeline. Jede Vorlage hat eigene Farben und Schriftpaarungen." }
+            },
+            {
+              "@type": "Question",
+              "name": "Sind die Vorlagen ATS-tauglich?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Die Single-Column-Vorlagen lesen sich für Applicant Tracking Systems wie Workday, Taleo und iCIMS gut, weil sie keine Tabellen, Textboxen oder Sidebars verwenden. Mehrspaltige und Sidebar-Layouts sind für Mensch-zu-Mensch-Bewerbungen gedacht." }
+            },
+            {
+              "@type": "Question",
+              "name": "Wie funktioniert das KI-Lektorat?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Du erzeugst einen Sharelink, hängst .md ans Ende der URL und gibst diese Adresse einem Sprachmodell. Das Modell liest den Lebenslauf als Markdown, schlägt Änderungen vor, gibt eine überarbeitete Markdown-Fassung zurück, die du im Tool importierst. Die Diff-Vorschau zeigt vorher, was sich ändert." }
+            },
+            {
+              "@type": "Question",
+              "name": "Welche Sprachen werden unterstützt?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Lebensläufe und Anschreiben gibt es in vier Sprachen: Deutsch, Englisch, Französisch und Spanisch. Alle vier leben parallel im selben Profil; Sektionsüberschriften, Datums- und Feldbezeichnungen passen sich automatisch an." }
+            },
+            {
+              "@type": "Question",
+              "name": "Wer hostet die Daten?",
+              "acceptedAnswer": { "@type": "Answer", "text": "Du. Das Projekt läuft auf Coolify (selbst gehostet) mit Postgres-Datenbank. Profile bleiben im Konto des jeweiligen Users, externe KI-Provider sind nicht eingebunden." }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- Analytics: optional. Add your own (e.g. self-hosted Umami) here. Off by default. -->
+  </body>
+</html>

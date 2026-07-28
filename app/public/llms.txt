@@ -1,0 +1,62 @@
+# CV-Hub
+
+> Selbst gehostetes Tool zum Erstellen editorialer Lebensläufe und
+> Anschreiben mit 28 Vorlagen in vier Sprachen, automatischer A4-Anpassung
+> und einer Markdown-Brücke (plus MCP-Server) für KI-Lektorat. Keine
+> eingebaute KI. Betreiber: CV-Hub.
+
+## Über das Produkt
+
+- Webbasiertes Tool, läuft im Browser
+- Erstellt Lebensläufe und Anschreiben für Bewerbungen in vier Sprachen (Deutsch, Englisch, Französisch, Spanisch)
+- 28 Vorlagen in mehreren Layout-Archetypen (Single-Column, Sidebar L/R, Header-Band, Top-Centered, Timeline)
+- Exportiert als PDF, HTML, Markdown, JSON
+- Eingabe per Editor oder Markdown-Import
+- Versionshistorie mit automatischen Sicherungen vor Importen
+- Sharelinks mit optionalem Anschreiben-Toggle und Aufruf-Tracking
+- Demo-Modus ohne Registrierung (localStorage-only)
+- Cloud-Konto nur per Einladungscode (Family & Friends)
+
+## Technische Architektur
+
+- Frontend: React 19, Vite 8, TypeScript
+- Backend: Node.js, Express, Postgres
+- PDF-Rendering: Playwright (headless Chromium)
+- Hosting: Coolify (selbst gehostet auf Hetzner)
+- KI: nicht eingebaut. Markdown-Brücke ermöglicht externe Modelle (ChatGPT, Claude, Perplexity)
+
+## ATS-Tauglichkeit
+
+- Single-Column-Vorlagen sind für Applicant Tracking Systems (Workday, Taleo, iCIMS) optimiert
+- Mehrspaltige Vorlagen sind für Mensch-zu-Mensch-Bewerbungen (Initiativbewerbung, Empfehlung, kleine Firmen)
+- DOCX-Export für maximale ATS-Tauglichkeit ist in Planung
+
+## Datenschutz
+
+- Self-Hosted: Daten verlassen die Coolify-Instanz nicht
+- Keine externen KI-Provider eingebunden
+- Schriften self-hosted ausgeliefert — keine Google-Fonts-Calls, keine IP-Übermittlung an Google
+- Cookielose Umami-Analytics (DSGVO-konform)
+- Sharelinks tracken Browser-Familie und OS-Familie (z. B. „Chrome/Mac"), keine IP-Adressen
+- Demo-Modus: nur localStorage, keine Server-Kommunikation
+
+## Sprachen
+
+- Deutsch
+- Englisch
+- Französisch
+- Spanisch
+
+## MCP-Server (nur für registrierte Nutzer)
+
+- Optionaler Model-Context-Protocol-Server (stdio) verbindet externe KI-Clients
+  (Claude Desktop, Cursor) mit dem eigenen Konto
+- Auth ausschließlich per persönlichem API-Key (cvk_…), erzeugt im Konto unter
+  Einstellungen → Schlüssel; serverseitig nur als Hash gespeichert
+- Kein Zugriff im Demo-Modus (Demo hat keine Schlüssel)
+- Tools: Lebensläufe auflisten, als Markdown lesen und zurückschreiben,
+  Anschreiben lesen/schreiben, Vorlagen auflisten
+- Nutzt dieselbe Markdown-Brücke wie der Editor — im Tool selbst ist keine KI
+  eingebaut; das externe Modell arbeitet ausschließlich auf Markdown
+- Vor jedem Zurückschreiben legt der Server automatisch eine Version an
+- Quelle & Anleitung: Verzeichnis `mcp/` im Repository
