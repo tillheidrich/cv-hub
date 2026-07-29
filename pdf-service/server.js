@@ -1224,7 +1224,12 @@ function isPdfFetchAllowed(urlStr, requestHost) {
   } catch { return false; }
 }
 
-app.post('/api/pdf', requireAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+async function optionalAuth(req, _res, next) {
+  try { req.user = await loadUser(req); } catch { req.user = null; }
+  next();
+}
+
+app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   const { html, filename, pageFormat } = req.body || {};
   if (typeof html !== 'string' || html.length < 30) {
     return res.status(400).json({ error: 'Field "html" is required.' });
@@ -1272,7 +1277,7 @@ app.post('/api/pdf', requireAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 6
       .replace(/ü/g, 'ue').replace(/Ü/g, 'Ue')
       .replace(/ß/g, 'ss')
       .replace(/[^\w.\-]/g, '_');
-    logEvent(req.user.id, 'pdf');
+    logEvent(req.user?.id ?? null, 'pdf');
     res.setHeader('Content-Type', 'application/pdf');
     // RFC 5987 — modern browsers prefer the filename* with UTF-8 encoding.
     res.setHeader(

@@ -514,8 +514,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const [pdfErrMsg, setPdfErrMsg] = useState<string | null>(null);
   async function handlePdf() {
     setPdfErrMsg(null);
-    // Demo mode has no backend → use the browser print dialog directly.
-    if (demoMode) { onPrint?.(); return; }
+    // Direct one-click PDF for everyone (demo hits the render endpoint too).
     setPdfState('busy');
     try {
       await exportPdf({ data, cfg: exportConfig, isCover, coverLetter });
@@ -523,6 +522,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     } catch (err) {
       // Surface the real error so the user knows what went wrong instead of
       // silently bouncing them into the print dialog.
+      if (demoMode && onPrint) { setPdfState('idle'); onPrint(); return; }
       setPdfState('error');
       setPdfErrMsg(err instanceof Error ? err.message : 'PDF-Service-Fehler');
       setTimeout(() => setPdfState('idle'), 5000);
