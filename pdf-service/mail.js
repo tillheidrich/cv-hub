@@ -148,6 +148,32 @@ export function tplLoginCode({ code }) {
   };
 }
 
+// Benachrichtigung an den Admin bei einer neuen Zugangsanfrage. Enthält zwei
+// signierte Ein-Klick-Links (Annehmen / Ablehnen), sodass ohne Login und ohne
+// Admin-Panel entschieden werden kann. Die Links tragen die Autorisierung im
+// signierten Token — deshalb hier nur einsetzen, nicht selbst bauen.
+export function tplAccessRequest({ name, email, message, acceptUrl, rejectUrl }) {
+  const btnGhost = (href, label) =>
+    `<a href="${href}" style="display:inline-block;background:#fff;color:${INK};text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border:1px solid ${LINE};border-radius:9px;">${label}</a>`;
+  const row = (label, value) =>
+    `<tr><td style="padding:6px 0;font-size:12px;color:${SOFT};width:92px;vertical-align:top;">${escapeHtml(label)}</td>` +
+    `<td style="padding:6px 0;font-size:14px;color:${INK};">${value}</td></tr>`;
+  return {
+    subject: `Zugangsanfrage: ${name} <${email}>`,
+    html: layout(
+      h('Neue Zugangsanfrage') +
+      p('Jemand möchte Zugang. Du kannst direkt hier entscheiden — kein Login nötig.') +
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:${PAPER};border:1px solid ${LINE};border-radius:9px;padding:8px 16px;margin:0 0 20px;">` +
+      row('Name', escapeHtml(name)) +
+      row('E-Mail', `<a href="mailto:${escapeHtml(email)}" style="color:${ACCENT};text-decoration:none;">${escapeHtml(email)}</a>`) +
+      (message ? row('Nachricht', escapeHtml(message).replace(/\n/g, '<br/>')) : '') +
+      `</table>` +
+      `<div style="margin:4px 0 8px;">${btn(acceptUrl, 'Annehmen →')} &nbsp; ${btnGhost(rejectUrl, 'Ablehnen')}</div>` +
+      p('Bei „Annehmen" wird automatisch ein einmaliger, an diese E-Mail gebundener Einladungscode erzeugt und dem Anfragenden zugeschickt. „Ablehnen" verwirft die Anfrage stillschweigend.'),
+    ),
+  };
+}
+
 export function tplOffboarding({ username, deleted }) {
   return {
     subject: deleted ? 'Dein Konto wurde gelöscht — CV-Hub' : 'Dein Konto wurde deaktiviert — CV-Hub',

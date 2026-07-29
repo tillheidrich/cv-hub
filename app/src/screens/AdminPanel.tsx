@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../data/api';
-import type { InviteCode, AdminUser } from '../data/api';
+import type { InviteCode, AdminUser, AccessRequest } from '../data/api';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -8,10 +8,11 @@ const SERIF = "'Space Grotesk', serif";
 type Stats = { users: number; resumes: number; invitesActive: number; pdfExports: number; registrations7d: number };
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<'invites' | 'users'>('invites');
+  const [tab, setTab] = useState<'invites' | 'users' | 'requests'>('invites');
   const [stats, setStats] = useState<Stats | null>(null);
   const [invites, setInvites] = useState<InviteCode[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [maxUses, setMaxUses] = useState(1);
   const [note, setNote] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -21,8 +22,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, i, u] = await Promise.all([api.stats(), api.listInvites(), api.listUsers()]);
-      setStats(s); setInvites(i.invites); setUsers(u.users);
+      const [s, i, u, a] = await Promise.all([api.stats(), api.listInvites(), api.listUsers(), api.listAccessRequests()]);
+      setStats(s); setInvites(i.invites); setUsers(u.users); setRequests(a.requests);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Laden fehlgeschlagen.'); }
   }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -53,6 +54,21 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   async function toggleUser(u: AdminUser) {
     await api.setUserDisabled(u.id, !u.disabled); refresh();
   }
+  async function acceptRequest(r: AccessRequest) {
+    setErr(null);
+    try {
+      const res = await api.acceptAccessRequest(r.id);
+      window.alert(res.emailed
+        ? `Angenommen. Einladungscode ${res.code} an ${r.email} versendet.`
+        : `Angenommen. Code ${res.code} erzeugt — E-Mail-Versand nicht möglich, bitte manuell weitergeben.`);
+      refresh();
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Annahme fehlgeschlagen.'); }
+  }
+  async function rejectRequest(r: AccessRequest) {
+    if (!window.confirm(`Anfrage von ${r.name} ablehnen?`)) return;
+    try { await api.rejectAccessRequest(r.id); refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : 'Ablehnung fehlgeschlagen.'); }
+  }
   async function resetPassword(u: AdminUser) {
     const pw = window.prompt(`Neues Passwort für ${u.username} (mind. 8 Zeichen):`);
     if (!pw) return;
@@ -61,6 +77,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     catch (e) { window.alert('Fehler: ' + (e instanceof Error ? e.message : 'unbekannt')); }
   }
 
+  const pendingCount = requests.filter(r => r.status === 'pending').length;
   const card: React.CSSProperties = { background: 'oklch(0.985 0.003 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '10px', padding: '12px 14px' };
   const tabBtn = (active: boolean): React.CSSProperties => ({
     padding: '7px 14px', fontSize: '12.5px', fontWeight: 700, fontFamily: UI, cursor: 'pointer',
@@ -93,6 +110,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
           <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
             <button type="button" style={tabBtn(tab === 'invites')} onClick={() => setTab('invites')}>Einladungscodes</button>
+            <button type="button" style={tabBtn(tab === 'requests')} onClick={() => setTab('requests')}>
+              Anfragen{pendingCount > 0 && (
+                <span style={{ marginLeft: '6px', background: tab === 'requests' ? '#fff' : 'oklch(0.55 0.216 264)', color: tab === 'requests' ? 'oklch(0.21 0.021 264)' : '#fff', borderRadius: '999px', padding: '1px 6px', fontSize: '10.5px', fontWeight: 700 }}>{pendingCount}</span>
+              )}
+            </button>
             <button type="button" style={tabBtn(tab === 'users')} onClick={() => setTab('users')}>Nutzer ({users.length})</button>
           </div>
 
@@ -170,6 +192,38 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                   )}
                 </div>
               ))}
+            </>
+          )}
+
+          {tab === 'requests' && (
+            <>
+              {requests.length === 0 && <div style={{ fontSize: '12.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Keine Anfragen.</div>}
+              {requests.map(r => {
+                const decided = r.status !== 'pending';
+                return (
+                  <div key={r.id} style={{ ...card, marginBottom: '8px', opacity: decided ? 0.6 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', fontFamily: UI }}>{r.name}</span>
+                      <a href={`mailto:${r.email}`} style={{ fontSize: '12px', color: 'oklch(0.55 0.216 264)', fontFamily: UI, textDecoration: 'none' }}>{r.email}</a>
+                      {r.status === 'accepted' && <span style={{ fontSize: '9.5px', fontWeight: 700, background: 'oklch(0.55 0.16 150)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontFamily: UI }}>ANGENOMMEN{r.invite_code ? ` · ${r.invite_code}` : ''}</span>}
+                      {r.status === 'rejected' && <span style={{ fontSize: '9.5px', fontWeight: 700, background: 'oklch(0.55 0.02 264)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontFamily: UI }}>ABGELEHNT</span>}
+                      <div style={{ flex: 1 }} />
+                      {!decided && (
+                        <>
+                          <button type="button" onClick={() => acceptRequest(r)}
+                            style={{ background: 'oklch(0.55 0.216 264)', border: 'none', color: '#fff', borderRadius: '6px', padding: '5px 12px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', fontFamily: UI }}>Annehmen</button>
+                          <button type="button" onClick={() => rejectRequest(r)}
+                            style={{ background: 'none', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '6px', padding: '5px 10px', fontSize: '11.5px', cursor: 'pointer', color: '#c0392b', fontFamily: UI }}>Ablehnen</button>
+                        </>
+                      )}
+                    </div>
+                    {r.message && <div style={{ fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', fontFamily: UI, marginTop: '8px', whiteSpace: 'pre-wrap' }}>{r.message}</div>}
+                    <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, marginTop: '6px' }}>
+                      {new Date(r.created_at).toLocaleString('de-DE')}{r.ua_summary ? ` · ${r.ua_summary}` : ''}
+                    </div>
+                  </div>
+                );
+              })}
             </>
           )}
         </div>

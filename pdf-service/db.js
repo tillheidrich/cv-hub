@@ -151,6 +151,23 @@ CREATE TABLE IF NOT EXISTS resume_versions (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS resume_versions_resume_idx ON resume_versions(resume_id, created_at DESC);
+
+-- Zugangsanfragen ohne Login: Besucher fragen Zugang an, Admin nimmt an/lehnt
+-- ab (per signiertem E-Mail-Link ODER im Admin-Panel). Bei Annahme wird ein
+-- an die E-Mail gebundener Invite-Code erzeugt und dem Anfragenden zugesandt.
+CREATE TABLE IF NOT EXISTS access_requests (
+  id           SERIAL PRIMARY KEY,
+  name         TEXT NOT NULL,
+  email        TEXT NOT NULL,
+  message      TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending',   -- 'pending' | 'accepted' | 'rejected'
+  invite_code  TEXT,                              -- gesetzt bei Annahme
+  decided_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- NULL = per E-Mail-Link
+  ua_summary   TEXT,                              -- grober Browser/OS-String, keine IP
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests(status, created_at DESC);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

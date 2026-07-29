@@ -49,6 +49,18 @@ export interface AdminUser {
   resume_count: number;
 }
 
+export interface AccessRequest {
+  id: number;
+  name: string;
+  email: string;
+  message: string | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  invite_code: string | null;
+  ua_summary: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
 export interface ApiKey {
   id: number;
   name: string;
@@ -82,6 +94,9 @@ export const api = {
     req<{ user: AuthUser }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email }) }),
   register: (username: string, password: string, inviteCode: string, email?: string) =>
     req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email }) }),
+  /** Public: request access without an account. Admin decides via e-mail link or panel. */
+  requestAccess: (payload: { name: string; email: string; message?: string; website?: string }) =>
+    req<{ ok: boolean }>('/api/access/request', { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => req<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   forgotPassword: (identifier: string) =>
     req<{ ok: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ identifier }) }),
@@ -103,6 +118,11 @@ export const api = {
     req<{ code: string; email: string | null; emailed: boolean }>('/api/admin/invites', { method: 'POST', body: JSON.stringify(opts) }),
   revokeInvite: (code: string) =>
     req<{ ok: boolean }>(`/api/admin/invites/${encodeURIComponent(code)}/revoke`, { method: 'POST' }),
+  listAccessRequests: () => req<{ requests: AccessRequest[] }>('/api/admin/access-requests'),
+  acceptAccessRequest: (id: number) =>
+    req<{ ok: boolean; code: string; emailed: boolean }>(`/api/admin/access-requests/${id}/accept`, { method: 'POST' }),
+  rejectAccessRequest: (id: number) =>
+    req<{ ok: boolean }>(`/api/admin/access-requests/${id}/reject`, { method: 'POST' }),
   listUsers: () => req<{ users: AdminUser[] }>('/api/admin/users'),
   setUserDisabled: (id: number, disabled: boolean) =>
     req<{ ok: boolean }>(`/api/admin/users/${id}/disable`, { method: 'POST', body: JSON.stringify({ disabled }) }),

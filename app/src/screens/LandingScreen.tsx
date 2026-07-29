@@ -1,5 +1,6 @@
 import { APP_NAME } from '../brand';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../data/api';
 import type { UiLang } from '../ui/i18n';
 import './landing.css';
 
@@ -35,6 +36,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
   }, []);
 
   const t = COPY[lang] ?? DE;
+  const [requestOpen, setRequestOpen] = useState(false);
   const scrollTo = (id: string) => () => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -53,13 +55,14 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
             <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
             <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
+            <button type="button" onClick={onSignIn}>{t.nav.signin}</button>
           </nav>
           <div className="lp-lang-row">
             {LANG_ORDER.map(l => (
               <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => onLangChange(l)}>{l.toUpperCase()}</button>
             ))}
           </div>
-          <button type="button" className="lp-btn" onClick={onSignIn}>{t.nav.cta}</button>
+          <button type="button" className="lp-btn" onClick={() => setRequestOpen(true)}>{t.nav.cta}</button>
         </div>
       </header>
 
@@ -222,7 +225,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
         <div className="lp-wrap">
           <h2 className="lp-closing lp-display">{t.footer.closingA} <span className="lp-italic">{t.footer.closingB}</span></h2>
           <div className="lp-cta-links" style={{ paddingTop: 'clamp(40px,5vw,64px)' }}>
-            <button type="button" className="lp-link-arrow" onClick={onSignIn}>
+            <button type="button" className="lp-link-arrow" onClick={() => setRequestOpen(true)}>
               {t.footer.cta}
               <svg viewBox="0 0 46 12" fill="none" aria-hidden>
                 <line x1="0" y1="6" x2="44" y2="6" strokeWidth="1.4"></line>
@@ -252,7 +255,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <button type="button" onClick={() => onLegal?.('impressum')}>Impressum</button>
               <button type="button" onClick={() => onLegal?.('privacy')}>{({ de: 'Datenschutz', en: 'Privacy', fr: 'Confidentialité', es: 'Privacidad' } as Record<UiLang, string>)[lang]}</button>
             </nav>
-            <button type="button" className="lp-btn lp-ghost" onClick={onSignIn}>{t.nav.cta}</button>
+            <button type="button" className="lp-btn lp-ghost" onClick={() => setRequestOpen(true)}>{t.nav.cta}</button>
           </div>
           <div className="lp-footer-meta">
             <span>cv.example.com</span>
@@ -261,11 +264,73 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           </div>
         </div>
       </footer>
+
+      {requestOpen && <RequestAccessModal t={t.request} onClose={() => setRequestOpen(false)} />}
     </div>
   );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+function RequestAccessModal({ t, onClose }: { t: typeof DE['request']; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [website, setWebsite] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (name.trim().length < 2) { setErr(t.errName); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr(t.errEmail); return; }
+    setBusy(true);
+    try {
+      await api.requestAccess({ name: name.trim(), email: email.trim(), message: message.trim(), website });
+      setDone(true);
+    } catch { setErr(t.errGeneric); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="lp-modal-scrim" role="dialog" aria-modal="true" aria-label={t.title} onClick={onClose}>
+      <div className="lp-modal" onClick={e => e.stopPropagation()}>
+        <button type="button" className="lp-modal-x" onClick={onClose} aria-label={t.close}>×</button>
+        {done ? (
+          <div className="lp-modal-done">
+            <div className="lp-modal-h">{t.successTitle}</div>
+            <p className="lp-modal-lede">{t.success}</p>
+            <button type="button" className="lp-btn" onClick={onClose}>{t.close}</button>
+          </div>
+        ) : (
+          <form onSubmit={submit} noValidate>
+            <div className="lp-modal-h">{t.title}</div>
+            <p className="lp-modal-lede">{t.lede}</p>
+            <label className="lp-field"><span>{t.name}</span>
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus maxLength={120} /></label>
+            <label className="lp-field"><span>{t.email}</span>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} maxLength={200} /></label>
+            <label className="lp-field"><span>{t.message}</span>
+              <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} maxLength={1000} placeholder={t.messagePlaceholder} /></label>
+            <input className="lp-hp" tabIndex={-1} autoComplete="off" value={website} onChange={e => setWebsite(e.target.value)} aria-hidden="true" />
+            {err && <div className="lp-modal-err">{err}</div>}
+            <button type="submit" className="lp-btn lp-modal-submit" disabled={busy}>{busy ? `${t.sending}…` : t.submit}</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Mark() {
   return (
@@ -421,7 +486,20 @@ function Sheet({ variant }: { variant: 'single' | 'sidebar' | 'band' | 'wien' | 
 // ── Content (DE/EN) ────────────────────────────────────────────────────────
 
 const DE = {
-  nav: { templates: 'Vorlagen', howItWorks: "So funktioniert's", faq: 'FAQ', cta: 'Zugang anfragen' },
+  nav: { templates: 'Vorlagen', howItWorks: "So funktioniert's", faq: 'FAQ', cta: 'Zugang anfragen', signin: 'Anmelden' },
+  request: {
+    title: 'Zugang anfragen',
+    lede: 'CV-Hub ist Invite-only. Sag kurz, wer du bist â nach der Freigabe kommt dein Einladungslink per E-Mail.',
+    name: 'Name', email: 'E-Mail', message: 'Nachricht (optional)',
+    messagePlaceholder: 'Worum geht’s? Wofür möchtest du das Tool nutzen?',
+    submit: 'Anfrage senden', sending: 'Senden',
+    successTitle: 'Anfrage ist raus.',
+    success: 'Danke! Sobald sie freigegeben ist, bekommst du deinen Einladungslink per E-Mail.',
+    close: 'Schließen',
+    errName: 'Bitte gib deinen Namen an.',
+    errEmail: 'Bitte gib eine gültige E-Mail-Adresse an.',
+    errGeneric: 'Konnte nicht gesendet werden. Bitte später erneut versuchen.',
+  },
   hero: {
     eyebrow: 'Family & Friends · Invite-only · Kein Tracking',
     h1a: 'Lebensläufe lesen sich heute wie Formulare.',
@@ -495,7 +573,20 @@ const DE = {
 };
 
 const EN: typeof DE = {
-  nav: { templates: 'Templates', howItWorks: 'How it works', faq: 'FAQ', cta: 'Request access' },
+  nav: { templates: 'Templates', howItWorks: 'How it works', faq: 'FAQ', cta: 'Request access', signin: 'Sign in' },
+  request: {
+    title: 'Request access',
+    lede: 'CV-Hub is invite-only. Tell us briefly who you are — once approved, your invite link arrives by e-mail.',
+    name: 'Name', email: 'E-mail', message: 'Message (optional)',
+    messagePlaceholder: 'What is this about? What would you use the tool for?',
+    submit: 'Send request', sending: 'Sending',
+    successTitle: 'Request sent.',
+    success: 'Thanks! Once it is approved, your invite link will arrive by e-mail.',
+    close: 'Close',
+    errName: 'Please enter your name.',
+    errEmail: 'Please enter a valid e-mail address.',
+    errGeneric: 'Could not send. Please try again later.',
+  },
   hero: {
     eyebrow: 'Family & Friends · Invite-only · No tracking',
     h1a: 'Most résumés read like forms.',
@@ -569,7 +660,20 @@ const EN: typeof DE = {
 };
 
 const FR: typeof DE = {
-  nav: { templates: 'Modèles', howItWorks: 'Comment ça marche', faq: 'FAQ', cta: "Demander l'accès" },
+  nav: { templates: 'Modèles', howItWorks: 'Comment ça marche', faq: 'FAQ', cta: "Demander l'accès", signin: 'Se connecter' },
+  request: {
+    title: "Demander l'accès",
+    lede: "CV-Hub est sur invitation. Dites brièvement qui vous êtes — une fois validé, votre lien d'invitation arrive par e-mail.",
+    name: 'Nom', email: 'E-mail', message: 'Message (facultatif)',
+    messagePlaceholder: "De quoi s'agit-il ? À quoi vous servirait l'outil ?",
+    submit: 'Envoyer la demande', sending: 'Envoi',
+    successTitle: 'Demande envoyée.',
+    success: "Merci ! Une fois validée, votre lien d'invitation arrivera par e-mail.",
+    close: 'Fermer',
+    errName: 'Veuillez indiquer votre nom.',
+    errEmail: 'Veuillez indiquer une adresse e-mail valide.',
+    errGeneric: 'Envoi impossible. Veuillez réessayer plus tard.',
+  },
   hero: {
     eyebrow: 'Family & Friends · Invite-only · Sans tracking',
     h1a: "Aujourd'hui, les CV se lisent comme des formulaires.",
@@ -643,7 +747,20 @@ const FR: typeof DE = {
 };
 
 const ES: typeof DE = {
-  nav: { templates: 'Plantillas', howItWorks: 'Cómo funciona', faq: 'FAQ', cta: 'Solicitar acceso' },
+  nav: { templates: 'Plantillas', howItWorks: 'Cómo funciona', faq: 'FAQ', cta: 'Solicitar acceso', signin: 'Iniciar sesión' },
+  request: {
+    title: 'Solicitar acceso',
+    lede: 'CV-Hub es solo por invitación. Cuéntanos brevemente quién eres — una vez aprobado, tu enlace de invitación llegará por e-mail.',
+    name: 'Nombre', email: 'E-mail', message: 'Mensaje (opcional)',
+    messagePlaceholder: '¿De qué se trata? ¿Para qué usarías la herramienta?',
+    submit: 'Enviar solicitud', sending: 'Enviando',
+    successTitle: 'Solicitud enviada.',
+    success: '¡Gracias! Cuando se apruebe, recibirás tu enlace de invitación por e-mail.',
+    close: 'Cerrar',
+    errName: 'Indica tu nombre, por favor.',
+    errEmail: 'Indica una dirección de e-mail válida.',
+    errGeneric: 'No se pudo enviar. Inténtalo de nuevo más tarde.',
+  },
   hero: {
     eyebrow: 'Family & Friends · Invite-only · Sin tracking',
     h1a: 'Hoy los CV se leen como formularios.',

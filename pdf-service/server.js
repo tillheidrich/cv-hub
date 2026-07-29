@@ -10,7 +10,7 @@ import crypto from 'crypto';
 import { chromium } from 'playwright';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl } from './markdown.js';
-import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplOffboarding, tplLoginCode } from './mail.js';
+import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -268,6 +268,122 @@ function generateCode() {
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'cv-api' }));
 app.get('/api/templates', (_req, res) => res.json({ templates: TEMPLATES }));
+
+// ── Zugangsanfragen (Registrierung anfragen) ─────────────────────────────────
+// Besucher fragen ohne Login Zugang an. Der Admin entscheidet per signiertem
+// Ein-Klick-Link aus der Benachrichtigungs-E-Mail (kein Login) ODER im Admin-
+// Panel. Bei Annahme wird ein einmaliger, an die E-Mail gebundener Invite-Code
+// erzeugt und dem Anfragenden zugesandt. KEINE KI beteiligt.
+// ACCESS_NOTIFY_EMAIL bestimmt, wohin die Benachrichtigung geht (Fallback:
+// SMTP_USER). Ohne beides wird nur die Anfrage gespeichert, keine Mail versandt.
+
+const ACCESS_NOTIFY_EMAIL = (process.env.ACCESS_NOTIFY_EMAIL || process.env.SMTP_USER || '').trim();
+
+function publicBaseUrl(req) {
+  return (process.env.PUBLIC_BASE_URL || '').trim()
+    || `${req.get('x-forwarded-proto') || req.protocol}://${req.get('x-forwarded-host') || req.get('host')}`;
+}
+
+// Signierter Aktions-Token (Autorisierung steckt im Token, daher kein Login
+// nötig). Zweck-Claim verhindert Verwechslung mit Session-Tokens.
+function signAccessAction(id, action) {
+  return jwt.sign({ ar: id, act: action, purpose: 'access-action' }, JWT_SECRET, { expiresIn: '30d' });
+}
+
+// Schlichte HTML-Seite als Antwort auf die im Browser geöffneten Aktionslinks.
+function actionPage(title, body, ok = true) {
+  const accent = ok ? '#3d3df0' : '#b23b3b';
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head>
+  <body style="margin:0;background:#f8f9fb;font-family:Inter,Segoe UI,Arial,sans-serif;color:#1b1c22;">
+    <div style="max-width:460px;margin:12vh auto;background:#fff;border:1px solid #e6e7ec;border-radius:14px;padding:32px;">
+      <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;color:${accent};margin-bottom:10px;">${escapeHtml(title)}</div>
+      <p style="font-size:14px;line-height:1.6;color:#5c5e6b;margin:0;">${body}</p>
+    </div>
+  </body></html>`;
+}
+
+// Gemeinsame Annahme-Logik (E-Mail-Link wie Admin-Panel): Invite erzeugen,
+// Anfrage als angenommen markieren, Invite-Code an den Anfragenden mailen.
+async function acceptAccessRequest(reqRow, decidedBy) {
+  let code;
+  for (let i = 0; i < 6; i++) {
+    code = generateCode();
+    const { rowCount } = await pool.query('SELECT 1 FROM invite_codes WHERE code = $1', [code]);
+    if (!rowCount) break;
+  }
+  const expiresAt = new Date(Date.now() + 14 * 86400 * 1000);
+  await pool.query(
+    'INSERT INTO invite_codes (code, created_by, note, max_uses, expires_at, email) VALUES ($1, $2, $3, 1, $4, $5)',
+    [code, decidedBy, `Zugangsanfrage #${reqRow.id} · ${reqRow.name}`.slice(0, 160), expiresAt, reqRow.email],
+  );
+  await pool.query(
+    `UPDATE access_requests SET status = 'accepted', invite_code = $1, decided_by = $2, decided_at = now() WHERE id = $3`,
+    [code, decidedBy, reqRow.id],
+  );
+  const m = tplInvite({ code, note: null });
+  const emailed = await sendMail({ to: reqRow.email, ...m });
+  logEvent(decidedBy ?? null, 'access_accept');
+  return { code, emailed };
+}
+
+// Öffentlich, 5/Stunde/IP. Honeypot + Dedupe gegen Bots/Doppel-Mails.
+app.post('/api/access/request', rateLimit({ route: 'access', max: 5, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+  if (String(req.body?.website || '').trim()) return res.json({ ok: true }); // Honeypot: still schlucken
+  const name = String(req.body?.name || '').trim().slice(0, 120);
+  const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 200);
+  const message = String(req.body?.message || '').trim().slice(0, 1000);
+  if (name.length < 2) return res.status(400).json({ error: 'Bitte gib deinen Namen an.' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.' });
+
+  const dupe = await pool.query(
+    `SELECT 1 FROM users WHERE lower(email) = $1
+      UNION SELECT 1 FROM access_requests WHERE lower(email) = $1 AND status = 'pending'`,
+    [email],
+  );
+  if (dupe.rowCount) return res.json({ ok: true });
+
+  const ua = summarizeUa(req.get('user-agent') || '');
+  const { rows } = await pool.query(
+    'INSERT INTO access_requests (name, email, message, ua_summary) VALUES ($1, $2, $3, $4) RETURNING id',
+    [name, email, message || null, ua],
+  );
+  const id = rows[0].id;
+  const base = publicBaseUrl(req);
+  const acceptUrl = `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'accept'))}`;
+  const rejectUrl = `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'reject'))}`;
+  if (ACCESS_NOTIFY_EMAIL) {
+    sendMail({ to: ACCESS_NOTIFY_EMAIL, ...tplAccessRequest({ name, email, message, acceptUrl, rejectUrl }) });
+  } else {
+    console.warn('access: no ACCESS_NOTIFY_EMAIL/SMTP_USER — request stored but no notification sent.');
+  }
+  logEvent(null, 'access_request');
+  res.json({ ok: true });
+});
+
+// Ein-Klick-Aktion aus der E-Mail (Token = Autorisierung, kein Login).
+app.get('/api/access/action', async (req, res) => {
+  res.type('html');
+  let payload;
+  try { payload = jwt.verify(String(req.query.token || ''), JWT_SECRET); }
+  catch { return res.status(400).send(actionPage('Link ungültig oder abgelaufen', 'Dieser Aktionslink ist nicht mehr gültig. Entscheide die Anfrage im Admin-Panel.', false)); }
+  if (payload.purpose !== 'access-action' || !payload.ar || !['accept', 'reject'].includes(payload.act)) {
+    return res.status(400).send(actionPage('Link ungültig', 'Dieser Link ist nicht verwendbar.', false));
+  }
+  const { rows } = await pool.query('SELECT * FROM access_requests WHERE id = $1', [payload.ar]);
+  const reqRow = rows[0];
+  if (!reqRow) return res.status(404).send(actionPage('Anfrage nicht gefunden', 'Die Anfrage existiert nicht mehr.', false));
+  if (reqRow.status !== 'pending') {
+    const label = reqRow.status === 'accepted' ? 'bereits angenommen' : 'bereits abgelehnt';
+    return res.send(actionPage('Schon entschieden', `Diese Anfrage von ${escapeHtml(reqRow.name)} wurde ${label}.`));
+  }
+  if (payload.act === 'reject') {
+    await pool.query(`UPDATE access_requests SET status = 'rejected', decided_at = now() WHERE id = $1`, [reqRow.id]);
+    logEvent(null, 'access_reject');
+    return res.send(actionPage('Abgelehnt', `Die Anfrage von ${escapeHtml(reqRow.name)} wurde abgelehnt. Dem Anfragenden wurde keine E-Mail gesendet.`));
+  }
+  const { code, emailed } = await acceptAccessRequest(reqRow, null);
+  return res.send(actionPage('Angenommen', `${escapeHtml(reqRow.name)} wurde eingeladen. Einladungscode <strong>${escapeHtml(code)}</strong> ${emailed ? 'wurde per E-Mail zugestellt.' : '— E-Mail-Versand ist nicht konfiguriert, bitte den Code manuell weitergeben.'}`));
+});
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
@@ -1134,6 +1250,34 @@ app.get('/api/admin/invites', requireAuth, requireAdmin, async (_req, res) => {
 
 app.post('/api/admin/invites/:code/revoke', requireAuth, requireAdmin, async (req, res) => {
   await pool.query('UPDATE invite_codes SET revoked = true WHERE code = $1', [req.params.code]);
+  res.json({ ok: true });
+});
+
+// Zugangsanfragen im Admin-Panel (Alternative zu den E-Mail-Links).
+app.get('/api/admin/access-requests', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, name, email, message, status, invite_code, ua_summary, created_at, decided_at
+       FROM access_requests ORDER BY (status = 'pending') DESC, created_at DESC LIMIT 200`,
+  );
+  res.json({ requests: rows });
+});
+
+app.post('/api/admin/access-requests/:id/accept', requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM access_requests WHERE id = $1', [req.params.id]);
+  const r = rows[0];
+  if (!r) return res.status(404).json({ error: 'Anfrage nicht gefunden.' });
+  if (r.status !== 'pending') return res.status(409).json({ error: 'Anfrage wurde bereits entschieden.' });
+  const { code, emailed } = await acceptAccessRequest(r, req.user.id);
+  res.json({ ok: true, code, emailed });
+});
+
+app.post('/api/admin/access-requests/:id/reject', requireAuth, requireAdmin, async (req, res) => {
+  const { rowCount } = await pool.query(
+    `UPDATE access_requests SET status = 'rejected', decided_by = $1, decided_at = now() WHERE id = $2 AND status = 'pending'`,
+    [req.user.id, req.params.id],
+  );
+  if (!rowCount) return res.status(409).json({ error: 'Anfrage wurde bereits entschieden oder existiert nicht.' });
+  logEvent(req.user.id, 'access_reject');
   res.json({ ok: true });
 });
 
