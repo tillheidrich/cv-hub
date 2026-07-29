@@ -1,6 +1,7 @@
 import { APP_NAME } from '../brand';
 import { useEffect, useState } from 'react';
 import { api } from '../data/api';
+import { track } from '../data/track';
 import type { UiLang } from '../ui/i18n';
 import './landing.css';
 
@@ -37,6 +38,9 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
 
   const t = COPY[lang] ?? DE;
   const [requestOpen, setRequestOpen] = useState(false);
+  const openRequest = () => { track('request_open'); setRequestOpen(true); };
+  const goSignIn = () => { track('signin_click'); onSignIn(); };
+  const startDemo = () => { track('demo_start'); onDemoStart(); };
   const scrollTo = (id: string) => () => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -55,14 +59,14 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
             <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
             <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
-            <button type="button" onClick={onSignIn}>{t.nav.signin}</button>
+            <button type="button" onClick={goSignIn}>{t.nav.signin}</button>
           </nav>
           <div className="lp-lang-row">
             {LANG_ORDER.map(l => (
               <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => onLangChange(l)}>{l.toUpperCase()}</button>
             ))}
           </div>
-          <button type="button" className="lp-btn" onClick={() => setRequestOpen(true)}>{t.nav.cta}</button>
+          <button type="button" className="lp-btn" onClick={openRequest}>{t.nav.cta}</button>
         </div>
       </header>
 
@@ -86,7 +90,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <h1 className="lp-display">{t.hero.h1a} <span className="lp-italic lp-accent-text">{t.hero.h1b}</span></h1>
             <p className="lp-lede">{t.hero.lede}</p>
             <div className="lp-cta">
-              <button type="button" className="lp-btn" onClick={onDemoStart}>{t.hero.ctaPrimary}</button>
+              <button type="button" className="lp-btn" onClick={startDemo}>{t.hero.ctaPrimary}</button>
               <button type="button" className="lp-link-arrow" onClick={scrollTo('vorlagen')}>
                 {t.hero.ctaSecondary}
                 <svg viewBox="0 0 46 12" fill="none" aria-hidden>
@@ -225,7 +229,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
         <div className="lp-wrap">
           <h2 className="lp-closing lp-display">{t.footer.closingA} <span className="lp-italic">{t.footer.closingB}</span></h2>
           <div className="lp-cta-links" style={{ paddingTop: 'clamp(40px,5vw,64px)' }}>
-            <button type="button" className="lp-link-arrow" onClick={() => setRequestOpen(true)}>
+            <button type="button" className="lp-link-arrow" onClick={openRequest}>
               {t.footer.cta}
               <svg viewBox="0 0 46 12" fill="none" aria-hidden>
                 <line x1="0" y1="6" x2="44" y2="6" strokeWidth="1.4"></line>
@@ -255,7 +259,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <button type="button" onClick={() => onLegal?.('impressum')}>Impressum</button>
               <button type="button" onClick={() => onLegal?.('privacy')}>{({ de: 'Datenschutz', en: 'Privacy', fr: 'Confidentialité', es: 'Privacidad' } as Record<UiLang, string>)[lang]}</button>
             </nav>
-            <button type="button" className="lp-btn lp-ghost" onClick={() => setRequestOpen(true)}>{t.nav.cta}</button>
+            <button type="button" className="lp-btn lp-ghost" onClick={openRequest}>{t.nav.cta}</button>
           </div>
           <div className="lp-footer-meta">
             <span>cv.example.com</span>
@@ -297,6 +301,7 @@ function RequestAccessModal({ t, onClose }: { t: typeof DE['request']; onClose: 
     setBusy(true);
     try {
       await api.requestAccess({ name: name.trim(), email: email.trim(), message: message.trim(), website });
+      track('request_submit');
       setDone(true);
     } catch { setErr(t.errGeneric); }
     finally { setBusy(false); }

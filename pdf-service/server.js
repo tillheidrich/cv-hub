@@ -1317,6 +1317,10 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
     invitesActive: await q('SELECT count(*)::int n FROM invite_codes WHERE NOT revoked AND uses < max_uses'),
     pdfExports: await q("SELECT count(*)::int n FROM events WHERE kind = 'pdf'"),
     registrations7d: await q("SELECT count(*)::int n FROM events WHERE kind = 'register' AND created_at > now() - interval '7 days'"),
+    accessPending: await q("SELECT count(*)::int n FROM access_requests WHERE status = 'pending'"),
+    accessAccepted: await q("SELECT count(*)::int n FROM access_requests WHERE status = 'accepted'"),
+    accessRejected: await q("SELECT count(*)::int n FROM access_requests WHERE status = 'rejected'"),
+    accessRequests7d: await q("SELECT count(*)::int n FROM access_requests WHERE created_at > now() - interval '7 days'"),
   });
 });
 // ── PDF rendering ───────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
 import { LANG_NAMES } from '../data/labels';
 import { api } from '../data/api';
+import { track } from '../data/track';
 import type { ShareLink } from '../data/api';
 
 interface ExportPanelProps {
@@ -519,6 +520,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     setPdfState('busy');
     try {
       await exportPdf({ data, cfg: exportConfig, isCover, coverLetter });
+      track('export_pdf', { docType: isCover ? 'cover' : 'resume', demo: !!demoMode });
       setPdfState('idle');
     } catch (err) {
       // Surface the real error so the user knows what went wrong instead of
@@ -619,11 +621,11 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           </>
         ) : (
           <>
-            <ExportButton icon="📄" label="Word (.docx)" sub="ATS-optimiert: eine Spalte, echte Überschriften, keine Tabellen" onClick={() => exportDocx(data)} />
+            <ExportButton icon="📄" label="Word (.docx)" sub="ATS-optimiert: eine Spalte, echte Überschriften, keine Tabellen" onClick={() => { track('export_docx'); exportDocx(data); }} />
             <ExportButton icon="🌐" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
             <ExportButton icon="📝" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="{ }" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
-            <ExportButton icon="🧩" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => exportJsonResume(data)} />
+            <ExportButton icon="🧩" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
           </>
         )}
       </div>

@@ -126,7 +126,10 @@ export const api = {
   listUsers: () => req<{ users: AdminUser[] }>('/api/admin/users'),
   setUserDisabled: (id: number, disabled: boolean) =>
     req<{ ok: boolean }>(`/api/admin/users/${id}/disable`, { method: 'POST', body: JSON.stringify({ disabled }) }),
-  stats: () => req<{ users: number; resumes: number; invitesActive: number; pdfExports: number; registrations7d: number }>('/api/admin/stats'),
+  stats: () => req<{
+    users: number; resumes: number; invitesActive: number; pdfExports: number; registrations7d: number;
+    accessPending: number; accessAccepted: number; accessRejected: number; accessRequests7d: number;
+  }>('/api/admin/stats'),
 
   // API keys (per user — for the MCP server)
   listKeys: () => req<{ keys: ApiKey[] }>('/api/keys'),

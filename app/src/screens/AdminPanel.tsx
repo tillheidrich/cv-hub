@@ -5,7 +5,10 @@ import type { InviteCode, AdminUser, AccessRequest } from '../data/api';
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
 
-type Stats = { users: number; resumes: number; invitesActive: number; pdfExports: number; registrations7d: number };
+type Stats = {
+  users: number; resumes: number; invitesActive: number; pdfExports: number; registrations7d: number;
+  accessPending: number; accessAccepted: number; accessRejected: number; accessRequests7d: number;
+};
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'invites' | 'users' | 'requests'>('invites');
@@ -99,10 +102,13 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           {/* Stats */}
           {stats && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '20px' }}>
-              {[['Nutzer', stats.users], ['Lebensläufe', stats.resumes], ['Aktive Codes', stats.invitesActive], ['PDF-Exporte', stats.pdfExports]].map(([l, v]) => (
-                <div key={l as string} style={{ ...card, textAlign: 'center' }}>
-                  <div style={{ fontSize: '22px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', fontFamily: SERIF }}>{v as number}</div>
-                  <div style={{ fontSize: '10px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>{l as string}</div>
+              {([
+                ['Nutzer', stats.users], ['Lebensläufe', stats.resumes], ['Aktive Codes', stats.invitesActive], ['PDF-Exporte', stats.pdfExports],
+                ['Anfragen offen', stats.accessPending, stats.accessPending > 0], ['Angenommen', stats.accessAccepted], ['Abgelehnt', stats.accessRejected], ['Anfragen 7T', stats.accessRequests7d],
+              ] as [string, number, boolean?][]).map(([l, v, hot]) => (
+                <div key={l} style={{ ...card, textAlign: 'center', ...(hot ? { borderColor: 'oklch(0.55 0.216 264)', background: 'oklch(0.97 0.02 264)' } : {}) }}>
+                  <div style={{ fontSize: '22px', fontWeight: 700, color: hot ? 'oklch(0.55 0.216 264)' : 'oklch(0.21 0.021 264)', fontFamily: SERIF }}>{v}</div>
+                  <div style={{ fontSize: '10px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>{l}</div>
                 </div>
               ))}
             </div>
