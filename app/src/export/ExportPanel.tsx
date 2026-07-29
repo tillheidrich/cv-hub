@@ -56,6 +56,7 @@ import type { ExportRenderConfig } from './exportHtml';
 import { exportMarkdown } from './exportMarkdown';
 import { exportJson } from './exportJson';
 import { exportDocx } from './exportDocx';
+import { exportJsonResume } from './jsonResume';
 import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
 import { LANG_NAMES } from '../data/labels';
@@ -622,6 +623,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <ExportButton icon="🌐" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
             <ExportButton icon="📝" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="{ }" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
+            <ExportButton icon="🧩" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => exportJsonResume(data)} />
           </>
         )}
       </div>
