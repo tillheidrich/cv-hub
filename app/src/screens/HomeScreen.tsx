@@ -18,6 +18,11 @@ interface Props {
   onSelect: (id: string) => void;
   onCreate: (profile: AppProfile) => void;
   onDelete: (id: string) => void;
+  /** Account controls in the top bar (logged-in home). */
+  username?: string;
+  isAdmin?: boolean;
+  onLogout?: () => void;
+  onOpenAdmin?: () => void;
 }
 
 // ── Create Profile Modal ───────────────────────────────────────────────────
@@ -311,7 +316,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
 
 // ── HomeScreen ───────────────────────────────────────────────────────────
 
-export default function HomeScreen({ profiles, onSelect, onCreate, onDelete }: Props) {
+export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const { isMobile } = useViewport();
 
@@ -325,13 +330,27 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete }: P
       minHeight: '100vh', background: C.paper,
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Top metadata bar */}
-      <div style={{ borderBottom: B.hairline, padding: '14px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: C.paper }}>
+      {/* Top metadata bar — brand left, account controls right */}
+      <div style={{ borderBottom: B.hairline, padding: '12px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: C.paper }}>
         <div style={{ ...TYPE.micromono, color: C.ink }}>
           CV-HUB · LEBENSLAUF & ANSCHREIBEN
         </div>
-        <div style={{ ...TYPE.micromono, color: C.fade }}>
-          v3 · EDITORIAL
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {username && (
+            <span style={{ ...TYPE.micromono, color: C.fade, whiteSpace: 'nowrap' }}>{username}</span>
+          )}
+          {isAdmin && onOpenAdmin && (
+            <button type="button" onClick={onOpenAdmin} title="Admin-Bereich"
+              style={{ padding: '5px 11px', background: C.ink, color: C.paper, border: 'none', fontFamily: F.ui, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              Admin
+            </button>
+          )}
+          {onLogout && (
+            <button type="button" onClick={onLogout} title="Abmelden"
+              style={{ padding: '5px 12px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '11px', fontWeight: 600, color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Abmelden
+            </button>
+          )}
         </div>
       </div>
 

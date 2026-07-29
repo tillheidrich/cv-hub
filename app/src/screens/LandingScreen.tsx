@@ -59,14 +59,16 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
             <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
             <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
-            <button type="button" onClick={goSignIn}>{t.nav.signin}</button>
           </nav>
           <div className="lp-lang-row">
             {LANG_ORDER.map(l => (
               <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => onLangChange(l)}>{l.toUpperCase()}</button>
             ))}
           </div>
-          <button type="button" className="lp-btn" onClick={openRequest}>{t.nav.cta}</button>
+          <div className="lp-nav-actions">
+            <button type="button" className="lp-signin" onClick={goSignIn}>{t.nav.signin}</button>
+            <button type="button" className="lp-btn" onClick={openRequest}>{t.nav.cta}</button>
+          </div>
         </div>
       </header>
 

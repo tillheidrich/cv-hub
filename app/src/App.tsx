@@ -734,7 +734,8 @@ export default function App() {
   if (screen === 'home') {
     return (
       <>
-        <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile} />
+        <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile}
+          username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={handleLogout} onOpenAdmin={() => setAdminOpen(true)} />
         {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
       </>
     );

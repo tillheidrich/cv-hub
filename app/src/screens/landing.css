@@ -116,6 +116,17 @@
 .lp-lang-row button:hover { color: var(--ink); }
 .lp-lang-row button.is-on { color: #fff; background: var(--ink); }
 
+/* Login + request-access sit together, top-right. */
+.lp-nav-actions { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.lp-signin {
+  font-family: var(--font-text); font-size: 15px; font-weight: 500;
+  color: var(--ink-soft); background: none; border: 0; cursor: pointer;
+  padding: 10px 14px; border-radius: var(--radius-sm); white-space: nowrap;
+  transition: color var(--ease) 0.15s, background var(--ease) 0.15s;
+}
+.lp-signin:hover { color: var(--ink); background: var(--raised); }
+.lp-signin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .lp-btn {
   font-family: var(--font-text); font-style: normal;
   font-size: 15px; font-weight: 550; letter-spacing: -0.01em;
