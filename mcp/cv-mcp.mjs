@@ -70,6 +70,35 @@ async function apiFetch(path, opts = {}) {
 const ok = (text) => ({ content: [{ type: 'text', text }] });
 const fail = (e) => ({ isError: true, content: [{ type: 'text', text: `Fehler: ${e instanceof Error ? e.message : String(e)}` }] });
 
+// ── Struktur-/Design-Konstanten (Spiegel von app/src/data/types.ts) ──────────
+const SECTION_KEYS = ['profile', 'details', 'experience', 'education', 'skills', 'languages', 'additional'];
+const PAGE_MODES = ['one', 'two', 'three', 'auto'];
+const PAGE_FORMATS = ['a4', 'letter', 'legal', 'a5'];
+const FONT_PAIRINGS = ['auto', 'inter-playfair', 'pure-inter', 'lora-source', 'merri-source', 'space-inter', 'garamond-archivo', 'plex-corporate', 'libre-inter'];
+
+/** Vollständiges Profil-Payload (AppProfile) lesen. */
+async function getPayload(id) {
+  const r = await apiFetch(`/api/resumes/${encodeURIComponent(id)}`);
+  if (!r?.resume?.payload) throw new Error('Profil nicht gefunden.');
+  return r.resume.payload;
+}
+/** Profil-Payload speichern — legt vorher eine Version an (Wiederherstellung). */
+async function savePayload(p, source) {
+  await apiFetch('/api/resumes', {
+    method: 'POST',
+    body: JSON.stringify({ id: p.id, displayName: p.displayName, payload: p, snapshotBefore: true, snapshotSource: source }),
+  });
+}
+/** Bildtyp anhand der Magic-Bytes bestimmen (das Backend prüft MIME↔Bytes). */
+function sniffImageMime(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (buf.slice(0, 3).toString('ascii') === 'GIF') return 'image/gif';
+  return null;
+}
+
 /** Baut einen frischen MCP-Server mit allen Tools. Im HTTP-Modus wird pro
  *  Anfrage einer erzeugt (zustandslos), im stdio-Modus genau einer. */
 function buildServer() {
@@ -160,6 +189,152 @@ function buildServer() {
         return ok(dry_run
           ? 'Validierung erfolgreich — das Anschreiben-Markdown ist gültig (nichts gespeichert).'
           : `Anschreiben zu ${id} gespeichert. Eine Version wurde vorher gesichert.`);
+      } catch (e) { return fail(e); }
+    },
+  );
+
+  // ── Design & Struktur ──────────────────────────────────────────────────
+  server.tool(
+    'get_resume_settings',
+    'Liest Design- und Struktur-Einstellungen eines Lebenslaufs als JSON: template (Design), pageMode, pageFormat, fontPairing, fontScale, lang, sectionOrder (Abschnitts-Reihenfolge), hiddenSections (ausgeblendet), sowie ob ein Foto hängt. Enthält auch die erlaubten Werte. Gültige Template-IDs liefert list_templates.',
+    { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
+    async ({ id }) => {
+      try {
+        const p = await getPayload(id);
+        const s = p.settings || {};
+        const langs = Object.keys(p.data || {});
+        const photo = langs.map(l => p.data[l]?.personal?.photo).find(Boolean) || null;
+        return ok(JSON.stringify({
+          template: s.template ?? null,
+          pageMode: s.pageMode ?? 'auto',
+          pageFormat: s.pageFormat ?? 'a4',
+          fontPairing: s.fontPairing ?? 'auto',
+          fontScale: s.fontScale ?? 1,
+          lang: s.lang ?? 'de',
+          sectionOrder: s.sectionOrder ?? SECTION_KEYS,
+          hiddenSections: s.hiddenSections ?? [],
+          respectTemplateStructure: s.respectTemplateStructure !== false,
+          photoAttached: !!photo,
+          photoUrl: photo,
+          languagesPresent: langs,
+          allowed: { sectionKeys: SECTION_KEYS, pageModes: PAGE_MODES, pageFormats: PAGE_FORMATS, fontPairings: FONT_PAIRINGS, langs: ['de', 'en', 'fr', 'es'] },
+        }, null, 2));
+      } catch (e) { return fail(e); }
+    },
+  );
+
+  server.tool(
+    'update_resume_settings',
+    'Ändert Design/Struktur eines Lebenslaufs (nur die übergebenen Felder). template = Design-Wechsel (gültige IDs via list_templates). pageMode: one|two|three|auto. pageFormat: a4|letter|legal|a5. sectionOrder ordnet die Abschnitte um, hiddenSections blendet welche aus (Keys: profile, details, experience, education, skills, languages, additional). Inhalte werden separat mit update_resume_markdown bearbeitet. Version wird vorher gesichert.',
+    {
+      id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
+      template: z.string().optional().describe('Design-/Template-ID (siehe list_templates).'),
+      pageMode: z.enum(['one', 'two', 'three', 'auto']).optional(),
+      pageFormat: z.enum(['a4', 'letter', 'legal', 'a5']).optional(),
+      fontPairing: z.string().optional().describe('auto | inter-playfair | pure-inter | lora-source | merri-source | space-inter | garamond-archivo | plex-corporate | libre-inter'),
+      fontScale: z.number().optional().describe('Schriftgröße-Faktor, 0.6–1.4.'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Primäre Sprache für die Ausgabe.'),
+      sectionOrder: z.array(z.string()).optional().describe('Reihenfolge der Abschnitts-Keys.'),
+      hiddenSections: z.array(z.string()).optional().describe('Auszublendende Abschnitts-Keys.'),
+      respectTemplateStructure: z.boolean().optional(),
+    },
+    async (a) => {
+      try {
+        const p = await getPayload(a.id);
+        p.settings = p.settings || {};
+        const changed = [];
+        if (a.template !== undefined) {
+          const { templates } = await apiFetch('/api/templates');
+          const ids = new Set((templates || []).map(t => t.id));
+          if (!ids.has(a.template)) return fail(new Error(`Unbekanntes Template "${a.template}". Gültige IDs liefert list_templates.`));
+          p.settings.template = a.template; changed.push(`template=${a.template}`);
+        }
+        if (a.pageMode !== undefined) { p.settings.pageMode = a.pageMode; changed.push(`pageMode=${a.pageMode}`); }
+        if (a.pageFormat !== undefined) { p.settings.pageFormat = a.pageFormat; changed.push(`pageFormat=${a.pageFormat}`); }
+        if (a.fontPairing !== undefined) {
+          if (!FONT_PAIRINGS.includes(a.fontPairing)) return fail(new Error(`Unbekanntes fontPairing. Erlaubt: ${FONT_PAIRINGS.join(', ')}`));
+          p.settings.fontPairing = a.fontPairing; changed.push(`fontPairing=${a.fontPairing}`);
+        }
+        if (a.fontScale !== undefined) { p.settings.fontScale = Math.max(0.6, Math.min(1.4, a.fontScale)); changed.push(`fontScale=${p.settings.fontScale}`); }
+        if (a.lang !== undefined) { p.settings.lang = a.lang; changed.push(`lang=${a.lang}`); }
+        if (a.sectionOrder !== undefined) {
+          const bad = a.sectionOrder.filter(k => !SECTION_KEYS.includes(k));
+          if (bad.length) return fail(new Error(`Ungültige Abschnitts-Keys: ${bad.join(', ')}. Erlaubt: ${SECTION_KEYS.join(', ')}`));
+          p.settings.sectionOrder = a.sectionOrder; changed.push('sectionOrder');
+        }
+        if (a.hiddenSections !== undefined) {
+          const bad = a.hiddenSections.filter(k => !SECTION_KEYS.includes(k));
+          if (bad.length) return fail(new Error(`Ungültige Abschnitts-Keys: ${bad.join(', ')}. Erlaubt: ${SECTION_KEYS.join(', ')}`));
+          p.settings.hiddenSections = a.hiddenSections; changed.push(`hiddenSections=[${a.hiddenSections.join(',')}]`);
+        }
+        if (a.respectTemplateStructure !== undefined) { p.settings.respectTemplateStructure = a.respectTemplateStructure; changed.push(`respectTemplateStructure=${a.respectTemplateStructure}`); }
+        if (!changed.length) return ok('Keine Änderung übergeben.');
+        await savePayload(p, 'settings_update');
+        return ok(`Gespeichert: ${changed.join(', ')}.`);
+      } catch (e) { return fail(e); }
+    },
+  );
+
+  // ── Foto ────────────────────────────────────────────────────────────────
+  server.tool(
+    'set_resume_photo',
+    'Hängt ein Bewerbungsfoto an den Lebenslauf (wird in allen Sprachfassungen gesetzt). Übergib ENTWEDER image_url (öffentliche https-URL) ODER image_base64. JPEG/PNG/WebP/GIF, max 4 MB. Sichtbar nur bei Templates mit Fotobereich — sonst per update_resume_settings ein passendes Template wählen. Version wird vorher gesichert.',
+    {
+      id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
+      image_url: z.string().optional().describe('Öffentliche https-URL des Fotos.'),
+      image_base64: z.string().optional().describe('Base64 der Bilddaten (data:-Präfix wird toleriert).'),
+    },
+    async ({ id, image_url, image_base64 }) => {
+      try {
+        let buf;
+        if (image_base64) {
+          buf = Buffer.from(image_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+        } else if (image_url) {
+          if (!/^https:\/\//i.test(image_url)) return fail(new Error('image_url muss eine https-URL sein.'));
+          const host = new URL(image_url).hostname;
+          if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/i.test(host) || host === '::1' || host.endsWith('.internal')) {
+            return fail(new Error('image_url zeigt auf eine interne/lokale Adresse.'));
+          }
+          const r = await fetch(image_url, { redirect: 'follow' });
+          if (!r.ok) return fail(new Error(`Bild konnte nicht geladen werden (HTTP ${r.status}).`));
+          buf = Buffer.from(await r.arrayBuffer());
+        } else {
+          return fail(new Error('Bitte image_url ODER image_base64 übergeben.'));
+        }
+        if (buf.length < 100) return fail(new Error('Bild zu klein oder leer.'));
+        if (buf.length > 4 * 1024 * 1024) return fail(new Error('Bild zu groß (max 4 MB).'));
+        const mime = sniffImageMime(buf);
+        if (!mime) return fail(new Error('Kein gültiges Bild (JPEG/PNG/WebP/GIF erwartet).'));
+        const up = await apiFetch('/api/photos', { method: 'POST', body: JSON.stringify({ mime, dataBase64: buf.toString('base64') }) });
+        const url = up.url;
+        const p = await getPayload(id);
+        let n = 0;
+        for (const l of Object.keys(p.data || {})) {
+          if (p.data[l] && typeof p.data[l] === 'object') {
+            p.data[l].personal = p.data[l].personal || {};
+            p.data[l].personal.photo = url; n++;
+          }
+        }
+        await savePayload(p, 'photo_set');
+        return ok(`Foto gesetzt (${n} Sprachfassung${n === 1 ? '' : 'en'}). Prüfe mit get_resume_settings; sichtbar nur bei Templates mit Fotobereich.`);
+      } catch (e) { return fail(e); }
+    },
+  );
+
+  server.tool(
+    'remove_resume_photo',
+    'Entfernt das Foto aus allen Sprachfassungen des Lebenslaufs. Version wird vorher gesichert.',
+    { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
+    async ({ id }) => {
+      try {
+        const p = await getPayload(id);
+        let n = 0;
+        for (const l of Object.keys(p.data || {})) {
+          if (p.data[l]?.personal?.photo) { delete p.data[l].personal.photo; n++; }
+        }
+        if (!n) return ok('Es war kein Foto gesetzt.');
+        await savePayload(p, 'photo_remove');
+        return ok(`Foto entfernt (${n} Sprachfassung${n === 1 ? '' : 'en'}).`);
       } catch (e) { return fail(e); }
     },
   );
