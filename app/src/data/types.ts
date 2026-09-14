@@ -31,6 +31,12 @@ export interface PersonalInfo {
   nationality?: string;
   driversLicense?: string;
   photo?: string;
+  /** Ort für die Unterschriftszeile am Blattfuß. Leer = `location` wird
+   *  genommen, denn in neun von zehn Fällen ist es derselbe Ort. */
+  signatureCity?: string;
+  /** Datum der Unterschrift. Leer = heute, beim Rendern gebildet — ein
+   *  Lebenslauf mit einem drei Monate alten Datum ist ein Eigentor. */
+  signatureDate?: string;
 }
 
 export interface ProfileSummary {
@@ -178,8 +184,28 @@ export const DEFAULT_SECTION_ORDER: SectionKey[] = ['profile', 'details', 'exper
 /** Page format key — full specs live in data/pageFormats.ts */
 export type PageFormat = 'a4' | 'letter' | 'legal' | 'a5';
 
+/** Wählbare Akzentfarben — die Werte stehen in templates/theme.ts (ACCENTS).
+ *  Hier, weil die Einstellungen eines Profils nichts über den Renderer wissen
+ *  sollen und `types.ts` bewusst importfrei bleibt. */
+export type AccentId =
+  | 'auto' | 'graphit' | 'tinte' | 'petrol' | 'tanne'
+  | 'olive' | 'kupfer' | 'bordeaux' | 'aubergine';
+
+/** Wählbare Papierfarben — die Werte stehen in templates/theme.ts (PAPERS).
+ *  Einige Vorlagen bringen cremefarbenes Papier mit (Lille, Antwerpen,
+ *  Husum). Das ist eine Gestaltungsentscheidung der Vorlage und darf deshalb
+ *  auch wieder zurückgenommen werden — `auto` heißt „so wie die Vorlage es
+ *  vorsieht". */
+export type PaperId = 'auto' | 'weiss' | 'creme' | 'sand' | 'leinen' | 'nebel';
+
 export interface ProfileSettings {
   template: TemplateName;
+  /** Akzentfarbe der Vorlage. Fehlt sie oder steht sie auf 'auto', gilt die
+   *  Farbe der Vorlage selbst. Ersetzt die früheren Farbvarianten-Vorlagen. */
+  accent?: AccentId;
+  /** Papierfarbe. Fehlt sie oder steht sie auf 'auto', gilt die Farbe der
+   *  Vorlage — bei den Creme-Vorlagen also Creme. */
+  paper?: PaperId;
   fontScale: FontScale;
   fontPairing: FontPairingId;
   pageMode: PageMode;

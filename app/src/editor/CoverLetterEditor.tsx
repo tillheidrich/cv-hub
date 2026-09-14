@@ -108,7 +108,7 @@ export default function CoverLetterEditor({ data, onUpdate, uiLang }: Props) {
         <div style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', marginTop: '2px' }}>{t.clSubtitle}</div>
       </div>
 
-      <div style={{ padding: '14px 16px 28px' }}>
+      <div style={{ padding: '14px 16px calc(40px + env(safe-area-inset-bottom, 0px))' }}>
         <Section title={t.clRecipient} hint={t.clRecipientHint} open={open.recipient} onToggle={() => toggle('recipient')}>
           <Field label={t.clCompany} value={data.company} onChange={v => set('company', v)} placeholder={t.clCompanyPlaceholder} />
           <Field label={t.clContact} value={data.contactPerson} onChange={v => set('contactPerson', v)} placeholder={t.clContactPlaceholder} />

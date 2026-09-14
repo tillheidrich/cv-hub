@@ -1,7 +1,7 @@
 /**
  * Self-hosted Webfonts (via @fontsource) statt Google-Fonts-CDN.
  *
- * DSGVO-Baseline von CV-Hub: keine Calls an fonts.googleapis.com /
+ * DSGVO-Baseline: keine Aufrufe an fonts.googleapis.com /
  * fonts.gstatic.com (Übertragung der Nutzer-IP an Google). Diese Dateien
  * werden mit dem App-Bundle ausgeliefert. Familiennamen entsprechen exakt den
  * bisherigen (Inter, Space Grotesk, …), damit kein CSS angefasst werden muss.
@@ -25,6 +25,14 @@ import '@fontsource/space-grotesk/700.css';
 // IBM Plex Mono — Labels/Zahlen
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+
+// Caveat — Unterschrift unter dem Lebenslauf.
+// Deutsche Bewerbungsvorlagen setzen unten „Ort, Datum" und eine Unterschrift.
+// Ein eingescannter Schriftzug bräuchte einen Upload-Weg; die Vorlagen aus der
+// Sammlung (Henery Webster, Adrian Schreiber) benutzen ohnehin durchweg eine
+// Schreibschrift, keinen Scan. Genau das ist hier gebaut — und es wird im
+// Werkzeug auch so benannt.
+import '@fontsource/caveat/500.css';
 
 // Editor-/Template-Schriften
 import '@fontsource/playfair-display/400.css';

@@ -1,0 +1,66 @@
+# Was hier läuft, läuft ohne Browser und ohne Datenbank.
+#
+# Von den dreizehn Prüfskripten unter app/scripts/ braucht genau eines keinen
+# Chromium (build-fonts, und das hängt ohnehin am Build). Alles andere — Kontrast,
+# Überlauf, Seitenzahl, PDF-Textebene, Word-Export — setzt einen laufenden
+# Dev-Server und einen echten Browser voraus und gehört deshalb (noch) nicht
+# hierher. Lieber eine CI, die drei Dinge ehrlich prüft, als eine, die zehn
+# behauptet und übersprungen meldet.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - name: Typen
+        run: npx tsc -b
+        working-directory: app
+      - name: Build
+        run: npm run build
+        working-directory: app
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax
+        run: |
+          for f in pdf-service/*.js mcp/*.mjs; do node --check "$f"; done
+      - name: Tests (SSRF-Schutz)
+        run: node --test
+        working-directory: pdf-service
+
+  keine-personendaten:
+    # Dieses Projekt ist aus einem privaten Werkzeug herausgelöst worden. Die
+    # Entpersonalisierung war Handarbeit, und Handarbeit hält nicht von selbst.
+    # Der Wächter kostet zehn Sekunden und schlägt an, bevor etwas gepusht ist.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Muster suchen, die hier nichts verloren haben
+        run: |
+          # Der GitHub-Name des Autors ist öffentlich und steht legitim in der
+          # Klon-Adresse der README — gesucht wird die private DOMAIN, nicht der Name.
+          MUSTER='heidrich-digital|tillheidrich\.de|Rotdornweg|73953819|ghp_[A-Za-z0-9]{20,}|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
+          # Die Datei hier trägt die Muster selbst und schlüge sonst auf sich an.
+          if git grep -nIE "$MUSTER" -- . ':!package-lock.json' ':!**/package-lock.json' ':!.github/workflows/ci.yml'; then
+            echo "::error::Treffer oben gehören nicht in ein öffentliches Repository."
+            exit 1
+          fi
+          echo "sauber"

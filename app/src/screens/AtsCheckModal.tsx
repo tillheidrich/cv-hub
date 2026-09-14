@@ -1,10 +1,14 @@
 import { useState, useMemo } from 'react';
 import type { CVData, CoverLetterData } from '../data/types';
+import { extractExportText, type ExportRenderConfig } from '../export/exportHtml';
 import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
 
 interface Props {
   data: CVData;
   coverLetter?: CoverLetterData;
+  /** Export-Einstellungen — der Check liest das echte Exportdokument, nicht
+   *  die Rohdaten. Ohne sie fällt er auf eine einfache Datenansicht zurück. */
+  exportConfig?: ExportRenderConfig;
   onClose: () => void;
 }
 
@@ -26,7 +30,7 @@ interface Props {
  * If the posting says "Microsoft Excel" your CV must say "Microsoft Excel",
  * not "Microsoft Office". This tool makes that gap visible.
  */
-export default function AtsCheckModal({ data, coverLetter, onClose }: Props) {
+export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose }: Props) {
   const [tab, setTab] = useState<'notepad' | 'keywords'>('notepad');
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -56,7 +60,7 @@ export default function AtsCheckModal({ data, coverLetter, onClose }: Props) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
-          {tab === 'notepad' ? <NotepadView data={data} coverLetter={coverLetter} /> : <KeywordMatchView data={data} />}
+          {tab === 'notepad' ? <NotepadView data={data} coverLetter={coverLetter} exportConfig={exportConfig} /> : <KeywordMatchView data={data} />}
         </div>
 
         <div style={{ padding: '14px 28px', borderTop: B.hairline, display: 'flex', justifyContent: 'flex-end' }}>
@@ -72,10 +76,18 @@ export default function AtsCheckModal({ data, coverLetter, onClose }: Props) {
 
 // ── Tab 1: Notepad-Vorschau ─────────────────────────────────────────────────
 
-function NotepadView({ data, coverLetter }: { data: CVData; coverLetter?: CoverLetterData }) {
+function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverLetter?: CoverLetterData; exportConfig?: ExportRenderConfig }) {
   void coverLetter; // currently CV-only — cover letter is plain prose anyway
 
-  const text = useMemo(() => buildNotepadText(data), [data]);
+  /* Der Text kommt aus dem tatsächlich exportierten Dokument. Vorher wurde er
+     aus den Eingabefeldern neu zusammengesetzt — damit konnte der Check per
+     Konstruktion keinen einzigen Exportfehler finden und suggerierte trotzdem,
+     man sehe hier, was ein ATS sieht. */
+  const fromExport = useMemo(() => {
+    if (!exportConfig) return null;
+    try { return extractExportText(data, exportConfig); } catch { return null; }
+  }, [data, exportConfig]);
+  const text = useMemo(() => fromExport || buildNotepadText(data), [fromExport, data]);
 
   const issues = useMemo(() => {
     const out: string[] = [];
@@ -84,14 +96,39 @@ function NotepadView({ data, coverLetter }: { data: CVData; coverLetter?: CoverL
     if (!p.phone) out.push('Telefon fehlt — ATS-Filter werfen Bewerbungen ohne Telefonnummer oft direkt aus.');
     if (!p.name) out.push('Name fehlt — ohne Name kein Match auf den Pflicht-Eintrag „Vor- und Nachname".');
     if (!data.experience.some(e => !e.hidden)) out.push('Keine Berufserfahrung gepflegt.');
-    if (data.experience.some(e => e.role && !e.start)) out.push('Mindestens eine Berufserfahrung ohne Start-Datum — ATS verwirft Bewerbungen mit lückenhafter Chronologie.');
+    if (data.experience.some(e => e.role && !e.start)) out.push('Mindestens eine Berufserfahrung ohne Start-Datum — eine lückenhafte Chronologie fällt sowohl Menschen als auch Filtern auf.');
+
+    /* Prüfungen, die erst möglich sind, weil hier das echte Exportdokument
+       gelesen wird — und die die eigentlichen Exportfehler finden. */
+    if (fromExport) {
+      const flat = fromExport.replace(/\s+/g, ' ').toLowerCase();
+      const head = fromExport.split('\n').filter(Boolean).slice(0, 3).join(' ').toLowerCase();
+      if (p.name && !head.includes(p.name.toLowerCase().split(' ')[0])) {
+        out.push('Der Name steht nicht am Anfang des Dokuments — im Textstrom kommt zuerst etwas anderes. Parser, die ohne Layoutanalyse arbeiten, lesen dann den falschen Namen zuerst.');
+      }
+      if (p.email && !flat.includes(p.email.toLowerCase())) {
+        out.push('Die E-Mail-Adresse taucht im exportierten Dokument nicht als Text auf.');
+      }
+      for (const e of data.experience.filter(x => !x.hidden)) {
+        if (e.company && !flat.includes(e.company.toLowerCase().slice(0, 12))) {
+          out.push(`„${e.company}" fehlt im exportierten Dokument — die Station wird beim Auslesen nicht gefunden.`);
+          break;
+        }
+      }
+      const dupe = data.experience.filter(x => !x.hidden)[0]?.company;
+      if (dupe && flat.split(dupe.toLowerCase()).length > 3) {
+        out.push(`„${dupe}" steht mehrfach im Dokument — vermutlich rendert die Vorlage eine Sektion doppelt.`);
+      }
+    }
     return out;
-  }, [data]);
+  }, [data, fromExport]);
 
   return (
     <>
       <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '16px', maxWidth: '60ch' }}>
-        Dein Lebenslauf in der Lese-Reihenfolge, die ein typischer ATS-Parser erzeugt — keine Formatierung, kein Layout. Wenn hier etwas fehlt oder verdreht aussieht, sieht ein Workday- oder Taleo-System es genauso.
+        {fromExport
+          ? 'Das ist der Text deines tatsächlich exportierten Dokuments, in genau der Reihenfolge, in der er auch im PDF steht. Fehlt hier etwas oder steht es verdreht, liegt der Fehler im Export — nicht in deinen Eingaben. Was ein bestimmtes System am Ende daraus macht, hängt von dessen Parser ab; geprüft ist hier Reihenfolge und Vollständigkeit.'
+          : 'Deine Eingaben als Fließtext. Hinweis: das ist noch nicht das exportierte Dokument — öffne den Check aus dem Export-Bereich, dann wird die echte Datei gelesen.'}
       </div>
 
       {issues.length > 0 && (

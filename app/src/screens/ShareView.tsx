@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import ResumeRenderer from '../templates/ResumeRenderer';
 import CoverLetterRenderer from '../templates/CoverLetterRenderer';
 import DocumentPreview from '../preview/DocumentPreview';
+import { contentKeyOf } from '../preview/contentKey';
+import type { Metrics } from '../templates/metrics';
 import { getTheme, resolvePairing } from '../templates/theme';
 import { api } from '../data/api';
 import { withAllLangs } from '../data/storage';
@@ -23,7 +25,10 @@ export default function ShareView({ token }: { token: string }) {
   }, [token]);
 
   const lang = profile?.settings?.lang ?? 'de';
-  const theme = useMemo(() => getTheme(profile?.settings?.template || 'hamburg'), [profile]);
+  const theme = useMemo(
+    () => getTheme(profile?.settings?.template || 'hamburg', profile?.settings?.accent ?? 'auto', profile?.settings?.paper ?? 'auto'),
+    [profile],
+  );
   const pairing = useMemo(() => resolvePairing(theme, (profile?.settings?.fontPairing as FontPairingId) || 'auto'), [theme, profile]);
   const userScale = profile?.settings?.fontScale ?? 1.0;
   const pageMode: PageMode = profile?.settings?.pageMode ?? 'one';
@@ -66,10 +71,10 @@ export default function ShareView({ token }: { token: string }) {
   const hasCoverLetter = clData && (clData.intro || clData.mainBody || clData.subject);
   const name = cvData?.personal?.name || 'Lebenslauf';
 
-  const render = (density: number, pages: number, measure: boolean) =>
+  const render = (metrics: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) =>
     doc === 'cover-letter' && clData
-      ? <CoverLetterRenderer cvData={cvData} clData={clData} theme={theme} pairing={pairing} density={density} pages={pages} measure={measure} pageFormat={pageFormat} />
-      : <ResumeRenderer data={cvData} theme={theme} pairing={pairing} density={density} pages={pages} measure={measure} pageFormat={pageFormat} />;
+      ? <CoverLetterRenderer cvData={cvData} clData={clData} theme={theme} pairing={pairing} metrics={metrics} measure={measure} pageFormat={pageFormat} />
+      : <ResumeRenderer data={cvData} theme={theme} pairing={pairing} metrics={metrics} pageBlocks={pageBlocks} measure={measure} pageFormat={pageFormat} asideSkillCap={asideCap} />;
 
   return (
     <div style={{ minHeight: '100vh', background: '#eceae5', display: 'flex', flexDirection: 'column' }}>
@@ -88,7 +93,8 @@ export default function ShareView({ token }: { token: string }) {
         )}
       </header>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '32px' }}>
-        <DocumentPreview render={render} userScale={userScale} pageMode={pageMode} pageFormat={pageFormat} viewportScale={1} />
+        <DocumentPreview render={render} userScale={userScale} pageMode={pageMode} pageFormat={pageFormat} viewportScale={1}
+          contentKey={contentKeyOf(doc === 'cover-letter' ? clData : cvData, doc, theme.id, pairing.id)} />
       </div>
     </div>
   );

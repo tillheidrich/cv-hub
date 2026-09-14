@@ -83,7 +83,7 @@ export interface UiStrings {
 
 export const T: Record<UiLang, UiStrings> = {
   de: {
-    brand: 'CV-HUB',
+    brand: 'HEIDRICH/CV',
     nav: { signIn: 'Anmelden' },
     hero: {
       overline: 'Editorial Lebenslauf-Werkstatt',
@@ -135,7 +135,7 @@ export const T: Record<UiLang, UiStrings> = {
           a: 'Du. Das Projekt läuft auf Coolify (selbst gehostet) mit Postgres-Datenbank. Profile bleiben im Konto des jeweiligen Users, externe KI-Provider sind nicht eingebunden.' },
       ],
     },
-    footer: { built: 'CV-HUB', license: 'OPEN SOURCE · AGPL-3.0' },
+    footer: { built: 'HEIDRICH/CV', license: 'OPEN SOURCE · MIT-LICENSED' },
     auth: {
       welcomeBack: 'Willkommen zurück.',
       createAccount: 'Leg dein Konto an.',
@@ -155,7 +155,7 @@ export const T: Record<UiLang, UiStrings> = {
     },
   },
   en: {
-    brand: 'CV-HUB',
+    brand: 'HEIDRICH/CV',
     nav: { signIn: 'Sign in' },
     hero: {
       overline: 'Editorial resume workshop',
@@ -207,7 +207,7 @@ export const T: Record<UiLang, UiStrings> = {
           a: 'You do. The project runs on Coolify (self-hosted) with a Postgres database. Profiles stay in the owning account, no external AI providers are integrated.' },
       ],
     },
-    footer: { built: 'CV-HUB', license: 'OPEN SOURCE · AGPL-3.0' },
+    footer: { built: 'HEIDRICH/CV', license: 'OPEN SOURCE · MIT-LICENSED' },
     auth: {
       welcomeBack: 'Welcome back.',
       createAccount: 'Create your account.',
@@ -227,7 +227,7 @@ export const T: Record<UiLang, UiStrings> = {
     },
   },
   fr: {
-    brand: 'CV-HUB',
+    brand: 'HEIDRICH/CV',
     nav: { signIn: 'Se connecter' },
     hero: {
       overline: 'Atelier éditorial de CV',
@@ -279,7 +279,7 @@ export const T: Record<UiLang, UiStrings> = {
           a: "Vous. Le projet tourne sur Coolify (auto-hébergé) avec une base Postgres. Les profils restent dans le compte de chaque utilisateur, aucun fournisseur d'IA externe n'est intégré." },
       ],
     },
-    footer: { built: 'CV-HUB', license: 'OPEN SOURCE · AGPL-3.0' },
+    footer: { built: 'HEIDRICH/CV', license: 'OPEN SOURCE · MIT-LICENSED' },
     auth: {
       welcomeBack: 'Content de vous revoir.',
       createAccount: 'Créez votre compte.',
@@ -299,7 +299,7 @@ export const T: Record<UiLang, UiStrings> = {
     },
   },
   es: {
-    brand: 'CV-HUB',
+    brand: 'HEIDRICH/CV',
     nav: { signIn: 'Iniciar sesión' },
     hero: {
       overline: 'Taller editorial de CV',
@@ -351,7 +351,7 @@ export const T: Record<UiLang, UiStrings> = {
           a: 'Tú. El proyecto corre en Coolify (autoalojado) con base de datos Postgres. Los perfiles quedan en la cuenta de cada usuario y no hay proveedores de IA externos integrados.' },
       ],
     },
-    footer: { built: 'CV-HUB', license: 'OPEN SOURCE · AGPL-3.0' },
+    footer: { built: 'HEIDRICH/CV', license: 'OPEN SOURCE · MIT-LICENSED' },
     auth: {
       welcomeBack: 'Bienvenido de nuevo.',
       createAccount: 'Crea tu cuenta.',

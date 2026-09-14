@@ -1,6 +1,9 @@
 import type { CVData } from './types';
 import { labelsEN } from './labels';
 
+/** Siehe demo-de.ts — neutraler Platzhalter statt fremdgehostetem Foto. */
+const PLACEHOLDER_PHOTO = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20300%20400%22%20width%3D%22300%22%20height%3D%22400%22%3E%3Crect%20width%3D%22300%22%20height%3D%22400%22%20fill%3D%22%23e7e2d9%22%2F%3E%3Ccircle%20cx%3D%22150%22%20cy%3D%22152%22%20r%3D%2262%22%20fill%3D%22%23cfc7ba%22%2F%3E%3Cpath%20d%3D%22M150%20232c-58%200-104%2038-112%2092h224c-8-54-54-92-112-92z%22%20fill%3D%22%23cfc7ba%22%2F%3E%3Ctext%20x%3D%22150%22%20y%3D%22372%22%20font-family%3D%22Inter%2C%20system-ui%2C%20sans-serif%22%20font-size%3D%2218%22%20fill%3D%22%238d8577%22%20text-anchor%3D%22middle%22%20letter-spacing%3D%222%22%3EFOTO%3C%2Ftext%3E%3C%2Fsvg%3E';
+
 /** Fictional demo persona — English variant. See demo-de.ts for context. */
 export const demoEN: CVData = {
   personal: {
@@ -15,7 +18,7 @@ export const demoEN: CVData = {
     instagram: '',
     birthDate: '14 March 1991',
     driversLicense: 'Class B',
-    photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=85&fit=crop&crop=faces',
+    photo: PLACEHOLDER_PHOTO,
   },
 
   profile: {

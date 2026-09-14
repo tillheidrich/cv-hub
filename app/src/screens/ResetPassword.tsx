@@ -1,4 +1,3 @@
-import { APP_NAME } from '../brand';
 import { useState } from 'react';
 import { api } from '../data/api';
 
@@ -56,7 +55,7 @@ export default function ResetPassword({ token }: { token: string }) {
       <div style={{ width: '100%', maxWidth: '420px' }}>
         <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none', marginBottom: '22px' }}>
           <span style={{ fontFamily: DISP, fontSize: '20px', fontWeight: 600, letterSpacing: '-0.02em', color: INK }}>
-            {APP_NAME}
+            CV<span style={{ fontFamily: MONO, fontSize: '12px', color: ACCENT }}>-Hub</span>
           </span>
         </a>
         <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: '16px', boxShadow: '0 6px 20px -8px oklch(0.21 0.02 264 / 0.14)', padding: '30px' }}>

@@ -20,12 +20,23 @@ generalized for public/self-host use and what is still in progress.
 - **Packaging:** root `docker-compose.yml` (Postgres + `cv-api` + frontend),
   `.env.example`, README, SECURITY.md.
 
-## Remaining / nice-to-have
+## Done (2026-09-14)
 
-- **Template names:** five templates are still named after trademarked
-  characters (`pikachu`, `onyx`, `azurill`, `gengar`, `leafish`). Rename to
-  neutral names **with back-compat aliases** so existing saved profiles that
-  reference the old IDs don't break.
+- **Template names renamed.** The five templates named after trademarked
+  characters are now `sonnenblume`, `schiefer`, `azur`, `amethyst`, `farn`.
+  The old IDs live on as permanent aliases (`THEME_ALIASES` in
+  `app/src/templates/theme.ts`) so saved profiles don't fall back to the first
+  template. All five are `deprecated: true` and not offered in the picker.
+- **Brought up to date with the upstream production tool** (September work):
+  the flow-based pagination and measured type scale, eight new templates,
+  editable labels everywhere, inline editing in the document, the one-page
+  workshop with its shortening advisor, the "template without data" export,
+  selectable paper colour, and the mobile fixes.
+- **Security review applied** — see `CHANGELOG.md`: host-header injection in
+  signed links, state-changing GET, Chromium as root, SSRF allowlist,
+  hard-wired `trust proxy`. `pdf-service/ssrf.test.mjs` covers the SSRF guard.
+
+## Remaining / nice-to-have
 - **Legal pages i18n:** currently German-only with placeholders; make them fully
   config/markdown-driven and translatable.
 - **Demo seed:** the sample profile should be a generic English example.

@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Schriften werden beim Build aus den @fontsource-Paketen erzeugt
+# (scripts/build-fonts.mjs, als prebuild verdrahtet) — sie gehören nicht ins
+# Repository, sonst pflegt man zwei Stände derselben Dateien.
+public/fonts/
+public/fonts.css

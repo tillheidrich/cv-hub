@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ResumeRenderer from '../templates/ResumeRenderer';
 import CoverLetterRenderer from '../templates/CoverLetterRenderer';
 import { getTheme, resolvePairing } from '../templates/theme';
-import type { CVData, CoverLetterData, FontPairingId, PageFormat, SectionKey } from '../data/types';
+import type { AccentId, PaperId, CVData, CoverLetterData, FontPairingId, PageFormat, SectionKey } from '../data/types';
+import { metricsFor, type Metrics } from '../templates/metrics';
 import { getPageFormat } from '../data/pageFormats';
 import { exportFilename } from './filename';
 
@@ -11,56 +12,88 @@ import { exportFilename } from './filename';
 const PDF_SERVICE: string =
   (import.meta.env.VITE_PDF_SERVICE as string | undefined) || '/pdfapi';
 
-const FONT_LINK = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Source+Serif+4:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=EB+Garamond:wght@400;500;600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap';
+/** Schriften kommen von der eigenen Domain, nicht von Google. Das spart bei
+ *  jedem PDF-Aufbau zwei Netzrunden zu einem fremden Host, macht den Export
+ *  spürbar schneller und hält die Zusage ein, dass keine IP-Adressen an Google
+ *  gehen. `public/fonts.css` wird beim Build aus den @fontsource-Paketen
+ *  erzeugt (scripts/build-fonts.mjs). */
+const FONT_LINK = typeof window !== 'undefined'
+  ? `${window.location.origin}/fonts.css`
+  : '/fonts.css';
 
 export interface ExportRenderConfig {
   themeId: string;
+  /** Gewählte Akzentfarbe — ohne sie exportierte das PDF in der Vorlagenfarbe
+   *  und sah anders aus als die Vorschau. */
+  accentId?: AccentId;
+  /** Gewählte Papierfarbe — aus demselben Grund wie der Akzent: ohne sie
+   *  druckte das PDF auf der Vorlagenfarbe und wich von der Vorschau ab. */
+  paperId?: PaperId;
   pairingId: FontPairingId;
-  density: number;
-  pages: number;
+  /** Aufgelöste Metriken aus der Vorschau — dieselben Werte, dieselbe Optik. */
+  metrics?: Metrics;
+  /** Umbruchergebnis aus der Vorschau: Block-IDs je Seite. Das PDF bekommt
+   *  exakt die Seiten, die der Nutzer gesehen hat — kein zweiter
+   *  Umbruchalgorithmus, keine Abweichung. */
+  pageBlocks?: string[][];
   hiddenSections?: SectionKey[];
   sectionOrder?: SectionKey[];
   pageFormat?: PageFormat;
-  /** Manual page assignment per section — when set with pages > 1 the
-   *  ResumeRenderer emits N independent .cv-page divs, so we skip the
-   *  print-slice wrapper (which would double-paginate). */
-  sectionPages?: Partial<Record<SectionKey, number>>;
+  /** Sektionen mit erzwungenem Seitenumbruch. */
+  forcedBreaks?: SectionKey[];
+  /** Skill-Gruppen in der Seitenspalte — aus der Vorschau übernommen, sonst
+   *  läuft die Spalte im PDF über und der Inhalt fehlt kommentarlos. */
+  asideSkillCap?: number;
+  /** @deprecated Altlast aus der Zeit vor dem Metrik-System. */
+  density?: number;
+  /** @deprecated Seitenzahl kommt jetzt aus `pageBlocks`. */
+  pages?: number;
 }
 
 function download(filename: string, blob: Blob): void {
+  // Der Link muss im Dokument hängen und die Object-URL darf NICHT sofort
+  // wieder freigegeben werden — sonst brechen Safari und Firefox den Download
+  // gelegentlich mitten im Speichern ab. Gleiches Muster wie in Klarbild.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', pages = 1): string {
+/** Liest den Dateinamen aus dem Content-Disposition-Header. Der Server kennt
+ *  den kanonischen Namen (inkl. Zeitstempel) — den hier nachzubauen hieße,
+ *  zwei Exporte derselben Minute wieder gleich zu benennen. */
+function filenameFromHeader(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8) { try { return decodeURIComponent(utf8[1]); } catch { /* fällt unten durch */ } }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1] : fallback;
+}
+
+
+function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'): string {
   const fmt = getPageFormat(pageFormat);
   const w = `${fmt.widthMm}mm`;
   const h = `${fmt.heightMm}mm`;
 
-  // Multi-page PDF/HTML output: we don't trust Chromium to natively paginate
-  // a single .cv-page that has height: N*pageHeight and overflow:hidden —
-  // experimentally Chromium clips at page 1 in that setup. Instead, emit the
-  // rendered body N times, each inside a fixed-height "print-slice" that's
-  // exactly one physical page tall, with the inner body translated up by the
-  // slice's index so each slice shows a different vertical chunk of the same
-  // content. `page-break-after: always` on the slice guarantees N physical
-  // pages in the resulting PDF. This is the same model the on-screen
-  // DocumentPreview uses, just emitted as actual DOM for the print engine.
-  const bodyMaybeSliced = pages > 1
-    ? Array.from({ length: pages }, (_, i) => `<div class="print-slice"><div class="print-inner" style="transform:translateY(-${i * fmt.heightMm}mm)">${body}</div></div>`).join('\n')
-    : body;
+  // Kein Zerschneiden mehr. Der Renderer liefert bereits N fertige
+  // `.cv-page`-Elemente — jede genau eine physische Seite hoch, mit dem
+  // Inhalt, den der Paginator dieser Seite zugewiesen hat. Chromium muss
+  // nur noch nach jeder Seite umbrechen. Vorher wurde derselbe Fließtext
+  // N-mal ausgegeben und per `translateY` verschoben; genau daher kamen die
+  // Schnitte mitten im Satz.
   return `<!doctype html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="${FONT_LINK}" rel="stylesheet">
 <style>
   *, *::before, *::after {
@@ -89,26 +122,45 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
     overflow: hidden;
   }
   .cv-page:last-of-type { page-break-after: auto; break-after: auto; }
-  /* Keep multi-page exports clean: avoid splitting sections / entries / bullets
-     across pages. The browser print engine picks the next clean break point. */
-  .cv-page section { page-break-inside: avoid; break-inside: avoid-page; }
-  .cv-page li, .cv-page p { page-break-inside: avoid; break-inside: avoid; }
 
-  /* Multi-page slice container — used only when pages > 1. Each slice is
-     exactly one physical page tall, clips its contents, and forces a hard
-     page break after itself so Chromium always emits N pages. The inner
-     wrapper is translated up so each slice shows a different vertical chunk
-     of the same rendered .cv-page below it. */
-  .print-slice {
-    width: ${w};
-    height: ${h};
-    overflow: hidden;
-    position: relative;
-    page-break-after: always;
-    break-after: page;
+/* ── Isolation des gesetzten Dokuments ───────────────────────────────────────
+   Wortgleich in app/src/index.css und im Export-HTML (export/exportHtml.ts).
+   Grund: in der App liegt Tailwinds Preflight über allem, im exportierten
+   HTML nur ein Minimal-Reset. Ohne diesen Block misst die Vorschau andere
+   Blockhöhen als das PDF — und weil die Seitenaufteilung aus genau diesen
+   Höhen berechnet wird, wandern Umbrüche. Inline-Styles des Renderers
+   gewinnen gegen diese Regeln; hier wird nur neutralisiert, was der Renderer
+   NICHT selbst setzt. */
+.cv-page, .cv-page * {
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+  box-sizing: border-box;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  font-style: inherit;
+  list-style: none;
+  text-decoration: none;
+  text-align: inherit;
+  vertical-align: baseline;
+}
+
+  /* Nur für Screenreader und Textextraktion sichtbar — trägt u. a. das
+     Sprachniveau, das visuell als Punkteskala erscheint. */
+  .cv-sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%);
+    white-space: nowrap; border: 0;
   }
-  .print-slice:last-of-type { page-break-after: auto; break-after: auto; }
-  .print-inner { width: ${w}; }
+
+  /* Sicherheitsnetz, falls eine Seite doch minimal überläuft: Chromium soll
+     dann an einer Blockgrenze brechen, nicht mitten in einem Stichpunkt.
+     Im Normalfall greift keine dieser Regeln, weil jede .cv-page bereits
+     genau den Inhalt trägt, der auf sie passt. */
+  .cv-page [data-cv-section] { break-inside: avoid; }
+  .cv-page p { orphans: 2; widows: 2; }
 
   /* Sticky print-tip banner — visible on screen, hidden when printing. */
   .print-tip {
@@ -150,7 +202,7 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
   <strong>Druck-Tipp:</strong> Strg/⌘+P → <em>Ränder: Keine</em>, <em>Hintergrundgrafiken: An</em>.
   <button onclick="document.getElementById('print-tip').remove()">Verstanden</button>
 </div>
-${bodyMaybeSliced}
+${body}
 </body>
 </html>`;
 }
@@ -158,10 +210,19 @@ ${bodyMaybeSliced}
 // ── HTML builders ───────────────────────────────────────────────────────────
 
 function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
-  const theme = getTheme(cfg.themeId);
+  const theme = getTheme(cfg.themeId, cfg.accentId, cfg.paperId);
   const pairing = resolvePairing(theme, cfg.pairingId);
   const body = renderToStaticMarkup(
-    createElement(ResumeRenderer, { data, theme, pairing, density: cfg.density, pages: cfg.pages, hiddenSections: cfg.hiddenSections, sectionOrder: cfg.sectionOrder, pageFormat: cfg.pageFormat, sectionPages: cfg.sectionPages }),
+    createElement(ResumeRenderer, {
+      data, theme, pairing,
+      metrics: cfg.metrics ?? metricsFor(0, cfg.density ?? 1),
+      pageBlocks: cfg.pageBlocks,
+      hiddenSections: cfg.hiddenSections,
+      sectionOrder: cfg.sectionOrder,
+      pageFormat: cfg.pageFormat,
+      forcedBreaks: cfg.forcedBreaks,
+      asideSkillCap: cfg.asideSkillCap,
+    }),
   );
   // The <title> becomes the default filename when the user prints the HTML
   // via Ctrl/Cmd+P → "Save as PDF". Using the same canonical export filename
@@ -169,21 +230,74 @@ function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
   // 'Lebenslauf_Lena-Brandt_2026-06-01_0930' format instead of the prosey
   // 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
   const title = exportFilename('lebenslauf', data.personal.name, '').replace(/\.$/, '');
-  // Manual page-break mode: the renderer already emitted N .cv-page divs,
-  // so we pass pages=1 to wrapDocument to skip the print-slice wrapper.
-  // Without this we'd double-paginate.
-  const effectivePagesForWrap = cfg.sectionPages ? 1 : (cfg.pages || 1);
-  return wrapDocument(title, body, cfg.pageFormat, effectivePagesForWrap);
+  return wrapDocument(title, body, cfg.pageFormat);
 }
 
 function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
-  const theme = getTheme(cfg.themeId);
+  const theme = getTheme(cfg.themeId, cfg.accentId, cfg.paperId);
   const pairing = resolvePairing(theme, cfg.pairingId);
   const body = renderToStaticMarkup(
-    createElement(CoverLetterRenderer, { cvData, clData, theme, pairing, density: cfg.density, pages: cfg.pages, pageFormat: cfg.pageFormat }),
+    createElement(CoverLetterRenderer, { cvData, clData, theme, pairing, metrics: cfg.metrics ?? metricsFor(0, cfg.density ?? 1), pageFormat: cfg.pageFormat }),
   );
   const title = exportFilename('anschreiben', cvData.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, cfg.pages || 1);
+  return wrapDocument(title, body, cfg.pageFormat);
+}
+
+/**
+ * Liest den Text aus dem TATSÄCHLICH exportierten Dokument, in der Reihenfolge
+ * des DOM — und damit in der Reihenfolge, in der die Wörter auch im
+ * PDF-Content-Stream landen.
+ *
+ * Das ist der Unterschied zu einer aus den Rohdaten zusammengesetzten
+ * Textansicht: die kann gar nicht auffallen lassen, wenn im Export etwas fehlt,
+ * doppelt steht oder in der falschen Spaltenreihenfolge ausgegeben wird. Genau
+ * solche Fehler hat es in diesem Renderer schon gegeben (Sektionen doppelt bei
+ * header-band; Seitenspalte vor dem Namen im Textstrom).
+ *
+ * Bewusst KEINE Aussage darüber, was ein bestimmtes ATS daraus macht — geprüft
+ * wird die Reihenfolge und die Vollständigkeit, nicht das Parse-Ergebnis.
+ */
+export function extractExportText(data: CVData, cfg: ExportRenderConfig): string {
+  const html = buildResumeHtml(data, cfg);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('style, script, .print-tip').forEach(el => el.remove());
+
+  const lines: string[] = [];
+  const BLOCK = new Set(['DIV', 'P', 'LI', 'UL', 'SECTION', 'H1', 'H2', 'H3', 'H4', 'ARTICLE']);
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t) {
+        // An Blockgrenzen neue Zeile, innerhalb eines Blocks anhängen.
+        if (lines.length && !lines[lines.length - 1].endsWith('\u0000')) lines[lines.length - 1] += (lines[lines.length - 1] ? ' ' : '') + t;
+        else lines.push(t);
+      }
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as HTMLElement;
+    const block = BLOCK.has(el.tagName);
+    if (block) lines.push('');
+    el.childNodes.forEach(walk);
+    if (block) lines.push('');
+  };
+  doc.querySelectorAll('.cv-page').forEach((pageEl, i) => {
+    if (i > 0) lines.push('', `--- Seite ${i + 1} ---`, '');
+    pageEl.childNodes.forEach(walk);
+  });
+
+  return lines
+    .map(l => l.trim())
+    .filter((l, i, arr) => l || (arr[i - 1] && arr[i - 1].trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Nur für den Umbruch-Prüfstand: gibt das Export-HTML zurück, statt es
+ *  herunterzuladen. So lässt sich das echte PDF im Test erzeugen. */
+export function buildResumeHtmlForTest(data: CVData, cfg: ExportRenderConfig): string {
+  return buildResumeHtml(data, cfg);
 }
 
 // ── HTML export (standalone file) ───────────────────────────────────────────
@@ -212,7 +326,7 @@ export interface PdfExportArgs {
  * directly — no browser print dialog. Throws on failure so the caller can
  * fall back to window.print().
  */
-export async function exportPdf({ data, cfg, isCover, coverLetter }: PdfExportArgs): Promise<void> {
+export async function exportPdf({ data, cfg, isCover, coverLetter }: PdfExportArgs): Promise<{ pages: number; bytes: number }> {
   const html = isCover && coverLetter
     ? buildCoverLetterHtml(data, coverLetter, cfg)
     : buildResumeHtml(data, cfg);
@@ -226,11 +340,16 @@ export async function exportPdf({ data, cfg, isCover, coverLetter }: PdfExportAr
     body: JSON.stringify({ html, filename, pageFormat }),
   });
   if (!resp.ok) {
-    throw new Error(`PDF-Service antwortete mit ${resp.status}`);
+    // Der Dienst schickt bei Fehlern JSON mit Klartext — den zeigen wir dem
+    // Nutzer, statt ihn mit einer nackten Statusnummer stehen zu lassen.
+    const detail = await resp.json().then(j => (j && typeof j.error === 'string' ? j.error : '')).catch(() => '');
+    if (resp.status === 429) throw new Error('Zu viele PDF-Exporte in kurzer Zeit. In ein paar Minuten nochmal.');
+    throw new Error(detail || `PDF-Dienst antwortete mit ${resp.status}`);
   }
   const blob = await resp.blob();
   if (blob.type.indexOf('pdf') === -1 && blob.size < 1000) {
-    throw new Error('PDF-Service lieferte kein gültiges PDF');
+    throw new Error('Der PDF-Dienst hat kein gültiges PDF geliefert.');
   }
-  download(filename, blob);
+  download(filenameFromHeader(resp.headers.get('Content-Disposition'), filename), blob);
+  return { pages: cfg.pageBlocks?.length || 1, bytes: blob.size };
 }

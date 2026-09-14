@@ -58,26 +58,26 @@ function CreateModal({ onConfirm, onClose }: {
         style={{ background: C.paper, border: B.inkStrong, padding: '40px 44px', maxWidth: '540px', width: '100%' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>NEU · PROFIL</div>
+        <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>NEU · LEBENSLAUF</div>
         <div style={{ fontFamily: F.display, fontSize: '38px', fontWeight: 400, color: C.ink, lineHeight: 0.95, letterSpacing: '-0.02em', marginBottom: '28px' }}>
-          Neues Profil<br/><em style={{ fontStyle: 'italic' }}>anlegen.</em>
+          Neuen Lebenslauf<br/><em style={{ fontStyle: 'italic' }}>anlegen.</em>
         </div>
 
-        <div style={overline}>Name des Profils</div>
+        <div style={overline}>Wie soll er heißen?</div>
         <input
           type="text" value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleCreate()}
-          placeholder="z. B. Bewerbung Acme"
+          placeholder="z. B. Bewerbung Stadtwerke"
           autoFocus
           style={input}
         />
 
-        <div style={{ ...overline, marginTop: '32px' }}>Startdaten</div>
+        <div style={{ ...overline, marginTop: '32px' }}>Womit anfangen?</div>
         <div style={{ display: 'flex', gap: '0', borderTop: B.hairline, borderBottom: B.hairline }}>
           {[
-            { id: 'blank' as const, label: 'Leer beginnen', desc: 'Alle Felder leer' },
-            { id: 'demo' as const, label: 'Mit Demo', desc: 'Lena Brandt, Senior Product Designer' },
+            { id: 'blank' as const, label: 'Leer anfangen', desc: 'Alle Felder leer — du tippst deine eigenen Daten ein' },
+            { id: 'demo' as const, label: 'Mit Beispiel', desc: 'Ausgefüllter Muster-Lebenslauf zum Überschreiben' },
           ].map((opt, i) => (
             <button
               key={opt.id}
@@ -252,8 +252,17 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
   const EXPO_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
   return (
+    // Vorher ein reines div mit onClick: der Home-Screen hatte drei
+    // fokussierbare Elemente und keines davon war ein Lebenslauf. Ohne Maus
+    // kam man gar nicht in den Editor.
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Lebenslauf „${profile.displayName}" öffnen`}
       onClick={onOpen}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
+      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -333,7 +342,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
       {/* Top metadata bar — brand left, account controls right */}
       <div style={{ borderBottom: B.hairline, padding: '12px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: C.paper }}>
         <div style={{ ...TYPE.micromono, color: C.ink }}>
-          CV-HUB · LEBENSLAUF & ANSCHREIBEN
+          HEIDRICH/CV · LEBENSLAUF & ANSCHREIBEN
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
           {username && (
@@ -354,7 +363,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: isMobile ? '0 20px' : '0 32px' }}>
+      <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: isMobile ? '0 20px' : '0 32px' }}>
         <div style={{ width: '100%', maxWidth: '960px', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: isMobile ? '20px' : '32px', padding: isMobile ? '40px 0 64px' : '64px 0 96px' }}>
 
           {/* Hero */}
@@ -395,11 +404,11 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
 
           {/* Profiles section */}
           <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 3' }}>
-            <div style={{ ...TYPE.overline, color: C.ink, marginBottom: '8px' }}>Deine Profile</div>
+            <div style={{ ...TYPE.overline, color: C.ink, marginBottom: '8px' }}>Deine Lebensläufe</div>
             <div style={{ fontFamily: F.ui, fontSize: '12px', color: C.pencil, lineHeight: 1.55 }}>
               {profiles.length === 0
-                ? 'Noch keine Profile. Leg eines an, um den Editor zu öffnen.'
-                : `${profiles.length} Profil${profiles.length === 1 ? '' : 'e'} in deinem Konto. Klick auf eines, um es zu öffnen.`}
+                ? 'Noch nichts angelegt. Fang mit einem leeren Lebenslauf an — oder nimm den Beispiel-Inhalt und überschreib ihn Feld für Feld.'
+                : `${profiles.length} Lebenslauf${profiles.length === 1 ? '' : 'e'} in deinem Konto. Klick auf einen, um ihn zu öffnen.`}
             </div>
             <button type="button" onClick={() => setShowCreate(true)}
               style={{
@@ -410,8 +419,12 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
               <span style={{ fontFamily: F.mono, fontSize: '14px', fontWeight: 400 }}>＋</span>
-              Neues Profil
+              Neuer Lebenslauf
             </button>
+            <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.pencil, lineHeight: 1.6, marginTop: '14px', maxWidth: '46ch' }}>
+              Danach: links eintragen, rechts sofort sehen. Gespeichert wird automatisch —
+              du kannst jederzeit rausgehen und später weitermachen.
+            </div>
           </div>
 
           <div style={{ gridColumn: isMobile ? '1 / -1' : '4 / span 9' }}>
@@ -441,14 +454,14 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           {/* Footer */}
           <div style={{ gridColumn: '1 / -1', borderTop: B.hairline, paddingTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
             <div style={{ ...TYPE.micromono, color: C.fade }}>
-              CV-HUB · {new Date().getFullYear()}
+              HEIDRICH DIGITAL · {new Date().getFullYear()}
             </div>
             <div style={{ ...TYPE.micromono, color: C.fade }}>
               Family &amp; Friends · invite-only
             </div>
           </div>
         </div>
-      </div>
+      </main>
 
       {showCreate && (
         <CreateModal onConfirm={handleCreate} onClose={() => setShowCreate(false)} />

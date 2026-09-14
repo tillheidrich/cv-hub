@@ -1,5 +1,5 @@
-import { APP_NAME } from '../brand';
 import { useState, useEffect } from 'react';
+import { APP_NAME } from '../brand';
 import { api } from '../data/api';
 import type { AuthUser } from '../data/api';
 import { T, type UiLang } from '../ui/i18n';
@@ -58,17 +58,19 @@ function BrandMark() {
 }
 
 export default function AuthScreen({
-  onAuth, onDemoStart, lang = 'de', onLangChange,
+  onAuth, onDemoStart, lang = 'de', onLangChange, initialInvite = '', initialMode = 'login',
 }: {
   onAuth: (u: AuthUser) => void;
   onDemoStart?: () => void;
   lang?: UiLang;
   onLangChange?: (l: UiLang) => void;
+  initialInvite?: string;
+  initialMode?: 'login' | 'register';
 }) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [invite, setInvite] = useState('');
+  const [invite, setInvite] = useState(initialInvite);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +161,7 @@ export default function AuthScreen({
         <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
           <BrandMark />
           <span style={{ fontFamily: DISP, fontSize: '19px', fontWeight: 600, letterSpacing: '-0.02em', color: INK }}>
-            {APP_NAME}
+            CV<span style={{ fontFamily: MONO, fontSize: '12px', fontWeight: 500, color: ACCENT, marginLeft: '1px' }}>-Hub</span>
           </span>
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -179,7 +181,7 @@ export default function AuthScreen({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: isMobile ? '24px' : '48px', padding: isMobile ? '36px 20px' : '72px clamp(24px, 5vw, 48px)', maxWidth: '1120px', width: '100%', margin: '0 auto', alignItems: 'center' }}>
+      <main style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: isMobile ? '24px' : '48px', padding: isMobile ? '36px 20px' : '72px clamp(24px, 5vw, 48px)', maxWidth: '1120px', width: '100%', margin: '0 auto', alignItems: 'center' }}>
 
         {/* Hero side */}
         <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 6' }}>
@@ -339,11 +341,11 @@ export default function AuthScreen({
             </div>
           )}
         </div>
-      </div>
+      </main>
 
       <div style={{ borderTop: `1px solid ${LINE}`, padding: '14px clamp(20px, 5vw, 44px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ ...micromono, color: GHOST }}>CV-Hub</div>
-        <div style={{ ...micromono, color: GHOST }}>cv.example.com</div>
+        <div style={{ ...micromono, color: GHOST }}>{APP_NAME}</div>
       </div>
     </div>
   );

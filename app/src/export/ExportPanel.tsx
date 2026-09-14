@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CVData, CoverLetterData, AppProfile } from '../data/types';
+import type { CVData, CoverLetterData, AppProfile, Lang } from '../data/types';
 import AtsCheckModal from '../screens/AtsCheckModal';
 
 // ── Lightweight structural diff for MD-import previews ─────────────────────
@@ -56,13 +56,14 @@ import type { ExportRenderConfig } from './exportHtml';
 import { exportMarkdown } from './exportMarkdown';
 import { exportJson } from './exportJson';
 import { exportDocx } from './exportDocx';
-import { exportJsonResume } from './jsonResume';
+import { exportJsonResume, jsonResumeToCv, isJsonResume } from './jsonResume';
+import { exportTemplateKit } from './exportTemplate';
 import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
 import { LANG_NAMES } from '../data/labels';
 import { api } from '../data/api';
-import { track } from '../data/track';
 import type { ShareLink } from '../data/api';
+import { track } from '../data/track';
 
 interface ExportPanelProps {
   data: CVData;
@@ -79,6 +80,8 @@ interface ExportPanelProps {
   onDemoBlock?: (reason: string) => void;
   /** Called after a successful Markdown import so the app can refresh state. */
   onProfileUpdated?: (profile: AppProfile) => void;
+  /** Replace the active language's CV data (used by JSON Resume / bare-CVData import). */
+  onReplaceData?: (cv: CVData) => void;
 }
 
 // Prompt builders. Embedded variant ships the Markdown content inline so the
@@ -251,29 +254,46 @@ const s = {
 };
 
 function ExportButton({
-  icon, label, sub, onClick,
-}: { icon: string; label: string; sub: string; onClick: () => void }) {
+  icon, label, sub, onClick, busy,
+}: { icon: string; label: string; sub: string; onClick: () => void; busy?: boolean }) {
   const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
+      disabled={busy}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={s.exportBtn(hover)}
     >
-      <div style={s.btnIcon}>{icon}</div>
+      <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : icon}</div>
       <div>
         <div style={s.btnLabel}>{label}</div>
-        <div style={s.btnSub}>{sub}</div>
+        <div style={s.btnSub}>{busy ? 'Wird gebaut…' : sub}</div>
       </div>
     </button>
   );
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, demoMode = false, onDemoBlock }: ExportPanelProps) {
+/**
+ * Freigabeliste aus einer Serverantwort, notfalls leer.
+ *
+ * Antwortet der Server mit 200, aber ohne `shares` — etwa weil ein Proxy die
+ * SPA-Startseite zurückgibt statt der API —, landete vorher `undefined` im
+ * Zustand, und der nächste Zugriff darauf riss die GANZE Anwendung mit.
+ * Auf dem Telefon besonders bitter: dort hängt das Export-Panel dauerhaft im
+ * DOM, der Fehler nahm also auch Bearbeiten und Vorschau mit in den
+ * weißen Bildschirm.
+ */
+function asShares(d: unknown): ShareLink[] {
+  const list = (d as { shares?: unknown } | null | undefined)?.shares;
+  return Array.isArray(list) ? list as ShareLink[] : [];
+}
+
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock }: ExportPanelProps) {
   const [pdfHover, setPdfHover] = useState(false);
   const [pdfState, setPdfState] = useState<'idle' | 'busy' | 'error'>('idle');
+  const [kitBusy, setKitBusy] = useState(false);
   const [atsOpen, setAtsOpen] = useState(false);
   const [shares, setShares] = useState<ShareLink[]>([]);
   const [shareBusy, setShareBusy] = useState(false);
@@ -411,24 +431,29 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     reader.onload = async () => {
       try {
         const parsed = JSON.parse(String(reader.result || ''));
-        // accept either an AppProfile or a bare CVData payload
         if (!parsed || typeof parsed !== 'object') throw new Error('Ungültiges JSON');
-        let updated: AppProfile;
-        if (parsed.id && parsed.data) {
-          updated = { ...parsed, id: resumeId || parsed.id };
-        } else if (parsed.personal && parsed.experience !== undefined) {
-          // bare CVData → wrap into the active profile
-          const language = lang === 'en' ? 'en' : 'de';
-          // shallow merge of the active profile via callback path
-          throw new Error('Bitte vollständiges Profil-JSON (id, settings, data) hochladen.');
-          void language;
-        } else {
-          throw new Error('JSON-Format unbekannt. Erwartet wird ein Profil-Export aus diesem Tool.');
+
+        // JSON Resume (jsonresume.org) or a bare CVData → map into the active
+        // language's data via the replace callback (autosaves like any edit).
+        if (isJsonResume(parsed) || (parsed.personal && parsed.experience !== undefined)) {
+          if (!onReplaceData) throw new Error('Import hier nicht verfügbar.');
+          const cv = isJsonResume(parsed) ? jsonResumeToCv(parsed, data) : (parsed as CVData);
+          onReplaceData(cv);
+          setImportOpen(false);
+          return;
         }
-        if (!resumeId) throw new Error('Kein aktives Profil — bitte erst eines anlegen.');
-        await api.saveResumeWithSnapshot(updated, 'json_import');
-        onProfileUpdated?.(updated);
-        setImportOpen(false);
+
+        // Full profile export from this tool.
+        if (parsed.id && parsed.data) {
+          if (!resumeId) throw new Error('Kein aktives Profil — bitte erst eines anlegen.');
+          const updated: AppProfile = { ...parsed, id: resumeId || parsed.id };
+          await api.saveResumeWithSnapshot(updated, 'json_import');
+          onProfileUpdated?.(updated);
+          setImportOpen(false);
+          return;
+        }
+
+        throw new Error('JSON-Format unbekannt. Erwartet: Profil-Export, JSON Resume oder CVData.');
       } catch (e) { setImportErr(e instanceof Error ? e.message : 'JSON-Import fehlgeschlagen.'); }
       finally { setImportBusy(false); }
     };
@@ -458,11 +483,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   }
 
   useEffect(() => {
-    if (!resumeId) { setShares([]); return; }
+    // Im Demo-Modus gibt es serverseitig kein Profil — die Anfrage kann nur
+    // fehlschlagen. Sie zu unterlassen spart nicht nur einen Fehlversuch,
+    // sondern schließt die Ursache eines Totalausfalls aus (siehe `asShares`).
+    if (!resumeId || demoMode) { setShares([]); return; }
     let alive = true;
-    api.listShares(resumeId).then(d => { if (alive) setShares(d.shares); }).catch(() => {});
+    api.listShares(resumeId).then(d => { if (alive) setShares(asShares(d)); }).catch(() => {});
     return () => { alive = false; };
-  }, [resumeId]);
+  }, [resumeId, demoMode]);
 
   const [newShareIncludeCl, setNewShareIncludeCl] = useState(true);
   async function createShare() {
@@ -470,8 +498,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     setShareBusy(true); setShareErr(null);
     try {
       await api.createShare(resumeId, { includeCoverLetter: newShareIncludeCl });
-      const d = await api.listShares(resumeId);
-      setShares(d.shares);
+      setShares(asShares(await api.listShares(resumeId)));
     } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
     finally { setShareBusy(false); }
   }
@@ -479,8 +506,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     if (!resumeId) return;
     try {
       await api.updateShare(token, { includeCoverLetter: next });
-      const d = await api.listShares(resumeId);
-      setShares(d.shares);
+      setShares(asShares(await api.listShares(resumeId)));
     } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
   }
   async function revokeShare(token: string) {
@@ -488,8 +514,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     if (!window.confirm('Diesen Link widerrufen? Verbindungen damit funktionieren danach nicht mehr.')) return;
     try {
       await api.revokeShare(token);
-      const d = await api.listShares(resumeId);
-      setShares(d.shares);
+      setShares(asShares(await api.listShares(resumeId)));
     } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
   }
   function relativeTime(iso: string | null): string {
@@ -514,21 +539,25 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   }
 
   const [pdfErrMsg, setPdfErrMsg] = useState<string | null>(null);
+  const [pdfDone, setPdfDone] = useState<string | null>(null);
   async function handlePdf() {
     setPdfErrMsg(null);
-    // Direct one-click PDF for everyone (demo hits the render endpoint too).
+    setPdfDone(null);
+    // Ein Klick, ein Download — kein Druckdialog. Der PDF-Endpunkt bedient auch
+    // den Demo-Modus, dort gibt es dasselbe echte Vektor-PDF. Nur wenn der
+    // Dienst wirklich ausfällt, fällt der Demo-Pfad auf den Browserdruck zurück.
     setPdfState('busy');
     try {
-      await exportPdf({ data, cfg: exportConfig, isCover, coverLetter });
+      const res = await exportPdf({ data, cfg: exportConfig, isCover, coverLetter });
       track('export_pdf', { docType: isCover ? 'cover' : 'resume', demo: !!demoMode });
       setPdfState('idle');
+      setPdfDone(`PDF fertig · ${res.pages === 1 ? 'eine Seite' : `${res.pages} Seiten`} · ${Math.max(1, Math.round(res.bytes / 1024))} KB. Liegt in deinem Download-Ordner.`);
+      setTimeout(() => setPdfDone(null), 9000);
     } catch (err) {
-      // Surface the real error so the user knows what went wrong instead of
-      // silently bouncing them into the print dialog.
       if (demoMode && onPrint) { setPdfState('idle'); onPrint(); return; }
       setPdfState('error');
-      setPdfErrMsg(err instanceof Error ? err.message : 'PDF-Service-Fehler');
-      setTimeout(() => setPdfState('idle'), 5000);
+      setPdfErrMsg(err instanceof Error ? err.message : 'PDF-Dienst-Fehler');
+      setTimeout(() => setPdfState('idle'), 8000);
     }
   }
 
@@ -577,13 +606,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           style={{ ...s.pdfBtn, margin: 0, width: '100%', background: pdfState === 'busy' ? '#555' : (pdfHover ? '#333' : 'oklch(0.21 0.021 264)'), cursor: pdfState === 'busy' ? 'default' : 'pointer' }}
         >
           {pdfState === 'busy'
-            ? <><span>⏳</span> PDF wird erzeugt…</>
+            ? <><span className="cv-spin" aria-hidden /> PDF wird gebaut …</>
             : <><span>↓</span> {docWord} als PDF herunterladen</>}
         </button>
-        <div style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginTop: '8px', fontFamily: "'Inter', sans-serif" }}>
+        <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'oklch(0.50 0.014 264)', lineHeight: 1.55, marginTop: '8px', fontFamily: "'Inter', sans-serif" }}>
           {pdfState === 'error'
-            ? `PDF-Export fehlgeschlagen${pdfErrMsg ? `: ${pdfErrMsg}` : ''}. Bitte erneut versuchen.`
-            : 'Direkter Download — vektorbasiert, A4, ATS-lesbar. Kein Druckdialog.'}
+            ? `PDF-Export fehlgeschlagen: ${pdfErrMsg || 'unbekannter Fehler'}`
+            : pdfDone
+              ? pdfDone
+              : 'Ein Klick, ein Download. Vektor-PDF, echte Textebene, kein Druckdialog — die Seiten sind exakt die aus der Vorschau.'}
         </div>
 
         <button
@@ -621,11 +652,33 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           </>
         ) : (
           <>
-            <ExportButton icon="📄" label="Word (.docx)" sub="ATS-optimiert: eine Spalte, echte Überschriften, keine Tabellen" onClick={() => { track('export_docx'); exportDocx(data); }} />
+            <ExportButton
+              icon="📄" label="Word (.docx)"
+              sub="Die gewählte Vorlage in Word — Farbfläche, Akzentfarben, Datumsspalte. Öffnet in Word und LibreOffice."
+              onClick={() => { track('export_docx'); exportDocx(data, exportConfig.themeId, 'design'); }}
+            />
+            <ExportButton
+              icon="📄" label="Word — ATS-Fassung"
+              sub="Einspaltig, ohne Tabellen und Flächen. Für Portale, die die Datei maschinell auslesen."
+              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig.themeId, 'ats'); }}
+            />
             <ExportButton icon="🌐" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
             <ExportButton icon="📝" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="{ }" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
             <ExportButton icon="🧩" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
+            {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus
+                alles, was ein Mensch oder eine KI braucht, um es zu füllen. */}
+            <ExportButton
+              icon="📦" label="Vorlage ohne Daten"
+              sub="ZIP mit HTML, Word, leerem JSON und Anleitung — das Design zum Selbstbefüllen, auch ohne dieses Werkzeug."
+              busy={kitBusy}
+              onClick={async () => {
+                track('export_template_kit');
+                setKitBusy(true);
+                try { await exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang, data); }
+                finally { setKitBusy(false); }
+              }}
+            />
           </>
         )}
       </div>
@@ -869,7 +922,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           </div>
         </div>
       )}
-      {atsOpen && <AtsCheckModal data={data} coverLetter={coverLetter} onClose={() => setAtsOpen(false)} />}
+      {atsOpen && <AtsCheckModal data={data} coverLetter={coverLetter} exportConfig={exportConfig} onClose={() => setAtsOpen(false)} />}
     </div>
   );
 }

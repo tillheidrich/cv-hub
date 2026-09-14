@@ -1,15 +1,15 @@
 # CV-Hub
 
-> Selbst gehostetes Tool zum Erstellen editorialer Lebensläufe und
-> Anschreiben mit 28 Vorlagen in vier Sprachen, automatischer A4-Anpassung
-> und einer Markdown-Brücke (plus MCP-Server) für KI-Lektorat. Keine
-> eingebaute KI. Betreiber: CV-Hub.
+> Selbst gehostetes Tool zum Erstellen von Lebensläufen und Anschreiben:
+> 25 Vorlagen, vier Sprachen, blockweise Seitenumbrüche ohne Schnitt mitten
+> im Eintrag und eine Markdown-Brücke (plus MCP-Server) für KI-Lektorat.
+> Keine eingebaute KI. Diese Datei beschreibt die Instanz, auf der sie liegt.
 
 ## Über das Produkt
 
 - Webbasiertes Tool, läuft im Browser
 - Erstellt Lebensläufe und Anschreiben für Bewerbungen in vier Sprachen (Deutsch, Englisch, Französisch, Spanisch)
-- 28 Vorlagen in mehreren Layout-Archetypen (Single-Column, Sidebar L/R, Header-Band, Top-Centered, Timeline)
+- 25 wählbare Vorlagen in mehreren Layout-Archetypen (Single-Column, Sidebar L/R, Header-Band, Top-Centered, Timeline)
 - Exportiert als PDF, HTML, Markdown, JSON
 - Eingabe per Editor oder Markdown-Import
 - Versionshistorie mit automatischen Sicherungen vor Importen
@@ -27,9 +27,49 @@
 
 ## ATS-Tauglichkeit
 
-- Single-Column-Vorlagen sind für Applicant Tracking Systems (Workday, Taleo, iCIMS) optimiert
-- Mehrspaltige Vorlagen sind für Mensch-zu-Mensch-Bewerbungen (Initiativbewerbung, Empfehlung, kleine Firmen)
-- DOCX-Export für maximale ATS-Tauglichkeit ist in Planung
+- Einspaltige Vorlagen werden von Parsern am zuverlässigsten in Felder überführt.
+  Belegt über Herstellerdokumentation: Personio nennt mehrspaltige Layouts,
+  Tabellen, Kopf-/Fußzeilen, Schrift ≤ 8 pt und Grafiken statt Text als
+  Parsing-Fehlerursachen; Greenhouse nennt „columned layout" und Grafiken;
+  Workday nennt Bilder und die Lesereihenfolge der Wörter.
+- Mehrspaltige Vorlagen bleiben wählbar und sind im Tool als „ATS-riskant"
+  gekennzeichnet — Textkernel (Parser u. a. hinter softgarden) erkennt nach
+  eigener Verbesserung rund 90 % der Spalten-Layouts korrekt; jeder zehnte
+  also nicht.
+- Das Tool behauptet ausdrücklich KEINE Ablehnungsquote. Die kursierende
+  „75 % werden vom ATS aussortiert"-Zahl stammt aus einem Verkaufsargument von
+  2012 ohne Methodik. Parsing-Qualität ist hier ein Hygienefaktor, kein
+  Erfolgsversprechen.
+- Fließtext ab Werk 9,8 pt, harte Untergrenze 8,4 pt — auch wenn der Inhalt
+  dadurch auf eine zweite Seite läuft.
+- DOCX-Export ist vorhanden (ATS-clean, ohne Layout-Tabellen).
+
+## Für KI-Agenten ohne MCP-Server
+
+Das Tool lässt sich vollständig über Markdown bedienen — ohne MCP, ohne API-Key,
+ohne Login auf Agentenseite. Ablauf:
+
+1. Vorlage holen (statisch, ohne Authentifizierung abrufbar):
+   - https://example.org/vorlage-lebenslauf-de.md
+   - https://example.org/vorlage-lebenslauf-en.md
+   - https://example.org/vorlage-anschreiben-de.md
+   - https://example.org/vorlage-anschreiben-en.md
+2. Inhalte in genau dieser Struktur ausfüllen. Der Frontmatter-Block steuert
+   Vorlage, Sprache, Schriftgröße und Seitenzahl (`pageMode: one | two | three | auto`).
+3. Den fertigen Markdown-Text im Tool unter „Import" einfügen. Der Parser ist
+   tolerant gegenüber `### **Fettschrift-Titeln**` und den Bullet-Zeichen `*`, `+`, `-`.
+4. Vor jedem Import legt das Tool automatisch eine Version an; ein Fehlgriff ist
+   also rückholbar.
+
+Alternativ versteht das Tool den JSON-Resume-Standard (jsonresume.org) für
+Import und Export — deterministisch, ohne KI-Zwischenschritt.
+
+Grenzen, die ein Agent kennen sollte:
+- Konten gibt es nur per Einladungscode. Es existiert keine offene Registrierung
+  und kein Weg, sich selbst einen Zugang zu verschaffen.
+- Der Demo-Modus arbeitet ausschließlich im localStorage und braucht keinen Zugang.
+- Im Tool selbst arbeitet keine KI. Es rechnet, setzt und exportiert — Formulieren
+  ist Sache des Modells davor.
 
 ## Datenschutz
 

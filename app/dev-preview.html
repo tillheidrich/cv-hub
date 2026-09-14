@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Umbruch-Prüfstand</title>
+    <style>
+      body { margin: 0; background: #eceae5; font-family: Inter, sans-serif; }
+      .harness { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px; }
+      .cv-page { box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 12px 32px -8px rgba(0,0,0,.18); }
+      .hud { position: fixed; top: 8px; left: 8px; z-index: 99; background: #111; color: #fff;
+             font: 11px/1.5 ui-monospace, monospace; padding: 6px 10px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="dev-root"></div>
+    <script type="module" src="/src/dev/devPreview.tsx"></script>
+  </body>
+</html>

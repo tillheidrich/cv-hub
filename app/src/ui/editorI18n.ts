@@ -26,6 +26,11 @@ export interface EditorStrings {
   ttAdmin: string; ttExitDemo: string; ttSignOut: string;
   // Soft-Wall (Demo-Sperre)
   swLimit: string; swTitle: string; swTitleAccent: string; swBody: string; swStay: string;
+  // Direktes Schreiben in der Vorschau (Telefon/Tablet)
+  zoomDone: string; tapToWrite: string;
+  // Blätter und Menü auf dem Telefon
+  close: string; menu: string; chooseTemplate: string; typeAndPage: string;
+  docTypeLabel: string; langLabel: string;
 }
 
 export const ET: Record<UiLang, EditorStrings> = {
@@ -44,6 +49,9 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttExitDemo: 'Demo verlassen und ein Konto anlegen',
     ttSignOut: 'Abmelden',
     swLimit: 'Demo-Limit', swTitle: 'Diese Funktion braucht ein', swTitleAccent: 'Konto.', swBody: 'Du bist gerade im Demo-Modus. Speichern, Sharelinks, Versionen und KI-Funktionen brauchen ein Konto — registrieren dauert 30 Sekunden, du bekommst einen Einladungscode von der Person, die dir das Tool gezeigt hat.', swStay: 'Weiter im Demo',
+    zoomDone: 'Fertig', tapToWrite: 'Text antippen und schreiben',
+    close: 'Schließen', menu: 'Menü', chooseTemplate: 'Vorlage wählen', typeAndPage: 'Schrift & Seite',
+    docTypeLabel: 'Dokument', langLabel: 'Sprache des Lebenslaufs',
   },
   en: {
     home: 'HOME',
@@ -60,6 +68,9 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttExitDemo: 'Leave the demo and create an account',
     ttSignOut: 'Sign out',
     swLimit: 'Demo limit', swTitle: 'This feature needs an', swTitleAccent: 'account.', swBody: "You're in demo mode right now. Saving, sharelinks, versions and AI features require an account — signing up takes 30 seconds, you'll get an invite code from whoever showed you the tool.", swStay: 'Stay in the demo',
+    zoomDone: 'Done', tapToWrite: 'Tap any text to write',
+    close: 'Close', menu: 'Menu', chooseTemplate: 'Choose a template', typeAndPage: 'Type & page',
+    docTypeLabel: 'Document', langLabel: 'Language of the CV',
   },
   fr: {
     home: 'ACCUEIL',
@@ -76,6 +87,9 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttExitDemo: 'Quitter la démo et créer un compte',
     ttSignOut: 'Déconnexion',
     swLimit: 'Limite démo', swTitle: 'Cette fonction nécessite un', swTitleAccent: 'compte.', swBody: "Vous êtes en mode démo. L'enregistrement, les liens de partage, les versions et les fonctions IA nécessitent un compte — l'inscription prend 30 secondes, avec un code d'invitation fourni par la personne qui vous a montré l'outil.", swStay: 'Rester en démo',
+    zoomDone: 'Terminé', tapToWrite: 'Touchez un texte pour écrire',
+    close: 'Fermer', menu: 'Menu', chooseTemplate: 'Choisir un modèle', typeAndPage: 'Typographie et page',
+    docTypeLabel: 'Document', langLabel: 'Langue du CV',
   },
   es: {
     home: 'INICIO',
@@ -92,6 +106,9 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttExitDemo: 'Salir de la demo y crear una cuenta',
     ttSignOut: 'Cerrar sesión',
     swLimit: 'Límite de la demo', swTitle: 'Esta función requiere una', swTitleAccent: 'cuenta.', swBody: 'Estás en modo demo. Guardar, los enlaces para compartir, las versiones y las funciones de IA requieren una cuenta — registrarse lleva 30 segundos y recibes un código de invitación de quien te enseñó la herramienta.', swStay: 'Seguir en la demo',
+    zoomDone: 'Listo', tapToWrite: 'Toca un texto para escribir',
+    close: 'Cerrar', menu: 'Menú', chooseTemplate: 'Elegir plantilla', typeAndPage: 'Tipografía y página',
+    docTypeLabel: 'Documento', langLabel: 'Idioma del CV',
   },
 };
 
@@ -104,7 +121,10 @@ export const ET: Record<UiLang, EditorStrings> = {
 export interface PanelStrings {
   // Section tabs
   tabPersonal: string; tabProfil: string; tabErfahrung: string;
-  tabBildung: string; tabSkills: string; tabSprachen: string;
+  tabBildung: string; tabSkills: string; tabSprachen: string; tabTexte: string;
+  // Reiter „Beschriftungen"
+  labelsIntro: string; labelsSections: string; labelsFields: string; labelsMisc: string;
+  labelsFooter: string; labelsReset: string; labelsResetAll: string;
 
   // Common
   add: string;            // '+ Hinzufügen'
@@ -134,6 +154,8 @@ export interface PanelStrings {
   personalNote: string;
   birthDate: string; birthDatePlaceholder: string;
   birthPlace: string; maritalStatus: string; nationality: string; driversLicense: string;
+  // Unterschrift am Blattfuß (nur Vorlagen, die eine zeigen)
+  signatureHead: string; signatureHint: string; signatureCity: string; signatureDate: string;
 
   // Profile
   profileHint: string; profileLabel: string; profilePlaceholder: string;
@@ -214,6 +236,10 @@ export const EP: Record<UiLang, PanelStrings> = {
   de: {
     tabPersonal: 'Persönlich', tabProfil: 'Profil', tabErfahrung: 'Erfahrung',
     tabBildung: 'Bildung', tabSkills: 'Skills', tabSprachen: 'Sprachen',
+    tabTexte: 'Texte',
+    labelsIntro: 'Jede Überschrift und jede Feldbezeichnung im Dokument gehört dir. Änderungen gelten für diese Sprachfassung; die anderen bleiben, wie sie sind.',
+    labelsSections: 'Überschriften', labelsFields: 'Feldbezeichnungen', labelsMisc: 'Sonstiges',
+    labelsFooter: 'Fußzeile', labelsReset: 'Zurücksetzen', labelsResetAll: 'Alle Texte zurücksetzen',
 
     add: '+ Hinzufügen',
     remove: 'Entfernen',
@@ -239,6 +265,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     personalNote: 'Hinweis: Familienstand, Geburtsort und Staatsangehörigkeit sind im deutschen Lebenslauf 2026 nicht mehr Standard und können weggelassen werden. Leere Felder werden nicht angezeigt.',
     birthDate: 'Geburtsdatum', birthDatePlaceholder: 'z. B. 01.01.1990',
     birthPlace: 'Geburtsort', maritalStatus: 'Familienstand', nationality: 'Nationalität', driversLicense: 'Führerschein',
+    signatureHead: 'Unterschrift', signatureCity: 'Ort', signatureDate: 'Datum',
+    signatureHint: 'Vorlagen im Bewerbungsset-Stil setzen unten Ort, Datum und einen Schriftzug. Der Schriftzug ist gesetzt, kein Scan — genau wie bei den gekauften Vorlagen. Leer lassen: Ort kommt aus der Adresse, Datum ist immer heute.',
 
     profileHint: 'Das Kurzprofil erscheint direkt unter deinem Namen. 2–4 Sätze, spezifisch und wirkungsstark.',
     profileLabel: 'Profil-Text',
@@ -312,6 +340,10 @@ export const EP: Record<UiLang, PanelStrings> = {
   en: {
     tabPersonal: 'Personal', tabProfil: 'Profile', tabErfahrung: 'Experience',
     tabBildung: 'Education', tabSkills: 'Skills', tabSprachen: 'Languages',
+    tabTexte: 'Wording',
+    labelsIntro: 'Every heading and field label in the document is yours. Changes apply to this language version; the others stay as they are.',
+    labelsSections: 'Headings', labelsFields: 'Field labels', labelsMisc: 'Other',
+    labelsFooter: 'Footer', labelsReset: 'Reset', labelsResetAll: 'Reset all wording',
 
     add: '+ Add',
     remove: 'Remove',
@@ -337,6 +369,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     personalNote: 'Note: Marital status, place of birth and nationality are no longer standard on a German CV in 2026 and can be left out. Empty fields are not shown.',
     birthDate: 'Date of birth', birthDatePlaceholder: 'e.g. 01/01/1990',
     birthPlace: 'Place of birth', maritalStatus: 'Marital status', nationality: 'Nationality', driversLicense: 'Driving licence',
+    signatureHead: 'Signature', signatureCity: 'Place', signatureDate: 'Date',
+    signatureHint: 'Application-set templates put place, date and a signature at the foot. The signature is typeset, not a scan — exactly as in the bought templates. Leave empty: place comes from the address, date is always today.',
 
     profileHint: 'The short profile appears right under your name. 2–4 sentences, specific and impactful.',
     profileLabel: 'Profile text',
@@ -410,6 +444,10 @@ export const EP: Record<UiLang, PanelStrings> = {
   fr: {
     tabPersonal: 'Personnel', tabProfil: 'Profil', tabErfahrung: 'Expérience',
     tabBildung: 'Formation', tabSkills: 'Compétences', tabSprachen: 'Langues',
+    tabTexte: 'Libellés',
+    labelsIntro: 'Chaque titre et chaque libellé du document vous appartient. Les modifications valent pour cette version linguistique ; les autres restent inchangées.',
+    labelsSections: 'Titres', labelsFields: 'Libellés de champ', labelsMisc: 'Divers',
+    labelsFooter: 'Pied de page', labelsReset: 'Réinitialiser', labelsResetAll: 'Tout réinitialiser',
 
     add: '+ Ajouter',
     remove: 'Supprimer',
@@ -435,6 +473,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     personalNote: 'Remarque : la situation familiale, le lieu de naissance et la nationalité ne sont plus standard sur un CV allemand en 2026 et peuvent être omis. Les champs vides ne sont pas affichés.',
     birthDate: 'Date de naissance', birthDatePlaceholder: 'p. ex. 01/01/1990',
     birthPlace: 'Lieu de naissance', maritalStatus: 'Situation familiale', nationality: 'Nationalité', driversLicense: 'Permis de conduire',
+    signatureHead: 'Signature', signatureCity: 'Lieu', signatureDate: 'Date',
+    signatureHint: 'Les modèles de type dossier de candidature placent lieu, date et une signature en bas. La signature est composée, ce n’est pas un scan — comme dans les modèles achetés. Laissez vide : le lieu vient de l’adresse, la date est toujours celle du jour.',
 
     profileHint: 'Le profil court apparaît juste sous votre nom. 2 à 4 phrases, précises et percutantes.',
     profileLabel: 'Texte du profil',
@@ -508,6 +548,10 @@ export const EP: Record<UiLang, PanelStrings> = {
   es: {
     tabPersonal: 'Personal', tabProfil: 'Perfil', tabErfahrung: 'Experiencia',
     tabBildung: 'Formación', tabSkills: 'Competencias', tabSprachen: 'Idiomas',
+    tabTexte: 'Rótulos',
+    labelsIntro: 'Cada título y cada rótulo del documento es tuyo. Los cambios valen para esta versión de idioma; las demás quedan igual.',
+    labelsSections: 'Títulos', labelsFields: 'Rótulos de campo', labelsMisc: 'Otros',
+    labelsFooter: 'Pie de página', labelsReset: 'Restablecer', labelsResetAll: 'Restablecer todos los rótulos',
 
     add: '+ Añadir',
     remove: 'Quitar',
@@ -533,6 +577,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     personalNote: 'Nota: el estado civil, el lugar de nacimiento y la nacionalidad ya no son estándar en un currículum alemán en 2026 y pueden omitirse. Los campos vacíos no se muestran.',
     birthDate: 'Fecha de nacimiento', birthDatePlaceholder: 'p. ej. 01/01/1990',
     birthPlace: 'Lugar de nacimiento', maritalStatus: 'Estado civil', nationality: 'Nacionalidad', driversLicense: 'Carné de conducir',
+    signatureHead: 'Firma', signatureCity: 'Lugar', signatureDate: 'Fecha',
+    signatureHint: 'Las plantillas tipo dossier ponen lugar, fecha y una firma al pie. La firma es tipográfica, no un escaneo — igual que en las plantillas compradas. Déjalo vacío: el lugar sale de la dirección, la fecha es siempre hoy.',
 
     profileHint: 'El perfil breve aparece justo debajo de tu nombre. 2–4 frases, específicas y contundentes.',
     profileLabel: 'Texto del perfil',

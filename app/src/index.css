@@ -26,11 +26,48 @@ body {
   min-height: 100vh;
 }
 
+
+/* ── App-Höhe auf dem Telefon ─────────────────────────────────────────────
+   `100vh` ist in iOS Safari die GROSSE Ansichtshöhe — die, die gälte, wenn
+   die Browserleiste eingefahren wäre. Sie ist es aber meistens nicht: die
+   unteren rund 50 px der App liegen dann hinter der Leiste, und genau dort
+   sitzt die Bereichsleiste (Bearbeiten / Vorschau / Export / Tipps). `dvh`
+   ist die tatsächliche, mitwandernde Höhe. `vh` bleibt als Rückfall für
+   ältere Browser stehen — die Reihenfolge entscheidet. */
+.cv-app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
 .cv-page {
   width: 210mm;
   background: #ffffff;
   position: relative;
 }
+
+/* ── Isolation des gesetzten Dokuments ───────────────────────────────────────
+   Wortgleich in app/src/index.css und im Export-HTML (export/exportHtml.ts).
+   Grund: in der App liegt Tailwinds Preflight über allem, im exportierten
+   HTML nur ein Minimal-Reset. Ohne diesen Block misst die Vorschau andere
+   Blockhöhen als das PDF — und weil die Seitenaufteilung aus genau diesen
+   Höhen berechnet wird, wandern Umbrüche. Inline-Styles des Renderers
+   gewinnen gegen diese Regeln; hier wird nur neutralisiert, was der Renderer
+   NICHT selbst setzt. */
+.cv-page, .cv-page * {
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+  box-sizing: border-box;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  font-style: inherit;
+  list-style: none;
+  text-decoration: none;
+  text-align: inherit;
+  vertical-align: baseline;
+}
+
 
 @media screen {
   .cv-page {
@@ -62,6 +99,14 @@ body {
     width: auto !important;
   }
 
+  /* Die Markierung beschreibbarer Felder ist Bedienhilfe, nicht Dokument —
+     im Druck (und damit im PDF über den Browser-Druckpfad) hat sie nichts
+     verloren. */
+  .cv-edit {
+    box-shadow: none !important;
+    background: none !important;
+  }
+
   .cv-page {
     box-shadow: none !important;
     margin: 0 !important;
@@ -73,4 +118,80 @@ body {
     page-break-after: avoid;
     break-after: avoid;
   }
+}
+
+
+/* Spinner für laufende Exporte — dieselbe Anmutung wie in Klarbild:
+   ein dünner Ring, kein zappelndes Emoji. */
+.cv-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: cv-spin 700ms linear infinite;
+}
+@keyframes cv-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cv-spin { animation-duration: 2.4s; }
+}
+
+
+/* Nur für Screenreader: Text, der sichtbar nichts belegt. Gebraucht für
+   Statusmeldungen (Speichern, Export) und für Werte, die visuell als Grafik
+   dargestellt sind — dort ist es zugleich das, was ein PDF-Textextraktor
+   später findet. */
+.cv-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Blatt von unten (Telefon): `dvh`, damit die Browserleiste mitgerechnet wird,
+   `vh` als Rückfall — die Reihenfolge entscheidet. */
+.cv-sheet {
+  max-height: 76vh;
+  max-height: 76dvh;
+}
+
+/* ── Direktes Bearbeiten in der Vorschau ──────────────────────────────────
+   Der Rahmen liegt als Schatten AUSSEN auf dem Feld und ändert die Maße des
+   Textes nicht. Jede Lösung mit Rand oder Innenabstand würde die Zeilen beim
+   Anklicken umbrechen lassen — und damit die Seitenaufteilung, die gerade
+   berechnet wurde. */
+.cv-edit {
+  outline: none;
+  cursor: text;
+  border-radius: 2px;
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+@media (hover: hover) {
+  .cv-edit:hover {
+    box-shadow: 0 0 0 2px rgba(58, 126, 216, 0.16);
+  }
+}
+/* Auf Touch-Geräten gibt es kein Überfahren mit dem Zeiger. Die Felder
+   dauerhaft zu umranden wäre die naheliegende Antwort — und die falsche: die
+   Vorschau soll zeigen, wie das Dokument aussieht, nicht wie ein Formular.
+   Den Hinweis übernimmt stattdessen eine Einblendung beim Öffnen der
+   Vorschau; wer hineintippt, sieht den Fokusrahmen. */
+.cv-edit:focus {
+  box-shadow: 0 0 0 2px rgba(58, 126, 216, 0.55);
+  background: rgba(58, 126, 216, 0.06);
+}
+/* Ein leer getipptes Feld wäre sonst unsichtbar und nicht mehr anklickbar. */
+.cv-edit:empty::after {
+  content: '…';
+  opacity: 0.3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cv-edit { transition: none; }
 }

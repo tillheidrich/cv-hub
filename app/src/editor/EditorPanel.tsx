@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useId, useState, useRef } from 'react';
 import type { CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, SocialLink, SocialPlatform } from '../data/types';
 import type { UiLang } from '../ui/i18n';
 import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
 import type { PanelStrings } from '../ui/editorI18n';
+import { LABELS } from '../data/labels';
 
 // ── Social platforms ────────────────────────────────────────────────────────
 // Keep prefix logic in one place. Renderer reads this same map to display links.
@@ -70,7 +71,10 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
 const scrollArea: React.CSSProperties = {
   flex: 1,
   overflowY: 'auto',
-  padding: '16px 20px',
+  /* Unten großzügig: Auf dem Telefon sitzt darunter die Bereichsleiste, und
+     bei geöffneter Tastatur schiebt sich das letzte Feld sonst genau unter
+     deren Kante. Am Schreibtisch kostet der Abstand nichts. */
+  padding: '16px 20px calc(40px + env(safe-area-inset-bottom, 0px))',
 };
 
 const fieldGroup: React.CSSProperties = {
@@ -169,11 +173,16 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
   type?: string;
   placeholder?: string;
 }) {
+  // useId verbindet Label und Feld. Vorher standen beide nur nebeneinander —
+  // für Screenreader war das Feld damit unbeschriftet, und ein Klick aufs
+  // Label setzte den Fokus nicht.
+  const id = useId();
   const [focused, setFocused] = useState(false);
   return (
     <div style={fieldGroup}>
-      <label style={labelStyle}>{label}</label>
+      <label htmlFor={id} style={labelStyle}>{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -193,11 +202,13 @@ function TextareaField({ label, value, onChange, rows = 4, placeholder }: {
   rows?: number;
   placeholder?: string;
 }) {
+  const id = useId();
   const [focused, setFocused] = useState(false);
   return (
     <div style={fieldGroup}>
-      <label style={labelStyle}>{label}</label>
+      <label htmlFor={id} style={labelStyle}>{label}</label>
       <textarea
+        id={id}
         value={value}
         onChange={e => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
@@ -378,7 +389,9 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
 
       <Field label={t.email} value={p.email} onChange={v => updatePersonal('email', v)} type="email" />
       <Field label={t.phone} value={p.phone} onChange={v => updatePersonal('phone', v)} type="tel" />
-      <Field label={t.locationAddress} value={p.location} onChange={v => updatePersonal('location', v)} />
+      {/* Anschrift zweizeilig: Straße, dann Postleitzahl und Ort. Ein
+          einzeiliges Eingabefeld konnte das gar nicht abbilden. */}
+      <TextareaField label={t.locationAddress} value={p.location} onChange={v => updatePersonal('location', v)} rows={2} />
       <Field label={t.website} value={p.website ?? ''} onChange={v => updatePersonal('website', v)} />
 
       <SocialsEditor data={data} onChange={onChange} />
@@ -394,6 +407,15 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
       <Field label={t.maritalStatus} value={p.maritalStatus ?? ''} onChange={v => updatePersonal('maritalStatus', v)} />
       <Field label={t.nationality} value={p.nationality ?? ''} onChange={v => updatePersonal('nationality', v)} />
       <Field label={t.driversLicense} value={p.driversLicense ?? ''} onChange={v => updatePersonal('driversLicense', v)} />
+
+      {/* Unterschrift: nur die Vorlagen im Bewerbungsset-Stil zeigen sie, aber
+          die Felder stehen immer hier — sonst wären sie nach einem
+          Vorlagenwechsel unauffindbar. */}
+      <div style={{ borderTop: '1px solid oklch(0.91 0.005 264)', margin: '18px 0 14px' }} />
+      <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.50 0.014 264)', marginBottom: '8px', fontFamily: editorFont }}>{t.signatureHead}</div>
+      <div style={{ fontSize: '11px', color: '#999', marginBottom: '12px', lineHeight: 1.6, fontFamily: editorFont }}>{t.signatureHint}</div>
+      <Field label={t.signatureCity} value={p.signatureCity ?? ''} onChange={v => updatePersonal('signatureCity', v)} />
+      <Field label={t.signatureDate} value={p.signatureDate ?? ''} onChange={v => updatePersonal('signatureDate', v)} />
     </div>
   );
 }
@@ -414,6 +436,72 @@ function ProfileEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
         rows={8}
         placeholder={t.profilePlaceholder}
       />
+    </div>
+  );
+}
+
+// ── Beschriftungen ───────────────────────────────────────────────────────────
+//
+// Überschriften („BERUFSERFAHRUNG"), Feldbezeichnungen („STAATSANGEHÖRIGKEIT")
+// und die Fußzeile kamen aus einer festen Tabelle je Sprache und waren an
+// keiner Stelle änderbar. Wer „Berufsprofil" lieber „Kurzprofil" nennt oder
+// die Zeile „Führerschein" braucht, ohne dass „Führerschein" darübersteht,
+// hatte keinen Weg. Sie liegen ohnehin auf dem Datensatz — und weil jede
+// Sprachfassung ihren eigenen Datensatz hat, ist eine Änderung automatisch
+// sprachspezifisch.
+
+const SECTION_ORDER = ['personal', 'details', 'profile', 'experience', 'education', 'languages', 'additional'] as const;
+const FIELD_ORDER = ['email', 'phone', 'address', 'web', 'linkedin', 'birthDate', 'birthPlace', 'maritalStatus', 'nationality', 'driversLicense'] as const;
+
+function LabelsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData) => void }) {
+  const t = usePanelT();
+  const L = data.labels;
+  const fresh = LABELS[L.lang];
+
+  const set = (group: 'sections' | 'fields' | 'misc', key: string, v: string) =>
+    onChange({ ...data, labels: { ...L, [group]: { ...L[group], [key]: v } } });
+
+  const groupChanged = (group: 'sections' | 'fields' | 'misc') =>
+    Object.keys(fresh[group]).some(k => (L[group] as Record<string, string>)[k] !== (fresh[group] as Record<string, string>)[k]);
+
+  const resetGroup = (group: 'sections' | 'fields' | 'misc') =>
+    onChange({ ...data, labels: { ...L, [group]: { ...fresh[group] } } });
+
+  const head = (title: string, group: 'sections' | 'fields' | 'misc') => (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 8px' }}>
+      <span style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.50 0.014 264)', fontFamily: editorFont }}>{title}</span>
+      {groupChanged(group) && (
+        <button type="button" onClick={() => resetGroup(group)}
+          style={{ background: 'none', border: 'none', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', cursor: 'pointer', fontFamily: editorFont, padding: '4px 0' }}>
+          {t.labelsReset}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={scrollArea}>
+      <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px', lineHeight: 1.6, fontFamily: editorFont }}>
+        {t.labelsIntro}
+      </div>
+
+      {head(t.labelsSections, 'sections')}
+      {SECTION_ORDER.map(k => (
+        /* Beschriftet wird das Feld mit dem VORGABEwert dieser Sprache, nicht
+           mit einer eigenen Erklärung: so sieht man auf einen Blick, was man
+           umbenannt hat („Berufsprofil" → „Kurzprofil"), und es übersetzt sich
+           von selbst mit. */
+        <Field key={k} label={fresh.sections[k]} value={L.sections[k]} onChange={v => set('sections', k, v)} />
+      ))}
+
+      {head(t.labelsFields, 'fields')}
+      {FIELD_ORDER.map(k => (
+        <Field key={k} label={fresh.fields[k]} value={L.fields[k]} onChange={v => set('fields', k, v)} />
+      ))}
+
+      {head(t.labelsMisc, 'misc')}
+      <Field label={`${t.labelsFooter} · ${fresh.misc.cvLabel}`} value={L.misc.cvLabel} onChange={v => set('misc', 'cvLabel', v)} />
+      <Field label={fresh.misc.present} value={L.misc.present} onChange={v => set('misc', 'present', v)} />
     </div>
   );
 }
@@ -489,24 +577,35 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
           onDragLeave={() => { if (dragOverIdx === idx) setDragOverIdx(null); }}
           onDrop={e => { e.preventDefault(); if (dragIdx !== null && dragIdx !== idx) reorder(dragIdx, idx); setDragIdx(null); setDragOverIdx(null); }}
         >
+          {/* Der ganze Kopf war vorher ein div mit onClick: per Tastatur gar nicht
+              erreichbar — und damit waren alle zugeklappten Positionen für
+              Tastaturnutzer nicht editierbar. Jetzt trägt ein echter Button den
+              Aufklapp-Zustand, das Ziehen bleibt auf dem Griff. */}
           <div
             style={{ ...cardHeader, cursor: 'grab' }}
             draggable
             onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
             onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
-            onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
             title={t.dragTitle}
           >
-            <span style={{ fontSize: '12px', color: '#bbb', userSelect: 'none' }}>⋮⋮</span>
-            <span style={{ fontSize: '13px' }}>{openIdx === idx ? '▾' : '▸'}</span>
+            <span style={{ fontSize: '12px', color: '#8a8a8a', userSelect: 'none' }} aria-hidden>⋮⋮</span>
+            <button
+              type="button"
+              onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
+              aria-expanded={openIdx === idx}
+              aria-controls={`exp-body-${exp.id}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '9px', flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+            >
+            <span style={{ fontSize: '13px' }} aria-hidden>{openIdx === idx ? '▾' : '▸'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {exp.role || <span style={{ color: '#bbb' }}>{t.newPosition}</span>}
+                {exp.role || <span style={{ color: '#8a8a8a' }}>{t.newPosition}</span>}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', fontFamily: editorFont }}>
+              <div style={{ fontSize: '10.5px', color: 'oklch(0.45 0.16 264)', fontFamily: editorFont }}>
                 {exp.company}{exp.location ? ` · ${exp.location}` : ''}
               </div>
             </div>
+            </button>
             <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
               <button type="button" onClick={e => { e.stopPropagation(); moveExp(idx, -1); }} style={iconBtn()} title={t.moveUp}>↑</button>
               <button type="button" onClick={e => { e.stopPropagation(); moveExp(idx, 1); }} style={iconBtn()} title={t.moveDown}>↓</button>
@@ -515,7 +614,7 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
           </div>
 
           {openIdx === idx && (
-            <div style={cardBody}>
+            <div id={`exp-body-${exp.id}`} style={cardBody}>
               {/* Hidden toggle */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <input
@@ -596,19 +695,27 @@ function EducationEditor({ data, onChange }: { data: CVData; onChange: (d: CVDat
 
       {data.education.map((edu, idx) => (
         <div key={edu.id} style={cardStyle}>
-          <div style={cardHeader} onClick={() => setOpenIdx(openIdx === idx ? null : idx)}>
-            <span style={{ fontSize: '13px' }}>{openIdx === idx ? '▾' : '▸'}</span>
+          <div style={cardHeader}>
+            <button
+              type="button"
+              onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
+              aria-expanded={openIdx === idx}
+              aria-controls={`edu-body-${edu.id}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '9px', flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+            >
+            <span style={{ fontSize: '13px' }} aria-hidden>{openIdx === idx ? '▾' : '▸'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {edu.degree || <span style={{ color: '#bbb' }}>{t.newEntry}</span>}
+                {edu.degree || <span style={{ color: '#8a8a8a' }}>{t.newEntry}</span>}
               </div>
-              <div style={{ fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', fontFamily: editorFont }}>{edu.institution}</div>
+              <div style={{ fontSize: '10.5px', color: 'oklch(0.45 0.16 264)', fontFamily: editorFont }}>{edu.institution}</div>
             </div>
+            </button>
             <button type="button" onClick={e => { e.stopPropagation(); removeEdu(idx); }} style={iconBtn('#c0392b')} title={t.remove}>×</button>
           </div>
 
           {openIdx === idx && (
-            <div style={cardBody}>
+            <div id={`edu-body-${edu.id}`} style={cardBody}>
               <Field label={t.eduDegree} value={edu.degree} onChange={v => updateEdu(idx, { ...edu, degree: v })} />
               <Field label={t.eduInstitution} value={edu.institution} onChange={v => updateEdu(idx, { ...edu, institution: v })} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
@@ -974,11 +1081,11 @@ function DotRatingInput({ value, onChange }: { value?: number; onChange: (v: num
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 
-type Tab = 'personal' | 'profil' | 'erfahrung' | 'bildung' | 'skills' | 'sprachen';
+type Tab = 'personal' | 'profil' | 'erfahrung' | 'bildung' | 'skills' | 'sprachen' | 'texte';
 
 // Stable tab order + ids. Labels are resolved from the i18n catalog inside the
 // component so they follow the UI language.
-const tabOrder: Tab[] = ['personal', 'profil', 'erfahrung', 'bildung', 'skills', 'sprachen'];
+const tabOrder: Tab[] = ['personal', 'profil', 'erfahrung', 'bildung', 'skills', 'sprachen', 'texte'];
 
 const tabLabelKeys: Record<Tab, keyof PanelStrings> = {
   personal: 'tabPersonal',
@@ -987,6 +1094,7 @@ const tabLabelKeys: Record<Tab, keyof PanelStrings> = {
   bildung: 'tabBildung',
   skills: 'tabSkills',
   sprachen: 'tabSprachen',
+  texte: 'tabTexte',
 };
 
 // ── EditorPanel ──────────────────────────────────────────────────────────────
@@ -1043,6 +1151,7 @@ export default function EditorPanel({ data, uiLang, onUpdate, demoMode = false, 
         {activeTab === 'bildung' && <EducationEditor data={data} onChange={handleChange} />}
         {activeTab === 'skills' && <SkillsEditor data={data} onChange={handleChange} />}
         {activeTab === 'sprachen' && <LanguagesEditor data={data} onChange={handleChange} />}
+        {activeTab === 'texte' && <LabelsEditor data={data} onChange={handleChange} />}
       </div>
     </PanelI18nCtx.Provider>
   );
