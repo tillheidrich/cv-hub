@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { chromium } from 'playwright';
+import { isPdfFetchAllowed } from './ssrf.js';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl } from './markdown.js';
 import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
@@ -130,7 +131,23 @@ const TEMPLATES = [
 ];
 
 const app = express();
-app.set('trust proxy', 1);
+/* Befund vom 14.09.2026: „1" war fest verdrahtet.
+ *
+ * Hinter einem Reverse-Proxy ist das richtig — Express nimmt dann den rechten,
+ * vom Proxy gesetzten Hop als `req.ip`, und den kann ein Aufrufer nicht
+ * fälschen. OHNE Proxy ist derselbe Wert fatal: dann stammt `req.ip` aus einem
+ * X-Forwarded-For, das der Client frei setzt, und JEDES Rate-Limit dieser
+ * Datei (Login 5/15 min, Registrierung, PDF) ist mit einem Header abgeschaltet.
+ * Passwort-Brute-Force liefe nur noch gegen die bcrypt-Kosten.
+ *
+ * Eine selbstgehostete Kopie hat in aller Regel keinen Proxy. Deshalb ist die
+ * Vorgabe jetzt „kein Proxy", und wer einen hat, sagt es: TRUST_PROXY=1 (Zahl
+ * der Hops) oder ein Express-Schlüsselwort wie „loopback". */
+const TRUST_PROXY = (process.env.TRUST_PROXY || '').trim();
+app.set('trust proxy',
+  TRUST_PROXY === '' ? false
+  : /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY)
+  : TRUST_PROXY);
 // CORS: only allow our own frontend origin (plus localhost for dev). Reflecting
 // the request origin (origin: true) is an unnecessary footgun when we also set
 // credentials: true — even with sameSite:'lax' on the session cookie, this used
@@ -155,6 +172,18 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: '12mb' }));
+
+/* Hosts, unter denen dieser Dienst wirklich erreichbar ist.
+ *
+ * Gebraucht an zwei Stellen, die beide vorher einen frei wählbaren Header
+ * gelesen haben: beim Bauen von Links, die das Haus verlassen (E-Mail,
+ * Teilen-Link), und bei der SSRF-Prüfung des PDF-Renderers. */
+const TRUSTED_HOSTS = new Set();
+for (const o of ALLOWLIST) { try { TRUSTED_HOSTS.add(new URL(o).host); } catch { /* kein gültiger Ursprung */ } }
+for (const v of [process.env.PUBLIC_BASE_URL, process.env.APP_BASE_URL]) {
+  if (!v) continue;
+  try { TRUSTED_HOSTS.add(new URL(v.trim()).host); } catch { /* kein gültiger Ursprung */ }
+}
 
 // ── Auth helpers ────────────────────────────────────────────────────────────
 
@@ -279,15 +308,34 @@ app.get('/api/templates', (_req, res) => res.json({ templates: TEMPLATES }));
 
 const ACCESS_NOTIFY_EMAIL = (process.env.ACCESS_NOTIFY_EMAIL || process.env.SMTP_USER || '').trim();
 
+/* Basis-URL für alles, was das Haus verlässt.
+ *
+ * Befund vom 14.09.2026: Die Adresse wurde aus `x-forwarded-host` gebaut — aus
+ * einem Header also, den jeder Aufrufer frei setzt. Wer eine Zugangsanfrage mit
+ * `X-Forwarded-Host: angreifer.tld` stellte, erzeugte damit eine Admin-Mail,
+ * deren „Annehmen"-Knopf auf SEINEN Server zeigte. Ein Klick, und er hatte den
+ * gültigen Aktions-Token in seinem Log — und damit einen Einladungscode. Das
+ * ganze Zugang-nur-auf-Einladung-Modell hing an diesem einen Header.
+ *
+ * Jetzt: konfigurierter Wert zuerst. Sonst der `Host`-Header, und auch der nur,
+ * wenn er zu einem bekannten Host gehört. Sonst `null` — und die aufrufende
+ * Stelle entscheidet, was sie ohne Link tut. Lieber eine Mail ohne Knopf als
+ * ein Knopf, der woanders hinführt. */
 function publicBaseUrl(req) {
-  return (process.env.PUBLIC_BASE_URL || '').trim()
-    || `${req.get('x-forwarded-proto') || req.protocol}://${req.get('x-forwarded-host') || req.get('host')}`;
+  const configured = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  const host = (req.get('host') || '').trim();
+  if (host && TRUSTED_HOSTS.has(host)) return `${req.protocol}://${host}`;
+  return null;
 }
 
 // Signierter Aktions-Token (Autorisierung steckt im Token, daher kein Login
 // nötig). Zweck-Claim verhindert Verwechslung mit Session-Tokens.
 function signAccessAction(id, action) {
-  return jwt.sign({ ar: id, act: action, purpose: 'access-action' }, JWT_SECRET, { expiresIn: '30d' });
+  /* 30 Tage waren für einen Ein-Klick-Knopf in einer E-Mail absurd lang: einen
+   * Monat lang lag in einem Postfach ein gültiger Schlüssel zum Einladungs-
+   * system. Drei Tage reichen, um eine Anfrage zu entscheiden. */
+  return jwt.sign({ ar: id, act: action, purpose: 'access-action' }, JWT_SECRET, { expiresIn: '3d' });
 }
 
 // Schlichte HTML-Seite als Antwort auf die im Browser geöffneten Aktionslinks.
@@ -348,9 +396,12 @@ app.post('/api/access/request', rateLimit({ route: 'access', max: 5, windowMs: 6
     [name, email, message || null, ua],
   );
   const id = rows[0].id;
+  /* Ohne bekannte Basis-URL entstehen KEINE Aktionslinks. Lieber eine
+   * Benachrichtigung ohne Knöpfe — entschieden wird dann im Admin-Panel — als
+   * ein Knopf, der irgendwohin führt. */
   const base = publicBaseUrl(req);
-  const acceptUrl = `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'accept'))}`;
-  const rejectUrl = `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'reject'))}`;
+  const acceptUrl = base ? `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'accept'))}` : null;
+  const rejectUrl = base ? `${base}/pdfapi/api/access/action?token=${encodeURIComponent(signAccessAction(id, 'reject'))}` : null;
   if (ACCESS_NOTIFY_EMAIL) {
     sendMail({ to: ACCESS_NOTIFY_EMAIL, ...tplAccessRequest({ name, email, message, acceptUrl, rejectUrl }) });
   } else {
@@ -360,11 +411,53 @@ app.post('/api/access/request', rateLimit({ route: 'access', max: 5, windowMs: 6
   res.json({ ok: true });
 });
 
-// Ein-Klick-Aktion aus der E-Mail (Token = Autorisierung, kein Login).
+/* Aktion aus der E-Mail (Token = Autorisierung, kein Login).
+ *
+ * Befund vom 14.09.2026: Das war ein GET, und ein GET hat hier Wirkung entfaltet
+ * — Einladungscode anlegen und verschicken. Outlook SafeLinks, Proofpoint,
+ * Virenscanner und jede Link-Vorschau rufen Links in E-Mails automatisch ab.
+ * Damit wurde eine Zugangsanfrage angenommen, sobald die Benachrichtigung einen
+ * solchen Scanner passierte — ohne dass der Admin je geklickt hatte.
+ *
+ * Jetzt trennt sich beides: GET zeigt nur die Nachfrage, POST führt aus. Ein
+ * Scanner folgt Links, aber er schickt keine Formulare ab. */
+function actionConfirmPage(reqRow, act, token) {
+  const ja = act === 'accept' ? 'Annehmen' : 'Ablehnen';
+  const text = act === 'accept'
+    ? `${escapeHtml(reqRow.name)} &lt;${escapeHtml(reqRow.email)}&gt; bekommt einen einmaligen Einladungscode per E-Mail.`
+    : `Die Anfrage von ${escapeHtml(reqRow.name)} wird verworfen. Der Anfragende erhält keine Nachricht.`;
+  const body = `${text}</p>
+      <form method="post" action="" style="margin:18px 0 0;">
+        <input type="hidden" name="token" value="${escapeHtml(token)}">
+        <button type="submit" style="font:600 14px Inter,Segoe UI,Arial,sans-serif;padding:11px 22px;border-radius:9px;border:1px solid #d7d8e0;background:${act === 'accept' ? '#3d3df0' : '#fff'};color:${act === 'accept' ? '#fff' : '#1b1c22'};cursor:pointer;">${ja}</button>
+      </form>
+      <p style="font-size:12px;color:#8b8d9b;margin:16px 0 0;">`;
+  return actionPage(`${ja}?`, `${body}Erst der Knopf löst etwas aus. Der Link allein tut nichts — sonst entschieden Mail-Scanner die Anfrage.`);
+}
+
 app.get('/api/access/action', async (req, res) => {
   res.type('html');
+  const token = String(req.query.token || '');
   let payload;
-  try { payload = jwt.verify(String(req.query.token || ''), JWT_SECRET); }
+  try { payload = jwt.verify(token, JWT_SECRET); }
+  catch { return res.status(400).send(actionPage('Link ungültig oder abgelaufen', 'Dieser Aktionslink ist nicht mehr gültig. Entscheide die Anfrage im Admin-Panel.', false)); }
+  if (payload.purpose !== 'access-action' || !payload.ar || !['accept', 'reject'].includes(payload.act)) {
+    return res.status(400).send(actionPage('Link ungültig', 'Dieser Link ist nicht verwendbar.', false));
+  }
+  const { rows } = await pool.query('SELECT * FROM access_requests WHERE id = $1', [payload.ar]);
+  const reqRow = rows[0];
+  if (!reqRow) return res.status(404).send(actionPage('Anfrage nicht gefunden', 'Die Anfrage existiert nicht mehr.', false));
+  if (reqRow.status !== 'pending') {
+    const label = reqRow.status === 'accepted' ? 'bereits angenommen' : 'bereits abgelehnt';
+    return res.send(actionPage('Schon entschieden', `Diese Anfrage von ${escapeHtml(reqRow.name)} wurde ${label}.`));
+  }
+  return res.send(actionConfirmPage(reqRow, payload.act, token));
+});
+
+app.post('/api/access/action', express.urlencoded({ extended: false, limit: '8kb' }), async (req, res) => {
+  res.type('html');
+  let payload;
+  try { payload = jwt.verify(String(req.body?.token || req.query.token || ''), JWT_SECRET); }
   catch { return res.status(400).send(actionPage('Link ungültig oder abgelaufen', 'Dieser Aktionslink ist nicht mehr gültig. Entscheide die Anfrage im Admin-Panel.', false)); }
   if (payload.purpose !== 'access-action' || !payload.ar || !['accept', 'reject'].includes(payload.act)) {
     return res.status(400).send(actionPage('Link ungültig', 'Dieser Link ist nicht verwendbar.', false));
@@ -752,9 +845,12 @@ app.post('/api/photos', requireAuth, rateLimit({ route: 'photos', max: 30, windo
   const id = crypto.randomBytes(12).toString('hex');
   await pool.query('INSERT INTO photos (id, user_id, mime, data, size_bytes) VALUES ($1, $2, $3, $4, $5)', [id, req.user.id, mime, buf, buf.length]);
   // Absolute URL so exported HTML/PDF works outside the app too.
-  const host = req.get('x-forwarded-host') || req.get('host');
-  const proto = req.get('x-forwarded-proto') || req.protocol;
-  res.json({ id, url: `${proto}://${host}/pdfapi/api/photos/${id}` });
+  /* Auch hier nicht mehr aus Headern: Ein gefälschter X-Forwarded-Host
+   * schrieb dem Hochladenden eine fremde Adresse in sein eigenes Profil.
+   * Ohne bekannte Basis-URL kommt der relative Pfad zurück — den löst das
+   * Frontend ohnehin gegen seinen eigenen Ursprung auf. */
+  const base = publicBaseUrl(req);
+  res.json({ id, url: `${base || ''}/pdfapi/api/photos/${id}` });
 });
 
 app.get('/api/photos/:id', async (req, res) => {
@@ -810,12 +906,12 @@ app.post('/api/resumes/:id/share', requireAuth, async (req, res) => {
     'INSERT INTO share_links (token, resume_id, created_by, expires_at, include_cover_letter) VALUES ($1, $2, $3, $4, $5)',
     [token, id, req.user.id, expiresAt, includeCl],
   );
-  // Derive the public URL from the host the request came in on — that way
-  // staging deploys and local dev get the right share URL too, not a hard-
-  // coded prod link. PUBLIC_BASE_URL env can override for edge cases.
-  const baseUrl = (process.env.PUBLIC_BASE_URL || '').trim()
-    || `${req.get('x-forwarded-proto') || req.protocol}://${req.get('x-forwarded-host') || req.get('host')}`;
-  res.json({ token, url: `${baseUrl}/share/${token}`, expires_at: expiresAt, include_cover_letter: includeCl });
+  /* Dieselbe Quelle wie für die E-Mail-Links (siehe publicBaseUrl): aus einem
+   * gefälschten X-Forwarded-Host entstand sonst ein Teilen-Link, der den
+   * Empfänger auf einen fremden Server schickt. Ist keine Basis-URL bekannt,
+   * kommt der Pfad allein zurück — relativ zur Anwendung stimmt er immer. */
+  const baseUrl = publicBaseUrl(req);
+  res.json({ token, url: `${baseUrl || ''}/share/${token}`, expires_at: expiresAt, include_cover_letter: includeCl });
 });
 
 app.get('/api/resumes/:id/shares', requireAuth, async (req, res) => {
@@ -901,11 +997,15 @@ app.get(/^\/share\/([0-9a-fA-F]+)\/?$/, async (req, res, next) => {
    * URL as og:image and turn every share-card preview into a confirmed-read
    * tracking pixel for the recipient. (Audit finding #10.) */
   const rawPhoto = (cv.personal && cv.personal.photo) || '';
-  const reqHost = req.get('x-forwarded-host') || req.get('host');
-  const reqProto = req.get('x-forwarded-proto') || req.protocol;
+  /* Der Schutz aus Befund #10 hing an denselben Headern wie alles andere:
+   * Wer `X-Forwarded-Host` auf seine eigene Adresse setzte, bestand die
+   * „gleicher Ursprung"-Prüfung — und das Zählpixel war wieder da. Die
+   * Basis-URL kommt deshalb aus der Konfiguration; fehlt sie, gilt nur noch
+   * die relative Schreibweise, die gar keinen Host enthalten kann. */
+  const ownBase = publicBaseUrl(req);
   const sameOriginPhoto = rawPhoto && (
     rawPhoto.startsWith('/pdfapi/api/photos/') ||
-    rawPhoto.startsWith(`${reqProto}://${reqHost}/pdfapi/api/photos/`)
+    (!!ownBase && rawPhoto.startsWith(`${ownBase}/pdfapi/api/photos/`))
   );
   const photo = sameOriginPhoto ? rawPhoto : '';
   const description = [title, location].filter(Boolean).join(' · ') || 'Lebenslauf in editorialem Layout — geteilte Vorschau.';
@@ -1348,30 +1448,6 @@ const PDF_FORMAT_MAP = { a4: 'A4', letter: 'Letter', legal: 'Legal', a5: 'A5' };
  *  exactly what our renderer legitimately needs: HTTPS Google Fonts +
  *  same-origin photos + data: URLs (inline base64). Everything else gets
  *  aborted before the network request leaves the container. */
-const PDF_ALLOWED_HOSTS = new Set([
-  'fonts.googleapis.com',
-  'fonts.gstatic.com',
-]);
-function isPdfFetchAllowed(urlStr, requestHost) {
-  try {
-    const u = new URL(urlStr);
-    if (u.protocol === 'data:') return true;
-    // about:blank etc. — Playwright's initial document load.
-    if (u.protocol === 'about:') return true;
-    // Block file://, gopher://, ftp://, etc.
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-    // Block plain http unless localhost (no use case in prod).
-    if (u.protocol === 'http:' && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) return false;
-    if (PDF_ALLOWED_HOSTS.has(u.hostname)) return true;
-    // Same-origin photos: the photo URL emitted by /api/photos/:id resolves
-    // to our public host (e.g. your public host). Allow that explicitly.
-    if (requestHost && u.hostname === requestHost) return true;
-    // Block private/loopback/link-local IPv4 + IPv6 ranges.
-    if (/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1$|fc|fd)/i.test(u.hostname)) return false;
-    return false;
-  } catch { return false; }
-}
-
 async function optionalAuth(req, _res, next) {
   try { req.user = await loadUser(req); } catch { req.user = null; }
   next();
@@ -1388,7 +1464,12 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
     return res.status(413).json({ error: 'HTML payload exceeds 2 MB limit.' });
   }
   const fmt = PDF_FORMAT_MAP[pageFormat] || 'A4';
-  const requestHost = req.get('x-forwarded-host') || req.get('host');
+  /* Der „eigene Host" für die SSRF-Prüfung kommt aus der Konfiguration, nicht
+   * aus einem Header — sonst erweitert der Aufrufer die Allowlist selbst. */
+  const ownHost = (() => {
+    const base = publicBaseUrl(req);
+    try { return base ? new URL(base).host : null; } catch { return null; }
+  })();
   let page;
   try {
     const browser = await getBrowser();
@@ -1402,7 +1483,7 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
     // loaders for fonts/images cannot reach private hosts.
     await page.route('**', (route) => {
       const url = route.request().url();
-      if (isPdfFetchAllowed(url, requestHost)) return route.continue();
+      if (isPdfFetchAllowed(url, ownHost)) return route.continue();
       console.warn(`[pdf] blocked SSRF candidate: ${url}`);
       return route.abort();
     });

@@ -168,8 +168,10 @@ export function tplAccessRequest({ name, email, message, acceptUrl, rejectUrl })
       row('E-Mail', `<a href="mailto:${escapeHtml(email)}" style="color:${ACCENT};text-decoration:none;">${escapeHtml(email)}</a>`) +
       (message ? row('Nachricht', escapeHtml(message).replace(/\n/g, '<br/>')) : '') +
       `</table>` +
-      `<div style="margin:4px 0 8px;">${btn(acceptUrl, 'Annehmen →')} &nbsp; ${btnGhost(rejectUrl, 'Ablehnen')}</div>` +
-      p('Bei „Annehmen" wird automatisch ein einmaliger, an diese E-Mail gebundener Einladungscode erzeugt und dem Anfragenden zugeschickt. „Ablehnen" verwirft die Anfrage stillschweigend.'),
+      (acceptUrl && rejectUrl
+        ? `<div style="margin:4px 0 8px;">${btn(acceptUrl, 'Annehmen →')} &nbsp; ${btnGhost(rejectUrl, 'Ablehnen')}</div>`
+          + p('Beide Knöpfe öffnen erst eine Nachfrage — der Link allein löst nichts aus. Bei „Annehmen" wird ein einmaliger, an diese E-Mail gebundener Einladungscode erzeugt und dem Anfragenden zugeschickt. „Ablehnen" verwirft die Anfrage stillschweigend.')
+        : p('Diese Nachricht enthält keine Aktionsknöpfe, weil keine Basis-URL konfiguriert ist (PUBLIC_BASE_URL oder APP_BASE_URL). Entscheide die Anfrage im Admin-Panel.')),
     ),
   };
 }
