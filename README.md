@@ -6,6 +6,12 @@ letters from structured data — 26 editorial templates, four languages
 **model-agnostic Markdown bridge** (plus an optional MCP server). **No built-in
 AI, no vendor lock-in.** Runs entirely on your own server.
 
+**Try it: [cv.heidrich-digital.de](https://cv.heidrich-digital.de)** — the demo
+mode needs no account and stores nothing on the server; your data stays in your
+browser. That instance is the author's own deployment, not a hosted service:
+accounts there are invite-only, and it is where this code runs in production.
+Self-host your own with the Quickstart below.
+
 ## What makes this different: the claims are measured
 
 Every résumé builder claims to be "ATS-friendly". This one checks, and you can
