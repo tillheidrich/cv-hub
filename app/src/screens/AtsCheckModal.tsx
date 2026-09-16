@@ -307,6 +307,35 @@ function KeywordMatchView({ data }: { data: CVData }) {
   const hits = result?.filter(r => r.foundInResume).length ?? 0;
   const misses = result?.filter(r => !r.foundInResume).length ?? 0;
 
+  /* Welcher Punkt im Lebenslauf trägt zu DIESER Anzeige bei?
+   *
+   * Übernommen aus der Idee der „relevance-weighted content cutting" im
+   * Projekt ai-job-search (MIT, MadsLorentzen) — dort entscheidet ein Modell,
+   * welche Punkte beim Kürzen bleiben. Hier entscheidet der Mensch, und das
+   * Werkzeug legt ihm nur die Grundlage hin: Welche Aufzählungspunkte
+   * enthalten Begriffe aus der Anzeige, welche keinen einzigen? Wer von zwei
+   * Seiten auf eine muss, kürzt zuerst dort, wo nichts anschlägt — statt
+   * chronologisch von unten.
+   *
+   * Kein Modell, keine Wertung des Inhalts: ein Punkt ohne Treffer kann der
+   * beste des Lebenslaufs sein. Die Liste sagt nur, dass er für diese eine
+   * Anzeige nichts beiträgt. */
+  const punkte = useMemo(() => {
+    if (!result) return null;
+    const begriffe = result.filter(r => r.foundInJd > 0).map(r => r.skill);
+    const mit: { rolle: string; text: string; treffer: string[] }[] = [];
+    const ohne: { rolle: string; text: string }[] = [];
+    for (const e of data.experience.filter(x => !x.hidden)) {
+      for (const b of (e.bullets || [])) {
+        const low = b.toLowerCase();
+        const treffer = begriffe.filter(k => low.includes(k.toLowerCase()));
+        if (treffer.length) mit.push({ rolle: e.role, text: b, treffer: [...new Set(treffer)] });
+        else ohne.push({ rolle: e.role, text: b });
+      }
+    }
+    return { mit, ohne };
+  }, [result, data]);
+
   return (
     <>
       <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '12px', maxWidth: '60ch' }}>
@@ -349,9 +378,59 @@ function KeywordMatchView({ data }: { data: CVData }) {
               </span>
             ))}
           </div>
+
+          {punkte && (punkte.mit.length > 0 || punkte.ohne.length > 0) && (
+            <div style={{ marginTop: '26px', borderTop: B.hairline, paddingTop: '18px' }}>
+              <div style={{ ...TYPE.overline, color: C.fade, marginBottom: '4px' }}>Beitrag zu dieser Anzeige</div>
+              <div style={{ fontFamily: F.ui, fontSize: '12px', color: C.pencil, lineHeight: 1.55, marginBottom: '14px', maxWidth: '62ch' }}>
+                Wer kürzen muss, kürzt zuerst dort, wo für diese Anzeige nichts anschlägt — nicht chronologisch von unten.
+                Ein Punkt ohne Treffer kann trotzdem der beste im Lebenslauf sein; die Liste sagt nur, dass er für
+                <em> diese</em> Stelle nichts beiträgt.
+              </div>
+
+              <Punkteliste
+                titel={`Mit Bezug zur Anzeige (${punkte.mit.length})`}
+                farbe={C.success}
+                eintraege={punkte.mit.map(p => ({ rolle: p.rolle, text: p.text, zusatz: p.treffer.join(' · ') }))}
+              />
+              <Punkteliste
+                titel={`Ohne Treffer (${punkte.ohne.length})`}
+                farbe={C.fade}
+                eintraege={punkte.ohne.map(p => ({ rolle: p.rolle, text: p.text }))}
+              />
+            </div>
+          )}
         </>
       )}
     </>
+  );
+}
+
+/** Aufzählungspunkte mit ihrer Station, zusammengeklappt hinter einer Zeile. */
+function Punkteliste({ titel, farbe, eintraege }: {
+  titel: string; farbe: string; eintraege: { rolle: string; text: string; zusatz?: string }[];
+}) {
+  const [offen, setOffen] = useState(false);
+  if (!eintraege.length) return null;
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <button type="button" onClick={() => setOffen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '6px 0', cursor: 'pointer', fontFamily: F.ui, fontSize: '12.5px', fontWeight: 700, color: farbe }}>
+        <span style={{ fontSize: '10px' }}>{offen ? '▾' : '▸'}</span>{titel}
+      </button>
+      {offen && (
+        <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', listStyle: 'disc' }}>
+          {eintraege.map((e, i) => (
+            <li key={i} style={{ fontFamily: F.ui, fontSize: '12px', color: C.ink, lineHeight: 1.5, marginBottom: '7px' }}>
+              {e.text}
+              <span style={{ display: 'block', color: C.fade, fontSize: '10.5px', marginTop: '2px' }}>
+                {e.rolle}{e.zusatz ? ` — ${e.zusatz}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
