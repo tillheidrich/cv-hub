@@ -45,6 +45,9 @@ jobs:
       - name: Tests (SSRF-Schutz)
         run: node --test
         working-directory: pdf-service
+      - name: Tests (OAuth am MCP-Endpunkt)
+        run: node --test
+        working-directory: mcp
 
   keine-personendaten:
     # Dieses Projekt ist aus einem privaten Werkzeug herausgelöst worden. Die

@@ -114,6 +114,28 @@ The browser-driven scripts need a running dev server (`HARNESS_BASE`, default
   idempotently at startup (`db.js`); there is no separate migration step.
 - **MCP server** (`mcp/`) — optional, stdio or hosted HTTP.
 
+### Connecting an MCP client to the hosted endpoint
+
+Run the server in HTTP mode behind the same domain as the app (the bundled
+nginx config already proxies `/mcp` and the two OAuth discovery paths), set
+`MCP_PUBLIC_URL` and `MCP_GATE_TOKEN`, and add `https://your-domain/mcp` as a
+custom connector in the client.
+
+The endpoint speaks **OAuth 2.1 with dynamic client registration and PKCE**,
+because that is the only way a remote MCP client can connect — clients have no
+field for a static bearer token. The flow is deliberately stateless: the client
+registration, the authorization code and the access token are HMAC-signed
+records rather than database rows, so a redeploy does not disconnect anyone.
+
+Since one endpoint acts as exactly one `CV_API_KEY`, the consent screen asks for
+`MCP_GATE_TOKEN` instead of a username — that token is the gate, passed through
+the OAuth flow. It also still works directly as a bearer token, so scripts and
+the command line keep working.
+
+If discovery fails with *"registration with the authorization server failed"*,
+check that `/.well-known/oauth-protected-resource` returns JSON and not your
+SPA's `index.html`: a catch-all route in front of it is the usual cause.
+
 ## Security
 
 Please read `SECURITY.md` before exposing an instance to the internet, and
