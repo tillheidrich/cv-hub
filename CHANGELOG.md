@@ -28,6 +28,13 @@ brings "keep with next", which stopped LibreOffice from breaking the single
 table row of a sidebar layout across pages — the heading level now lives in the
 main column only.
 
+**The profile photo is cropped before it is uploaded.** Until now the file went
+to the server as it came out of the camera and `object-fit: cover` decided the
+rest — centred, always. Drag to move, slider to zoom, portrait 4:5 or square for
+the round frames. What gets uploaded is the crop, baked into pixels, not the
+original plus an instruction on how to cut it: Word, PDF and HTML each crop on
+their own otherwise.
+
 **Icons instead of emoji**, and the document properties name the person, not the
 tool.
 

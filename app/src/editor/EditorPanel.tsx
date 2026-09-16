@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, useRef } from 'react';
 import { Icon } from '../ui/Icon';
+import PhotoCropper from './PhotoCropper';
 import type { CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, SocialLink, SocialPlatform } from '../data/types';
 import type { UiLang } from '../ui/i18n';
 import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
@@ -300,12 +301,20 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
 function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: (d: CVData) => void; demoMode?: boolean }) {
   const t = usePanelT();
   const fileRef = useRef<HTMLInputElement>(null);
+  /** Datei im Zuschnitt — solange gesetzt, steht der Dialog offen. */
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const p = data.personal;
 
   function updatePersonal(key: string, value: string) {
     onChange({ ...data, personal: { ...p, [key]: value } });
   }
 
+  /* Die gewählte Datei geht nicht mehr direkt zum Server, sondern erst in den
+   * Zuschnitt. Hochgeladen wird danach genau der Ausschnitt — nicht das
+   * Original mit einer Anweisung, wie es zu beschneiden sei. Das ist der
+   * Unterschied zwischen „sieht in der Vorschau richtig aus" und „sieht
+   * überall richtig aus": Word, PDF und HTML beschneiden sonst jeweils
+   * eigenständig. */
   async function handlePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -318,8 +327,17 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
         reader.onerror = () => reject(new Error(t.readerError));
         reader.readAsDataURL(file);
       });
+      setCropSrc(dataUrl);
+    } catch (err) {
+      window.alert(t.alertUploadFailed + (err instanceof Error ? err.message : t.alertUnknown));
+    }
+  }
+
+  async function ladeZugeschnittenesFotoHoch(dataUrl: string) {
+    setCropSrc(null);
+    try {
       const [meta, b64] = dataUrl.split(',');
-      const mime = (meta.match(/data:([^;]+)/)?.[1] || file.type || 'image/jpeg').toLowerCase();
+      const mime = (meta.match(/data:([^;]+)/)?.[1] || 'image/jpeg').toLowerCase();
       const { api } = await import('../data/api');
       const { url } = await api.uploadPhoto(mime, b64);
       updatePersonal('photo', url);
@@ -362,6 +380,14 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           </div>
         </div>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handlePhotoFile} />
+        {cropSrc && (
+          <PhotoCropper
+            src={cropSrc}
+            texts={{ title: t.cropTitle, hint: t.cropHint, zoom: t.cropZoom, portrait: t.cropPortrait, square: t.cropSquare, apply: t.cropApply, cancel: t.cropCancel }}
+            onCancel={() => setCropSrc(null)}
+            onDone={ladeZugeschnittenesFotoHoch}
+          />
+        )}
         {demoMode ? (
           <div style={{ fontSize: '11px', color: 'oklch(0.55 0.216 264)', marginTop: '8px', fontFamily: editorFont, lineHeight: 1.5 }}>
             {t.photoDemoHint}

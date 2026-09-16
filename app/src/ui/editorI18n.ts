@@ -143,6 +143,14 @@ export interface PanelStrings {
   photoDemoHint: string;
   photoUrlHint: string;
   photoUrlPlaceholder: string;
+  // Zuschneiden
+  cropTitle: string;
+  cropHint: string;
+  cropZoom: string;
+  cropPortrait: string;
+  cropSquare: string;
+  cropApply: string;
+  cropCancel: string;
   alertTooLarge: string;
   alertUploadFailed: string;
   alertUnknown: string;
@@ -251,6 +259,13 @@ export const EP: Record<UiLang, PanelStrings> = {
 
     photo: 'Foto',
     photoUpload: 'Foto hochladen',
+    cropTitle: 'Bild zuschneiden',
+    cropHint: 'Ziehen zum Verschieben, Regler zum Vergrößern. Der sichtbare Ausschnitt wird gespeichert.',
+    cropZoom: 'Größe',
+    cropPortrait: 'Hochformat',
+    cropSquare: 'Quadrat',
+    cropApply: 'Übernehmen',
+    cropCancel: 'Abbrechen',
     photoRemove: '× Entfernen',
     photoDisabledTitle: 'Im Demo-Modus deaktiviert — Konto anlegen, um Fotos hochzuladen',
     photoChooseTitle: 'Foto-Datei wählen',
@@ -357,6 +372,13 @@ export const EP: Record<UiLang, PanelStrings> = {
 
     photo: 'Photo',
     photoUpload: 'Upload photo',
+    cropTitle: 'Crop photo',
+    cropHint: 'Drag to move, slider to zoom. What you see is what gets saved.',
+    cropZoom: 'Size',
+    cropPortrait: 'Portrait',
+    cropSquare: 'Square',
+    cropApply: 'Apply',
+    cropCancel: 'Cancel',
     photoRemove: '× Remove',
     photoDisabledTitle: 'Disabled in demo mode — create an account to upload photos',
     photoChooseTitle: 'Choose photo file',
@@ -463,6 +485,13 @@ export const EP: Record<UiLang, PanelStrings> = {
 
     photo: 'Photo',
     photoUpload: 'Téléverser une photo',
+    cropTitle: 'Recadrer la photo',
+    cropHint: 'Glissez pour déplacer, curseur pour agrandir. La zone visible est enregistrée.',
+    cropZoom: 'Taille',
+    cropPortrait: 'Portrait',
+    cropSquare: 'Carré',
+    cropApply: 'Appliquer',
+    cropCancel: 'Annuler',
     photoRemove: '× Supprimer',
     photoDisabledTitle: 'Désactivé en mode démo — créez un compte pour téléverser des photos',
     photoChooseTitle: 'Choisir un fichier photo',
@@ -569,6 +598,13 @@ export const EP: Record<UiLang, PanelStrings> = {
 
     photo: 'Foto',
     photoUpload: 'Subir foto',
+    cropTitle: 'Recortar foto',
+    cropHint: 'Arrastra para mover, control para ampliar. Se guarda lo que se ve.',
+    cropZoom: 'Tamaño',
+    cropPortrait: 'Vertical',
+    cropSquare: 'Cuadrado',
+    cropApply: 'Aplicar',
+    cropCancel: 'Cancelar',
     photoRemove: '× Quitar',
     photoDisabledTitle: 'Desactivado en el modo demo — crea una cuenta para subir fotos',
     photoChooseTitle: 'Elegir archivo de foto',
