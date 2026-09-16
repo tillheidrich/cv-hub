@@ -59,10 +59,16 @@ if (!HTTP_MODE) {
     process.exit(1);
   }
 }
-// Der Key wird als Bearer-Token gesendet — nur über HTTPS (Ausnahme: lokale
-// Entwicklung gegen localhost). Sonst liefe der Schlüssel im Klartext.
-if (!/^https:\/\//i.test(API_BASE) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(API_BASE)) {
-  console.error(`cv-mcp: CV_API_BASE muss HTTPS sein (oder localhost). Erhalten: ${API_BASE}`);
+/* Token gehen als Bearer über die Leitung, also nur über HTTPS.
+ *
+ * Zwei Ausnahmen, beide verlassen den Rechner nicht: localhost und ein
+ * einteiliger Hostname ohne Punkt — so heißen Dienste innerhalb eines
+ * Docker-Netzes (`cv-api`). Alles mit Punkt ist ein echter Domainname und muss
+ * verschlüsselt sein; sonst liefe das Token im Klartext durchs Internet. */
+const apiHost = (() => { try { return new URL(API_BASE).hostname; } catch { return ''; } })();
+const localish = ['localhost', '127.0.0.1', '[::1]'].includes(apiHost) || !apiHost.includes('.');
+if (!/^https:\/\//i.test(API_BASE) && !(/^http:\/\//i.test(API_BASE) && localish)) {
+  console.error(`cv-mcp: CV_API_BASE muss HTTPS sein (Ausnahme: localhost oder ein Dienstname ohne Punkt im eigenen Netz). Erhalten: ${API_BASE}`);
   process.exit(1);
 }
 

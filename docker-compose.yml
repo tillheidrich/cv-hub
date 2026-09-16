@@ -1,4 +1,4 @@
-# CV-Hub — one-command self-host stack: Postgres + backend (cv-api) + frontend (nginx).
+# CV-Hub — one-command self-host stack: Postgres + backend (cv-api) + MCP + frontend (nginx).
 # Quickstart:  cp .env.example .env  &&  edit .env  &&  docker compose up -d
 # Then open http://localhost:8080 — the first account you register becomes admin
 # (or set ADMIN_USERNAME/ADMIN_PASSWORD in .env for a bootstrapped admin).
@@ -37,9 +37,35 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Public address of the OAuth endpoints. Empty is correct for this stack
+      # (nginx routes /oauth here); set it when a proxy strips a path prefix,
+      # because then this service cannot know its own public address.
+      OAUTH_PUBLIC_BASE: ${OAUTH_PUBLIC_BASE:-}
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Service name MUST be cv-mcp — the frontend nginx proxies /mcp -> cv-mcp:3000.
+  #
+  # Optional: only needed if you want AI clients (Claude and friends) to connect
+  # over MCP. It is multi-tenant — every user of your instance authorizes their
+  # own client and sees only their own data.
+  #
+  # Note there is no CV_API_KEY here, and there must not be: in hosted mode the
+  # caller brings their own token. A key from the environment would turn every
+  # caller into the same account.
+  cv-mcp:
+    build: ./mcp
+    environment:
+      MCP_HTTP: "1"
+      CV_API_BASE: http://cv-api:3000
+      MCP_PUBLIC_URL: ${APP_BASE_URL:-http://localhost:8080}
+      # Only needed when the backend sits behind a path prefix your proxy
+      # strips. In this stack it does not, so the default is right.
+      MCP_AUTH_BASE: ${MCP_AUTH_BASE:-}
+    depends_on:
+      - cv-api
     restart: unless-stopped
 
   frontend:
@@ -48,6 +74,7 @@ services:
       - "8080:80"
     depends_on:
       - cv-api
+      - cv-mcp
     restart: unless-stopped
 
 volumes:

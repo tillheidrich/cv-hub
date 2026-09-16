@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-09-16
+
+**The hosted MCP endpoint is multi-tenant.** Every user of an instance
+authorizes their own AI client and sees only their own data. Paste
+`https://your-domain/mcp` into the client — it registers itself, your instance
+opens, the user is already signed in, they press *Allow*. No tokens are copied
+anywhere.
+
+- **The authorization server lives in the backend** (`pdf-service/oauth.js`),
+  not in the MCP service. The first attempt put it in the MCP container, which
+  has no users, no sessions and no database — so it could serve exactly one
+  account, behind a shared secret. Identity belongs where the identities are.
+- OAuth 2.1 with dynamic client registration (RFC 7591), PKCE (S256 only —
+  OAuth 2.1 dropped `plain`), refresh, and revocation (RFC 7009). The consent
+  screen runs against the existing session; users who are not signed in are
+  sent to the app and land back on consent afterwards.
+- **The MCP service is deliberately dumb**: no passwords, no user list. It
+  passes the caller's token to the API and lets the API decide. The token rides
+  on the async context rather than a module variable — in a process serving
+  many users, a module variable would be a data leak waiting to happen.
+- Authorization codes are single-use, enforced in the same `UPDATE` that reads
+  them. Tokens and codes are stored hashed, like the API keys.
+- New: *Settings → Connected apps* — see and end every connection.
+- `docker-compose.yml` now includes the MCP service; `CV_API_KEY` must not be
+  set there.
+- Verified against a real Postgres with two users: over the same endpoint each
+  sees only their own CVs, and neither can read or write the other's.
+
+
 ## 2026-09-14
 
 **Security.** Five findings from a pre-release review, all of them also

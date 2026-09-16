@@ -53,12 +53,41 @@ Analog: Command `node`, Argument der absolute Pfad zu `cv-mcp.mjs`, und
 
 Danach den Client neu starten.
 
+## Gehosteter Betrieb (mehrbenutzerfähig)
+
+Der Server läuft auch als Web-Dienst. Dann verbindet sich **jeder Nutzer deiner
+Instanz** mit seinem eigenen KI-Client und sieht ausschließlich seine eigenen
+Daten — niemand muss einen Schlüssel kopieren.
+
+Im mitgelieferten `docker-compose.yml` ist der Dienst enthalten. Der Nutzer
+trägt in seinem Client nur die Adresse ein:
+
+```
+https://deine-domain/mcp
+```
+
+Der Client registriert sich selbst (OAuth 2.1 mit Dynamic Client Registration
+und PKCE), die Instanz öffnet sich, der Nutzer ist bereits angemeldet,
+bestätigt einmal — fertig. Verbindungen lassen sich im Konto unter
+*Einstellungen → Verbundene Apps* jederzeit beenden.
+
+Warum OAuth und nicht einfach ein Token: Entfernte MCP-Clients verbinden sich
+ausschließlich so. **Ein Feld für ein statisches Bearer-Token gibt es dort
+nicht.**
+
+> **`CV_API_KEY` im HTTP-Modus nicht setzen.** Er würde jeden Aufrufer zu
+> demselben Konto machen — genau das, was der Mehrbenutzerbetrieb vermeidet.
+
 ## Umgebungsvariablen
 
-| Variable      | Pflicht | Standard                                   | Zweck                          |
-|---------------|:-------:|--------------------------------------------|--------------------------------|
-| `CV_API_KEY`  |   ja    | –                                          | Persönlicher Schlüssel (`cvk_…`) |
-| `CV_API_BASE` |  nein   | `http://localhost:8080/pdfapi`    | API-Basis (für Self-Hosting)   |
+| Variable         | Pflicht | Standard | Zweck |
+|------------------|:-------:|----------|-------|
+| `CV_API_KEY`     | nur stdio | – | Persönlicher Schlüssel (`cvk_…`). Im HTTP-Modus **nicht** setzen |
+| `CV_API_BASE`    | nein | `http://localhost:8080/pdfapi` | API-Basis. HTTPS Pflicht, außer localhost oder ein Dienstname ohne Punkt im eigenen Netz |
+| `MCP_HTTP`       | nur HTTP | – | `1` = gehosteter Web-Dienst statt stdio |
+| `PORT`           | nein | `3000` | Port im HTTP-Modus |
+| `MCP_PUBLIC_URL` | HTTP: empfohlen | Host-Header | Öffentliche Basis-Adresse. Steht im Wegweiser zum Anmeldedienst |
+| `MCP_AUTH_BASE`  | nein | `<MCP_PUBLIC_URL>/oauth` | Öffentliche Adresse der OAuth-Endpunkte. Nur nötig, wenn ein Proxy dem Backend ein Pfadpräfix abschneidet — dann kann der Dienst seine eigene Adresse nicht kennen |
 
 ## Tools
 
@@ -70,6 +99,10 @@ Danach den Client neu starten.
 | `get_cover_letter_markdown`     | Anschreiben als Markdown lesen                     |
 | `update_cover_letter_markdown`  | Überarbeitetes Anschreiben zurückschreiben         |
 | `list_templates`                | Verfügbare Design-Vorlagen auflisten               |
+| `get_resume_settings`           | Vorlage, Sprache und Satz-Einstellungen lesen      |
+| `update_resume_settings`        | Dieselben ändern                                   |
+| `set_resume_photo`              | Profilfoto setzen                                  |
+| `remove_resume_photo`           | Profilfoto entfernen                               |
 
 Die `update_*`-Tools legen serverseitig **vor jedem Speichern automatisch eine
 Version** an — Fehlbearbeitungen lassen sich im Editor über die Versionshistorie
