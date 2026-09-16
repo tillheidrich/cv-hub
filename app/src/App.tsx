@@ -18,7 +18,7 @@ import KnowledgePanel from './knowledge/KnowledgePanel';
 import AuthScreen from './screens/AuthScreen';
 import LandingScreen from './screens/LandingScreen';
 import { ImpressumPage, PrivacyPage } from './screens/LegalPages';
-import { atsLevelForLayout, atsLabelDe, atsNoteDe, atsColors } from './templates/atsScore';
+import { atsLevelForLayout, atsLabel, atsNote, ATS_LEGEND, atsColors } from './templates/atsScore';
 import { detectInitialUiLang, setUiLang, type UiLang } from './ui/i18n';
 import { ET, type EditorStrings } from './ui/editorI18n';
 import AdminPanel from './screens/AdminPanel';
@@ -148,7 +148,7 @@ function MobileSheet({ title, onClose, closeLabel, children }: {
   );
 }
 
-function TemplatePicker({ current, onChange, isMobile, t: et }: { current: TemplateName; onChange: (t: TemplateName) => void; isMobile?: boolean; t: EditorStrings }) {
+function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { current: TemplateName; onChange: (t: TemplateName) => void; isMobile?: boolean; t: EditorStrings; uiLang: UiLang }) {
   const [open, setOpen] = useState(false);
   const cur = getTheme(current);
   const cats: string[] = ['klassisch', 'modern', 'kreativ', 'minimal'];
@@ -171,22 +171,21 @@ function TemplatePicker({ current, onChange, isMobile, t: et }: { current: Templ
   const legende = (
     <div style={{ borderTop: '1px solid oklch(0.93 0.004 264)', margin: '8px 0 0', padding: '10px 8px 4px', fontFamily: UI_FONT }}>
       <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#b0a896', marginBottom: '7px' }}>
-        Was heißt ATS-stark?
+        {ATS_LEGEND[uiLang].title}
       </div>
       {(['high', 'medium', 'low'] as const).map(lv => {
         const col = atsColors(lv);
         return (
           <div key={lv} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '6px' }}>
             <span style={{ background: col.bg, color: col.ink, border: `1px solid ${col.border}`, fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {atsLabelDe(lv)}
+              {atsLabel(lv, uiLang)}
             </span>
-            <span style={{ fontSize: '10px', lineHeight: 1.5, color: 'oklch(0.48 0.015 264)' }}>{atsNoteDe(lv)}</span>
+            <span style={{ fontSize: '10px', lineHeight: 1.5, color: 'oklch(0.48 0.015 264)' }}>{atsNote(lv, uiLang)}</span>
           </div>
         );
       })}
       <div style={{ fontSize: '9.5px', lineHeight: 1.55, color: 'oklch(0.58 0.012 264)', marginTop: '8px' }}>
-        Gemeint ist, wie zuverlässig ein Bewerbungsparser die Felder trifft — nicht, ob eingeladen wird.
-        Für Portale, die maschinell lesen, gibt es zusätzlich die einspaltige Word-ATS-Fassung im Export.
+        {ATS_LEGEND[uiLang].caveat}
       </div>
     </div>
   );
@@ -210,14 +209,14 @@ function TemplatePicker({ current, onChange, isMobile, t: et }: { current: Templ
             const lv = atsLevelForLayout(t.layout);
             const col = atsColors(lv);
             return (
-              <span title={atsNoteDe(lv)}
+              <span title={atsNote(lv, uiLang)}
                 style={{
                   background: col.bg, color: col.ink, border: `1px solid ${col.border}`,
                   fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
                   padding: '2px 6px', borderRadius: '3px',
                   fontFamily: UI_FONT, whiteSpace: 'nowrap',
                 }}>
-                {atsLabelDe(lv)}
+                {atsLabel(lv, uiLang)}
               </span>
             );
           })()}
@@ -1281,7 +1280,7 @@ export default function App() {
           }}
         />
 
-        <TemplatePicker current={template} onChange={t => updateSettings({ template: t })} isMobile={isMobile} t={et} />
+        <TemplatePicker current={template} onChange={t => updateSettings({ template: t })} isMobile={isMobile} t={et} uiLang={uiLang} />
 
         {!isMobile && (
           <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
