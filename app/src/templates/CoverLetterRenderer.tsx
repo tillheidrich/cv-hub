@@ -111,7 +111,7 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
               <div style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.inkSoft, fontStyle: 'italic' }}>Empfänger noch nicht eingegeben</div>
             )}
           </div>
-          {(clData.city || clData.date) && (
+          {clData.showDateline !== false && (clData.city || clData.date) && (
             <div style={{ fontFamily: P.body, fontSize: `${10.9 * d}px`, color: C.inkSoft, whiteSpace: 'nowrap' }}>
               {clData.city && <Ed path="cl.city">{clData.city}</Ed>}
               {clData.city && clData.date ? ', ' : ''}
@@ -144,8 +144,12 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
           <p style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.inkMid, margin: `0 0 ${18 * d}px` }}>
             <Ed path="cl.signoff">{clData.signoff || 'Mit freundlichen Grüßen'}</Ed>
           </p>
-          <div style={{ borderBottom: `0.6px solid ${C.rule}`, width: `${52 * d}px`, marginBottom: `${4 * d}px` }} />
-          <div style={{ fontFamily: P.heading, fontSize: `${13 * d}px`, color: C.ink }}>{personal.name}</div>
+          {clData.showSignature !== false && (
+            <>
+              <div style={{ borderBottom: `0.6px solid ${C.rule}`, width: `${52 * d}px`, marginBottom: `${4 * d}px` }} />
+              <div style={{ fontFamily: P.heading, fontSize: `${13 * d}px`, color: C.ink }}>{personal.name}</div>
+            </>
+          )}
         </div>
 
         <div style={{ flex: 1 }} />

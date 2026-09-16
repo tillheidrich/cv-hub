@@ -2,6 +2,35 @@
 
 ## 2026-09-16
 
+**Every export path measured, three holes found.** `app/scripts/exportcheck.mjs`
+now clicks every button in the running app, catches the real download and looks
+inside the file — the ZIP for its four parts, the DOCX for `word/document.xml`,
+the JSON for its fields, the ATS variant for the absence of tables. Eight paths,
+all green. The first run found three things:
+
+- The Markdown button served the app's own start page whenever a proxy answered
+  before the API: status 200, HTML body, filename `.md`. Every error was
+  swallowed, so a click did nothing and said nothing. It now checks that the
+  answer is Markdown, falls back to the local build, and says why.
+- The local build wrote *different* Markdown from the server bridge — no
+  frontmatter, translated headings — so it could not be imported back. Both
+  write the same format now; verified by running the produced file through the
+  server's own parser.
+- The download snippet existed seven times in two versions, one of them without
+  the link in the document and with an immediate `revokeObjectURL`. That is what
+  makes Safari and Firefox abort a download. There is one `saveFile.ts` now.
+
+**Word carries the template's handwriting.** All 28 templates used to share one
+heading style in Word. The eight shapes of the preview are rebuilt with
+paragraph borders: short bar underneath, bar in front, rule above, filled label.
+Bullet characters and the language dot scale come along. Word's *Heading 1*
+brings "keep with next", which stopped LibreOffice from breaking the single
+table row of a sidebar layout across pages — the heading level now lives in the
+main column only.
+
+**Icons instead of emoji**, and the document properties name the person, not the
+tool.
+
 **Printing the exported HTML no longer doubles the page count.** Safari turned
 a two-page CV into four sheets: it sets type slightly differently from the
 browser that measured the page break, and the one line that then stuck out at

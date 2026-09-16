@@ -17,11 +17,13 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat,
   TabStopType, BorderStyle, Table, TableRow, TableCell, TableLayoutType,
-  WidthType, ShadingType, VerticalAlign, ImageRun,
+  WidthType, ShadingType, VerticalAlign, ImageRun, LineRuleType,
 } from 'docx';
 import type { CVData, PersonalInfo } from '../data/types';
 import { getTheme } from '../templates/theme';
+import type { HeadingStyle } from '../templates/theme';
 import { socialLabel, socialDisplay } from '../templates/ResumeRenderer';
+import { saveBlob } from './saveFile';
 
 const val = (s?: string | null) => (s || '').trim();
 
@@ -153,8 +155,11 @@ const NO_BORDERS = {
   insideHorizontal: NO_BORDER, insideVertical: NO_BORDER,
 };
 
+/** Überschriftsform der Vorlage — dieselben acht Formen wie in der Vorschau. */
+type HeadStyle = HeadingStyle;
+
 /** Farbsatz für einen Bereich des Dokuments (Hauptspalte oder Farbfläche). */
-interface Pal { ink: string; soft: string; accent: string; }
+interface Pal { ink: string; soft: string; accent: string; accentInk?: string; }
 
 /**
  * Bausteine des Lebenslaufs als Word-Absätze.
@@ -165,22 +170,107 @@ interface Pal { ink: string; soft: string; accent: string; }
  * Aufzählung — bleibt in beiden Fällen dieselbe, damit ein Parser dieselben
  * Abschnitte findet, egal wie die Vorlage aussieht.
  */
-function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string }, rightTab: number, dateTab: number | null) {
+function makeParts(
+  cv: CVData,
+  pal: Pal,
+  fonts: { body: string; heading: string },
+  rightTab: number,
+  dateTab: number | null,
+  headStyle: HeadStyle = 'caps-tracked',
+) {
   const val2 = val;
-  const H1 = (text: string) =>
+  /* Sektionsüberschriften.
+   *
+   * Bis zum 16.09.2026 trug jede Vorlage in Word dieselbe Überschrift:
+   * gesperrte Versalien in der Akzentfarbe mit einer Linie über die ganze
+   * Spaltenbreite. Im Browser hat jede Vorlage ihre eigene — Terrakotta einen
+   * Serifentitel mit kurzem Farbbalken darunter, Lissabon einen Balken davor,
+   * die Register-Vorlagen einen Strich darüber. Genau das meinte Till mit den
+   * fehlenden Farbleisten: nicht die Farbe fehlte, die Form fehlte.
+   *
+   * Word kennt keine freien Rechtecke, aber es kennt Absatzrahmen. Damit
+   * lässt sich jede der acht Formen nachbauen:
+   *   — kurzer Balken darunter → leerer Absatz mit Unterlinie und rechtem
+   *     Einzug, der ihn auf Balkenbreite kürzt
+   *   — Balken davor          → linker Rahmen am Überschriftsabsatz
+   *   — Strich darüber        → oberer Rahmen
+   *   — Farbfläche            → Hinterlegung am Textlauf selbst
+   * Der Text bleibt dabei ein gewöhnlicher Absatz mit Überschriftsformat:
+   * Für einen Parser ändert sich nichts. */
+  const HEAD_SIZES: Record<HeadStyle, [number, number]> = {
+    /* [Hauptspalte, Nebenspalte] in halben Punkt. */
+    'serif': [26, 21], 'display': [34, 23], 'rule-over': [24, 19],
+    'block': [18, 17], 'bar': [19, 17], 'caps-plain': [19, 17],
+    'caps-rule': [19, 17], 'caps-tracked': [19, 17],
+  };
+  const serifish = (st: HeadStyle) => st === 'serif' || st === 'display';
+
+  /** Leerer Absatz, dessen Unterlinie den Farbbalken bildet. `width` in Twips. */
+  const barUnder = (width: number, thickness: number, color: string) =>
     new Paragraph({
-      heading: HeadingLevel.HEADING_1,
-      spacing: { before: 260, after: 90 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 6, space: 4, color: pal.accent } },
-      children: [new TextRun({ text: text.toUpperCase(), bold: true, color: pal.accent, characterSpacing: 16, font: fonts.body, size: 19 })],
+      spacing: { before: 40, after: 70, line: 20, lineRule: LineRuleType.EXACT },
+      indent: { right: Math.max(0, rightTab - width) },
+      border: { bottom: { style: BorderStyle.SINGLE, size: thickness, space: 0, color } },
+      /* Ein leerer Absatz ist für Word und LibreOffice ein Sonderfall: ohne
+       * Textlauf bekommt er die volle Standardzeilenhöhe zurück. Ein Lauf mit
+       * Kleinstgrad hält den Balken flach. */
+      children: [new TextRun({ text: '', size: 2, font: fonts.body })],
     });
-  /** Überschrift ohne Linie — für die schmale Farbfläche, wo eine Linie über
-   *  die halbe Spaltenbreite unruhig wirkt. */
-  const H1Plain = (text: string) =>
-    new Paragraph({
-      spacing: { before: 220, after: 70 },
-      children: [new TextRun({ text: text.toUpperCase(), bold: true, color: pal.accent, characterSpacing: 16, font: fonts.body, size: 17 })],
+
+  const H1For = (text: string, aside: boolean): Paragraph[] => {
+    const st = headStyle;
+    const size = HEAD_SIZES[st][aside ? 1 : 0];
+    const label = serifish(st) ? text : text.toUpperCase();
+    const run = new TextRun({
+      text: label,
+      bold: true,
+      color: st === 'block' ? (pal.accentInk || 'FFFFFF') : pal.ink,
+      characterSpacing: serifish(st) ? 0 : 16,
+      font: serifish(st) ? fonts.heading : fonts.body,
+      size,
+      ...(st === 'block' ? { shading: { type: ShadingType.CLEAR, color: 'auto', fill: pal.accent } } : {}),
     });
+    /* Überschriftsformat NUR in der Hauptspalte.
+     *
+     * Words „Überschrift 1" bringt „Absätze nicht trennen" mit. In der
+     * Nebenspalte steht der ganze Lebenslauf in EINER Tabellenzeile; sobald
+     * dort jede Überschrift am nächsten Absatz klebt, weigert sich
+     * LibreOffice, die Zeile über zwei Seiten zu brechen — und schiebt die
+     * komplette Spalte auf Seite 2, während Seite 1 leer bleibt. Genau das
+     * war der Befund vom 16.09. Die Gliederung geht nicht verloren: die
+     * Hauptspalte trägt die Überschriftsebenen, und ein Parser liest die
+     * Nebenspalte ohnehin als Block. */
+    const base = {
+      ...(aside ? {} : { heading: HeadingLevel.HEADING_1 }),
+      spacing: { before: aside ? 220 : 260, after: st === 'serif' ? 0 : (aside ? 70 : 90) },
+      children: [run],
+    };
+    switch (st) {
+      case 'serif':
+        return [new Paragraph(base), barUnder(aside ? 320 : 460, 12, pal.accent)];
+      case 'display':
+        return [new Paragraph({ ...base, border: { top: { style: BorderStyle.SINGLE, size: 20, space: 8, color: pal.ink } } })];
+      case 'rule-over':
+        return [new Paragraph({ ...base, border: { top: { style: BorderStyle.SINGLE, size: 12, space: 6, color: pal.accent } } })];
+      case 'caps-rule':
+        return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 4, color: pal.accent } } })];
+      case 'block':
+        return [new Paragraph(base)];
+      case 'caps-plain':
+        return [new Paragraph(base)];
+      /* Balken vor der Zeile: waagerecht im Browser, in Word ein senkrechter
+       * Rahmen links. Dieselbe Geste — eine Farbmarke vor der Überschrift —
+       * mit den Mitteln, die ein Absatz hat. */
+      case 'bar':
+      case 'caps-tracked':
+      default:
+        return [new Paragraph({ ...base, indent: { left: 110 }, border: { left: { style: BorderStyle.SINGLE, size: 18, space: 6, color: pal.accent } } })];
+    }
+  };
+
+  const H1 = (text: string) => H1For(text, false);
+  /** Dieselbe Form in der schmalen Spalte, nur kleiner gesetzt. */
+  const H1Plain = (text: string) => H1For(text, true);
   const H2 = (text: string) =>
     new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 160, after: 20 }, children: [new TextRun({ text, bold: true, color: pal.ink, font: fonts.heading })] });
 
@@ -242,10 +332,10 @@ function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string 
   /** Hauptspalte: Profil, Beruf, Ausbildung — die Abschnitte, die gelesen werden. */
   const mainBlocks = (skills: CVData['skillGroups']): Paragraph[] => {
     const out: Paragraph[] = [];
-    if (val2(cv.profile?.text)) { out.push(H1(sec.profile)); out.push(para(val2(cv.profile.text), { color: pal.soft })); }
+    if (val2(cv.profile?.text)) { out.push(...H1(sec.profile)); out.push(para(val2(cv.profile.text), { color: pal.soft })); }
     const exp = (cv.experience || []).filter(e => !e.hidden);
     if (exp.length) {
-      out.push(H1(sec.experience));
+      out.push(...H1(sec.experience));
       for (const e of exp) {
         const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
         if (val2(e.role)) out.push(H2Dated(val2(e.role), dates));
@@ -255,7 +345,7 @@ function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string 
       }
     }
     if ((cv.education || []).length) {
-      out.push(H1(sec.education));
+      out.push(...H1(sec.education));
       for (const e of cv.education) {
         const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
         if (val2(e.degree)) out.push(H2Dated(val2(e.degree), dates));
@@ -267,11 +357,11 @@ function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string 
     for (const g of skills) {
       const items = (g.items || []).map(val2).filter(Boolean);
       if (!items.length) continue;
-      out.push(H1(val2(g.label) || 'Skills'));
+      out.push(...H1(val2(g.label) || 'Skills'));
       out.push(para(items.join(', ')));
     }
     const add = (cv.additionalExperience || []).map(val2).filter(Boolean);
-    if (add.length) { out.push(H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
+    if (add.length) { out.push(...H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
     return out;
   };
 
@@ -290,7 +380,7 @@ function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string 
       if (val2(p.website)) rows.push([fields.web, val2(p.website)]);
       for (const s of p.socials || []) if (val2(s.value)) rows.push([socialLabel(s), socialDisplay(s)]);
       if (val2(p.linkedin)) rows.push(['LinkedIn', val2(p.linkedin)]);
-      out.push(H1Plain(sec.personal));
+      out.push(...H1Plain(sec.personal));
       for (const [l, v] of rows) {
         if (!v) continue;
         out.push(new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: l.toUpperCase(), bold: true, color: pal.accent, size: 15, characterSpacing: 14, font: fonts.body })] }));
@@ -303,23 +393,38 @@ function makeParts(cv: CVData, pal: Pal, fonts: { body: string; heading: string 
       [fields.driversLicense, val2(p.driversLicense)],
     ] as [string, string][]).filter(r => r[1]);
     if (details.length) {
-      out.push(H1Plain(sec.details));
+      out.push(...H1Plain(sec.details));
       for (const [l, v] of details) {
         out.push(new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: l.toUpperCase(), bold: true, color: pal.accent, size: 15, characterSpacing: 14, font: fonts.body })] }));
         out.push(new Paragraph({ spacing: { after: 90 }, children: multiRuns(v, { color: pal.ink, size: 18, font: fonts.body }) }));
       }
     }
     if ((cv.languages || []).length) {
-      out.push(H1Plain(sec.languages));
+      out.push(...H1Plain(sec.languages));
       for (const l of cv.languages) {
-        out.push(new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: val2(l.language), bold: true, color: pal.ink, size: 18, font: fonts.body })] }));
+        /* Die Punkteskala steht in der Vorschau neben der Sprache und fehlte
+         * in Word ganz. Sie ist dort kein Bild, sondern Schrift: gefüllte und
+         * leere Kreise in der Akzentfarbe. Die geschriebene Stufe („C1")
+         * bleibt darunter stehen — die Punkte ersetzen sie nicht, sie zeigen
+         * sie nur auf einen Blick. */
+        const dots = Math.max(0, Math.min(5, Math.round(l.dots ?? 0)));
+        out.push(new Paragraph({
+          spacing: { after: 0 },
+          children: [
+            new TextRun({ text: val2(l.language), bold: true, color: pal.ink, size: 18, font: fonts.body }),
+            ...(dots ? [
+              new TextRun({ text: `  ${'\u25CF'.repeat(dots)}`, color: pal.accent, size: 14, font: fonts.body }),
+              ...(dots < 5 ? [new TextRun({ text: '\u25CB'.repeat(5 - dots), color: pal.soft, size: 14, font: fonts.body })] : []),
+            ] : []),
+          ],
+        }));
         if (val2(l.level)) out.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: val2(l.level), color: pal.soft, size: 17, font: fonts.body })] }));
       }
     }
     for (const g of skills) {
       const items = (g.items || []).map(val2).filter(Boolean);
       if (!items.length) continue;
-      out.push(H1Plain(val2(g.label) || 'Skills'));
+      out.push(...H1Plain(val2(g.label) || 'Skills'));
       for (const it of items) {
         out.push(new Paragraph({ spacing: { after: 30 }, children: [new TextRun({ text: `· ${it}`, color: pal.ink, size: 18, font: fonts.body })] }));
       }
@@ -339,12 +444,28 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   const accent = theme ? toHex(theme.colors.accent) : '1A1A1A';
   const ink = theme ? toHex(theme.colors.ink, '1A1A1A') : '1A1A1A';
   const soft = theme ? toHex(theme.colors.inkSoft, '5A5A5A') : '5A5A5A';
+  const accentInk = theme ? toHex(theme.colors.accentInk, 'FFFFFF') : 'FFFFFF';
+  /* Überschriftsform der Vorlage. Die ATS-Fassung bleibt bewusst bei der
+   * schlichtesten Form: dort zählt Lesbarkeit für Maschinen, nicht Haltung. */
+  const headStyle: HeadStyle = variant === 'ats' ? 'caps-plain' : (theme?.heading ?? 'caps-tracked');
   const fonts = wordFont(themeId);
 
+  /* Aufzählungszeichen wie in der Vorschau: die Vorlagen setzen Strich, Punkt,
+   * Quadrat oder Pfeil — in Word stand überall derselbe schwarze Punkt. Die
+   * ATS-Fassung behält ihn bewusst: dort zählt, dass jeder Parser die Zeile
+   * als Listenpunkt erkennt, nicht die Handschrift der Vorlage. */
+  const BULLET_CHARS: Record<string, string> = {
+    dash: '–', dot: '•', chevron: '•', square: '▪', arrow: '→',
+  };
+  const bulletChar = variant === 'ats' ? '•' : (BULLET_CHARS[theme?.bullet ?? 'dot'] ?? '•');
+  const bulletColor = variant === 'ats' ? undefined : accent;
   const numbering = {
     config: [{
       reference: 'cv-bullets',
-      levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 260 } } } }],
+      levels: [{
+        level: 0, format: LevelFormat.BULLET, text: bulletChar, alignment: AlignmentType.LEFT,
+        style: { paragraph: { indent: { left: 360, hanging: 260 } }, ...(bulletColor ? { run: { color: bulletColor } } : {}) },
+      }],
     }],
   };
   const styles = {
@@ -355,10 +476,16 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
       heading2: { run: { font: fonts.heading, size: 23, bold: true, color: ink } },
     },
   };
+  /* Dokumenteigenschaften: der Mensch, nicht das Werkzeug.
+   *
+   * Vorher standen hier Name und Zweck des Programms. Das ist ein Stempel, den
+   * jeder Empfänger in den Eigenschaften der Datei sieht — und niemand hat ihn
+   * verlangt. Autor ist, wer den Lebenslauf schreibt. */
   const docMeta = {
-    creator: 'CV-Hub',
-    title: val(p.name) ? `${val(p.name)} — CV` : 'CV',
-    description: 'Lebenslauf aus CV-Hub',
+    creator: val(p.name) || '',
+    lastModifiedBy: val(p.name) || '',
+    title: val(p.name) ? `${val(p.name)} — ${val(p.title) || 'CV'}` : 'CV',
+    description: '',
   };
 
   const layout = theme?.layout ?? 'single-column';
@@ -369,14 +496,14 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
 
   // ── Einspaltige Fassung (ATS) ────────────────────────────────────────────
   if (!hasAside && !tabular) {
-    const P = makeParts(cv, { ink, soft, accent }, fonts, RIGHT_TAB, null);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, null, headStyle);
     const kids: Paragraph[] = [];
     kids.push(new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 20 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true })] }));
     if (val(p.title)) kids.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19 })] }));
     for (const line of personalLines(p, fields)) kids.push(P.para(line));
     kids.push(...P.mainBlocks(cv.skillGroups || []));
     if ((cv.languages || []).length) {
-      kids.push(P.H1(sec.languages));
+      kids.push(...P.H1(sec.languages));
       for (const l of cv.languages) {
         const t = [val(l.language), val(l.level)].filter(Boolean).join(' — ');
         if (t) kids.push(P.bullet(t));
@@ -394,7 +521,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
     // 02/2021" breiter als die Vorlagenschrift, und ein Datum, das in den
     // Titel läuft, ist schlimmer als vier Millimeter mehr Spalte.
     const dateTab = mm(30);
-    const P = makeParts(cv, { ink, soft, accent }, fonts, RIGHT_TAB, dateTab);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, dateTab, headStyle);
     const centered = layout === 'top-centered';
     const kids: Paragraph[] = [];
     /* Befund vom 14.09.2026, zweiter Teil: Der tabellarische Zweig hatte nie
@@ -404,7 +531,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
      * zerbrechlich, deshalb steht es als eigene Zeile darüber — bei
      * zentriertem Kopf mittig, sonst rechtsbündig. */
     if (theme?.photo !== 'none' && val(p.photo)) {
-      const foto = photoRun(val(p.photo), 26, 26 * 1.25, centered ? AlignmentType.CENTER : AlignmentType.RIGHT);
+      const foto = photoRun(val(p.photo), 26, theme?.photo === 'circle' ? 26 : 26 * 1.25, centered ? AlignmentType.CENTER : AlignmentType.RIGHT);
       if (foto) kids.push(foto);
     }
     kids.push(new Paragraph({
@@ -429,7 +556,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
     }));
     kids.push(...P.mainBlocks(cv.skillGroups || []));
     if ((cv.languages || []).length) {
-      kids.push(P.H1(sec.languages));
+      kids.push(...P.H1(sec.languages));
       for (const l of cv.languages) {
         const t = [val(l.language), val(l.level)].filter(Boolean).join(' — ');
         if (t) kids.push(P.bullet(t));
@@ -455,12 +582,14 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   const mainW = PAGE_W - sideW;
   const mainPadL = mm(11);
   const mainPadR = mm(12);
-  const Pm = makeParts(cv, { ink, soft, accent }, fonts, mainW - mainPadL - mainPadR, null);
+  const Pm = makeParts(cv, { ink, soft, accent, accentInk }, fonts, mainW - mainPadL - mainPadR, null, headStyle);
   const band = layout === 'header-band';
   // Im Bandlayout trägt nur der Kopfbalken die Farbfläche; die Nebenspalte
   // darunter steht — wie in der Vorlage — auf Weiß mit feiner Trennlinie.
-  const asidePal = band ? { ink, soft, accent } : { ink: panelInk, soft: panelSoft, accent: panelAccent };
-  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null);
+  const asidePal = band
+    ? { ink, soft, accent, accentInk }
+    : { ink: panelInk, soft: panelSoft, accent: panelAccent, accentInk: panelBg };
+  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null, headStyle);
 
   // Word liest Tabellen zeilenweise von links: bei linker Seitenspalte steht
   // deren Inhalt im Dokument VOR der Hauptspalte. Deshalb wandert der Name dort
@@ -492,7 +621,9 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
     verticalAlign: VerticalAlign.TOP,
     children: [
       ...(theme?.photo !== 'none' && val(p.photo) && !band
-        ? [photoRun(val(p.photo), 34, 34 * 1.25)].filter(Boolean) as Paragraph[]
+        // Ein Kreis braucht ein Quadrat. Mit dem Hochformat der übrigen
+        // Formen wäre er im Dokument eine Ellipse.
+        ? [photoRun(val(p.photo), 34, theme?.photo === 'circle' ? 34 : 34 * 1.25)].filter(Boolean) as Paragraph[]
         : []),
       ...Pa.asideBlocks(asideSkills, nameInAside, !band),
     ],
@@ -520,7 +651,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
       margins: { top: mm(13), bottom: mm(13), left: mm(16), right: mm(16) },
       children: [
         ...(theme?.photo !== 'none' && val(p.photo)
-          ? [photoRun(val(p.photo), 26, 26 * 1.2)].filter(Boolean) as Paragraph[]
+          ? [photoRun(val(p.photo), 26, theme?.photo === 'circle' ? 26 : 26 * 1.2)].filter(Boolean) as Paragraph[]
           : []),
         new Paragraph({ spacing: { after: 10 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true, size: 40, color: panelInk, font: fonts.heading })] }),
         ...(val(p.title) ? [new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: panelAccent, characterSpacing: 20, size: 18, font: fonts.body })] })] : []),
@@ -563,10 +694,33 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
  * (fremde Domain ohne CORS, Bild weg), bleibt es beim Export ohne Foto — dann
  * aber nachvollziehbar, weil der Aufrufer es erfährt.
  */
-export async function photoAsRaster(src: string): Promise<string | null> {
+export type PhotoShape = 'circle' | 'rounded' | 'rect' | 'none';
+
+/**
+ * Die Form gehört ins Bild, nicht ins Dokument.
+ *
+ * Befund aus der Benutzung: Ein Foto, das im Browser rund ist, kam in Word
+ * eckig an. Word kann Bilder zwar zuschneiden, aber `docx` reicht dafür keine
+ * Handhabe durch — und selbst wenn: Ein Empfänger, der das Bild anfasst,
+ * hätte plötzlich ein Quadrat. Deshalb wird die Form hier in die Bildpunkte
+ * gebrannt. Was Word bekommt, IST rund.
+ *
+ * Die Fläche außerhalb der Maske wird mit der Farbe hinterlegt, auf der das
+ * Bild später sitzt — nicht mit Weiß. Auf Terrakottas cremefarbenem Kopfband
+ * wäre ein weißes Quadrat um den Kreis genau der Fehler, den die Maske
+ * vermeiden soll. Transparenz scheidet aus: Word stellt transparente PNGs in
+ * manchen Fassungen schwarz dar.
+ */
+export async function photoAsRaster(
+  src: string,
+  shape: PhotoShape = 'rect',
+  bgHex = 'FFFFFF',
+): Promise<string | null> {
   const v = (src || '').trim();
   if (!v) return null;
-  if (/^data:image\/(png|jpe?g|gif|bmp);base64,/i.test(v)) return v;
+  // Eine fertige Data-URL wird nur dann unverändert durchgereicht, wenn keine
+  // Form aufgeprägt werden muss — sonst muss auch sie über die Leinwand.
+  if (shape !== 'circle' && shape !== 'rounded' && /^data:image\/(png|jpe?g|gif|bmp);base64,/i.test(v)) return v;
   try {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -579,15 +733,56 @@ export async function photoAsRaster(src: string): Promise<string | null> {
     // Grenze nach oben: ein 4000-px-Foto bläht die Word-Datei ohne jeden
     // sichtbaren Gewinn — 35 × 45 mm bei 300 dpi sind rund 414 × 532 px.
     const maxW = 900;
-    const scale = Math.min(1, maxW / (img.naturalWidth || maxW));
+    const nw = img.naturalWidth || maxW;
+    const nh = img.naturalHeight || maxW;
     const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round((img.naturalWidth || maxW) * scale));
-    c.height = Math.max(1, Math.round((img.naturalHeight || maxW) * scale));
     const ctx = c.getContext('2d');
     if (!ctx) return null;
-    // Weiß hinterlegen: PNG mit Transparenz wird in Word sonst schwarz.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, c.width, c.height);
+
+    const hinterlegen = () => {
+      ctx.fillStyle = `#${bgHex.replace(/^#/, '')}`;
+      ctx.fillRect(0, 0, c.width, c.height);
+    };
+
+    if (shape === 'circle') {
+      // Kreis heißt quadratisch, und quadratisch heißt: mittig beschneiden,
+      // nicht stauchen. Ein gestauchtes Gesicht wäre schlimmer als ein eckiges.
+      const seite = Math.min(maxW, Math.min(nw, nh));
+      c.width = seite; c.height = seite;
+      hinterlegen();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(seite / 2, seite / 2, seite / 2, 0, Math.PI * 2);
+      ctx.clip();
+      const q = Math.min(nw, nh);
+      ctx.drawImage(img, (nw - q) / 2, (nh - q) / 2, q, q, 0, 0, seite, seite);
+      ctx.restore();
+      return c.toDataURL('image/png');
+    }
+
+    const scale = Math.min(1, maxW / nw);
+    c.width = Math.max(1, Math.round(nw * scale));
+    c.height = Math.max(1, Math.round(nh * scale));
+    hinterlegen();
+
+    if (shape === 'rounded') {
+      const r = Math.round(c.width * 0.08);
+      ctx.save();
+      ctx.beginPath();
+      // roundRect kennt nicht jede Fassung — der Pfad von Hand ist billiger
+      // als eine Fallunterscheidung, die irgendwann niemand mehr prüft.
+      ctx.moveTo(r, 0);
+      ctx.lineTo(c.width - r, 0); ctx.quadraticCurveTo(c.width, 0, c.width, r);
+      ctx.lineTo(c.width, c.height - r); ctx.quadraticCurveTo(c.width, c.height, c.width - r, c.height);
+      ctx.lineTo(r, c.height); ctx.quadraticCurveTo(0, c.height, 0, c.height - r);
+      ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      ctx.restore();
+      return c.toDataURL('image/png');
+    }
+
     ctx.drawImage(img, 0, 0, c.width, c.height);
     return c.toDataURL('image/png');
   } catch {
@@ -595,11 +790,17 @@ export async function photoAsRaster(src: string): Promise<string | null> {
   }
 }
 
-/** Liefert den Lebenslauf mit einem Foto, das Word einbetten kann. */
-export async function withRasterPhoto(cv: CVData): Promise<CVData> {
+/** Liefert den Lebenslauf mit einem Foto, das Word einbetten kann — in der
+ *  Form, die die Vorlage vorsieht, und auf ihrer Hintergrundfarbe. */
+export async function withRasterPhoto(cv: CVData, themeId?: string): Promise<CVData> {
   const src = val(cv.personal?.photo);
   if (!src) return cv;
-  const raster = await photoAsRaster(src);
+  const theme = themeId ? getTheme(themeId) : undefined;
+  const shape = (theme?.photo ?? 'rect') as PhotoShape;
+  // Hinter dem Foto liegt die Fläche, auf der es im Dokument sitzt: im
+  // Bandlayout und in der Nebenspalte die Panel-Farbe, sonst das Papier.
+  const bg = toHex(theme ? theme.colors.panelBg : '#ffffff', 'FFFFFF');
+  const raster = await photoAsRaster(src, shape, bg);
   if (!raster) return { ...cv, personal: { ...cv.personal, photo: '' } };
   if (raster === src) return cv;
   return { ...cv, personal: { ...cv.personal, photo: raster } };
@@ -609,15 +810,8 @@ export async function withRasterPhoto(cv: CVData): Promise<CVData> {
 export async function exportDocx(cv: CVData, themeId?: string, variant: DocxVariant = 'design'): Promise<void> {
   // Foto zuerst in ein Format bringen, das Word kennt — sonst fehlt es
   // stillschweigend (siehe `photoAsRaster`).
-  const doc = buildDocx(variant === 'design' ? await withRasterPhoto(cv) : cv, themeId, variant);
+  const doc = buildDocx(variant === 'design' ? await withRasterPhoto(cv, themeId) : cv, themeId, variant);
   const blob = await Packer.toBlob(doc);
   const name = (val(cv.personal?.name) || 'lebenslauf').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lebenslauf';
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${name}${variant === 'ats' ? '-ats' : ''}.docx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveBlob(`${name}${variant === 'ats' ? '-ats' : ''}.docx`, blob);
 }

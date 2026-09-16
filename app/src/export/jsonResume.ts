@@ -2,6 +2,7 @@
 // Standard schema for portability; non-standard fields round-trip via a custom
 // `x_cvhub` block so nothing is lost.
 import type { CVData } from '../data/types';
+import { saveText } from './saveFile';
 
 const v = (s?: string | null) => (s || '').trim();
 let _id = 0;
@@ -131,10 +132,5 @@ export function isJsonResume(o: any): boolean {
 export function exportJsonResume(cv: CVData): void {
   const jr = cvToJsonResume(cv);
   const name = (v(cv.personal?.name) || 'lebenslauf').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lebenslauf';
-  const blob = new Blob([JSON.stringify(jr, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `${name}.resume.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveText(`${name}.resume.json`, JSON.stringify(jr, null, 2), 'application/json');
 }

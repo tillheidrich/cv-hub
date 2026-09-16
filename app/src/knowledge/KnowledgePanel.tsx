@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon, type IconName } from '../ui/Icon';
 
 const UI_FONT = "'Inter', sans-serif";
 const SERIF_FONT = "'Space Grotesk', serif";
@@ -18,7 +19,7 @@ interface Card {
 interface Category {
   id: string;
   label: string;
-  icon: string;
+  icon: IconName;
   cards: Card[];
 }
 
@@ -27,7 +28,7 @@ const CATEGORIES: Category[] = [
   {
     id: 'strategy',
     label: 'Strategie',
-    icon: '🧭',
+    icon: 'compass' as const,
     cards: [
       {
         id: 'authentic-signals',
@@ -77,7 +78,7 @@ Formel: Verb + Kontext + messbares Ergebnis. Wenn keine Zahlen verfügbar: Grö�
   {
     id: 'cv',
     label: 'Lebenslauf',
-    icon: '📄',
+    icon: 'file-text' as const,
     cards: [
       {
         id: 'jd-keywords',
@@ -152,7 +153,7 @@ Formuliere daraus 4–6 prägnante Bullet Points für den "Weiteres"-Abschnitt m
   {
     id: 'cover-letter',
     label: 'Anschreiben',
-    icon: '✉️',
+    icon: 'mail' as const,
     cards: [
       {
         id: 'cl-write',
@@ -221,7 +222,7 @@ Mein Anschreiben:
   {
     id: 'job-search',
     label: 'Job-Suche',
-    icon: '🔍',
+    icon: 'search' as const,
     cards: [
       {
         id: 'hidden-markets',
@@ -342,7 +343,7 @@ function CopyButton({ text }: { text: string }) {
         flexShrink: 0,
       }}
     >
-      {copied ? '✓ Kopiert' : '⎘ Kopieren'}
+      {copied ? <><Icon name="check" size={12} /> Kopiert</> : <><Icon name="copy" size={12} /> Kopieren</>}
     </button>
   );
 }
@@ -519,7 +520,7 @@ export default function KnowledgePanel() {
                 transition: 'color 0.15s',
               }}
             >
-              <span>{cat.icon}</span>
+              <Icon name={cat.icon} />
               <span>{cat.label}</span>
             </button>
           ))}

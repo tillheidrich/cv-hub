@@ -13,6 +13,7 @@
 // Ende der Verlässlichkeit.
 
 import JSZip from 'jszip';
+import { saveBlob } from './saveFile';
 import { Packer } from 'docx';
 import type { CVData, Lang } from '../data/types';
 import { LABELS } from '../data/labels';
@@ -181,12 +182,5 @@ export async function exportTemplateKit(
   zip.file('ANLEITUNG.md', anleitung(theme.name, theme.id, lang));
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `vorlage-${theme.id}.zip`;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+  saveBlob(`vorlage-${theme.id}.zip`, blob);
 }

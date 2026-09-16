@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, useRef } from 'react';
+import { Icon } from '../ui/Icon';
 import type { CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, SocialLink, SocialPlatform } from '../data/types';
 import type { UiLang } from '../ui/i18n';
 import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
@@ -341,7 +342,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
             {p.photo ? (
               <img src={p.photo} alt={t.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <span style={{ fontSize: '20px' }}>👤</span>
+              <Icon name="user" size={20} style={{ color: 'oklch(0.62 0.012 264)' }} />
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

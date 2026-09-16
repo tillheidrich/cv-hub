@@ -170,6 +170,10 @@ function sectionOf(title) {
 
 export function markdownToCV(md, existing, targetLang) {
   const out = JSON.parse(JSON.stringify(existing));
+  // Ein Profil ohne `settings` gibt es im Normalbetrieb nicht — aber ein
+  // Import darf an einem fehlenden Feld nicht mit einem 500er enden.
+  if (!out.settings) out.settings = {};
+  if (!out.data) out.data = {};
   const lang = out.settings?.lang || 'de';
   // Eine Übersetzung einzuspielen darf die eingestellte Sprache des Profils
   // NICHT umstellen. Wer die französische Fassung schreibt, will nicht, dass
@@ -373,6 +377,10 @@ export function clToMarkdown(profile, targetLang) {
   out.push(`doc: cover-letter`);
   out.push(`lang: ${lang}`);
   out.push(`template: ${profile.settings?.template || 'hamburg'}`);
+  // Nur schreiben, wenn abgeschaltet — sonst stünde in jeder Datei eine Zeile,
+  // die nichts aussagt.
+  if (cl.showDateline === false) out.push('dateline: off');
+  if (cl.showSignature === false) out.push('signature: off');
   out.push('---');
   out.push('');
 
@@ -424,6 +432,10 @@ export function markdownToCl(md, existing, targetLang) {
   const fm = md.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
   let body = md;
   let useLang = lang;
+  /* Zeitlose Fassung: Ort/Datum und Unterschriftsblock lassen sich abschalten.
+   * Ohne Übernahme hier setzte ein Schreibvorgang über die Brücke die
+   * Entscheidung des Menschen stillschweigend zurück. */
+  const schalter = {};
   if (fm) {
     body = fm[2];
     for (const line of fm[1].split('\n')) {
@@ -431,6 +443,8 @@ export function markdownToCl(md, existing, targetLang) {
       if (!m) continue;
       const k = m[1], v = m[2].trim();
       if (k === 'lang' && ['de', 'en', 'fr', 'es'].includes(v)) useLang = v;
+      else if (k === 'dateline') schalter.showDateline = v.trim() !== 'off';
+      else if (k === 'signature') schalter.showSignature = v.trim() !== 'off';
     }
   }
   // Ein ausdrücklich genanntes Ziel schlägt die Angabe im Frontmatter. Sonst
@@ -443,6 +457,10 @@ export function markdownToCl(md, existing, targetLang) {
     city: '', date: '',
     subject: '', salutation: '',
     intro: '', mainBody: '', companyReference: '', motivation: '', closing: '', signoff: '',
+    // Aus dem Frontmatter, sonst der bisherige Stand des Profils. Ein Import
+    // darf eine bewusst abgeschaltete Datumszeile nicht wieder einschalten.
+    showDateline: schalter.showDateline ?? out.coverLetters?.[useLang]?.showDateline,
+    showSignature: schalter.showSignature ?? out.coverLetters?.[useLang]?.showSignature,
   };
 
   const lines = body.split('\n').map(l => l.replace(/\r$/, ''));

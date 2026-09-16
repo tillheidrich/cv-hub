@@ -67,6 +67,25 @@ function Section({ title, hint, open, onToggle, children }: {
   );
 }
 
+/* Ein Schalter für „zeigen / nicht zeigen".
+ *
+ * Bewusst kein Löschen der Eingabe: Wer Ort und Datum ausblendet, will sie
+ * beim nächsten Mal wiederhaben, ohne sie neu zu tippen. */
+function Switch({ label, hint, on, onChange }: {
+  label: string; hint: string; on: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', padding: '2px 0' }}>
+      <input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)}
+        style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: 'oklch(0.55 0.216 264)', cursor: 'pointer', flexShrink: 0 }} />
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: F }}>{label}</span>
+        <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: F, marginTop: '1px', lineHeight: 1.45 }}>{hint}</span>
+      </span>
+    </label>
+  );
+}
+
 function Field({ label, value, onChange, textarea, rows, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; textarea?: boolean; rows?: number; placeholder?: string;
 }) {
@@ -120,6 +139,8 @@ export default function CoverLetterEditor({ data, onUpdate, uiLang }: Props) {
             <div style={{ flex: 1 }}><Field label={t.clCity} value={data.city} onChange={v => set('city', v)} placeholder={t.clCityPlaceholder} /></div>
             <div style={{ flex: 2 }}><Field label={t.clDate} value={data.date} onChange={v => set('date', v)} placeholder={t.clDatePlaceholder} /></div>
           </div>
+          <Switch label={t.clShowDateline} hint={t.clShowDatelineHint}
+            on={data.showDateline !== false} onChange={v => set('showDateline', v)} />
           <Field label={t.clSubject} value={data.subject} onChange={v => set('subject', v)} placeholder={t.clSubjectPlaceholder} />
           <Field label={t.clSalutation} value={data.salutation} onChange={v => set('salutation', v)} placeholder={t.clSalutationPlaceholder} />
         </Section>
@@ -134,6 +155,8 @@ export default function CoverLetterEditor({ data, onUpdate, uiLang }: Props) {
 
         <Section title={t.clSignoffSection} hint={t.clSignoffHint} open={open.signoff} onToggle={() => toggle('signoff')}>
           <Field label={t.clSignoff} value={data.signoff} onChange={v => set('signoff', v)} placeholder={t.clSignoffPlaceholder} />
+          <Switch label={t.clShowSignature} hint={t.clShowSignatureHint}
+            on={data.showSignature !== false} onChange={v => set('showSignature', v)} />
         </Section>
 
         <div style={{ padding: '11px 13px', background: 'oklch(0.968 0.004 264)', borderRadius: '9px', border: '1px solid oklch(0.91 0.005 264)', fontSize: '11px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55 }}>

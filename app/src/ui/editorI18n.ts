@@ -39,10 +39,10 @@ export const ET: Record<UiLang, EditorStrings> = {
     edit: 'Bearbeiten', preview: 'Vorschau', export: 'Export', tips: 'Tipps',
     resume: 'Lebenslauf', coverLetter: 'Anschreiben',
     saved: 'Gespeichert', saving: 'Speichert…', unsaved: 'Nicht gespeichert',
-    font: 'Schrift', versions: 'Versionen', account: 'Konto', admin: 'Admin', demo: 'DEMO',
+    font: 'Darstellung', versions: 'Versionen', account: 'Konto', admin: 'Admin', demo: 'DEMO',
     createAccount: 'Konto anlegen →', signOut: 'Abmelden',
     ttHome: 'Zurück zur Profilübersicht',
-    ttFont: 'Schrift & Seite',
+    ttFont: 'Darstellung: Schrift, Farbe, Papier, Seiten und Sektionen',
     ttVersions: 'Versionen — automatische Sicherungen vor Importen',
     ttAccount: 'Einstellungen — Passwort, Daten, Konto',
     ttAdmin: 'Admin-Bereich',
@@ -50,7 +50,7 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttSignOut: 'Abmelden',
     swLimit: 'Demo-Limit', swTitle: 'Diese Funktion braucht ein', swTitleAccent: 'Konto.', swBody: 'Du bist gerade im Demo-Modus. Speichern, Sharelinks, Versionen und KI-Funktionen brauchen ein Konto — registrieren dauert 30 Sekunden, du bekommst einen Einladungscode von der Person, die dir das Tool gezeigt hat.', swStay: 'Weiter im Demo',
     zoomDone: 'Fertig', tapToWrite: 'Text antippen und schreiben',
-    close: 'Schließen', menu: 'Menü', chooseTemplate: 'Vorlage wählen', typeAndPage: 'Schrift & Seite',
+    close: 'Schließen', menu: 'Menü', chooseTemplate: 'Vorlage wählen', typeAndPage: 'Darstellung',
     docTypeLabel: 'Dokument', langLabel: 'Sprache des Lebenslaufs',
   },
   en: {
@@ -58,10 +58,10 @@ export const ET: Record<UiLang, EditorStrings> = {
     edit: 'Edit', preview: 'Preview', export: 'Export', tips: 'Tips',
     resume: 'Resume', coverLetter: 'Cover Letter',
     saved: 'Saved', saving: 'Saving…', unsaved: 'Not saved',
-    font: 'Type', versions: 'Versions', account: 'Account', admin: 'Admin', demo: 'DEMO',
+    font: 'Appearance', versions: 'Versions', account: 'Account', admin: 'Admin', demo: 'DEMO',
     createAccount: 'Create account →', signOut: 'Sign out',
     ttHome: 'Back to your profiles',
-    ttFont: 'Type & page',
+    ttFont: 'Appearance: type, colour, paper, pages and sections',
     ttVersions: 'Versions — automatic backups before imports',
     ttAccount: 'Settings — password, data, account',
     ttAdmin: 'Admin area',
@@ -69,7 +69,7 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttSignOut: 'Sign out',
     swLimit: 'Demo limit', swTitle: 'This feature needs an', swTitleAccent: 'account.', swBody: "You're in demo mode right now. Saving, sharelinks, versions and AI features require an account — signing up takes 30 seconds, you'll get an invite code from whoever showed you the tool.", swStay: 'Stay in the demo',
     zoomDone: 'Done', tapToWrite: 'Tap any text to write',
-    close: 'Close', menu: 'Menu', chooseTemplate: 'Choose a template', typeAndPage: 'Type & page',
+    close: 'Close', menu: 'Menu', chooseTemplate: 'Choose a template', typeAndPage: 'Appearance',
     docTypeLabel: 'Document', langLabel: 'Language of the CV',
   },
   fr: {
@@ -77,10 +77,10 @@ export const ET: Record<UiLang, EditorStrings> = {
     edit: 'Éditer', preview: 'Aperçu', export: 'Export', tips: 'Astuces',
     resume: 'CV', coverLetter: 'Lettre',
     saved: 'Enregistré', saving: 'Enregistrement…', unsaved: 'Non enregistré',
-    font: 'Police', versions: 'Versions', account: 'Compte', admin: 'Admin', demo: 'DÉMO',
+    font: 'Apparence', versions: 'Versions', account: 'Compte', admin: 'Admin', demo: 'DÉMO',
     createAccount: 'Créer un compte →', signOut: 'Déconnexion',
     ttHome: 'Retour à vos profils',
-    ttFont: 'Police et page',
+    ttFont: 'Apparence : police, couleur, papier, pages et sections',
     ttVersions: 'Versions — sauvegardes automatiques avant chaque import',
     ttAccount: 'Paramètres — mot de passe, données, compte',
     ttAdmin: 'Espace admin',
@@ -88,7 +88,7 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttSignOut: 'Déconnexion',
     swLimit: 'Limite démo', swTitle: 'Cette fonction nécessite un', swTitleAccent: 'compte.', swBody: "Vous êtes en mode démo. L'enregistrement, les liens de partage, les versions et les fonctions IA nécessitent un compte — l'inscription prend 30 secondes, avec un code d'invitation fourni par la personne qui vous a montré l'outil.", swStay: 'Rester en démo',
     zoomDone: 'Terminé', tapToWrite: 'Touchez un texte pour écrire',
-    close: 'Fermer', menu: 'Menu', chooseTemplate: 'Choisir un modèle', typeAndPage: 'Typographie et page',
+    close: 'Fermer', menu: 'Menu', chooseTemplate: 'Choisir un modèle', typeAndPage: 'Apparence',
     docTypeLabel: 'Document', langLabel: 'Langue du CV',
   },
   es: {
@@ -96,10 +96,10 @@ export const ET: Record<UiLang, EditorStrings> = {
     edit: 'Editar', preview: 'Vista previa', export: 'Exportar', tips: 'Consejos',
     resume: 'Currículum', coverLetter: 'Carta',
     saved: 'Guardado', saving: 'Guardando…', unsaved: 'Sin guardar',
-    font: 'Fuente', versions: 'Versiones', account: 'Cuenta', admin: 'Admin', demo: 'DEMO',
+    font: 'Apariencia', versions: 'Versiones', account: 'Cuenta', admin: 'Admin', demo: 'DEMO',
     createAccount: 'Crear cuenta →', signOut: 'Cerrar sesión',
     ttHome: 'Volver a tus perfiles',
-    ttFont: 'Fuente y página',
+    ttFont: 'Apariencia: tipografía, color, papel, páginas y secciones',
     ttVersions: 'Versiones — copias de seguridad automáticas antes de importar',
     ttAccount: 'Ajustes — contraseña, datos, cuenta',
     ttAdmin: 'Área de administración',
@@ -107,7 +107,7 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttSignOut: 'Cerrar sesión',
     swLimit: 'Límite de la demo', swTitle: 'Esta función requiere una', swTitleAccent: 'cuenta.', swBody: 'Estás en modo demo. Guardar, los enlaces para compartir, las versiones y las funciones de IA requieren una cuenta — registrarse lleva 30 segundos y recibes un código de invitación de quien te enseñó la herramienta.', swStay: 'Seguir en la demo',
     zoomDone: 'Listo', tapToWrite: 'Toca un texto para escribir',
-    close: 'Cerrar', menu: 'Menú', chooseTemplate: 'Elegir plantilla', typeAndPage: 'Tipografía y página',
+    close: 'Cerrar', menu: 'Menú', chooseTemplate: 'Elegir plantilla', typeAndPage: 'Apariencia',
     docTypeLabel: 'Documento', langLabel: 'Idioma del CV',
   },
 };
@@ -228,6 +228,8 @@ export interface PanelStrings {
   clMotivation: string; clMotivationPlaceholder: string;
   clClosing: string; clClosingPlaceholder: string;
   clSignoffSection: string; clSignoffHint: string;
+  clShowDateline: string; clShowDatelineHint: string;
+  clShowSignature: string; clShowSignatureHint: string;
   clSignoff: string; clSignoffPlaceholder: string;
   clFooter: string;
 }
@@ -248,7 +250,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     socialsEmpty: 'Noch keine Profile. Klick auf „Hinzufügen", um z. B. LinkedIn, GitHub oder Bluesky einzutragen.',
 
     photo: 'Foto',
-    photoUpload: '📁 Foto hochladen',
+    photoUpload: 'Foto hochladen',
     photoRemove: '× Entfernen',
     photoDisabledTitle: 'Im Demo-Modus deaktiviert — Konto anlegen, um Fotos hochzuladen',
     photoChooseTitle: 'Foto-Datei wählen',
@@ -334,6 +336,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     clMotivation: 'Motivation', clMotivationPlaceholder: 'Die ausgeschriebene Position bietet mir die Möglichkeit…',
     clClosing: 'Abschluss', clClosingPlaceholder: 'Über die Möglichkeit, mich Ihnen persönlich vorzustellen…',
     clSignoffSection: 'Grußformel', clSignoffHint: 'Schlussformel',
+    clShowDateline: 'Ort und Datum zeigen', clShowDatelineHint: 'Aus = zeitlose Fassung. Die Eingaben bleiben erhalten.',
+    clShowSignature: 'Unterschriftszeile zeigen', clShowSignatureHint: 'Linie und Name unter der Grußformel.',
     clSignoff: 'Grußformel', clSignoffPlaceholder: 'Mit freundlichen Grüßen',
     clFooter: 'Absender (Name, Kontaktdaten) und Vorlage werden automatisch aus dem Lebenslauf übernommen.',
   },
@@ -352,7 +356,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     socialsEmpty: 'No profiles yet. Click "Add" to enter e.g. LinkedIn, GitHub or Bluesky.',
 
     photo: 'Photo',
-    photoUpload: '📁 Upload photo',
+    photoUpload: 'Upload photo',
     photoRemove: '× Remove',
     photoDisabledTitle: 'Disabled in demo mode — create an account to upload photos',
     photoChooseTitle: 'Choose photo file',
@@ -438,6 +442,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     clMotivation: 'Motivation', clMotivationPlaceholder: 'The advertised position offers me the opportunity…',
     clClosing: 'Closing', clClosingPlaceholder: 'I would welcome the opportunity to introduce myself in person…',
     clSignoffSection: 'Sign-off', clSignoffHint: 'Closing phrase',
+    clShowDateline: 'Show place and date', clShowDatelineHint: 'Off = undated version. Your entries are kept.',
+    clShowSignature: 'Show signature line', clShowSignatureHint: 'Rule and name below the sign-off.',
     clSignoff: 'Sign-off', clSignoffPlaceholder: 'Kind regards',
     clFooter: 'Sender (name, contact details) and template are taken automatically from the resume.',
   },
@@ -456,7 +462,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     socialsEmpty: 'Aucun profil pour l\'instant. Cliquez sur « Ajouter » pour saisir par ex. LinkedIn, GitHub ou Bluesky.',
 
     photo: 'Photo',
-    photoUpload: '📁 Téléverser une photo',
+    photoUpload: 'Téléverser une photo',
     photoRemove: '× Supprimer',
     photoDisabledTitle: 'Désactivé en mode démo — créez un compte pour téléverser des photos',
     photoChooseTitle: 'Choisir un fichier photo',
@@ -542,6 +548,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     clMotivation: 'Motivation', clMotivationPlaceholder: 'Le poste proposé m\'offre la possibilité…',
     clClosing: 'Conclusion', clClosingPlaceholder: 'Je serais ravi de me présenter à vous en personne…',
     clSignoffSection: 'Formule de politesse', clSignoffHint: 'Formule finale',
+    clShowDateline: 'Afficher lieu et date', clShowDatelineHint: 'Désactivé = version sans date. Les saisies sont conservées.',
+    clShowSignature: 'Afficher la ligne de signature', clShowSignatureHint: 'Trait et nom sous la formule.',
     clSignoff: 'Formule de politesse', clSignoffPlaceholder: 'Cordialement',
     clFooter: 'L\'expéditeur (nom, coordonnées) et le modèle sont repris automatiquement du CV.',
   },
@@ -560,7 +568,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     socialsEmpty: 'Aún no hay perfiles. Haz clic en «Añadir» para introducir p. ej. LinkedIn, GitHub o Bluesky.',
 
     photo: 'Foto',
-    photoUpload: '📁 Subir foto',
+    photoUpload: 'Subir foto',
     photoRemove: '× Quitar',
     photoDisabledTitle: 'Desactivado en el modo demo — crea una cuenta para subir fotos',
     photoChooseTitle: 'Elegir archivo de foto',
@@ -646,6 +654,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     clMotivation: 'Motivación', clMotivationPlaceholder: 'El puesto ofertado me brinda la oportunidad…',
     clClosing: 'Cierre', clClosingPlaceholder: 'Agradecería la oportunidad de presentarme en persona…',
     clSignoffSection: 'Despedida', clSignoffHint: 'Fórmula de cierre',
+    clShowDateline: 'Mostrar lugar y fecha', clShowDatelineHint: 'Desactivado = versión sin fecha. Se conservan los datos.',
+    clShowSignature: 'Mostrar línea de firma', clShowSignatureHint: 'Línea y nombre bajo la despedida.',
     clSignoff: 'Despedida', clSignoffPlaceholder: 'Atentamente',
     clFooter: 'El remitente (nombre, datos de contacto) y la plantilla se toman automáticamente del currículum.',
   },

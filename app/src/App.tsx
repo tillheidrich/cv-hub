@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { APP_NAME } from './brand';
+import { Icon } from './ui/Icon';
 import { createPortal } from 'react-dom';
 import ResumeRenderer, { type InlineEditApi } from './templates/ResumeRenderer';
 import { applyInlineEdit, applyCoverLetterEdit, isCoverLetterPath, insertAfter, removeAt } from './data/inlineEdit';
@@ -593,7 +595,12 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
         aria-modal="true"
         aria-label={et.typeAndPage}
         tabIndex={-1}
-        style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 300, background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '12px', boxShadow: '0 12px 36px rgba(0,0,0,0.16)', padding: '18px', width: '288px' }}>
+        /* Höhe begrenzen UND scrollen lassen. Vorher fehlte beides: Das
+           Panel wuchs mit seinem Inhalt über den Bildschirmrand hinaus, und
+           die unteren Sektionen waren schlicht nicht erreichbar — sichtbar
+           abgeschnitten, ohne Scrollbalken. overscrollBehavior verhindert,
+           dass das Scrollen am Ende auf die Seite dahinter überspringt. */
+        style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 300, background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '12px', boxShadow: '0 12px 36px rgba(0,0,0,0.16)', padding: '18px', width: '288px', maxHeight: 'min(calc(100vh - 96px), 680px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {body}
       </div>
     </>
@@ -1094,7 +1101,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.60 0.012 264)' }}>
-        Heidrich/cv wird geladen…
+        {APP_NAME} wird geladen…
       </div>
     );
   }
@@ -1186,7 +1193,7 @@ export default function App() {
             ? { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }
             : { flexShrink: 0 }),
         }}>
-          {activeProfile?.displayName ?? 'Heidrich/cv'}
+          {activeProfile?.displayName ?? APP_NAME}
         </h1>
 
         {!isMobile && <div style={{ width: '1px', height: '20px', background: 'oklch(0.85 0.008 264)', flexShrink: 0 }} />}
@@ -1402,10 +1409,10 @@ export default function App() {
 
       {isMobile && (
         <nav data-noprint style={{ display: 'flex', borderTop: '1px solid oklch(0.91 0.005 264)', background: '#fff', flexShrink: 0, zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          <button type="button" onClick={() => setMode('edit')} style={mobileModeStyle(mode === 'edit')}><span style={{ fontSize: '16px' }}>✏️</span>{et.edit}</button>
-          <button type="button" onClick={() => setMode('preview')} style={mobileModeStyle(mode === 'preview')}><span style={{ fontSize: '16px' }}>👁</span>{et.preview}</button>
-          <button type="button" onClick={() => setMode('export')} style={mobileModeStyle(mode === 'export')}><span style={{ fontSize: '16px' }}>↗</span>{et.export}</button>
-          <button type="button" onClick={() => setMode('knowledge')} style={mobileModeStyle(mode === 'knowledge')}><span style={{ fontSize: '16px' }}>💡</span>{et.tips}</button>
+          <button type="button" onClick={() => setMode('edit')} style={mobileModeStyle(mode === 'edit')}><Icon name="pencil" size={17} />{et.edit}</button>
+          <button type="button" onClick={() => setMode('preview')} style={mobileModeStyle(mode === 'preview')}><Icon name="eye" size={17} />{et.preview}</button>
+          <button type="button" onClick={() => setMode('export')} style={mobileModeStyle(mode === 'export')}><Icon name="share" size={17} />{et.export}</button>
+          <button type="button" onClick={() => setMode('knowledge')} style={mobileModeStyle(mode === 'knowledge')}><Icon name="bulb" size={17} />{et.tips}</button>
         </nav>
       )}
 

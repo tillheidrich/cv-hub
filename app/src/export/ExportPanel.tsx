@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { saveText } from './saveFile';
+import { Icon, type IconName } from '../ui/Icon';
 import type { CVData, CoverLetterData, AppProfile, Lang } from '../data/types';
 import AtsCheckModal from '../screens/AtsCheckModal';
 
@@ -255,7 +257,7 @@ const s = {
 
 function ExportButton({
   icon, label, sub, onClick, busy,
-}: { icon: string; label: string; sub: string; onClick: () => void; busy?: boolean }) {
+}: { icon: IconName; label: string; sub: string; onClick: () => void; busy?: boolean }) {
   const [hover, setHover] = useState(false);
   return (
     <button
@@ -266,7 +268,7 @@ function ExportButton({
       onMouseLeave={() => setHover(false)}
       style={s.exportBtn(hover)}
     >
-      <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : icon}</div>
+      <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : <Icon name={icon} />}</div>
       <div>
         <div style={s.btnLabel}>{label}</div>
         <div style={s.btnSub}>{busy ? 'Wird gebaut…' : sub}</div>
@@ -298,6 +300,8 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const [shares, setShares] = useState<ShareLink[]>([]);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
+  /** Hinweis, wenn der Markdown-Download nicht vom Server kam. */
+  const [mdNote, setMdNote] = useState<string | null>(null);
   const [justCopied, setJustCopied] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
@@ -395,34 +399,45 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   }
 
   // Download cover-letter MD for the active resume (auth-gated server endpoint).
-  async function downloadCoverLetterMd() {
-    if (!resumeId) return;
+  /**
+   * Markdown vom Server holen — und nachsehen, ob es wirklich Markdown ist.
+   *
+   * Zwei Dinge gingen hier bisher schief, beide lautlos. Erstens: Steht vor
+   * der API ein Proxy, der bei unbekannten Pfaden die Startseite der App
+   * ausliefert, antwortet der Server mit 200 und HTML — die Datei hieß dann
+   * `.md` und enthielt die Anwendung. Genau dieser Fehler hat an anderer
+   * Stelle schon einmal den ganzen Bildschirm weiß gemacht. Zweitens: Jeder
+   * Fehler wurde verschluckt; wer klickte, bekam gar nichts und keinen Grund.
+   *
+   * Der Test ist einfach: die Bridge-Fassung beginnt mit einem Frontmatter.
+   * Fehlt es, war es nicht unsere Antwort. Dann lädt die lokale Fassung —
+   * besser eine Datei ohne Server-Feinheiten als eine kaputte — und der
+   * Hinweis sagt, was passiert ist.
+   */
+  async function ladeMarkdown(pfad: string, art: 'lebenslauf' | 'anschreiben') {
+    setMdNote(null);
     try {
-      const r = await fetch(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}/cover-letter.md`, { credentials: 'include' });
-      if (!r.ok) throw new Error(`Fehler ${r.status}`);
+      const r = await fetch(pfad, { credentials: 'include' });
+      if (!r.ok) throw new Error(`Der Server antwortete mit ${r.status}.`);
       const text = await r.text();
-      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = exportFilename('anschreiben', data.personal.name, 'md');
-      a.click(); URL.revokeObjectURL(url);
-    } catch { /* swallow */ }
+      if (!text.trimStart().startsWith('---')) throw new Error('Die Antwort war kein Markdown.');
+      saveText(exportFilename(art, data.personal.name, 'md'), text, 'text/markdown');
+    } catch (e) {
+      if (art === 'lebenslauf') {
+        exportMarkdown(data);
+        setMdNote(`${e instanceof Error ? e.message : 'Der Server war nicht erreichbar.'} Heruntergeladen wurde die lokale Fassung — sie enthält denselben Text, aber keine Server-Einstellungen.`);
+      } else {
+        setMdNote(`${e instanceof Error ? e.message : 'Der Server war nicht erreichbar.'} Das Anschreiben konnte nicht geladen werden.`);
+      }
+    }
   }
 
+  const downloadCoverLetterMd = () => resumeId
+    && ladeMarkdown(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}/cover-letter.md`, 'anschreiben');
+
   // Download CV markdown directly from the server bridge (same format as import).
-  async function downloadResumeMd() {
-    if (!resumeId) return;
-    try {
-      const r = await fetch(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}.md`, { credentials: 'include' });
-      if (!r.ok) throw new Error(`Fehler ${r.status}`);
-      const text = await r.text();
-      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = exportFilename('lebenslauf', data.personal.name, 'md');
-      a.click(); URL.revokeObjectURL(url);
-    } catch { /* swallow */ }
-  }
+  const downloadResumeMd = () => resumeId
+    && ladeMarkdown(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}.md`, 'lebenslauf');
 
   // Import a JSON profile file (full payload). Replaces the current profile.
   function importJsonFile(file: File) {
@@ -466,13 +481,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   function downloadMdTemplate() {
     const kind = isCover ? 'cl' : 'cv';
     const md = getMdTemplate(kind, lang as MdTemplateFullLang);
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exportFilename(isCover ? 'anschreiben' : 'lebenslauf', 'Vorlage', 'md');
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(exportFilename(isCover ? 'anschreiben' : 'lebenslauf', 'Vorlage', 'md'), md, 'text/markdown');
   }
 
   // MD file pickup — read into the import textarea so user can review.
@@ -637,15 +646,20 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       <div style={s.divider} />
       <div style={s.section}>
         <div style={s.sectionLabel}>Weitere Formate</div>
+        {mdNote && (
+          <div style={{ background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', color: '#8a6500', marginBottom: '8px', lineHeight: 1.5, fontFamily: "'Inter', sans-serif" }}>
+            {mdNote}
+          </div>
+        )}
         {isCover ? (
           <>
             <ExportButton
-              icon="🌐" label="HTML"
+              icon="globe" label="HTML"
               sub="Anschreiben als Webseite, druckfertig"
               onClick={() => coverLetter && exportCoverLetterHtml(data, coverLetter, exportConfig)}
             />
             <ExportButton
-              icon="📝" label="Markdown"
+              icon="markdown" label="Markdown"
               sub="Anschreiben als .md (rund-um-bearbeitbar)"
               onClick={downloadCoverLetterMd}
             />
@@ -653,23 +667,23 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         ) : (
           <>
             <ExportButton
-              icon="📄" label="Word (.docx)"
+              icon="file-text" label="Word (.docx)"
               sub="Die gewählte Vorlage in Word — Farbfläche, Akzentfarben, Datumsspalte. Öffnet in Word und LibreOffice."
               onClick={() => { track('export_docx'); exportDocx(data, exportConfig.themeId, 'design'); }}
             />
             <ExportButton
-              icon="📄" label="Word — ATS-Fassung"
+              icon="file-text" label="Word — ATS-Fassung"
               sub="Einspaltig, ohne Tabellen und Flächen. Für Portale, die die Datei maschinell auslesen."
               onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig.themeId, 'ats'); }}
             />
-            <ExportButton icon="🌐" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
-            <ExportButton icon="📝" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
-            <ExportButton icon="{ }" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
-            <ExportButton icon="🧩" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
+            <ExportButton icon="globe" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
+            <ExportButton icon="markdown" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
+            <ExportButton icon="braces" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
+            <ExportButton icon="puzzle" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
             {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus
                 alles, was ein Mensch oder eine KI braucht, um es zu füllen. */}
             <ExportButton
-              icon="📦" label="Vorlage ohne Daten"
+              icon="package" label="Vorlage ohne Daten"
               sub="ZIP mit HTML, Word, leerem JSON und Anleitung — das Design zum Selbstbefüllen, auch ohne dieses Werkzeug."
               busy={kitBusy}
               onClick={async () => {
@@ -695,7 +709,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                 : 'Lebenslauf aus Markdown wiederherstellen oder ein komplettes Profil-JSON zurückspielen.'}
             </div>
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
-              <div style={s.btnIcon}>↑</div>
+              <div style={s.btnIcon}><Icon name="upload" /></div>
               <div>
                 <div style={s.btnLabel}>Markdown hochladen</div>
                 <div style={s.btnSub}>{isCover ? 'Importiert ins Anschreiben' : 'Importiert in den Lebenslauf'}</div>
@@ -704,14 +718,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             </label>
             <button type="button" onClick={downloadMdTemplate}
               style={{ ...s.exportBtn(false), cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-              <div style={s.btnIcon}>📝</div>
+              <div style={s.btnIcon}><Icon name="markdown" /></div>
               <div>
                 <div style={s.btnLabel}>Leere Markdown-Vorlage</div>
                 <div style={s.btnSub}>Zum Ausfüllen in deinem Editor (LM-Studio, VS Code, Obsidian …)</div>
               </div>
             </button>
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
-              <div style={s.btnIcon}>{'{ }'}</div>
+              <div style={s.btnIcon}><Icon name="braces" /></div>
               <div>
                 <div style={s.btnLabel}>JSON hochladen</div>
                 <div style={s.btnSub}>Vollständiger Profil-Import (überschreibt aktiv)</div>
@@ -825,7 +839,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
                 <button type="button" onClick={copyPrompt}
                   style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif", textAlign: 'left' }}>
-                  {justCopied === 'prompt' ? '✓ Prompt kopiert' : '📋 Prompt + Markdown-Link kopieren'}
+                  {justCopied === 'prompt'
+                ? <><Icon name="check" size={13} /> Prompt kopiert</>
+                : <><Icon name="clipboard" size={13} /> Prompt + Markdown-Link kopieren</>}
                 </button>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button type="button" onClick={() => openInAi('chatgpt')}

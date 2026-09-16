@@ -240,10 +240,3 @@ export interface ShareLink {
   created_at: string;
 }
 
-/** Returns the absolute URL for a server-side photo or null if the input is not a server photo. */
-export function photoUrl(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  if (value.startsWith('data:') || value.startsWith('http')) return value;
-  if (value.startsWith('/pdfapi/')) return 'https://cv.heidrich-digital.de' + value;
-  return value;
-}

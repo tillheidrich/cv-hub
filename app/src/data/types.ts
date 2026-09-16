@@ -137,6 +137,17 @@ export interface CoverLetterData {
 
   // Sign-off
   signoff: string;         // "Mit freundlichen Grüßen"
+
+  /* Zeitlose Fassung.
+   *
+   * Ort/Datum und der Unterschriftsblock machen aus einem Anschreiben ein
+   * datiertes Dokument. Wer eine Fassung ohne Bezug auf einen Tag will —
+   * für eine Initiativbewerbung, als Vorlage, für ein Portal —, schaltet
+   * sie hier ab, ohne die eingegebenen Werte zu verlieren.
+   *
+   * undefined = an. Bestandsprofile verhalten sich damit unverändert. */
+  showDateline?: boolean;
+  showSignature?: boolean;
 }
 
 export interface CVData {
