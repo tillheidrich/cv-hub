@@ -2,6 +2,18 @@
 
 ## 2026-09-16
 
+**Printing the exported HTML no longer doubles the page count.** Safari turned
+a two-page CV into four sheets: it sets type slightly differently from the
+browser that measured the page break, and the one line that then stuck out at
+the bottom was pushed onto a sheet of its own. `overflow: hidden` hides that
+line on screen, but WebKit ignores it while paginating. Each page now also
+carries `contain: paint`, which makes it a monolithic box — never split, and
+clipped in print exactly as on screen. Verified against Chromium: same page
+count, pixel-identical output. Clipping must not be silent, so a small script
+measures once fonts and images have loaded and names the affected page in the
+print hint at the top. The PDF export was never affected; it renders in
+Chromium server-side.
+
 **MCP can create, rename, and write per language.** Three gaps that surfaced on
 first real use — and forced a workaround:
 

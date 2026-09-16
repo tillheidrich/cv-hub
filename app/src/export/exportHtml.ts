@@ -83,7 +83,9 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
   const h = `${fmt.heightMm}mm`;
 
   // Kein Zerschneiden mehr. Der Renderer liefert bereits N fertige
-  // `.cv-page`-Elemente — jede genau eine physische Seite hoch, mit dem
+  // `.cv-page`-Elemente — jede auf genau eine physische Seite gepinnt (Höhe
+  // und `contain: paint` weiter unten, sonst umbricht Safari den Überhang
+  // auf ein Extrablatt), mit dem
   // Inhalt, den der Paginator dieser Seite zugewiesen hat. Chromium muss
   // nur noch nach jeder Seite umbrechen. Vorher wurde derselbe Fließtext
   // N-mal ausgegeben und per `translateY` verschoben; genau daher kamen die
@@ -115,11 +117,19 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
   body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
   .cv-page {
     width: ${w};
+    height: ${h};
     margin: 0 !important;
     padding: 0;
     page-break-after: always;
     break-after: page;
     overflow: hidden;
+    /* WebKit (Safari) ignoriert "overflow: hidden" beim Seitenumbruch: was
+       unten herausragt, landet dort auf einem zusätzlichen Blatt — aus zwei
+       Seiten werden vier. "contain" macht die Seite zu einem monolithischen
+       Kasten: sie wird nie zerschnitten, und der Überhang wird auch im Druck
+       abgeschnitten statt umbrochen. Damit druckt Safari genau das, was am
+       Bildschirm zu sehen ist. */
+    contain: paint;
   }
   .cv-page:last-of-type { page-break-after: auto; break-after: auto; }
 
@@ -185,9 +195,14 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
     body { display: block !important; }
     .cv-page {
       width: ${w} !important;
+      height: ${h} !important;
       margin: 0 !important;
       box-shadow: none !important;
       border: none !important;
+      overflow: hidden !important;
+      contain: paint;
+      break-inside: avoid-page;
+      page-break-inside: avoid;
     }
     .print-tip { display: none !important; }
     /* Belt-and-suspenders: kill any UA padding around the page edges. */
@@ -203,6 +218,40 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
   <button onclick="document.getElementById('print-tip').remove()">Verstanden</button>
 </div>
 ${body}
+<script>
+/* Der Kasten einer Seite ist auf die Blatthöhe gepinnt und schneidet ab, was
+   nicht hineinpasst — sonst schiebt Safari den Überhang auf ein Extrablatt.
+   Abschneiden darf aber nicht heimlich passieren: Fremde Browser setzen Text
+   minimal anders als der, in dem der Umbruch berechnet wurde. Passt etwas
+   nicht mehr, sagt der Hinweis oben, welche Seite betroffen ist. */
+function checkOverflow() {
+  var tip = document.getElementById('print-tip');
+  if (!tip) return;
+  var over = [];
+  var pages = document.querySelectorAll('.cv-page');
+  for (var i = 0; i < pages.length; i++) {
+    var p = pages[i], max = 0;
+    for (var j = 0; j < p.children.length; j++) {
+      var c = p.children[j];
+      max = Math.max(max, c.scrollHeight, c.getBoundingClientRect().height);
+    }
+    if (max - p.clientHeight > 2) over.push(i + 1);
+  }
+  if (!over.length) return;
+  tip.innerHTML = '<strong>Hinweis:</strong> In diesem Browser passt der Inhalt von Seite '
+    + over.join(', ') + ' nicht ganz auf das Blatt; der Überhang wird abgeschnitten. '
+    + 'Das PDF aus dem Editor ist maßgeblich \u2014 oder im Editor etwas kürzen.'
+    + '<button onclick="this.parentNode.remove()">Verstanden</button>';
+  tip.style.background = '#fef3c7';
+  tip.style.color = '#7c2d12';
+}
+/* Erst messen, wenn Schriften und Bild geladen sind: mit Ersatzschrift ist der
+   Satz höher, das ergäbe einen Fehlalarm. */
+window.addEventListener('load', function () {
+  var ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+  ready.then(function () { setTimeout(checkOverflow, 0); });
+});
+</script>
 </body>
 </html>`;
 }
