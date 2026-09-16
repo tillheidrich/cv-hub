@@ -4,48 +4,60 @@
 // Stellt die Markdown-Brücke des CV-Tools als MCP-Tools bereit: ein externes
 // KI-Modell (Claude Desktop, Cursor, …) kann Lebensläufe und Anschreiben
 // als Markdown LESEN, überarbeiten und ZURÜCKSCHREIBEN — ohne dass im Tool selbst
-// eine KI eingebaut ist. Auth ausschließlich per persönlichem API-Key (cvk_…).
+// eine KI eingebaut ist.
 //
 // Zwei Betriebsarten:
-//   • stdio  (Standard):  lokal vom MCP-Client gestartet.  CV_API_KEY=cvk_… node cv-mcp.mjs
-//   • HTTP   (gehostet):  als Web-Dienst deploybar, Client verbindet sich remote.
-//                         Aktiv, wenn MCP_HTTP=1 gesetzt ist. Zusätzlich nötig:
-//                         MCP_GATE_TOKEN (Zugriffs-Token für den Endpunkt), PORT.
+//   • stdio  (Standard):  lokal vom MCP-Client gestartet, für genau einen
+//                         Menschen.  CV_API_KEY=cvk_… node cv-mcp.mjs
+//   • HTTP   (gehostet):  als Web-Dienst deploybar, MEHRBENUTZERFÄHIG. Jeder
+//                         Aufrufer bringt sein eigenes Token mit (cvm_…, per
+//                         OAuth im Tool erteilt) und sieht ausschließlich seine
+//                         eigenen Daten. Aktiv mit MCP_HTTP=1.
+//
+// Dieser Dienst ist im HTTP-Modus bewusst dumm: er prüft keine Passwörter und
+// führt keine Nutzerliste. Er reicht das Token des Aufrufers an die cv-api
+// weiter, und die entscheidet. Der Anmeldedienst (OAuth) liegt ebenfalls in der
+// cv-api — dort sind Nutzer, Sessions und Datenbank.
 //
 // Konfiguration über Umgebungsvariablen:
-//   CV_API_KEY     (erforderlich)  Persönlicher Schlüssel, beginnt mit "cvk_".
+//   CV_API_KEY     (stdio: Pflicht) Persönlicher Schlüssel, beginnt mit "cvk_".
+//                  Im HTTP-Modus NICHT setzen — er würde alle Aufrufer zu
+//                  demselben Konto machen.
 //   CV_API_BASE    (optional)      Standard: http://localhost:8080/pdfapi
 //   MCP_HTTP       (optional)      "1" → HTTP-Modus statt stdio.
-//   MCP_GATE_TOKEN (HTTP: Pflicht) Geheimes Bearer-Token, das der Client senden muss.
 //   PORT           (HTTP: optional) Standard 3000.
-//   MCP_PUBLIC_URL (HTTP: empfohlen) Öffentliche Basis-Adresse, z. B.
-//                  https://cv.example.com — wird für die OAuth-Metadaten
-//                  gebraucht. Fehlt sie, wird der Host-Header genommen; das
-//                  funktioniert, ist aber angreifbar und wird gewarnt.
+//   MCP_PUBLIC_URL (HTTP: empfohlen) Öffentliche Basis-Adresse. Steht im
+//                  WWW-Authenticate-Wegweiser; fehlt sie, wird der Host-Header
+//                  genommen — das funktioniert, ist aber angreifbar.
+//   MCP_AUTH_BASE  (HTTP: nötig, wenn die cv-api unter einem Pfadpräfix hängt)
+//                  Öffentliche Adresse der OAuth-Endpunkte, z. B.
+//                  https://cv.example.com/pdfapi/api/oauth
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import crypto from 'crypto';
-import {
-  makeSigner, safeEqual, redirectUriAllowed, pkceMatches, consentPage,
-  protectedResourceMetadata, authorizationServerMetadata,
-  CODE_TTL, ACCESS_TTL, REFRESH_TTL,
-} from './oauth.mjs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const APP_NAME = process.env.APP_NAME || 'CV-Hub';
 const API_BASE = (process.env.CV_API_BASE || 'http://localhost:8080/pdfapi').replace(/\/$/, '');
 const API_KEY = process.env.CV_API_KEY || '';
 const HTTP_MODE = process.env.MCP_HTTP === '1' || process.env.MCP_HTTP === 'true';
 
-if (!API_KEY) {
-  console.error('cv-mcp: CV_API_KEY fehlt. Erzeuge einen Schlüssel im Konto (Konto → Schlüssel) und setze CV_API_KEY.');
-  process.exit(1);
-}
-if (!API_KEY.startsWith('cvk_')) {
-  console.error('cv-mcp: CV_API_KEY sieht ungültig aus (erwartet Präfix "cvk_").');
-  process.exit(1);
+// Im stdio-Modus läuft der Server für genau einen Menschen, der seinen
+// Schlüssel selbst mitgibt. Im HTTP-Modus bringt JEDER Aufrufer sein eigenes
+// Token mit — ein Schlüssel aus der Umgebung wäre dort sogar schädlich, weil
+// er alle Aufrufer zu demselben Konto machen würde.
+if (!HTTP_MODE) {
+  if (!API_KEY) {
+    console.error('cv-mcp: CV_API_KEY fehlt. Erzeuge einen Schlüssel im Konto (Konto → Schlüssel) und setze CV_API_KEY.');
+    process.exit(1);
+  }
+  if (!API_KEY.startsWith('cvk_')) {
+    console.error('cv-mcp: CV_API_KEY sieht ungültig aus (erwartet Präfix "cvk_").');
+    process.exit(1);
+  }
 }
 // Der Key wird als Bearer-Token gesendet — nur über HTTPS (Ausnahme: lokale
 // Entwicklung gegen localhost). Sonst liefe der Schlüssel im Klartext.
@@ -54,12 +66,22 @@ if (!/^https:\/\//i.test(API_BASE) && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\
   process.exit(1);
 }
 
-/** Ruft die cv-api mit Bearer-Key auf. Wirft mit lesbarer Meldung bei Fehlern. */
+/* Der Schlüssel des gerade bedienten Aufrufers.
+ *
+ * Im HTTP-Modus bedient derselbe Prozess viele Nutzer. Ihn über eine
+ * Modulvariable zu führen wäre ein Datenleck mit Ansage: zwei gleichzeitige
+ * Anfragen würden sich gegenseitig den Schlüssel unterschieben. AsyncLocalStorage
+ * hängt den Wert an den Aufrufkontext, nicht an das Modul — dadurch bleibt jeder
+ * der fünfzehn apiFetch-Aufrufe unverändert und trotzdem richtig zugeordnet. */
+const keyStore = new AsyncLocalStorage();
+const currentKey = () => keyStore.getStore() || API_KEY;
+
+/** Ruft die cv-api mit dem Token des Aufrufers auf. Wirft mit lesbarer Meldung. */
 async function apiFetch(path, opts = {}) {
   const res = await fetch(API_BASE + path, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${currentKey()}`,
       ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
       ...(opts.headers || {}),
     },
@@ -364,30 +386,15 @@ async function runStdio() {
 // Single-Tenant: der CV_API_KEY steckt serverseitig im Env, der Endpunkt ist
 // mit MCP_GATE_TOKEN abgesichert. Nur wer das Token kennt, darf zugreifen.
 async function runHttp() {
-  const GATE = process.env.MCP_GATE_TOKEN || '';
-  if (!GATE || GATE.length < 24) {
-    console.error('cv-mcp: MCP_GATE_TOKEN fehlt oder zu kurz (min. 24 Zeichen). HTTP-Modus abgebrochen.');
-    process.exit(1);
-  }
   const { default: express } = await import('express');
   const app = express();
   app.use(express.json({ limit: '4mb' }));
-  // Der Token-Endpunkt spricht nach RFC 6749 formularkodiert; die
-  // Zustimmungsseite ebenfalls.
-  app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
   const PORT = parseInt(process.env.PORT || '3000', 10);
-
-  // ── OAuth 2.1 ──────────────────────────────────────────────────────────────
-  // Claude und jeder andere spezifikationstreue Client verbinden sich mit einem
-  // entfernten MCP-Server nur über OAuth mit Dynamic Client Registration. Ohne
-  // das Folgende bricht der Verbindungsversuch ab, obwohl der Dienst läuft.
-  const signer = makeSigner(process.env.MCP_OAUTH_SECRET || GATE);
   const CONFIGURED_URL = (process.env.MCP_PUBLIC_URL || '').replace(/\/$/, '');
   if (!CONFIGURED_URL) {
-    console.error('cv-mcp: MCP_PUBLIC_URL nicht gesetzt — OAuth-Metadaten fallen auf den Host-Header zurück. Bitte setzen.');
+    console.error('cv-mcp: MCP_PUBLIC_URL nicht gesetzt — der Wegweiser zum Anmeldedienst fällt auf den Host-Header zurück. Bitte setzen.');
   }
-  /** Öffentliche Basis-Adresse. Konfiguriert schlägt geraten. */
   function baseUrl(req) {
     if (CONFIGURED_URL) return CONFIGURED_URL;
     const host = req.get('host') || 'localhost';
@@ -395,194 +402,98 @@ async function runHttp() {
     return `${proto}://${host}`;
   }
 
-  // Metadaten und Token-Endpunkt werden teils aus dem Browser heraus geladen.
   app.use((req, res, next) => {
-    if (req.path.startsWith('/.well-known/') || req.path.startsWith('/mcp')) {
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id');
-      res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.set('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id');
-      if (req.method === 'OPTIONS') return res.sendStatus(204);
-    }
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Expose-Headers', 'WWW-Authenticate, Mcp-Session-Id');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
 
-  // Discovery. Die Pfadvarianten mit angehängtem /mcp verlangt RFC 9728 bzw.
-  // 8414 für Ressourcen, die nicht im Wurzelpfad liegen; verschiedene Clients
-  // fragen die eine oder die andere Form ab, also beantworten wir beide.
-  const prMeta = (req, res) => res.json(protectedResourceMetadata(baseUrl(req)));
-  app.get('/.well-known/oauth-protected-resource', prMeta);
-  app.get('/.well-known/oauth-protected-resource/mcp', prMeta);
-  const asMeta = (req, res) => res.json(authorizationServerMetadata(baseUrl(req)));
-  app.get('/.well-known/oauth-authorization-server', asMeta);
-  app.get('/.well-known/oauth-authorization-server/mcp', asMeta);
-  app.get('/mcp/.well-known/oauth-authorization-server', asMeta);
-
-  app.get('/mcp/oauth/info', (req, res) => {
-    res.type('text/plain').send(
-      'MCP-Endpunkt mit OAuth 2.1 (Dynamic Client Registration, PKCE/S256).\n' +
-      `Ressource: ${baseUrl(req)}/mcp\n` +
-      'Zugriff wird auf der Zustimmungsseite mit dem Zugriffs-Token des Dienstes erteilt.\n');
-  });
-
-  // Dynamic Client Registration (RFC 7591). Zustandslos: die client_id IST der
-  // signierte Registrierungsdatensatz, es gibt nichts zu speichern.
-  app.post('/mcp/oauth/register', (req, res) => {
-    const body = req.body || {};
-    const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
-    if (uris.length === 0 || uris.length > 10 || !uris.every(redirectUriAllowed)) {
-      return res.status(400).json({
-        error: 'invalid_redirect_uri',
-        error_description: 'redirect_uris fehlt oder enthält eine unzulässige Adresse (https, oder http auf localhost).',
-      });
-    }
-    const name = typeof body.client_name === 'string' ? body.client_name.slice(0, 120) : '';
-    const client_id = signer.sign('client', { ru: uris, n: name });
-    res.status(201).json({
-      client_id,
-      client_id_issued_at: Math.floor(Date.now() / 1000),
-      client_name: name || undefined,
-      redirect_uris: uris,
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-    });
-  });
-
-  /** Prüft die gemeinsamen /authorize-Parameter. Gibt {client, redirectUri} oder {error}. */
-  function checkAuthorizeParams(q) {
-    const client = signer.verify(q.client_id, 'client');
-    if (!client) return { error: 'invalid_client', description: 'client_id unbekannt oder abgelaufen.' };
-    const redirectUri = typeof q.redirect_uri === 'string' ? q.redirect_uri : client.ru[0];
-    if (!client.ru.includes(redirectUri)) {
-      return { error: 'invalid_request', description: 'redirect_uri gehört nicht zu dieser Registrierung.' };
-    }
-    if (q.response_type !== 'code') return { error: 'unsupported_response_type', description: 'Nur response_type=code.' };
-    if (q.code_challenge_method !== 'S256' || typeof q.code_challenge !== 'string' || q.code_challenge.length < 20) {
-      return { error: 'invalid_request', description: 'PKCE mit code_challenge_method=S256 ist Pflicht.' };
-    }
-    return { client, redirectUri };
-  }
-
-  app.get('/mcp/oauth/authorize', (req, res) => {
-    const chk = checkAuthorizeParams(req.query);
-    if (chk.error) return res.status(400).type('text/plain').send(`${chk.error}: ${chk.description}`);
-    res.type('html').send(consentPage({
-      appName: APP_NAME,
-      clientName: chk.client.n,
-      redirectUri: chk.redirectUri,
-      params: {
-        client_id: req.query.client_id,
-        redirect_uri: chk.redirectUri,
-        response_type: 'code',
-        code_challenge: req.query.code_challenge,
-        code_challenge_method: 'S256',
-        state: req.query.state ?? '',
-        scope: req.query.scope ?? 'cv',
-        resource: req.query.resource ?? '',
-      },
-    }));
-  });
-
-  app.post('/mcp/oauth/authorize', (req, res) => {
-    const chk = checkAuthorizeParams(req.body || {});
-    if (chk.error) return res.status(400).type('text/plain').send(`${chk.error}: ${chk.description}`);
-    if (!safeEqual(req.body.gate || '', GATE)) {
-      return res.status(401).type('html').send(consentPage({
-        appName: APP_NAME,
-        clientName: chk.client.n,
-        redirectUri: chk.redirectUri,
-        params: {
-          client_id: req.body.client_id,
-          redirect_uri: chk.redirectUri,
-          response_type: 'code',
-          code_challenge: req.body.code_challenge,
-          code_challenge_method: 'S256',
-          state: req.body.state ?? '',
-          scope: req.body.scope ?? 'cv',
-          resource: req.body.resource ?? '',
-        },
-        error: 'Token stimmt nicht.',
-      }));
-    }
-    const code = signer.sign('code', {
-      cc: req.body.code_challenge,
-      ru: chk.redirectUri,
-      ci: req.body.client_id,
-    }, CODE_TTL);
-    const back = new URL(chk.redirectUri);
-    back.searchParams.set('code', code);
-    if (req.body.state) back.searchParams.set('state', req.body.state);
-    res.redirect(302, back.toString());
-  });
-
-  app.post('/mcp/oauth/token', (req, res) => {
-    const b = req.body || {};
-    const issue = () => res.json({
-      access_token: signer.sign('access', { s: 'cv' }, ACCESS_TTL),
-      token_type: 'Bearer',
-      expires_in: ACCESS_TTL,
-      refresh_token: signer.sign('refresh', { s: 'cv' }, REFRESH_TTL),
-      scope: 'cv',
-    });
-    if (b.grant_type === 'authorization_code') {
-      const code = signer.verify(b.code, 'code');
-      // Ein abgelaufener oder gefälschter Code ist derselbe Fehler wie gar keiner.
-      if (!code) return res.status(400).json({ error: 'invalid_grant', error_description: 'Code ungültig oder abgelaufen.' });
-      if (typeof b.redirect_uri === 'string' && b.redirect_uri !== code.ru) {
-        return res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri passt nicht zum Code.' });
-      }
-      if (b.client_id && b.client_id !== code.ci) {
-        return res.status(400).json({ error: 'invalid_grant', error_description: 'client_id passt nicht zum Code.' });
-      }
-      if (!pkceMatches(b.code_verifier, code.cc)) {
-        return res.status(400).json({ error: 'invalid_grant', error_description: 'code_verifier passt nicht zur code_challenge.' });
-      }
-      return issue();
-    }
-    if (b.grant_type === 'refresh_token') {
-      if (!signer.verify(b.refresh_token, 'refresh')) {
-        return res.status(400).json({ error: 'invalid_grant', error_description: 'refresh_token ungültig oder abgelaufen.' });
-      }
-      return issue();
-    }
-    res.status(400).json({ error: 'unsupported_grant_type' });
-  });
-
-  // Zeitkonstanter Vergleich des Zugriffs-Tokens. Erlaubt sind das Gate-Token
-  // (Kommandozeile, eigene Skripte) und ein per OAuth ausgestelltes
-  // Access-Token. Fallback ?k=… für Clients ohne Custom-Header.
-  function gateOk(req) {
-    const auth = req.get('authorization') || '';
-    let given = null;
-    if (auth.startsWith('Bearer ')) given = auth.slice(7).trim();
-    else if (typeof req.query?.k === 'string') given = req.query.k;
-    if (!given) return false;
-    if (safeEqual(given, GATE)) return true;
-    return Boolean(signer.verify(given, 'access'));
-  }
-
-  /** 401 samt Wegweiser zum Anmeldedienst — ohne den findet kein Client hin. */
-  function unauthorized(req, res) {
-    res.set('WWW-Authenticate',
-      `Bearer realm="cv-mcp", resource_metadata="${baseUrl(req)}/.well-known/oauth-protected-resource"`);
-    res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });
-  }
-
   app.get('/health', (_req, res) => res.json({ ok: true, service: 'cv-mcp' }));
 
+  /* OAuth-Discovery.
+   *
+   * Der Anmeldedienst selbst läuft in der cv-api — dort sind Nutzer, Sessions
+   * und Datenbank. Beantwortet werden die Wegweiser trotzdem hier, weil der
+   * Reverse-Proxy vor der SPA nur diesen Container erreicht; die cv-api hängt
+   * in der Produktion direkt am Coolify-Proxy unter einem Pfadpräfix.
+   *
+   * MCP_AUTH_BASE nennt die öffentliche Adresse der OAuth-Endpunkte. Nicht
+   * geraten, sondern konfiguriert — sie steht in den Metadaten, nach denen
+   * sich jeder Client richtet. */
+  const AUTH_BASE = (process.env.MCP_AUTH_BASE || '').replace(/\/$/, '');
+  const authBase = req => AUTH_BASE || `${baseUrl(req)}/oauth`;
+
+  app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'], (req, res) => {
+    res.json({
+      resource: `${baseUrl(req)}/mcp`,
+      authorization_servers: [baseUrl(req)],
+      bearer_methods_supported: ['header'],
+      scopes_supported: ['cv'],
+    });
+  });
+
+  app.get(['/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/mcp'], (req, res) => {
+    const e = authBase(req);
+    res.json({
+      issuer: baseUrl(req),
+      authorization_endpoint: `${e}/authorize`,
+      token_endpoint: `${e}/token`,
+      registration_endpoint: `${e}/register`,
+      revocation_endpoint: `${e}/revoke`,
+      scopes_supported: ['cv'],
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
+    });
+  });
+
+  /* 401 mit Wegweiser.
+   *
+   * Der Header ist der Einstieg in die ganze Kette: erst er sagt dem Client, wo
+   * die Metadaten des Anmeldedienstes liegen. Ohne ihn sieht der Client nur ein
+   * verschlossenes Tor ohne Klingel. Der Anmeldedienst selbst läuft in cv-api —
+   * dort sind Nutzer und Datenbank. */
+  function unauthorized(req, res, detail) {
+    res.set('WWW-Authenticate',
+      `Bearer realm="cv-mcp", resource_metadata="${baseUrl(req)}/.well-known/oauth-protected-resource"`);
+    res.status(401).json({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: detail || 'Unauthorized' },
+      id: null,
+    });
+  }
+
   app.post('/mcp', async (req, res) => {
-    if (!gateOk(req)) {
-      unauthorized(req, res);
-      return;
+    const auth = req.get('authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim()
+      : (typeof req.query?.k === 'string' ? req.query.k : '');
+    if (!token) return unauthorized(req, res);
+
+    // Gültigkeit einmal vorab prüfen, damit ein abgelaufenes Token als 401 mit
+    // Wegweiser zurückkommt und der Client neu autorisiert — statt als
+    // Werkzeugfehler mitten im Gespräch.
+    let me;
+    try {
+      me = await keyStore.run(token, () => apiFetch('/api/auth/me'));
+    } catch {
+      return unauthorized(req, res, 'Token ungültig oder abgelaufen.');
     }
+    if (!me?.user) return unauthorized(req, res, 'Token ungültig oder abgelaufen.');
+
     // Zustandslos: pro Anfrage frischer Server + Transport, danach aufräumen.
+    // Der Schlüssel des Aufrufers hängt am Aufrufkontext, nicht am Modul.
     const server = buildServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => { transport.close(); server.close(); });
     try {
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
+      await keyStore.run(token, async () => {
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      });
     } catch (err) {
       console.error('cv-mcp: request error:', err?.message || err);
       if (!res.headersSent) {
@@ -598,7 +509,7 @@ async function runHttp() {
   app.delete('/mcp', methodNotAllowed);
 
   app.listen(PORT, () => {
-    console.error(`cv-mcp (HTTP) bereit · Port ${PORT} · API: ${API_BASE}`);
+    console.error(`cv-mcp (HTTP, mehrbenutzerfähig) bereit · Port ${PORT} · API: ${API_BASE}`);
   });
 }
 

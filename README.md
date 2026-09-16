@@ -116,25 +116,40 @@ The browser-driven scripts need a running dev server (`HARNESS_BASE`, default
 
 ### Connecting an MCP client to the hosted endpoint
 
-Run the server in HTTP mode behind the same domain as the app (the bundled
-nginx config already proxies `/mcp` and the two OAuth discovery paths), set
-`MCP_PUBLIC_URL` and `MCP_GATE_TOKEN`, and add `https://your-domain/mcp` as a
-custom connector in the client.
+The hosted endpoint is **multi-tenant**: every user of your instance connects
+their own AI client and sees only their own CVs. Adding it takes one step —
+paste `https://your-domain/mcp` into the client as a custom connector. The
+client discovers the rest, your instance opens, the user is already signed in,
+they press *Allow*, done. No tokens to copy anywhere.
 
-The endpoint speaks **OAuth 2.1 with dynamic client registration and PKCE**,
-because that is the only way a remote MCP client can connect — clients have no
-field for a static bearer token. The flow is deliberately stateless: the client
-registration, the authorization code and the access token are HMAC-signed
-records rather than database rows, so a redeploy does not disconnect anyone.
+How it fits together:
 
-Since one endpoint acts as exactly one `CV_API_KEY`, the consent screen asks for
-`MCP_GATE_TOKEN` instead of a username — that token is the gate, passed through
-the OAuth flow. It also still works directly as a bearer token, so scripts and
-the command line keep working.
+- **The authorization server lives in the backend** (`pdf-service/oauth.js`),
+  not in the MCP service — that is where users, sessions and the database are.
+  The consent screen runs against the existing session, so there is no second
+  password and no shared secret.
+- **The MCP service is deliberately dumb.** It checks no passwords and keeps no
+  user list; it passes the caller's token through to the API and lets the API
+  decide. The token rides on the async context, not on a module variable — in a
+  process serving many users, a module variable would be a data leak waiting to
+  happen.
+- **Tokens and codes are stored hashed**, like the API keys. Authorization codes
+  are single-use, enforced in the same `UPDATE` that reads them.
+- Users see and end their connections under *Settings → Connected apps*.
 
-If discovery fails with *"registration with the authorization server failed"*,
-check that `/.well-known/oauth-protected-resource` returns JSON and not your
-SPA's `index.html`: a catch-all route in front of it is the usual cause.
+Configuration: set `MCP_PUBLIC_URL`, and — if your backend sits behind a path
+prefix that the proxy strips (the default `/pdfapi` layout does) — also
+`OAUTH_PUBLIC_BASE` and `MCP_AUTH_BASE`. A service behind a stripped prefix
+cannot know its own public address, and that address goes into the metadata
+every client follows, so it is configured rather than guessed.
+
+Two failure modes worth knowing, both cost real time here:
+
+- If discovery fails with *"registration with the authorization server failed"*,
+  check that `/.well-known/oauth-protected-resource` returns JSON and not your
+  SPA's `index.html`. A catch-all route in front of it is the usual cause.
+- In nginx, `set` and `rewrite` both belong to the rewrite module and `break`
+  ends that phase — a `set` below a `rewrite ... break` never runs.
 
 ## Security
 

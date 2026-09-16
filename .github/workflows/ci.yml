@@ -42,12 +42,9 @@ jobs:
       - name: Syntax
         run: |
           for f in pdf-service/*.js mcp/*.mjs; do node --check "$f"; done
-      - name: Tests (SSRF-Schutz)
+      - name: Tests (SSRF-Schutz und OAuth)
         run: node --test
         working-directory: pdf-service
-      - name: Tests (OAuth am MCP-Endpunkt)
-        run: node --test
-        working-directory: mcp
 
   keine-personendaten:
     # Dieses Projekt ist aus einem privaten Werkzeug herausgelöst worden. Die

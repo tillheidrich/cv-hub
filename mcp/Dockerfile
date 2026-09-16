@@ -5,9 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-# Beide Quelldateien. oauth.mjs wird von cv-mcp.mjs importiert — fehlt sie im
-# Image, startet der Container gar nicht erst (ERR_MODULE_NOT_FOUND).
-COPY cv-mcp.mjs oauth.mjs ./
+COPY cv-mcp.mjs ./
 
 ENV MCP_HTTP=1
 ENV PORT=3000

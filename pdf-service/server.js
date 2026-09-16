@@ -4,6 +4,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { mountOAuth, userForAccessToken } from './oauth.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -256,6 +257,14 @@ async function loadUser(req) {
       }
     } catch { /* fall through to cookie */ }
   }
+  // 1b. OAuth-Access-Token (MCP-Clients, pro Nutzer ausgestellt). Gilt überall
+  // dort, wo auch ein API-Schlüssel gilt — dieselbe Stelle, dieselben Rechte.
+  if (auth && auth.startsWith('Bearer cvm_')) {
+    try {
+      const u = await userForAccessToken(pool, auth.slice(7).trim());
+      if (u) return u;
+    } catch { /* fall through to cookie */ }
+  }
   // 2. cookie session (browser)
   const token = req.cookies?.[COOKIE];
   if (!token) return null;
@@ -286,6 +295,19 @@ function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Nur für Administratoren.' });
   next();
 }
+
+// ── OAuth 2.1 für den MCP-Endpunkt ──────────────────────────────────────────
+// Liegt hier, weil hier Nutzer, Sessions und Datenbank sind: nur so kann jeder
+// Nutzer seinen eigenen Client verbinden. Die Zustimmungsseite läuft gegen die
+// bestehende Anmeldung — kein zweites Passwort, kein geteiltes Token.
+mountOAuth(app, {
+  pool,
+  loadUser,
+  requireAuth,
+  baseUrlOf: publicBaseUrl,
+  appName: process.env.APP_NAME || 'CV-Hub',
+  urlencoded: express.urlencoded({ extended: false, limit: '64kb' }),
+});
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
 function generateCode() {

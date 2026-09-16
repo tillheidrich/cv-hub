@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../data/api';
-import type { TwoFaStatus } from '../data/api';
+import type { TwoFaStatus, OauthConnection } from '../data/api';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -28,6 +28,10 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
   const [tfaBusy, setTfaBusy] = useState(false);
   const [tfaErr, setTfaErr] = useState<string | null>(null);
 
+  // ── Verbundene KI-Clients (OAuth/MCP) ──────────────────────────────────────
+  const [conns, setConns] = useState<OauthConnection[] | null>(null);
+  const [connBusy, setConnBusy] = useState<number | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -35,8 +39,20 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
         setEmail(user.email ?? '');
         setTfa(status);
       } catch { /* Panel bleibt nutzbar, Sicherheits-Sektion zeigt dann nichts */ }
+      try {
+        setConns((await api.listConnections()).connections);
+      } catch { setConns([]); }
     })();
   }, []);
+
+  async function revokeConn(id: number) {
+    setConnBusy(id);
+    try {
+      await api.revokeConnection(id);
+      setConns(cs => (cs ?? []).map(c => (c.id === id ? { ...c, revoked: true } : c)));
+    } catch { /* bleibt stehen, der Nutzer kann es erneut versuchen */ }
+    finally { setConnBusy(null); }
+  }
 
   async function saveEmail() {
     setEmailMsg(null); setEmailBusy(true);
@@ -167,6 +183,43 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
             {tfaErr && (
               <div style={{ marginTop: '9px', fontSize: '12px', padding: '7px 10px', borderRadius: '7px', background: '#fff0f0', color: '#c0392b', border: '1px solid #f0c0c0', fontFamily: UI }}>{tfaErr}</div>
             )}
+          </div>
+
+          {/* ── Verbundene KI-Clients (OAuth/MCP) ───────────────────────── */}
+          <div style={{ ...sectionH, marginTop: '28px' }}>Verbundene Apps</div>
+          <div style={card}>
+            <div style={{ fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.55, marginBottom: conns && conns.length ? '12px' : 0, fontFamily: UI }}>
+              KI-Clients, denen du über den MCP-Endpunkt Zugriff auf deine Lebensläufe
+              erlaubt hast. „Beenden" entzieht den Zugriff sofort — der Client muss
+              dann neu fragen.
+            </div>
+            {conns === null && (
+              <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Lädt…</div>
+            )}
+            {conns?.length === 0 && (
+              <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, marginTop: '10px' }}>
+                Noch keine Verbindung erlaubt.
+              </div>
+            )}
+            {conns?.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between', padding: '9px 0', borderTop: '1px solid oklch(0.94 0.004 264)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: c.revoked ? 'oklch(0.60 0.012 264)' : 'oklch(0.21 0.021 264)', fontFamily: UI, textDecoration: c.revoked ? 'line-through' : 'none' }}>
+                    {c.client_name || 'Unbenannter Client'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, marginTop: '2px' }}>
+                    verbunden {new Date(c.created_at).toLocaleDateString('de-DE')}
+                    {c.last_used_at ? ` · zuletzt aktiv ${new Date(c.last_used_at).toLocaleDateString('de-DE')}` : ' · noch nicht benutzt'}
+                  </div>
+                </div>
+                {!c.revoked && (
+                  <button type="button" onClick={() => revokeConn(c.id)} disabled={connBusy === c.id}
+                    style={{ flex: '0 0 auto', padding: '6px 12px', background: '#fff', color: '#a1322b', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: connBusy === c.id ? 'default' : 'pointer', fontFamily: UI }}>
+                    {connBusy === c.id ? '…' : 'Beenden'}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* ── DSGVO: Datenexport ──────────────────────────────────────── */}

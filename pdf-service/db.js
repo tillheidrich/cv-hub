@@ -168,6 +168,49 @@ CREATE TABLE IF NOT EXISTS access_requests (
   decided_at   TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests(status, created_at DESC);
+
+-- OAuth 2.1 für den MCP-Endpunkt.
+--
+-- Der Anmeldedienst liegt hier und nicht im MCP-Dienst, weil hier die Nutzer,
+-- die Sessions und die Datenbank sind. Nur so kann sich JEDER Nutzer seinen
+-- eigenen Client verbinden — mit Zustand im MCP-Dienst wäre der Endpunkt für
+-- immer Single-Tenant geblieben.
+--
+-- Token liegen NUR als Hash vor, wie die API-Schlüssel auch. Ein Datenbank-
+-- Leck gibt damit keine benutzbaren Zugänge her.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL DEFAULT '',
+  redirect_uris JSONB NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash      TEXT PRIMARY KEY,
+  client_id      TEXT NOT NULL,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redirect_uri   TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scope          TEXT NOT NULL DEFAULT 'cv',
+  expires_at     TIMESTAMPTZ NOT NULL,
+  used           BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS oauth_codes_expiry_idx ON oauth_codes(expires_at);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  id           SERIAL PRIMARY KEY,
+  token_hash   TEXT UNIQUE NOT NULL,
+  refresh_hash TEXT UNIQUE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id    TEXT NOT NULL,
+  client_name  TEXT NOT NULL DEFAULT '',
+  scope        TEXT NOT NULL DEFAULT 'cv',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  revoked      BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS oauth_tokens_user_idx ON oauth_tokens(user_id, created_at DESC);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

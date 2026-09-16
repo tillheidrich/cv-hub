@@ -665,6 +665,27 @@ export default function App() {
     api.me().then(d => setAuthUser(d.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false));
   }, []);
 
+  /* Rücksprung nach dem Anmelden.
+   *
+   * Wer einen KI-Client verbindet, landet zuerst auf der Zustimmungsseite des
+   * Anmeldedienstes. Ist er dort nicht angemeldet, schickt ihn der Server
+   * hierher — mit ?next=… im Gepäck. Sobald die Anmeldung steht, geht es
+   * genau dorthin zurück, sonst müsste der Mensch den Verbindungsvorgang von
+   * vorn beginnen und wüsste nicht, warum.
+   *
+   * Streng geprüft: nur relative Pfade in den OAuth-Bereich. Eine absolute
+   * Adresse von außen wäre ein offener Weiterleiter — der klassische Weg,
+   * jemandem eine echte Anmeldeseite zu zeigen und ihn danach woanders
+   * abzuliefern. */
+  useEffect(() => {
+    if (!authUser) return;
+    const next = new URLSearchParams(window.location.search).get('next');
+    // Erlaubt sind nur relative Pfade in den OAuth-Bereich — direkt unter
+    // /oauth/ oder, wenn die API hinter einem Pfadpräfix hängt, darunter.
+    if (!next || !/^\/(?:[A-Za-z0-9_-]+\/)*oauth\/[A-Za-z0-9_-]+(\?[^#]*)?$/.test(next)) return;
+    window.location.replace(next);
+  }, [authUser]);
+
   // ?invite=CODE aus der Adresszeile entfernen, nachdem er gelesen wurde —
   // ein Reload soll dann nicht erneut die Registrierung erzwingen und der
   // Code bleibt nicht sichtbar in der URL stehen.
@@ -1073,7 +1094,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.60 0.012 264)' }}>
-        CV-Hub wird geladen…
+        Heidrich/cv wird geladen…
       </div>
     );
   }
@@ -1165,7 +1186,7 @@ export default function App() {
             ? { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }
             : { flexShrink: 0 }),
         }}>
-          {activeProfile?.displayName ?? 'CV-Hub'}
+          {activeProfile?.displayName ?? 'Heidrich/cv'}
         </h1>
 
         {!isMobile && <div style={{ width: '1px', height: '20px', background: 'oklch(0.85 0.008 264)', flexShrink: 0 }} />}

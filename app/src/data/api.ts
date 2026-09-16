@@ -70,6 +70,15 @@ export interface ApiKey {
   revoked: boolean;
 }
 
+export interface OauthConnection {
+  id: number;
+  client_name: string;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string;
+  revoked: boolean;
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
@@ -137,6 +146,13 @@ export const api = {
     req<{ key: string; prefix: string; name: string }>('/api/keys', { method: 'POST', body: JSON.stringify({ name }) }),
   revokeKey: (id: number) =>
     req<{ ok: boolean }>(`/api/keys/${id}/revoke`, { method: 'POST' }),
+
+  // Per OAuth verbundene KI-Clients (MCP). Anders als ein API-Schlüssel hat
+  // der Nutzer sie nicht selbst erzeugt, sondern auf einer Zustimmungsseite
+  // erlaubt — beenden können muss er sie trotzdem.
+  listConnections: () => req<{ connections: OauthConnection[] }>('/api/oauth/connections'),
+  revokeConnection: (id: number) =>
+    req<{ ok: boolean }>(`/api/oauth/connections/${id}/revoke`, { method: 'POST' }),
 
   // résumé storage (per user)
   listResumes: () => req<{ resumes: { id: string; display_name: string; updated_at: string }[] }>('/api/resumes'),
@@ -228,6 +244,6 @@ export interface ShareLink {
 export function photoUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (value.startsWith('data:') || value.startsWith('http')) return value;
-  if (value.startsWith('/pdfapi/')) return (typeof window !== 'undefined' ? window.location.origin : '') + value;
+  if (value.startsWith('/pdfapi/')) return 'https://cv.heidrich-digital.de' + value;
   return value;
 }

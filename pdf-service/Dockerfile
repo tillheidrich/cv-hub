@@ -8,7 +8,13 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-COPY server.js db.js markdown.js mail.js ssrf.js ./
+# Alle Quelldateien, nicht namentlich aufgezählt.
+#
+# Die Liste war zweimal der Grund für einen fehlgeschlagenen Deploy: wer eine
+# neue Datei anlegt, denkt nicht an das Dockerfile, und der Container startet
+# dann gar nicht erst (ERR_MODULE_NOT_FOUND). Das Glob erwischt *.js; Tests
+# heißen *.test.mjs und bleiben draußen.
+COPY *.js ./
 
 # Befund vom 14.09.2026: Der Dienst lief als root — und mit ihm ein Chromium
 # ohne Sandbox, das HTML von nicht angemeldeten Aufrufern rendert. Ein Fehler im
