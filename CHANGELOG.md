@@ -35,6 +35,19 @@ the round frames. What gets uploaded is the crop, baked into pixels, not the
 original plus an instruction on how to cut it: Word, PDF and HTML each crop on
 their own otherwise.
 
+**Structure where machines read it.** The PDF is now generated as a tagged PDF:
+headings, paragraphs and lists are in the file as structure, not only as text at
+coordinates — what a résumé parser looks for and what a screen reader needs
+(measured: no `StructTreeRoot` without the option, an `H1` and 254 paragraph
+marks with it, for 26 kB more). The HTML export additionally carries the person
+as a schema.org record in the head. Nothing is in it that is not visible in the
+document anyway — a second reading of the same page, not extra disclosure. The
+share link deliberately does not get it.
+
+**The ATS badges explain themselves.** The template list now carries a legend
+for all three levels, with the reason and with what the rating explicitly does
+not promise: how reliably a parser hits the fields, not whether you get invited.
+
 **Icons instead of emoji**, and the document properties name the person, not the
 tool.
 

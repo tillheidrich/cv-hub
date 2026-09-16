@@ -1535,9 +1535,14 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
     await page.emulateMedia({ media: 'print' });
     await page.setContent(html, { waitUntil: 'networkidle', timeout: 20000 });
     await page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve()));
+    /* `tagged` erzeugt ein PDF mit Strukturbaum: Überschriften, Absätze und
+     * Listen stehen als solche in der Datei, nicht nur als Text an einer
+     * Position. Das ist genau die Information, die ein Bewerbungsparser
+     * sucht — und die ein Screenreader braucht. */
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
+      tagged: true,
       format: fmt,
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     });

@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { saveBlob } from './saveFile';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ResumeRenderer from '../templates/ResumeRenderer';
 import CoverLetterRenderer from '../templates/CoverLetterRenderer';
@@ -51,18 +52,7 @@ export interface ExportRenderConfig {
 }
 
 function download(filename: string, blob: Blob): void {
-  // Der Link muss im Dokument hängen und die Object-URL darf NICHT sofort
-  // wieder freigegeben werden — sonst brechen Safari und Firefox den Download
-  // gelegentlich mitten im Speichern ab. Gleiches Muster wie in Klarbild.
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  saveBlob(filename, blob);
 }
 
 /** Liest den Dateinamen aus dem Content-Disposition-Header. Der Server kennt
@@ -77,7 +67,7 @@ function filenameFromHeader(header: string | null, fallback: string): string {
 }
 
 
-function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'): string {
+function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', jsonLd?: string): string {
   const fmt = getPageFormat(pageFormat);
   const w = `${fmt.widthMm}mm`;
   const h = `${fmt.heightMm}mm`;
@@ -97,6 +87,7 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <link href="${FONT_LINK}" rel="stylesheet">
+${jsonLd || ''}
 <style>
   *, *::before, *::after {
     box-sizing: border-box; margin: 0; padding: 0;
@@ -279,7 +270,7 @@ function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
   // 'Lebenslauf_Lena-Brandt_2026-06-01_0930' format instead of the prosey
   // 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
   const title = exportFilename('lebenslauf', data.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat);
+  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data));
 }
 
 function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
@@ -290,6 +281,52 @@ function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: Expo
   );
   const title = exportFilename('anschreiben', cvData.personal.name, '').replace(/\.$/, '');
   return wrapDocument(title, body, cfg.pageFormat);
+}
+
+/**
+ * Strukturierte Daten nach schema.org/Person.
+ *
+ * Der Lebenslauf sieht für einen Menschen sortiert aus; für eine Maschine ist
+ * er zunächst nur Text an Koordinaten. Was hier im Kopf der Datei steht, ist
+ * dieselbe Information noch einmal als Datensatz: Name, Rolle, Kontakt,
+ * Ausbildung, Sprachen, Schwerpunkte. Wer die Datei maschinell liest — ein
+ * Bewerbungsportal, ein Parser, später die eigene Lebenslauf-Website —,
+ * bekommt die Felder, statt sie aus dem Satzspiegel raten zu müssen.
+ *
+ * Es steht hier NICHTS, was nicht ohnehin sichtbar im Dokument steht. Der
+ * Datensatz ist eine zweite Lesart derselben Seite, keine zusätzliche
+ * Preisgabe.
+ */
+function personJsonLd(cv: CVData): string {
+  const v = (x?: string | null) => (x || '').trim();
+  const person: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: v(cv.personal?.name),
+  };
+  if (v(cv.personal?.title)) person.jobTitle = v(cv.personal.title);
+  if (v(cv.profile?.text)) person.description = v(cv.profile.text);
+  if (v(cv.personal?.email)) person.email = v(cv.personal.email);
+  if (v(cv.personal?.phone)) person.telephone = v(cv.personal.phone);
+  if (v(cv.personal?.location)) person.address = { '@type': 'PostalAddress', addressLocality: v(cv.personal.location) };
+  const web = v(cv.personal?.website);
+  if (web) person.url = /^https?:\/\//.test(web) ? web : `https://${web}`;
+  const sameAs = [
+    ...(cv.personal?.socials || []).map(s => v(s.value)),
+    v(cv.personal?.linkedin),
+  ].filter(Boolean).map(u => (/^https?:\/\//.test(u) ? u : `https://${u}`));
+  if (sameAs.length) person.sameAs = [...new Set(sameAs)];
+  const alumni = (cv.education || []).map(e => v(e.institution)).filter(Boolean);
+  if (alumni.length) person.alumniOf = [...new Set(alumni)].map(n => ({ '@type': 'EducationalOrganization', name: n }));
+  const jetzt = (cv.experience || []).find(e => !e.hidden && /heute|present|aujourd|actualidad/i.test(v(e.end)));
+  if (jetzt && v(jetzt.company)) person.worksFor = { '@type': 'Organization', name: v(jetzt.company) };
+  const sprachen = (cv.languages || []).map(l => v(l.language)).filter(Boolean);
+  if (sprachen.length) person.knowsLanguage = sprachen;
+  const skills = (cv.skillGroups || []).flatMap(g => (g.items || []).map(v)).filter(Boolean);
+  if (skills.length) person.knowsAbout = skills.slice(0, 40);
+  // `</script>` im Text würde den Block sonst vorzeitig schließen.
+  const json = JSON.stringify(person, null, 2).replace(/<\//g, '<\\/');
+  return `<script type="application/ld+json">\n${json}\n</script>`;
 }
 
 /**

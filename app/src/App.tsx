@@ -18,7 +18,7 @@ import KnowledgePanel from './knowledge/KnowledgePanel';
 import AuthScreen from './screens/AuthScreen';
 import LandingScreen from './screens/LandingScreen';
 import { ImpressumPage, PrivacyPage } from './screens/LegalPages';
-import { atsLevelForLayout, atsLabelDe, atsColors } from './templates/atsScore';
+import { atsLevelForLayout, atsLabelDe, atsNoteDe, atsColors } from './templates/atsScore';
 import { detectInitialUiLang, setUiLang, type UiLang } from './ui/i18n';
 import { ET, type EditorStrings } from './ui/editorI18n';
 import AdminPanel from './screens/AdminPanel';
@@ -162,6 +162,35 @@ function TemplatePicker({ current, onChange, isMobile, t: et }: { current: Templ
     padding: '8px', width: '300px', maxHeight: '460px', overflowY: 'auto',
   };
 
+  /* Was die drei Marken bedeuten — sichtbar, nicht nur im Tooltip.
+   *
+   * Till fragte danach, und das ist der eigentliche Befund: Eine Einstufung,
+   * die man erklären muss, erklärt sich nicht. Die Legende sagt in drei
+   * Zeilen, worauf sie sich bezieht (auf die Form, nicht auf den Inhalt) und
+   * was sie ausdrücklich NICHT verspricht. */
+  const legende = (
+    <div style={{ borderTop: '1px solid oklch(0.93 0.004 264)', margin: '8px 0 0', padding: '10px 8px 4px', fontFamily: UI_FONT }}>
+      <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#b0a896', marginBottom: '7px' }}>
+        Was heißt ATS-stark?
+      </div>
+      {(['high', 'medium', 'low'] as const).map(lv => {
+        const col = atsColors(lv);
+        return (
+          <div key={lv} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '6px' }}>
+            <span style={{ background: col.bg, color: col.ink, border: `1px solid ${col.border}`, fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {atsLabelDe(lv)}
+            </span>
+            <span style={{ fontSize: '10px', lineHeight: 1.5, color: 'oklch(0.48 0.015 264)' }}>{atsNoteDe(lv)}</span>
+          </div>
+        );
+      })}
+      <div style={{ fontSize: '9.5px', lineHeight: 1.55, color: 'oklch(0.58 0.012 264)', marginTop: '8px' }}>
+        Gemeint ist, wie zuverlässig ein Bewerbungsparser die Felder trifft — nicht, ob eingeladen wird.
+        Für Portale, die maschinell lesen, gibt es zusätzlich die einspaltige Word-ATS-Fassung im Export.
+      </div>
+    </div>
+  );
+
   const list = cats.map(cat => (
     <div key={cat}>
       <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#b0a896', padding: '8px 8px 4px' }}>{CAT_LABELS[cat]}</div>
@@ -181,7 +210,7 @@ function TemplatePicker({ current, onChange, isMobile, t: et }: { current: Templ
             const lv = atsLevelForLayout(t.layout);
             const col = atsColors(lv);
             return (
-              <span title={lv === 'high' ? 'ATS parst diese Struktur zuverlässig' : lv === 'medium' ? 'Funktioniert in den meisten ATS' : 'Sidebar-Layout — manche ATS-Parser verwirren das'}
+              <span title={atsNoteDe(lv)}
                 style={{
                   background: col.bg, color: col.ink, border: `1px solid ${col.border}`,
                   fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
@@ -207,11 +236,11 @@ function TemplatePicker({ current, onChange, isMobile, t: et }: { current: Templ
         <span style={{ fontSize: '9px', color: '#999', flexShrink: 0 }}>▾</span>
       </button>
       {open && (isMobile ? (
-        <MobileSheet title={et.chooseTemplate} closeLabel={et.close} onClose={() => setOpen(false)}>{list}</MobileSheet>
+        <MobileSheet title={et.chooseTemplate} closeLabel={et.close} onClose={() => setOpen(false)}>{list}{legende}</MobileSheet>
       ) : (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 290 }} onClick={() => setOpen(false)} />
-          <div style={dropdownStyle}>{list}</div>
+          <div style={dropdownStyle}>{list}{legende}</div>
         </>
       ))}
     </div>
