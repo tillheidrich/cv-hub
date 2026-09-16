@@ -44,6 +44,14 @@ as a schema.org record in the head. Nothing is in it that is not visible in the
 document anyway — a second reading of the same page, not extra disclosure. The
 share link deliberately does not get it.
 
+**Shared links fit the phone.** The share page put the document on screen at
+full A4 width — cut off on the right on any phone, which is where a link you
+send is usually opened. It now measures the space and scales to it. Two traps,
+both noted in the code: `transform: scale()` shrinks the rendering but not the
+layout box (the height comes from the scaled box's own bounding rect), and as a
+flex child that box would be stretched to the parent whose height is derived
+from it — which collapses to zero in one pass without `align-items: flex-start`.
+
 **The ATS badges explain themselves.** The template list now carries a legend
 for all three levels, with the reason and with what the rating explicitly does
 not promise: how reliably a parser hits the fields, not whether you get invited.

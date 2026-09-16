@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ResumeRenderer from '../templates/ResumeRenderer';
 import CoverLetterRenderer from '../templates/CoverLetterRenderer';
 import DocumentPreview from '../preview/DocumentPreview';
@@ -7,6 +7,7 @@ import type { Metrics } from '../templates/metrics';
 import { getTheme, resolvePairing } from '../templates/theme';
 import { api } from '../data/api';
 import { withAllLangs } from '../data/storage';
+import { getPageFormat } from '../data/pageFormats';
 import type { AppProfile, FontPairingId, PageMode, PageFormat } from '../data/types';
 
 const UI = "'Inter', sans-serif";
@@ -17,6 +18,21 @@ export default function ShareView({ token }: { token: string }) {
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [doc, setDoc] = useState<'resume' | 'cover-letter'>('resume');
+  /* Auf dem Telefon lag das Dokument bisher in voller A4-Breite in einem
+   * 390-px-Fenster: rechts abgeschnitten, Adresse und Profiltext halb weg.
+   * Die App skaliert ihre Vorschau längst auf die Fensterbreite — der
+   * geteilte Link tat es nicht, weil hier `viewportScale={1}` fest verdrahtet
+   * stand. Wer einen Link verschickt, weiß nicht, worauf der Empfänger ihn
+   * öffnet; Telefon ist der Normalfall, nicht die Ausnahme.
+   *
+   * `transform: scale()` verkleinert die Darstellung, nicht die Layout-Maße —
+   * der Kasten bliebe so hoch wie das unskalierte Dokument und hinterließe
+   * unten hunderte Pixel Leerraum. Deshalb bekommt der äußere Kasten die
+   * gemessene Höhe mal Maßstab. */
+  const bereichRef = useRef<HTMLDivElement>(null);
+  const dokRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [hoehe, setHoehe] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     api.fetchShare(token)
@@ -33,6 +49,36 @@ export default function ShareView({ token }: { token: string }) {
   const userScale = profile?.settings?.fontScale ?? 1.0;
   const pageMode: PageMode = profile?.settings?.pageMode ?? 'one';
   const pageFormat: PageFormat = (profile?.settings?.pageFormat as PageFormat) ?? 'a4';
+
+  const seitenBreitePx = (getPageFormat((profile?.settings?.pageFormat as PageFormat) ?? 'a4').widthMm / 25.4) * 96;
+  useEffect(() => {
+    const bereich = bereichRef.current;
+    if (!bereich) return;
+    let letzte = { s: -1, h: -1 };
+    const messen = () => {
+      const platz = bereich.clientWidth - 24;
+      if (platz <= 0) return;
+      const s = Math.min(1, platz / seitenBreitePx);
+      /* Die Höhe kommt aus dem Umriss des skalierten Kastens selbst:
+       * `getBoundingClientRect()` liefert bei einer Transformation die
+       * SICHTBARE Größe, nicht die Layout-Größe. Damit rechnet niemand den
+       * Maßstab zweimal ein — und der Wert stimmt auch bei zwei Seiten samt
+       * Abstand dazwischen. */
+      const kasten = dokRef.current?.querySelector('.cv-scale-wrapper') as HTMLElement | null;
+      const sichtbar = kasten?.getBoundingClientRect().height ?? 0;
+      const h = s < 1 && sichtbar > 0 ? Math.ceil(sichtbar) : -1;
+      if (Math.abs(s - letzte.s) < 0.002 && Math.abs(h - letzte.h) < 2) return;
+      letzte = { s, h };
+      setScale(s);
+      setHoehe(h > 0 ? h : undefined);
+    };
+    messen();
+    const ro = new ResizeObserver(messen);
+    ro.observe(bereich);
+    if (dokRef.current) ro.observe(dokRef.current);
+    const t = window.setTimeout(messen, 400);   // nach dem Schriftladen nachmessen
+    return () => { window.clearTimeout(t); ro.disconnect(); };
+  }, [seitenBreitePx, doc, profile]);
 
   if (error) {
     // Differentiated copy depending on what kind of failure we got from the
@@ -78,9 +124,9 @@ export default function ShareView({ token }: { token: string }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#eceae5', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ background: '#fff', borderBottom: '1px solid #e8e4de', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
-        <div style={{ fontFamily: SERIF, fontSize: '17px', fontWeight: 700, color: '#1a1a1a' }}>{name}</div>
-        <div style={{ fontSize: '11px', color: '#9a9183', fontFamily: UI }}>geteilte Vorschau</div>
+      <header style={{ background: '#fff', borderBottom: '1px solid #e8e4de', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: SERIF, fontSize: '17px', fontWeight: 700, color: '#1a1a1a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontSize: '11px', color: '#9a9183', fontFamily: UI, whiteSpace: 'nowrap' }}>geteilte Vorschau</div>
         {hasCoverLetter && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', background: '#f5f2ee', borderRadius: '7px', padding: '3px' }}>
             {(['resume', 'cover-letter'] as const).map(dt => (
@@ -92,9 +138,15 @@ export default function ShareView({ token }: { token: string }) {
           </div>
         )}
       </header>
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '32px' }}>
-        <DocumentPreview render={render} userScale={userScale} pageMode={pageMode} pageFormat={pageFormat} viewportScale={1}
-          contentKey={contentKeyOf(doc === 'cover-letter' ? clData : cvData, doc, theme.id, pairing.id)} />
+      <div ref={bereichRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', justifyContent: 'center', padding: scale < 1 ? '12px 12px 28px' : '32px' }}>
+        {/* `alignItems: flex-start` ist keine Kosmetik: als Flex-Kind würde der
+            skalierte Kasten sonst auf die Höhe dieses Kastens gedehnt — und
+            weil genau diese Höhe aus seinem Umriss berechnet wird, schaukelt
+            sich das in einem Durchgang auf null herunter. */}
+        <div ref={dokRef} style={{ height: hoehe, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: scale < 1 ? 'hidden' : undefined }}>
+          <DocumentPreview render={render} userScale={userScale} pageMode={pageMode} pageFormat={pageFormat} viewportScale={scale}
+            contentKey={contentKeyOf(doc === 'cover-letter' ? clData : cvData, doc, theme.id, pairing.id)} />
+        </div>
       </div>
     </div>
   );
