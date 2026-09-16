@@ -157,12 +157,83 @@ function buildServer() {
     },
   );
 
+  /* Ein leeres Profil anlegen.
+   *
+   * Fehlte bisher — mit der Folge, dass ein Client, der einen neuen Lebenslauf
+   * schreiben sollte, einen bestehenden überschrieb, weil es die einzige
+   * Möglichkeit war. Das ist genau der Fehler, den ein Werkzeug nicht
+   * erzwingen darf.
+   *
+   * Angelegt wird ein leeres Gerüst in allen vier Sprachen. Beschriftungen und
+   * Standard-Anschreiben ergänzt die Oberfläche beim ersten Öffnen selbst
+   * (`withAllLangs`), deshalb bleiben sie hier bewusst leer statt hier halb
+   * geraten zu werden. */
+  server.tool(
+    'create_resume',
+    'Legt einen NEUEN, leeren Lebenslauf an und gibt dessen id zurück. Danach mit update_resume_markdown befüllen. Nutze immer dieses Werkzeug für einen neuen Lebenslauf — überschreibe niemals einen bestehenden.',
+    {
+      display_name: z.string().describe('Anzeigename in der Liste, z. B. "Bewerbung Muster GmbH".'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Eingestellte Sprache des neuen Profils. Standard: de.'),
+      markdown: z.string().optional().describe('Optional: Inhalt direkt mitgeben (gleiche Struktur wie get_resume_markdown liefert).'),
+    },
+    async ({ display_name, lang, markdown }) => {
+      const leer = () => ({
+        personal: { name: '', title: '', location: '', email: '', phone: '' },
+        profile: { text: '' },
+        experience: [], education: [], skillGroups: [], languages: [], additionalExperience: [],
+      });
+      const payload = {
+        displayName: display_name,
+        data: { de: leer(), en: leer(), fr: leer(), es: leer() },
+        coverLetters: {},
+        settings: {
+          lang: lang || 'de', template: 'hamburg', fontScale: 1, fontPairing: 'auto',
+          pageMode: 'one', pageFormat: 'a4',
+          sectionOrder: ['profile', 'experience', 'education', 'skills', 'languages', 'additional'],
+          hiddenSections: [], respectTemplateStructure: true,
+        },
+      };
+      try {
+        const { id } = await apiFetch('/api/resumes', {
+          method: 'POST', body: JSON.stringify({ displayName: display_name, payload }),
+        });
+        if (markdown) {
+          await apiFetch(`/api/resumes/${encodeURIComponent(id)}/import-md`, {
+            method: 'POST', body: JSON.stringify({ markdown, lang }),
+          });
+          return ok(`Neuer Lebenslauf "${display_name}" angelegt und befüllt. id: ${id}`);
+        }
+        return ok(`Neuer Lebenslauf "${display_name}" angelegt (noch leer). id: ${id}\nJetzt mit update_resume_markdown befüllen.`);
+      } catch (e) { return fail(e); }
+    },
+  );
+
+  server.tool(
+    'rename_resume',
+    'Ändert nur den Anzeigenamen eines Lebenslaufs. Inhalte bleiben unberührt.',
+    {
+      id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
+      display_name: z.string().describe('Der neue Anzeigename.'),
+    },
+    async ({ id, display_name }) => {
+      try {
+        await apiFetch(`/api/resumes/${encodeURIComponent(id)}`, {
+          method: 'PATCH', body: JSON.stringify({ displayName: display_name }),
+        });
+        return ok(`Umbenannt in "${display_name}".`);
+      } catch (e) { return fail(e); }
+    },
+  );
+
   server.tool(
     'get_resume_markdown',
-    'Gibt einen Lebenslauf als Markdown zurück. Dieses Markdown ist das Bearbeitungsformat: überarbeite es und schreibe es mit update_resume_markdown zurück. Struktur (Überschriften, Feld-Reihenfolge) beibehalten.',
-    { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
-    async ({ id }) => {
-      try { return ok(await apiFetch(`/api/resumes/${encodeURIComponent(id)}.md`)); }
+    'Gibt einen Lebenslauf als Markdown zurück. Dieses Markdown ist das Bearbeitungsformat: überarbeite es und schreibe es mit update_resume_markdown zurück. Struktur (Überschriften, Feld-Reihenfolge) beibehalten. Mit lang eine andere Sprachfassung lesen.',
+    {
+      id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Sprachfassung. Ohne Angabe die im Profil eingestellte. Ein Profil führt ALLE vier Fassungen getrennt — wer nur eine überarbeitet, lässt die anderen unverändert stehen.'),
+    },
+    async ({ id, lang }) => {
+      try { return ok(await apiFetch(`/api/resumes/${encodeURIComponent(id)}.md${lang ? `?lang=${lang}` : ''}`)); }
       catch (e) { return fail(e); }
     },
   );
@@ -170,9 +241,12 @@ function buildServer() {
   server.tool(
     'get_cover_letter_markdown',
     'Gibt das Anschreiben eines Lebenslaufs als Markdown zurück (pro Sprache). Überarbeiten und mit update_cover_letter_markdown zurückschreiben.',
-    { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
-    async ({ id }) => {
-      try { return ok(await apiFetch(`/api/resumes/${encodeURIComponent(id)}/cover-letter.md`)); }
+    {
+      id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Sprachfassung. Ohne Angabe die im Profil eingestellte. Ein Profil führt ALLE vier Fassungen getrennt — wer nur eine überarbeitet, lässt die anderen unverändert stehen.'),
+    },
+    async ({ id, lang }) => {
+      try { return ok(await apiFetch(`/api/resumes/${encodeURIComponent(id)}/cover-letter.md${lang ? `?lang=${lang}` : ''}`)); }
       catch (e) { return fail(e); }
     },
   );
@@ -198,11 +272,12 @@ function buildServer() {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
       markdown: z.string().describe('Das vollständige, überarbeitete Lebenslauf-Markdown (gleiche Struktur wie get_resume_markdown liefert).'),
       dry_run: z.boolean().optional().describe('true = nur prüfen, nicht speichern. Standard false.'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Sprachfassung. Ohne Angabe die im Profil eingestellte. Ein Profil führt ALLE vier Fassungen getrennt — wer nur eine überarbeitet, lässt die anderen unverändert stehen.'),
     },
-    async ({ id, markdown, dry_run }) => {
+    async ({ id, markdown, dry_run, lang }) => {
       try {
         await apiFetch(`/api/resumes/${encodeURIComponent(id)}/import-md`, {
-          method: 'POST', body: JSON.stringify({ markdown, dryRun: !!dry_run }),
+          method: 'POST', body: JSON.stringify({ markdown, dryRun: !!dry_run, lang }),
         });
         return ok(dry_run
           ? 'Validierung erfolgreich — das Markdown ist gültig (nichts gespeichert).'
@@ -218,11 +293,12 @@ function buildServer() {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
       markdown: z.string().describe('Das vollständige, überarbeitete Anschreiben-Markdown.'),
       dry_run: z.boolean().optional().describe('true = nur prüfen, nicht speichern. Standard false.'),
+      lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Sprachfassung. Ohne Angabe die im Profil eingestellte. Ein Profil führt ALLE vier Fassungen getrennt — wer nur eine überarbeitet, lässt die anderen unverändert stehen.'),
     },
-    async ({ id, markdown, dry_run }) => {
+    async ({ id, markdown, dry_run, lang }) => {
       try {
         await apiFetch(`/api/resumes/${encodeURIComponent(id)}/import-cover-letter-md`, {
-          method: 'POST', body: JSON.stringify({ markdown, dryRun: !!dry_run }),
+          method: 'POST', body: JSON.stringify({ markdown, dryRun: !!dry_run, lang }),
         });
         return ok(dry_run
           ? 'Validierung erfolgreich — das Anschreiben-Markdown ist gültig (nichts gespeichert).'

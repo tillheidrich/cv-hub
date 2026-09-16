@@ -93,6 +93,8 @@ nicht.**
 
 | Tool                            | Zweck                                              |
 |---------------------------------|----------------------------------------------------|
+| `create_resume`                 | **Neuen** Lebenslauf anlegen (nie einen bestehenden überschreiben) |
+| `rename_resume`                 | Anzeigenamen ändern                                |
 | `list_resumes`                  | Alle Lebensläufe des Kontos auflisten (mit id)     |
 | `get_resume_markdown`           | Lebenslauf als Markdown lesen                      |
 | `update_resume_markdown`        | Überarbeitetes Lebenslauf-Markdown zurückschreiben |
@@ -103,6 +105,16 @@ nicht.**
 | `update_resume_settings`        | Dieselben ändern                                   |
 | `set_resume_photo`              | Profilfoto setzen                                  |
 | `remove_resume_photo`           | Profilfoto entfernen                               |
+
+Ein Profil führt **alle vier Sprachfassungen getrennt**. Die Markdown-Tools
+arbeiten ohne Angabe auf der eingestellten Sprache; mit `lang` (`de`/`en`/`fr`/`es`)
+auf einer anderen. Wer nur eine Fassung überarbeitet, lässt die übrigen
+unverändert stehen — das fällt erst auf, wenn dort jemand exportiert. Eine
+Übersetzung einzuspielen stellt die eingestellte Sprache des Profils nicht um.
+
+Kein `delete_resume`: Löschen bleibt in der Oberfläche. Ein Werkzeug, mit dem
+ein Modell Lebensläufe entfernen kann, ist ein schlechter Tausch gegen den
+Komfort, den es bringt.
 
 Die `update_*`-Tools legen serverseitig **vor jedem Speichern automatisch eine
 Version** an — Fehlbearbeitungen lassen sich im Editor über die Versionshistorie

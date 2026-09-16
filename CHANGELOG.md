@@ -2,6 +2,27 @@
 
 ## 2026-09-16
 
+**MCP can create, rename, and write per language.** Three gaps that surfaced on
+first real use — and forced a workaround:
+
+- There was no `create_resume`. A client asked to write a new CV had to
+  overwrite an existing one, because that was the only way. A tool must not
+  force that.
+- There was no rename. `PUT` wants the full payload, so changing a name meant
+  round-tripping the whole profile and risking it.
+- The Markdown bridge could only read and write the *selected* language. A
+  profile keeps all four separately, so revising the German one leaves the
+  others untouched — invisible until someone exports there and finds the demo
+  person in their PDF.
+
+`lang` is now optional on the Markdown endpoints and tools. Importing a
+translation does **not** switch the profile's selected language, and an
+explicit target beats the `lang:` line in the frontmatter — otherwise the
+content would decide where it is written.
+
+No `delete_resume`. Deleting stays in the UI: a tool that lets a model remove
+CVs is a bad trade for the convenience it buys.
+
 **The hosted MCP endpoint is multi-tenant.** Every user of an instance
 authorizes their own AI client and sees only their own data. Paste
 `https://your-domain/mcp` into the client — it registers itself, your instance

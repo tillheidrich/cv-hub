@@ -31,8 +31,12 @@ function normalisePlatform(k) {
   return KNOWN_SOCIALS.includes(lower) ? lower : null;
 }
 
-export function cvToMarkdown(profile) {
-  const lang = profile?.settings?.lang || 'de';
+export function cvToMarkdown(profile, targetLang) {
+  // targetLang erlaubt, eine ANDERE Sprachfassung zu lesen als die gerade
+  // eingestellte. Ohne das kommt man über die Brücke nur an die aktive
+  // Sprache heran — und genau so bleiben fremdsprachige Fassungen mit
+  // Demo-Inhalt stehen, ohne dass es jemand merkt.
+  const lang = (targetLang && profile?.data?.[targetLang]) ? targetLang : (profile?.settings?.lang || 'de');
   const cv = profile?.data?.[lang];
   if (!cv) return '';
   const out = [];
@@ -164,9 +168,13 @@ function sectionOf(title) {
   return null;
 }
 
-export function markdownToCV(md, existing) {
+export function markdownToCV(md, existing, targetLang) {
   const out = JSON.parse(JSON.stringify(existing));
   const lang = out.settings?.lang || 'de';
+  // Eine Übersetzung einzuspielen darf die eingestellte Sprache des Profils
+  // NICHT umstellen. Wer die französische Fassung schreibt, will nicht, dass
+  // das Profil danach auf Französisch steht.
+  const keepLang = out.settings?.lang;
 
   // Frontmatter
   const fm = md.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
@@ -186,7 +194,8 @@ export function markdownToCV(md, existing) {
     }
   }
 
-  const useLang = out.settings.lang;
+  const useLang = targetLang || out.settings.lang;
+  if (targetLang && keepLang) out.settings.lang = keepLang;
   const existingCv = out.data?.[useLang] || existing?.data?.[lang] || {};
   const cv = {
     personal: { name: '', title: '', location: '', email: '', phone: '' },
@@ -354,8 +363,8 @@ export function markdownToCV(md, existing) {
 
 // ── Cover Letter Markdown bridge ────────────────────────────────────────────
 
-export function clToMarkdown(profile) {
-  const lang = profile?.settings?.lang || 'de';
+export function clToMarkdown(profile, targetLang) {
+  const lang = (targetLang && profile?.coverLetters?.[targetLang]) ? targetLang : (profile?.settings?.lang || 'de');
   const cl = profile?.coverLetters?.[lang];
   if (!cl) return '';
   const out = [];
@@ -407,9 +416,9 @@ function clSectionOf(title) {
   return null;
 }
 
-export function markdownToCl(md, existing) {
+export function markdownToCl(md, existing, targetLang) {
   const out = JSON.parse(JSON.stringify(existing));
-  const lang = out.settings?.lang || 'de';
+  const lang = targetLang || out.settings?.lang || 'de';
 
   // Frontmatter (optional — accept lang override)
   const fm = md.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
@@ -424,6 +433,10 @@ export function markdownToCl(md, existing) {
       if (k === 'lang' && ['de', 'en', 'fr', 'es'].includes(v)) useLang = v;
     }
   }
+  // Ein ausdrücklich genanntes Ziel schlägt die Angabe im Frontmatter. Sonst
+  // entschiede der Inhalt darüber, wohin geschrieben wird — und ein
+  // kopierter Kopf aus einer anderen Fassung schriebe in die falsche Sprache.
+  if (targetLang) useLang = targetLang;
 
   const cl = {
     company: '', contactPerson: '', companyAddress: '',

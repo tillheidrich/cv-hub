@@ -1078,10 +1078,18 @@ app.get('/api/share/:token', async (req, res) => {
 });
 
 // Export own résumé as Markdown (auth)
+/* Zielsprache für die Markdown-Brücke.
+ *
+ * Ohne sie kommt man nur an die gerade eingestellte Sprachfassung heran. Genau
+ * daran sind in einem Profil die französische und die spanische Fassung mit
+ * Demo-Inhalt stehen geblieben: unsichtbar, bis jemand dort exportiert. */
+const LANG_KEYS = ['de', 'en', 'fr', 'es'];
+const wantedLang = v => (typeof v === 'string' && LANG_KEYS.includes(v) ? v : undefined);
+
 app.get(/^\/api\/resumes\/([^/]+)\.md$/, requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params[0], req.user.id]);
   if (!rows[0]) return res.status(404).type('text/plain').send('Profil nicht gefunden.');
-  res.type('text/markdown; charset=utf-8').send(cvToMarkdown(rows[0].payload));
+  res.type('text/markdown; charset=utf-8').send(cvToMarkdown(rows[0].payload, wantedLang(req.query.lang)));
 });
 
 // Import a corrected Markdown back into the user's profile (auth)
@@ -1094,7 +1102,7 @@ app.post('/api/resumes/:id/import-md', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
   let updated;
-  try { updated = markdownToCV(md, rows[0].payload); }
+  try { updated = markdownToCV(md, rows[0].payload, wantedLang(req.body?.lang)); }
   catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
   updated.id = req.params.id;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
@@ -1109,7 +1117,7 @@ app.post('/api/resumes/:id/import-md', requireAuth, async (req, res) => {
 app.get(/^\/api\/resumes\/([^/]+)\/cover-letter\.md$/, requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params[0], req.user.id]);
   if (!rows[0]) return res.status(404).type('text/plain').send('Profil nicht gefunden.');
-  res.type('text/markdown; charset=utf-8').send(clToMarkdown(rows[0].payload));
+  res.type('text/markdown; charset=utf-8').send(clToMarkdown(rows[0].payload, wantedLang(req.query.lang)));
 });
 
 app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, async (req, res) => {
@@ -1119,7 +1127,7 @@ app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, async (req, res
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
   let updated;
-  try { updated = markdownToCl(md, rows[0].payload); }
+  try { updated = markdownToCl(md, rows[0].payload, wantedLang(req.body?.lang)); }
   catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
   updated.id = req.params.id;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
@@ -1248,6 +1256,21 @@ app.put('/api/resumes/:id', requireAuth, async (req, res) => {
   );
   if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.' });
   res.json({ ok: true });
+});
+
+/* Nur umbenennen.
+ *
+ * PUT verlangt den vollständigen Payload — wer bloß den Namen ändern will,
+ * müsste das ganze Profil durchreichen und könnte es dabei beschädigen. */
+app.patch('/api/resumes/:id', requireAuth, async (req, res) => {
+  const displayName = String(req.body?.displayName || '').trim().slice(0, 120);
+  if (!displayName) return res.status(400).json({ error: 'displayName fehlt.' });
+  const { rowCount } = await pool.query(
+    'UPDATE resumes SET display_name = $1, updated_at = now() WHERE id = $2 AND user_id = $3',
+    [displayName, req.params.id, req.user.id],
+  );
+  if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.' });
+  res.json({ ok: true, displayName });
 });
 
 app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
