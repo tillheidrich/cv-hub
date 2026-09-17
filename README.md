@@ -57,7 +57,10 @@ its source in a comment next to it:
   — a ZIP with the design as standalone HTML and Word files, placeholders
   carrying their JSON path (`{{experience[0].role}}`), and an empty `daten.json`
   in exactly the shape the importer reads back. A documented way *out* of the
-  tool, not just in.
+  tool, not just in. The **PDF** is the one meant for printing and for sending
+  with an application; the HTML is for viewing and sharing, because what a
+  browser puts on the sheet is decided by its print dialog — its own margins,
+  headers and footers — not by the file.
 - **AI editing without built-in AI:** export as Markdown, let any model revise
   it, import the result. Version history snapshots before every import.
 - **Optional MCP server** (`mcp/`) for registered users — programmatic access
