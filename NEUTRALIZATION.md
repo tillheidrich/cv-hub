@@ -3,6 +3,25 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-09-17)
+
+- **Word export reworked.** The sidebar colour panel now reaches all four edges
+  of every sheet (anchored image in the header, not a table-cell background);
+  the name follows the template's own `nameInSidebar` flag instead of being
+  forced into the sidebar; skill groups are lists again; dates do not break in
+  two; entry headings stay with their first bullet; `panelFill: false` templates
+  get their hairline rule instead of a shaded cell.
+- **The HTML export no longer claims to be print-ready.** What lands on the sheet
+  is decided by the browser's print dialog, not by the file. Interface, the
+  exported file's own banner and the template kit's instructions now say the PDF
+  is the print master. The banner follows the document's language (de/en/fr/es)
+  and `<html lang>` is set accordingly.
+- **Photo re-crop:** the thumbnail is a button; the uncropped original is kept in
+  `personal.photoOriginal` so re-cropping is lossless.
+- **New checks:** `app/scripts/bandcheck.mjs` (measures the panel colour at the
+  bottom of the last page for every filled-sidebar template — 12/12),
+  `app/scripts/docxsweep.mjs` (all 36 templates x both Word variants).
+
 ## Done
 
 - **License:** AGPL-3.0-or-later (`LICENSE`, `NOTICE`).

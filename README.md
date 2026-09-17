@@ -53,6 +53,16 @@ its source in a comment next to it:
   profile; section, date and field labels adapt automatically — and every label
   is editable, so "Berufserfahrung" can become whatever you want it to be.
 - **Edit in the document**, not only in a form: click into the preview and type.
+- **Word (.docx) in two versions.** The *design* version carries the template's
+  handwriting into Word — a colour panel that runs to the edge of every sheet
+  (a single-colour image anchored to the page behind the text, carried by the
+  header, because Word has no rectangle you can lay on a page), the template's
+  heading shapes rebuilt from paragraph borders, its bullet character, the date
+  column. The *ATS* version is single-column, no tables, no panels, native Word
+  heading styles — for portals that read the file by machine.
+- **Crop the photo, and crop it again later.** The crop is baked into pixels, so
+  every output shows the same frame. The uncropped original is kept alongside,
+  so clicking the photo reopens the cropper and you can still zoom back out.
 - **PDF / HTML / Markdown / DOCX / JSON** export, plus **"template without data"**
   — a ZIP with the design as standalone HTML and Word files, placeholders
   carrying their JSON path (`{{experience[0].role}}`), and an empty `daten.json`
