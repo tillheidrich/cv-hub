@@ -139,6 +139,9 @@ export interface PanelStrings {
   photoUpload: string;
   photoRemove: string;
   photoDisabledTitle: string;
+  /** Titel des Vorschaubilds, wenn schon ein Foto liegt — es ist dann der
+   *  Knopf zum Nachjustieren des Ausschnitts. */
+  photoRecropTitle: string;
   photoChooseTitle: string;
   photoDemoHint: string;
   photoUrlHint: string;
@@ -267,6 +270,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropApply: 'Übernehmen',
     cropCancel: 'Abbrechen',
     photoRemove: '× Entfernen',
+    photoRecropTitle: 'Zum Zuschneiden anklicken',
     photoDisabledTitle: 'Im Demo-Modus deaktiviert — Konto anlegen, um Fotos hochzuladen',
     photoChooseTitle: 'Foto-Datei wählen',
     photoDemoHint: 'Foto-Upload und URL-Eingabe sind im Demo-Modus deaktiviert. Lege ein Konto an, um eigene Fotos zu nutzen.',
@@ -380,6 +384,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropApply: 'Apply',
     cropCancel: 'Cancel',
     photoRemove: '× Remove',
+    photoRecropTitle: 'Click to crop',
     photoDisabledTitle: 'Disabled in demo mode — create an account to upload photos',
     photoChooseTitle: 'Choose photo file',
     photoDemoHint: 'Photo upload and URL entry are disabled in demo mode. Create an account to use your own photos.',
@@ -493,6 +498,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropApply: 'Appliquer',
     cropCancel: 'Annuler',
     photoRemove: '× Supprimer',
+    photoRecropTitle: 'Cliquer pour recadrer',
     photoDisabledTitle: 'Désactivé en mode démo — créez un compte pour téléverser des photos',
     photoChooseTitle: 'Choisir un fichier photo',
     photoDemoHint: 'Le téléversement de photo et la saisie d\'URL sont désactivés en mode démo. Créez un compte pour utiliser vos propres photos.',
@@ -606,6 +612,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropApply: 'Aplicar',
     cropCancel: 'Cancelar',
     photoRemove: '× Quitar',
+    photoRecropTitle: 'Haz clic para recortar',
     photoDisabledTitle: 'Desactivado en el modo demo — crea una cuenta para subir fotos',
     photoChooseTitle: 'Elegir archivo de foto',
     photoDemoHint: 'La subida de fotos y la introducción de URL están desactivadas en el modo demo. Crea una cuenta para usar tus propias fotos.',

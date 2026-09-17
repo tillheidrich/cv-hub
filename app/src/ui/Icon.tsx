@@ -17,10 +17,19 @@ import type { CSSProperties, ReactElement } from 'react';
 export type IconName =
   | 'globe' | 'file-text' | 'markdown' | 'braces' | 'puzzle' | 'package'
   | 'upload' | 'download' | 'compass' | 'mail' | 'search' | 'user' | 'image'
-  | 'pencil' | 'eye' | 'share' | 'bulb' | 'copy' | 'clipboard' | 'check';
+  | 'pencil' | 'eye' | 'share' | 'bulb' | 'copy' | 'clipboard' | 'check' | 'crop';
 
 /** Pfade je Symbol, gezeichnet in einem 24er-Raster. */
 const PATHS: Record<IconName, ReactElement> = {
+  /* Zuschnitt: die beiden Winkel eines Beschnittrahmens, wie sie auf jedem
+     Passepartout liegen. Kein Rechteck — das wäre in 11 px ein Kasten und
+     nicht mehr zu unterscheiden von „Bild". */
+  crop: (
+    <>
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </>
+  ),
   globe: (
     <>
       <circle cx="12" cy="12" r="9" />

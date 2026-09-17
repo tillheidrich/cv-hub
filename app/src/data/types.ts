@@ -31,6 +31,16 @@ export interface PersonalInfo {
   nationality?: string;
   driversLicense?: string;
   photo?: string;
+  /** Das unbeschnittene Original zum Foto.
+   *
+   *  Der Zuschnitt wird in Pixel gebacken — was im Rahmen stand, IST die
+   *  gespeicherte Datei. Das ist für jede Ausgabe richtig und für ein
+   *  späteres Nachjustieren falsch: Wer den Ausschnitt ein zweites Mal
+   *  anfasst, könnte sonst nur enger schneiden, nie wieder herauszoomen, und
+   *  jede Runde kostet Bildpunkte. Deshalb liegt das Original daneben, und
+   *  der Zuschnitt setzt immer dort an. Ältere Profile haben es nicht — dann
+   *  wird am vorhandenen Ausschnitt weitergearbeitet. */
+  photoOriginal?: string;
   /** Ort für die Unterschriftszeile am Blattfuß. Leer = `location` wird
    *  genommen, denn in neun von zehn Fällen ist es derselbe Ort. */
   signatureCity?: string;

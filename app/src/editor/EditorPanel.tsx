@@ -303,10 +303,20 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
   const fileRef = useRef<HTMLInputElement>(null);
   /** Datei im Zuschnitt — solange gesetzt, steht der Dialog offen. */
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  /* Das frisch gewählte Original, solange es nur im Browser liegt. Erst wenn
+   * der Zuschnitt bestätigt ist, wandert es mit auf den Server — wer den
+   * Dialog abbricht, soll keine Datei hinterlassen haben. */
+  const frischesOriginal = useRef<string | null>(null);
   const p = data.personal;
 
   function updatePersonal(key: string, value: string) {
     onChange({ ...data, personal: { ...p, [key]: value } });
+  }
+
+  /** Mehrere Felder auf einmal — sonst überschreibt der zweite `updatePersonal`
+   *  den ersten, weil beide vom selben `p` ausgehen. */
+  function updatePersonalMany(patch: Partial<CVData['personal']>) {
+    onChange({ ...data, personal: { ...p, ...patch } });
   }
 
   /* Die gewählte Datei geht nicht mehr direkt zum Server, sondern erst in den
@@ -327,6 +337,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
         reader.onerror = () => reject(new Error(t.readerError));
         reader.readAsDataURL(file);
       });
+      frischesOriginal.current = dataUrl;
       setCropSrc(dataUrl);
     } catch (err) {
       window.alert(t.alertUploadFailed + (err instanceof Error ? err.message : t.alertUnknown));
@@ -335,15 +346,52 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
 
   async function ladeZugeschnittenesFotoHoch(dataUrl: string) {
     setCropSrc(null);
+    const original = frischesOriginal.current;
+    frischesOriginal.current = null;
     try {
-      const [meta, b64] = dataUrl.split(',');
-      const mime = (meta.match(/data:([^;]+)/)?.[1] || 'image/jpeg').toLowerCase();
       const { api } = await import('../data/api');
-      const { url } = await api.uploadPhoto(mime, b64);
-      updatePersonal('photo', url);
+      const hoch = async (u: string) => {
+        const [meta, b64] = u.split(',');
+        const mime = (meta.match(/data:([^;]+)/)?.[1] || 'image/jpeg').toLowerCase();
+        return (await api.uploadPhoto(mime, b64)).url;
+      };
+      const photo = await hoch(dataUrl);
+      /* Nur bei einer neu gewählten Datei wandert auch das Original mit. Beim
+       * Nachjustieren eines vorhandenen Fotos liegt es längst dort; es ein
+       * zweites Mal hochzuladen hieße, bei jedem Nachschärfen eine weitere
+       * Kopie im Konto abzulegen. */
+      if (original) {
+        const photoOriginal = await hoch(original);
+        updatePersonalMany({ photo, photoOriginal });
+      } else {
+        updatePersonal('photo', photo);
+      }
     } catch (err) {
       window.alert(t.alertUploadFailed + (err instanceof Error ? err.message : t.alertUnknown));
     }
+  }
+
+  /* Das Vorschaubild ist der Knopf zum Nachjustieren.
+   *
+   * Till, 17.09.2026: „bei bereits hochgeladenen Fotos möchte ich, dass man
+   * das Foto anklicken kann, um die Crop-Funktion zu haben." Bis dahin führte
+   * der einzige Weg zum Zuschnitt über eine neue Datei — wer den Ausschnitt
+   * nur ein Stück höher setzen wollte, musste sein Foto erneut heraussuchen.
+   * Angesetzt wird am Original, nicht am bestehenden Ausschnitt; nur so lässt
+   * sich auch wieder herauszoomen. */
+  function zuschnittOeffnen() {
+    if (demoMode) return;
+    const original = (p.photoOriginal || '').trim();
+    const quelle = original || (p.photo || '').trim();
+    if (!quelle) { fileRef.current?.click(); return; }
+    frischesOriginal.current = null;
+    /* Profile von vor dem 17.09.2026 haben kein Original — dort ist das
+     * bestehende Foto das Weiteste, was wir haben. Es jetzt als Original zu
+     * vermerken kostet nichts (es liegt bereits auf dem Server) und hält
+     * wenigstens jedes WEITERE Nachjustieren verlustfrei: sonst schnitte
+     * jede Runde in den Zuschnitt der vorigen. */
+    if (!original) updatePersonal('photoOriginal', quelle);
+    setCropSrc(quelle);
   }
 
   return (
@@ -352,17 +400,39 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
       <div style={fieldGroup}>
         <label style={labelStyle}>{t.photo}</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '8px', overflow: 'hidden',
-            background: 'oklch(0.96 0.03 264)', flexShrink: 0, border: '1px solid oklch(0.91 0.005 264)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
+          <button
+            type="button"
+            onClick={zuschnittOeffnen}
+            disabled={demoMode}
+            title={demoMode ? t.photoDisabledTitle : (p.photo ? t.photoRecropTitle : t.photoChooseTitle)}
+            aria-label={p.photo ? t.photoRecropTitle : t.photoChooseTitle}
+            style={{
+              width: '52px', height: '52px', borderRadius: '8px', overflow: 'hidden',
+              background: 'oklch(0.96 0.03 264)', flexShrink: 0, border: '1px solid oklch(0.91 0.005 264)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0, position: 'relative',
+              cursor: demoMode ? 'not-allowed' : 'pointer',
+            }}>
             {p.photo ? (
-              <img src={p.photo} alt={t.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <>
+                <img src={p.photo} alt={t.photo} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                {/* Ein Bild allein sieht nicht nach Knopf aus. Das Zeichen sagt,
+                    dass hier etwas passiert, ohne die Vorschau zuzudecken. */}
+                {!demoMode && (
+                  <span style={{
+                    position: 'absolute', right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.55)', color: '#fff',
+                    padding: '2px 3px 1px', borderTopLeftRadius: '6px',
+                    display: 'flex', alignItems: 'center',
+                  }}>
+                    <Icon name="crop" size={11} />
+                  </span>
+                )}
+              </>
             ) : (
               <Icon name="user" size={20} style={{ color: 'oklch(0.62 0.012 264)' }} />
             )}
-          </div>
+          </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <button
               type="button"

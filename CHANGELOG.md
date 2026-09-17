@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-17 (later)
+
+**Click the photo to re-crop it.** Until now the only road to the cropper led
+through a newly chosen file — wanting the frame a little higher meant digging
+out the photo again. The thumbnail is now the button; a small mark in its corner
+says so.
+
+It crops from the **uncropped original**, which is kept alongside from now on
+(`personal.photoOriginal`). The crop is baked into pixels — right for every
+output, wrong for adjusting later: otherwise you could only ever crop tighter,
+never zoom back out, and each round costs pixels. Profiles from before this
+change have no original; there, the existing photo is recorded as the original
+on the first re-crop, so at least every further round is lossless.
+
+`scripts/bandcheck.mjs` is new: it builds every template with a filled sidebar,
+renders it through LibreOffice and **measures the colour on the last page**, high
+up and at the very bottom of the column — exactly where the panel used to stop.
+Twelve of twelve pass. Measured, not assumed. (The first version compared the
+colour strings for equality and reported eight false alarms over a difference of
+1 in a single channel — antialiasing. It compares with a tolerance now: a check
+that cries wolf stops being read.)
+
+Phone widths 320/360/390/430 px checked, nothing found.
+
 ## 2026-09-17
 
 **The colour panel now runs to the edge of every sheet.** It hung on a table
