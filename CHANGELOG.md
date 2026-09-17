@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-17 (import)
+
+**Bring your CV with you, instead of typing it again.** The competitive review
+named the missing import as the biggest hurdle at the entrance — nobody retypes
+a CV they already have. On looking, `src/import/linkedinImport.ts` had been
+sitting in the tree for months and **was called from nowhere**: built, never
+wired up, never run. The first real pass showed what happens to code that never
+runs:
+
+- **The CSV reader split on `\n` first, then on `,`.** Every job description
+  with a line break — that is, almost every one — shredded the table. It now
+  reads character by character per RFC 4180: line breaks and commas inside
+  quotes belong to the field.
+- **Dates arrive as "Aug 2018", not "2018-08".** The converter knew only ISO and
+  passed the rest through, so "Aug 2018" stood next to "12/2023" in the CV. It
+  now handles month names (en/de), ISO, MM/YYYY and a bare year.
+- **The ZIP reader was hand-rolled**, with the comment "no jszip needed" — while
+  jszip sits in the project. It read the size from the local header, which is 0
+  for ZIPs with a data descriptor. It uses jszip now.
+- **`labels` was hard-set to German.** Importing an English CV put
+  "Berufserfahrung" above your positions.
+
+New on top: primary email address and phone number from the archive, language
+proficiency mapped to the dot scale, and tolerant lookup of file names and
+column headers — LinkedIn does not document the format, and what the archive
+contains depends on the account.
+
+**Nothing is replaced unasked.** The import first shows what is in the archive —
+counts per area, a before/after comparison, and what it did **not** find. Photo,
+profile text and cover letter are left alone: LinkedIn does not know them.
+Everything runs in the browser and the file reaches no server, so the import
+also works **in demo mode without an account**.
+
+`scripts/linkedincheck.mjs` is new: 20 assertions against an archive built to
+contain exactly the traps — a multi-line description with a comma, three date
+formats, a current position with no end date, two email addresses with a primary
+flag.
+
 ## 2026-09-17 (later)
 
 **Click the photo to re-crop it.** Until now the only road to the cropper led

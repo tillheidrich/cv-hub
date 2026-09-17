@@ -53,6 +53,11 @@ its source in a comment next to it:
   profile; section, date and field labels adapt automatically — and every label
   is editable, so "Berufserfahrung" can become whatever you want it to be.
 - **Edit in the document**, not only in a form: click into the preview and type.
+- **Import from LinkedIn.** Upload the ZIP from LinkedIn's "Get a copy of your
+  data" and it reads positions, education, skills, languages, email and phone.
+  It runs in the browser — the file reaches no server, so it works without an
+  account too — and it shows you what it found, and what it did *not*, before
+  replacing anything.
 - **Word (.docx) in two versions.** The *design* version carries the template's
   handwriting into Word — a colour panel that runs to the edge of every sheet
   (a single-colour image anchored to the page behind the text, carried by the

@@ -59,6 +59,7 @@ import { exportMarkdown } from './exportMarkdown';
 import { exportJson } from './exportJson';
 import { exportDocx } from './exportDocx';
 import { exportJsonResume, jsonResumeToCv, isJsonResume } from './jsonResume';
+import { importLinkedIn, type LinkedInBefund } from '../import/linkedinImport';
 import { exportTemplateKit } from './exportTemplate';
 import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
@@ -309,6 +310,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const [importErr, setImportErr] = useState<string | null>(null);
   // Diff preview between current data and a candidate import.
   const [importDiff, setImportDiff] = useState<DiffRow[] | null>(null);
+  /* LinkedIn-Import: Befund und Gegenüberstellung, bevor irgendetwas ersetzt
+   * wird. Läuft vollständig im Browser — die Datei geht an keinen Server,
+   * auch nicht an unseren. Deshalb funktioniert er auch im Demo-Modus. */
+  const [liBefund, setLiBefund] = useState<LinkedInBefund | null>(null);
+  const [liBusy, setLiBusy] = useState(false);
+  const [liErr, setLiErr] = useState<string | null>(null);
 
   const isCover = docType === 'cover-letter';
 
@@ -485,6 +492,24 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   }
 
   // MD file pickup — read into the import textarea so user can review.
+  /* Schritt 1: Archiv lesen, nichts ersetzen. */
+  async function linkedinLesen(file: File) {
+    setLiBusy(true); setLiErr(null); setLiBefund(null);
+    try {
+      setLiBefund(await importLinkedIn(file, data));
+    } catch (e) {
+      setLiErr(e instanceof Error ? e.message : 'Das Archiv ließ sich nicht lesen.');
+    } finally { setLiBusy(false); }
+  }
+
+  /* Schritt 2: übernehmen — erst nachdem der Mensch die Zahlen gesehen hat. */
+  function linkedinUebernehmen() {
+    if (!liBefund || !onReplaceData) return;
+    track('import_linkedin');
+    onReplaceData(liBefund.cv);
+    setLiBefund(null);
+  }
+
   function pickMdFile(file: File) {
     const reader = new FileReader();
     reader.onload = () => { setImportText(String(reader.result || '')); setImportOpen(true); };
@@ -703,6 +728,40 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         )}
       </div>
 
+      {/* ── Lebenslauf mitbringen ───────────────────────────────────────
+          Steht bewusst VOR dem Konto-Bereich und außerhalb davon: Der
+          LinkedIn-Import läuft vollständig im Browser, also auch ohne
+          Anmeldung. Wer das Werkzeug ausprobiert, soll nicht zuerst seinen
+          Lebenslauf abtippen müssen — das war die größte Hürde am Einstieg
+          und der auffälligste Rückstand gegenüber jedem Wettbewerber. */}
+      {onReplaceData && !isCover && (
+        <>
+          <div style={s.divider} />
+          <div style={s.section}>
+            <div style={s.sectionLabel}>Lebenslauf mitbringen</div>
+            <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+              Du musst nichts abtippen, was du schon hast. Das Archiv wird im Browser gelesen — es geht an keinen Server, auch nicht an unseren.
+            </div>
+            <label style={{ ...s.exportBtn(false), cursor: liBusy ? 'wait' : 'pointer' }}>
+              <div style={s.btnIcon}><Icon name="upload" /></div>
+              <div>
+                <div style={s.btnLabel}>{liBusy ? 'Lese Archiv…' : 'LinkedIn-Datenexport'}</div>
+                <div style={s.btnSub}>ZIP aus „Eine Kopie deiner Daten erhalten" — Stationen, Ausbildung, Skills, Sprachen</div>
+              </div>
+              <input type="file" accept=".zip,.csv" hidden disabled={liBusy}
+                onChange={e => { const f = e.target.files?.[0]; if (f) linkedinLesen(f); e.target.value = ''; }} />
+            </label>
+            <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', marginTop: '2px', fontFamily: "'Inter', sans-serif", textDecoration: 'none' }}>
+              Archiv bei LinkedIn anfordern →
+            </a>
+            {liErr && (
+              <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '11.5px', color: '#c0392b', marginTop: '8px', fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }}>{liErr}</div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── Import ──────────────────────────────────────────────────────── */}
       {resumeId && (
         <>
@@ -872,6 +931,58 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             </button>
           </div>
         </>
+      )}
+
+      {/* Gegenüberstellung vor dem Übernehmen. Ein Import, der ungefragt
+          ersetzt, ist kein Import, sondern ein Unfall: Wer hier schon
+          gearbeitet hat, sieht erst die Zahlen und entscheidet dann. */}
+      {liBefund && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => setLiBefund(null)}>
+          <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '620px', maxHeight: '88vh', overflowY: 'auto', padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', marginBottom: '4px' }}>
+              Das steht im Archiv
+            </div>
+            <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
+              Noch ist nichts ersetzt. Übernimmst du, werden Stationen, Ausbildung, Skills und Sprachen durch die aus dem Archiv ersetzt.
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '14px' }}>
+              {([['Stationen', liBefund.gefunden.stationen], ['Ausbildung', liBefund.gefunden.ausbildung], ['Skills', liBefund.gefunden.skills], ['Sprachen', liBefund.gefunden.sprachen]] as [string, number][]).map(([l, n]) => (
+                <div key={l} style={{ background: n > 0 ? '#f0f7f0' : 'oklch(0.97 0.003 264)', borderRadius: '8px', padding: '10px 12px', fontFamily: "'Inter', sans-serif" }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: n > 0 ? '#2c5e2c' : 'oklch(0.62 0.012 264)', lineHeight: 1.1 }}>{n}</div>
+                  <div style={{ fontSize: '10.5px', color: 'oklch(0.50 0.014 264)', marginTop: '2px' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ border: '1px solid oklch(0.91 0.005 264)', borderRadius: '9px', overflow: 'hidden', marginBottom: '14px' }}>
+              {diffMaps(summariseCv(data), summariseCv(liBefund.cv)).filter(r => r.changed).length === 0 ? (
+                <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>
+                  Keine Unterschiede zum aktuellen Stand — der Import wäre folgenlos.
+                </div>
+              ) : diffMaps(summariseCv(data), summariseCv(liBefund.cv)).filter(r => r.changed).map((row, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '8px', padding: '9px 12px', borderTop: i ? '1px solid oklch(0.96 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: "'Inter', sans-serif" }}>
+                  <div style={{ fontWeight: 700, color: 'oklch(0.44 0.017 264)' }}>{row.label}</div>
+                  <div style={{ background: '#fff0f0', padding: '5px 7px', borderRadius: '5px', color: '#7a2c2c', wordBreak: 'break-word' }}>{row.before || <em style={{ color: '#c0a0a0' }}>leer</em>}</div>
+                  <div style={{ background: '#f0f7f0', padding: '5px 7px', borderRadius: '5px', color: '#2c5e2c', wordBreak: 'break-word' }}>{row.after || <em style={{ color: '#a0c0a0' }}>leer</em>}</div>
+                </div>
+              ))}
+            </div>
+
+            {liBefund.hinweise.length > 0 && (
+              <ul style={{ margin: '0 0 16px', padding: '10px 12px 10px 28px', background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '8px', fontSize: '11.5px', color: '#8a6500', lineHeight: 1.6, fontFamily: "'Inter', sans-serif" }}>
+                {liBefund.hinweise.map((h, i) => <li key={i}>{h}</li>)}
+              </ul>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setLiBefund(null)}
+                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>Abbrechen</button>
+              <button type="button" onClick={linkedinUebernehmen}
+                style={{ padding: '8px 16px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Übernehmen</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {importOpen && (

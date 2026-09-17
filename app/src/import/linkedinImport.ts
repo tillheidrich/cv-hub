@@ -1,280 +1,338 @@
 /**
- * LinkedIn Data Export Importer
+ * LinkedIn-Datenexport einlesen.
  *
- * LinkedIn lets users download a ZIP from:
- * Settings → Data Privacy → Get a copy of your data
+ * Der Weg für den Nutzer: LinkedIn → Einstellungen → Datenschutz → „Eine Kopie
+ * deiner Daten erhalten" → ZIP herunterladen → hier hochladen. Kein Scraping,
+ * keine API, kein fremder Dienst: Die Datei bleibt im Browser, geparst wird
+ * lokal.
  *
- * The ZIP contains CSV files. We parse the relevant ones:
- *   Profile.csv        → PersonalInfo
- *   Positions.csv      → ExperienceEntry[]
- *   Education.csv      → EducationEntry[]
- *   Skills.csv         → flat skill list
- *   Languages.csv      → LanguageEntry[]
+ * ── Warum das neu geschrieben ist ───────────────────────────────────────────
+ * Eine erste Fassung lag seit Monaten im Verzeichnis und wurde **von nirgends
+ * aufgerufen** — gebaut, nie verdrahtet, nie ausgeführt. Beim ersten echten
+ * Durchlauf fielen vier Dinge auf, die alle daran lagen, dass nie eine Datei
+ * durchlief:
  *
- * No scraping. No API calls. Everything stays in the browser.
+ *   1. Der CSV-Leser trennte zuerst an `\n` und dann an `,`. Jede
+ *      Stellenbeschreibung mit Zeilenumbruch — also fast jede — zerlegte damit
+ *      die Tabelle. Ein CSV muss zeichenweise gelesen werden, weil ein
+ *      Umbruch **innerhalb** von Anführungszeichen zum Feld gehört.
+ *   2. Die Datumsangaben kommen als „Aug 2018", nicht als „2018-08". Die
+ *      Umrechnung kannte nur die ISO-Form und reichte den Rest unverändert
+ *      durch — im Lebenslauf stand dann „Aug 2018" neben „12/2023".
+ *   3. Der ZIP-Leser war von Hand gebaut, mit dem Kommentar „no jszip needed" —
+ *      obwohl jszip im Projekt liegt. Er ging von unkomprimierten Größen im
+ *      lokalen Kopf aus; bei ZIPs mit Datendeskriptor steht dort 0, und die
+ *      Schleife lief ins Leere.
+ *   4. Er setzte `labels` hart auf Deutsch. Wer seinen englischen Lebenslauf
+ *      importierte, bekam „Berufserfahrung" über seine Stationen.
+ *
+ * ── Warum tolerant statt streng ─────────────────────────────────────────────
+ * LinkedIn dokumentiert das Format nicht, und der Inhalt des Archivs hängt vom
+ * Konto ab — Dateinamen und Spalten unterscheiden sich zwischen Exporten.
+ * Deshalb wird hier nichts auf eine Schreibweise festgenagelt: Dateinamen und
+ * Spaltenköpfe werden normalisiert (klein, ohne Sonderzeichen) und über eine
+ * Liste von Alias-Namen gesucht. Was nicht gefunden wird, wird **benannt** —
+ * und der Import ersetzt nie etwas, ohne dass der Mensch die Gegenüberstellung
+ * gesehen hat.
  */
 
-import type { CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry } from '../data/types';
-import { labelsDE } from '../data/labels';
+import JSZip from 'jszip';
+import type {
+  CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, Lang,
+} from '../data/types';
 
-// ── CSV parser (no dependency needed – LinkedIn CSVs are well-formed) ────────
+// ── CSV ─────────────────────────────────────────────────────────────────────
 
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-
-  const headers = splitCSVLine(lines[0]);
-  const rows: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = splitCSVLine(lines[i]);
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h.trim()] = (values[idx] ?? '').trim();
-    });
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function splitCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
+/**
+ * Zeichenweiser CSV-Leser (RFC 4180).
+ *
+ * Zeilenumbrüche und Kommas innerhalb von Anführungszeichen gehören zum Feld.
+ * Genau daran scheiterte die erste Fassung: LinkedIn schreibt mehrzeilige
+ * Stellenbeschreibungen in ein einziges Feld.
+ */
+export function parseCSV(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let feld = '';
+  let zeile: string[] = [];
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
+  // BOM entfernen — LinkedIn liefert UTF-8 mit Vorzeichen.
+  const t = text.replace(/^\uFEFF/, '');
+
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (t[i + 1] === '"') { feld += '"'; i++; } else { inQuotes = false; }
       } else {
-        inQuotes = !inQuotes;
+        feld += c;
       }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
+      continue;
     }
+    if (c === '"') { inQuotes = true; continue; }
+    if (c === ',') { zeile.push(feld); feld = ''; continue; }
+    if (c === '\r') continue;
+    if (c === '\n') { zeile.push(feld); rows.push(zeile); zeile = []; feld = ''; continue; }
+    feld += c;
   }
-  result.push(current);
-  return result;
+  if (feld.length > 0 || zeile.length > 0) { zeile.push(feld); rows.push(zeile); }
+
+  if (rows.length < 2) return [];
+  const kopf = rows[0].map(normKey);
+  return rows.slice(1)
+    .filter(r => r.some(v => v.trim() !== ''))
+    .map(r => {
+      const o: Record<string, string> = {};
+      kopf.forEach((h, i) => { o[h] = (r[i] ?? '').trim(); });
+      return o;
+    });
 }
 
-// ── Date normalisation (LinkedIn uses YYYY-MM-DD or "Present") ───────────────
+/** Spaltenkopf auf einen vergleichbaren Schlüssel bringen: „Company Name" → „companyname". */
+const normKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-function normalizeDate(raw: string): string {
-  if (!raw || raw === '' || raw.toLowerCase() === 'present' || raw.toLowerCase() === 'heute') {
-    return 'present';
+/** Erster Treffer aus einer Liste möglicher Spaltennamen. */
+function feld(row: Record<string, string>, ...namen: string[]): string {
+  for (const n of namen) {
+    const v = row[normKey(n)];
+    if (v && v.trim()) return v.trim();
   }
-  // YYYY-MM-DD → MM/YYYY
-  const match = raw.match(/^(\d{4})-(\d{2})(-\d{2})?$/);
-  if (match) return `${match[2]}/${match[1]}`;
-  // YYYY → YYYY
-  if (/^\d{4}$/.test(raw)) return raw;
-  return raw;
+  return '';
 }
 
-// ── Bullet splitting ─────────────────────────────────────────────────────────
+// ── Datum ───────────────────────────────────────────────────────────────────
 
-function splitBullets(description: string): string[] {
-  if (!description) return [];
-  // Split on common delimiters: newline, "• ", "- ", numbered "1. "
-  const parts = description
-    .replace(/\r\n/g, '\n')
-    .split(/\n+|(?:^|\n)\s*[-•]\s*|(?:^|\n)\s*\d+\.\s*/m)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-  return parts.length > 0 ? parts : [description.trim()];
+const MONATE: Record<string, string> = {
+  jan: '01', feb: '02', mar: '03', mär: '03', apr: '04', may: '05', mai: '05',
+  jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', okt: '10',
+  nov: '11', dec: '12', dez: '12',
+};
+
+/**
+ * LinkedIn-Datum → „MM/JJJJ".
+ *
+ * Im Archiv steht je nach Feld und Kontoland „Aug 2018", „August 2018",
+ * „2018-08-01", „2018-08" oder nur „2018". Alles davon muss hier ankommen;
+ * was sich nicht deuten lässt, bleibt unverändert stehen, statt verfälscht zu
+ * werden — ein sichtbar fremdes Datum ist besser als ein falsches.
+ */
+export function normalizeDate(raw: string): string {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (iso) return `${iso[2].padStart(2, '0')}/${iso[1]}`;
+  const wort = s.match(/^([A-Za-zÄÖÜäöü]{3,})\.?\s+(\d{4})$/);
+  if (wort) {
+    const m = MONATE[wort[1].slice(0, 3).toLowerCase()];
+    if (m) return `${m}/${wort[2]}`;
+  }
+  if (/^\d{4}$/.test(s)) return s;
+  const mmjjjj = s.match(/^(\d{1,2})[./](\d{4})$/);
+  if (mmjjjj) return `${mmjjjj[1].padStart(2, '0')}/${mmjjjj[2]}`;
+  return s;
 }
 
-// ── Individual CSV parsers ───────────────────────────────────────────────────
+const LAEUFT: Record<Lang, string> = { de: 'heute', en: 'today', fr: "aujourd'hui", es: 'hoy' };
+const istLaufend = (s: string) => /^(present|current|heute|aujourd'hui|hoy|ongoing)$/i.test((s || '').trim());
 
-function parseProfile(rows: Record<string, string>[]): Partial<CVData['personal']> {
-  if (rows.length === 0) return {};
-  const r = rows[0];
-  return {
-    name: [r['First Name'], r['Last Name']].filter(Boolean).join(' '),
-    title: r['Headline'] ?? '',
-    location: r['Geo Location'] ?? r['Location'] ?? '',
-  };
-}
+// ── Aufzählungspunkte ───────────────────────────────────────────────────────
 
-function parsePositions(rows: Record<string, string>[]): ExperienceEntry[] {
-  return rows
-    .filter(r => r['Company Name'] || r['Title'])
-    .map((r, idx) => ({
-      id: `li-exp-${idx}`,
-      role: r['Title'] ?? '',
-      company: r['Company Name'] ?? '',
-      location: r['Location'] ?? '',
-      start: normalizeDate(r['Started On'] ?? ''),
-      end: normalizeDate(r['Finished On'] ?? 'present'),
-      bullets: splitBullets(r['Description'] ?? ''),
-    }));
-}
-
-function parseEducation(rows: Record<string, string>[]): EducationEntry[] {
-  return rows
-    .filter(r => r['School Name'] || r['Degree Name'])
-    .map((r, idx) => ({
-      id: `li-edu-${idx}`,
-      degree: ([r['Degree Name'], r['Field Of Study']].filter(Boolean).join(', ')) || (r['School Name'] ?? ''),
-      institution: r['School Name'] ?? '',
-      start: normalizeDate(r['Start Date'] ?? ''),
-      end: normalizeDate(r['End Date'] ?? ''),
-      notes: r['Notes'] ?? r['Description'] ?? undefined,
-    }));
-}
-
-function parseSkills(rows: Record<string, string>[]): SkillGroup {
-  const items = rows
-    .map(r => r['Name'] ?? r['Skill'] ?? '')
+/**
+ * Beschreibungstext in Stichpunkte zerlegen.
+ *
+ * LinkedIn speichert die Beschreibung als Fließtext, oft mit eigenen
+ * Aufzählungszeichen. Getrennt wird an Zeilenumbrüchen und an führenden
+ * Listenzeichen — nicht an Satzzeichen: Ein Punkt mitten im Satz ist kein
+ * neuer Stichpunkt, und aus einem Absatz drei Halbsätze zu machen wäre
+ * schlimmer als ein langer Stichpunkt, den der Mensch selbst teilt.
+ */
+export function splitBullets(beschreibung: string): string[] {
+  if (!beschreibung) return [];
+  return beschreibung
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(z => z.replace(/^\s*(?:[-–—•▪*·]|\d+[.)])\s*/, '').trim())
     .filter(Boolean);
-  return { label: 'Skills', items };
 }
 
-function parseLanguages(rows: Record<string, string>[]): LanguageEntry[] {
-  return rows
-    .filter(r => r['Name'])
-    .map(r => ({
-      language: r['Name'] ?? '',
-      level: r['Proficiency'] ?? '',
-    }));
+// ── Sprachniveau → Punkteskala ──────────────────────────────────────────────
+
+/** LinkedIn nennt Stufen im Klartext; die Vorlagen zeigen eine Skala von 5. */
+function dotsFuer(stufe: string): number {
+  const s = (stufe || '').toLowerCase();
+  if (/native|bilingual|mutterspr/.test(s)) return 5;
+  if (/full professional|verhandlungssicher|fließend|fliessend/.test(s)) return 4;
+  if (/professional working|gute kenntnisse|advanced/.test(s)) return 3;
+  if (/limited working|grundkenntnisse|basic/.test(s)) return 2;
+  if (/elementary|anfänger/.test(s)) return 1;
+  return 0;
 }
 
-// ── ZIP reading (native File API + DataView, no jszip needed) ────────────────
-// We use a simple approach: read ZIP entries via the browser FileReader API.
-// For most LinkedIn exports, the ZIP structure is flat (no subdirectories).
+// ── Archiv lesen ────────────────────────────────────────────────────────────
 
-interface ZipEntry { name: string; data: Uint8Array }
-
-async function readZipEntries(file: File): Promise<ZipEntry[]> {
-  const buffer = await file.arrayBuffer();
-  const view = new DataView(buffer);
-  const bytes = new Uint8Array(buffer);
-
-  const entries: ZipEntry[] = [];
-  let offset = 0;
-
-  while (offset < bytes.length - 4) {
-    // Local file header signature: 0x04034b50
-    if (view.getUint32(offset, true) !== 0x04034b50) break;
-
-    const flags         = view.getUint16(offset + 6,  true);
-    const compression   = view.getUint16(offset + 8,  true);
-    const compSize      = view.getUint32(offset + 18, true);
-    const uncompSize    = view.getUint32(offset + 22, true);
-    const nameLen       = view.getUint16(offset + 26, true);
-    const extraLen      = view.getUint16(offset + 28, true);
-    const name          = new TextDecoder().decode(bytes.slice(offset + 30, offset + 30 + nameLen));
-    const dataStart     = offset + 30 + nameLen + extraLen;
-
-    if (compression === 0) {
-      // Stored (no compression)
-      entries.push({ name, data: bytes.slice(dataStart, dataStart + uncompSize) });
-    } else if (compression === 8) {
-      // Deflate – use DecompressionStream if available
-      try {
-        const compressed = bytes.slice(dataStart, dataStart + compSize);
-        const ds = new DecompressionStream('deflate-raw');
-        const writer = ds.writable.getWriter();
-        writer.write(compressed);
-        writer.close();
-        const chunks: Uint8Array[] = [];
-        const reader = ds.readable.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-        const out = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
-        let pos = 0;
-        for (const c of chunks) { out.set(c, pos); pos += c.length; }
-        entries.push({ name, data: out });
-      } catch {
-        // DecompressionStream not available – skip deflated entries
-      }
-    }
-
-    // Data descriptor present (bit 3 of flags set): 12 extra bytes after data
-    const descriptorSize = (flags & 0x8) ? 12 : 0;
-    offset = dataStart + compSize + descriptorSize;
+/** Alle CSV-Dateien aus dem Archiv, unter normalisiertem Basisnamen. */
+async function csvsAusZip(file: File): Promise<Record<string, string>> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const out: Record<string, string> = {};
+  const dateien = Object.values(zip.files).filter(f => !f.dir && /\.csv$/i.test(f.name));
+  for (const f of dateien) {
+    const basis = (f.name.split('/').pop() || f.name).replace(/\.csv$/i, '');
+    out[normKey(basis)] = await f.async('string');
   }
-
-  return entries;
+  return out;
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
-
-export interface LinkedInImportResult {
-  partial: Partial<CVData>;
-  warnings: string[];
+/** Erste Datei, deren normalisierter Name einen der Begriffe enthält. */
+function datei(map: Record<string, string>, ...begriffe: string[]): string | null {
+  for (const b of begriffe) {
+    const k = normKey(b);
+    if (map[k] !== undefined) return map[k];
+  }
+  for (const b of begriffe) {
+    const k = normKey(b);
+    const treffer = Object.keys(map).find(name => name.includes(k));
+    if (treffer) return map[treffer];
+  }
+  return null;
 }
 
-export async function importLinkedIn(file: File): Promise<LinkedInImportResult> {
-  const warnings: string[] = [];
-  const csvMap: Record<string, string> = {};
+// ── Ergebnis ────────────────────────────────────────────────────────────────
 
-  const isZip = file.name.toLowerCase().endsWith('.zip');
+export interface LinkedInBefund {
+  /** Der fertige Lebenslauf: die aktuellen Daten, überschrieben mit dem, was
+   *  im Archiv stand. Felder, die LinkedIn nicht kennt (Foto, Profiltext,
+   *  Anschreiben), bleiben unangetastet. */
+  cv: CVData;
+  /** Was gefunden wurde — für die Gegenüberstellung vor dem Übernehmen. */
+  gefunden: { stationen: number; ausbildung: number; skills: number; sprachen: number };
+  /** Was nicht gefunden wurde. Wird dem Nutzer gezeigt, nicht verschluckt. */
+  hinweise: string[];
+}
 
-  if (isZip) {
-    const entries = await readZipEntries(file);
-    for (const entry of entries) {
-      const baseName = entry.name.split('/').pop() ?? entry.name;
-      csvMap[baseName.toLowerCase()] = new TextDecoder('utf-8').decode(entry.data);
+/**
+ * Archiv einlesen und auf den bestehenden Lebenslauf legen.
+ *
+ * `basis` ist der aktuelle Lebenslauf: Sprache, Beschriftungen, Foto und
+ * Profiltext kommen von dort, alles andere aus dem Archiv. Der Aufrufer
+ * entscheidet, ob er das Ergebnis übernimmt — diese Funktion schreibt nichts.
+ */
+export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedInBefund> {
+  const hinweise: string[] = [];
+  const name = file.name.toLowerCase();
+
+  let csvs: Record<string, string>;
+  if (name.endsWith('.zip')) {
+    csvs = await csvsAusZip(file);
+    if (Object.keys(csvs).length === 0) {
+      throw new Error('In diesem Archiv liegt keine einzige CSV-Datei. Es sieht nicht nach einem LinkedIn-Datenexport aus.');
     }
-  } else if (file.name.toLowerCase().endsWith('.csv')) {
-    // Single CSV file – detect type from header
-    const text = await file.text();
-    csvMap[file.name.toLowerCase()] = text;
+  } else if (name.endsWith('.csv')) {
+    csvs = { [normKey(file.name.replace(/\.csv$/i, ''))]: await file.text() };
   } else {
-    throw new Error('Bitte eine LinkedIn ZIP-Datei oder einzelne CSV-Datei hochladen.');
+    throw new Error('Bitte das ZIP aus dem LinkedIn-Datenexport hochladen (oder eine einzelne CSV daraus).');
   }
 
-  // Helper: get CSV rows for a known filename variant
-  function getRows(candidates: string[]): Record<string, string>[] {
-    for (const c of candidates) {
-      if (csvMap[c]) return parseCSV(csvMap[c]);
-    }
-    return [];
-  }
-
-  const profileRows  = getRows(['profile.csv']);
-  const positionRows = getRows(['positions.csv']);
-  const educRows     = getRows(['education.csv']);
-  const skillRows    = getRows(['skills.csv']);
-  const langRows     = getRows(['languages.csv']);
-
-  if (profileRows.length === 0 && positionRows.length === 0) {
-    warnings.push('Keine bekannten LinkedIn-CSV-Dateien gefunden. Stelle sicher, dass du die vollständige LinkedIn-Datenexport-ZIP hochlädst.');
-  }
-
-  const partialPersonal = parseProfile(profileRows);
-  const experience      = parsePositions(positionRows);
-  const education       = parseEducation(educRows);
-  const skillGroup      = parseSkills(skillRows);
-  const languages       = parseLanguages(langRows);
-
-  if (experience.length === 0) warnings.push('Keine Berufserfahrung gefunden (positions.csv fehlt oder ist leer).');
-  if (education.length === 0)  warnings.push('Keine Ausbildung gefunden (education.csv fehlt oder ist leer).');
-
-  const partial: Partial<CVData> = {
-    personal: {
-      name: partialPersonal.name ?? '',
-      title: partialPersonal.title ?? '',
-      location: partialPersonal.location ?? '',
-      email: '',
-      phone: '',
-    },
-    experience,
-    education,
-    skillGroups: skillGroup.items.length > 0 ? [skillGroup] : [],
-    languages: languages.length > 0 ? languages : [],
-    labels: labelsDE,
+  const rows = (...begriffe: string[]) => {
+    const t = datei(csvs, ...begriffe);
+    return t ? parseCSV(t) : [];
   };
 
-  return { partial, warnings };
+  const lang = (basis.labels?.lang ?? 'de') as Lang;
+  const laufend = LAEUFT[lang] ?? LAEUFT.de;
+
+  // ── Person ────────────────────────────────────────────────────────────────
+  const profil = rows('Profile')[0] ?? {};
+  const mails = rows('Email Addresses', 'Emails');
+  const telefone = rows('PhoneNumbers', 'Phone Numbers');
+
+  const vorname = feld(profil, 'First Name', 'Vorname');
+  const nachname = feld(profil, 'Last Name', 'Nachname');
+  const personName = [vorname, nachname].filter(Boolean).join(' ');
+
+  /* Bevorzugt die als primär markierte Adresse — ein Archiv enthält oft die
+   * alte Uni-Adresse gleich mit. */
+  const primaer = mails.find(m => /^(yes|ja|true)$/i.test(feld(m, 'Primary'))) ?? mails[0];
+  const mail = primaer ? feld(primaer, 'Email Address', 'Email') : '';
+  const telefon = telefone[0] ? feld(telefone[0], 'Number', 'Phone Number') : '';
+
+  // ── Stationen ─────────────────────────────────────────────────────────────
+  const positionen = rows('Positions', 'Position');
+  const experience: ExperienceEntry[] = positionen
+    .filter(r => feld(r, 'Company Name', 'Company') || feld(r, 'Title', 'Position'))
+    .map((r, i) => {
+      const bis = feld(r, 'Finished On', 'End Date', 'Finished');
+      return {
+        id: `li-exp-${i}`,
+        role: feld(r, 'Title', 'Position'),
+        company: feld(r, 'Company Name', 'Company'),
+        location: feld(r, 'Location'),
+        start: normalizeDate(feld(r, 'Started On', 'Start Date', 'Started')),
+        end: !bis || istLaufend(bis) ? laufend : normalizeDate(bis),
+        bullets: splitBullets(feld(r, 'Description')),
+      };
+    });
+
+  // ── Ausbildung ────────────────────────────────────────────────────────────
+  const schulen = rows('Education');
+  const education: EducationEntry[] = schulen
+    .filter(r => feld(r, 'School Name', 'School') || feld(r, 'Degree Name', 'Degree'))
+    .map((r, i) => ({
+      id: `li-edu-${i}`,
+      degree: [feld(r, 'Degree Name', 'Degree'), feld(r, 'Field Of Study', 'Field')].filter(Boolean).join(', ')
+        || feld(r, 'School Name', 'School'),
+      institution: feld(r, 'School Name', 'School'),
+      location: '',
+      start: normalizeDate(feld(r, 'Start Date', 'Started On')),
+      end: normalizeDate(feld(r, 'End Date', 'Finished On')),
+      notes: feld(r, 'Notes', 'Activities', 'Description') || undefined,
+    }));
+
+  // ── Skills ────────────────────────────────────────────────────────────────
+  const skillZeilen = rows('Skills');
+  const skillItems = skillZeilen.map(r => feld(r, 'Name', 'Skill')).filter(Boolean);
+  const vorhandeneGruppe = basis.skillGroups?.[0];
+  const skillGroups: SkillGroup[] = skillItems.length
+    ? [{ label: vorhandeneGruppe?.label || 'Skills', items: skillItems }]
+    : (basis.skillGroups ?? []);
+
+  // ── Sprachen ──────────────────────────────────────────────────────────────
+  const sprachZeilen = rows('Languages');
+  const languages: LanguageEntry[] = sprachZeilen
+    .map(r => ({ name: feld(r, 'Name', 'Language'), stufe: feld(r, 'Proficiency', 'Level') }))
+    .filter(x => x.name)
+    .map(x => ({ language: x.name, level: x.stufe, dots: dotsFuer(x.stufe) }));
+
+  // ── Was fehlt, wird gesagt ────────────────────────────────────────────────
+  if (!positionen.length) hinweise.push('Keine Berufserfahrung im Archiv gefunden (Positions.csv fehlt oder ist leer).');
+  if (!schulen.length) hinweise.push('Keine Ausbildung im Archiv gefunden (Education.csv fehlt oder ist leer).');
+  if (!personName) hinweise.push('Kein Name im Archiv gefunden (Profile.csv fehlt oder ist leer).');
+  if (!mail) hinweise.push('Keine E-Mail-Adresse im Archiv — die trägst du selbst nach.');
+  hinweise.push('LinkedIn liefert kein Bewerbungsfoto und keinen Profiltext für den Lebenslauf. Beides bleibt, wie es war.');
+
+  const cv: CVData = {
+    ...basis,
+    personal: {
+      ...basis.personal,
+      name: personName || basis.personal.name,
+      title: feld(profil, 'Headline') || basis.personal.title,
+      location: feld(profil, 'Geo Location', 'Location') || basis.personal.location,
+      email: mail || basis.personal.email,
+      phone: telefon || basis.personal.phone,
+    },
+    experience: experience.length ? experience : basis.experience,
+    education: education.length ? education : basis.education,
+    skillGroups,
+    languages: languages.length ? languages : basis.languages,
+  };
+
+  return {
+    cv,
+    gefunden: {
+      stationen: experience.length,
+      ausbildung: education.length,
+      skills: skillItems.length,
+      sprachen: languages.length,
+    },
+    hinweise,
+  };
 }
