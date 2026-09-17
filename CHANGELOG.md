@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-09-17
+
+**The colour panel now runs to the edge of every sheet.** It hung on a table
+cell's background, so it ended where its content ended — page two showed a
+half-height block of colour with a ragged bottom edge. The file's own header
+comment said this could not be done in Word. That was true only of the road we
+had taken. The panel is now a single-colour image, anchored freely to the page
+and behind the text, carried by the header: Word repeats it on every sheet by
+itself, out to all four edges.
+
+Four typesetting faults sat in the same picture and are fixed with it:
+
+- **The name is back where the template puts it.** The export moved it into the
+  sidebar in *every* left-sidebar template, although the templates carry their
+  own flag for that (`nameInSidebar`) and most do not set it. In Bordeaux the
+  large serif line at the top of the main column became a small line under the
+  photo — pick a template, get a different one in Word.
+- **Skill groups in the main column are a list again**, not one sentence joined
+  by commas. With entries that contain commas themselves — "HubSpot (CRM, CMS,
+  forms)" — there was no telling where one ended.
+- **The sidebar list has a hanging indent** and the template's own bullet in the
+  column's accent colour, instead of a typed-in "·"; continuation lines used to
+  sit under the bullet rather than under the text.
+- **Dates no longer break in two** ("2010 –" / "2014"), and **entry heading,
+  company line and first bullet stay together** — a position could end up alone
+  at the foot of a page.
+
+**Templates without a filled panel** (`panelFill: false` — Rotterdam, Lille,
+Antwerpen and neighbours) get the hairline rule they have in the preview instead
+of a shaded cell. Nobody had noticed, because their panel colour is white.
+
+`app/scripts/docxsweep.mjs` is new: every template through both Word variants in
+one browser, looking inside the ZIP instead of rendering, for the question
+"does each template still produce a valid file?".
+
+**The HTML export stops promising what it cannot keep.** The exported file was
+labelled *print-ready*, with a print tip: margins none, background graphics on.
+But what lands on the sheet is decided by the browser's print dialog, not by the
+file. Safari largely ignores the instruction to print without margins, Firefox
+takes "None" only when you click it, and headers and footers — address, date,
+page number — are on by default everywhere and land across the template. Anyone
+holding a crooked sheet afterwards had done nothing wrong; they had been
+promised something.
+
+The interface and the banner now say it plainly: the HTML file is for viewing
+and sharing, printing is what the PDF is for. "Print anyway" unfolds the three
+settings for those who want to try, with the warning that Safari honours none of
+them reliably. The banner speaks the document's language (de/en/fr/es), and
+`<html lang>` is finally set to it — an English CV sent to London used to carry
+a German notice and `lang="de"`. The template kit's instructions say the same.
+
 ## 2026-09-16
 
 **Every export path measured, three holes found.** `app/scripts/exportcheck.mjs`

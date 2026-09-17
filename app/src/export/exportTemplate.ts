@@ -100,7 +100,7 @@ brauchst dieses Werkzeug nicht, um sie zu benutzen.
 
 | Datei | Wofür |
 |---|---|
-| \`vorlage.html\` | Das Design als eigenständige Datei, mit Platzhaltern statt Inhalt. Im Browser öffnen, „Drucken → Als PDF sichern" gibt ein fertiges A4-PDF. |
+| \`vorlage.html\` | Das Design als eigenständige Datei, mit Platzhaltern statt Inhalt. Im Browser zu lesen; zum Drucken siehe unten. |
 | \`vorlage.docx\` | Dasselbe als Word-Datei mit echten Formatvorlagen (Überschrift 1/2, Aufzählung). Öffnet in Word **und** LibreOffice. |
 | \`daten.json\` | Leeres Formular in genau der Form, die dieses Werkzeug wieder einliest. |
 | \`beispiel.json\` | Dasselbe, ausgefüllt — als Muster. |
@@ -116,9 +116,16 @@ brauchst dieses Werkzeug nicht, um sie zu benutzen.
 
 \`vorlage.html\` in einem Editor öffnen und jeden Platzhalter \`{{…}}\` durch
 deinen Text ersetzen. Die Namen entsprechen \`daten.json\`, also steht
-\`{{experience[0].role}}\` für die Position deiner ersten Station. Danach im
-Browser öffnen und als PDF drucken. Das Ergebnis ist zeichengleich mit dem,
-was das Werkzeug erzeugt — es ist dieselbe Datei.
+\`{{experience[0].role}}\` für die Position deiner ersten Station.
+
+Zum Drucken: Der Satz auf dem Blatt ist derselbe wie im Werkzeug — es ist
+dieselbe Datei. Was darum herum passiert, entscheidet aber der Druckdialog
+deines Browsers, nicht die Datei. Stelle deshalb **Ränder: Keine**,
+**Hintergrundgrafiken: An** und **Kopf- und Fußzeilen: Aus** ein, sonst
+bekommst du weiße Kanten und die Adresse der Datei quer über der Vorlage.
+Chrome und Firefox können das; Safari hält sich nicht an alle drei — dort
+bleibt ein Rand. Wer ein Blatt ohne Wenn und Aber braucht, exportiert das PDF
+aus dem Werkzeug.
 
 ## Für eine KI
 

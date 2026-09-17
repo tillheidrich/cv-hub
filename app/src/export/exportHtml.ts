@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ResumeRenderer from '../templates/ResumeRenderer';
 import CoverLetterRenderer from '../templates/CoverLetterRenderer';
 import { getTheme, resolvePairing } from '../templates/theme';
-import type { AccentId, PaperId, CVData, CoverLetterData, FontPairingId, PageFormat, SectionKey } from '../data/types';
+import type { AccentId, PaperId, CVData, CoverLetterData, FontPairingId, Lang, PageFormat, SectionKey } from '../data/types';
 import { metricsFor, type Metrics } from '../templates/metrics';
 import { getPageFormat } from '../data/pageFormats';
 import { exportFilename } from './filename';
@@ -67,8 +67,55 @@ function filenameFromHeader(header: string | null, fallback: string): string {
 }
 
 
-function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', jsonLd?: string): string {
+
+/**
+ * Das Hinweisband in der Sprache des Dokuments.
+ *
+ * Es stand bisher immer auf Deutsch — auch über einem englischen Lebenslauf,
+ * den jemand an eine Londoner Agentur weitergibt. Die Datei ist zum
+ * Weitergeben gedacht; dann muss der einzige Satz darin, der nicht vom
+ * Bewerber stammt, wenigstens in seiner Sprache stehen.
+ */
+interface TipCopy { lead: string; body: string; more: string; print: string; open: string; ok: string; over: (p: string) => string; overBody: string; }
+
+const TIP: Record<Lang, TipCopy> = {
+  de: {
+    lead: 'Diese Datei ist zum Ansehen und Weitergeben.',
+    body: ' Zum Drucken und für die Bewerbung nimm das PDF aus dem Editor — der Browserdruck legt eigene Ränder, Kopf- und Fußzeilen darüber.',
+    more: 'Wenn es doch der Browser sein soll: <kbd>Strg</kbd>/<kbd>⌘</kbd>+<kbd>P</kbd>, dann <em>Ränder: Keine</em>, <em>Hintergrundgrafiken: An</em> und <em>Kopf- und Fußzeilen: Aus</em>. Safari hält sich nicht an alle drei — dort bleiben weiße Kanten.',
+    print: 'Trotzdem drucken', open: 'Druckdialog öffnen', ok: 'Verstanden',
+    over: p => 'Seite ' + p + ' passt in diesem Browser nicht ganz aufs Blatt.',
+    overBody: ' Der Überhang wird abgeschnitten. Maßgeblich ist das PDF aus dem Editor — oder dort etwas kürzen. ',
+  },
+  en: {
+    lead: 'This file is for viewing and sharing.',
+    body: ' To print it, or to send it with an application, use the PDF from the editor — browser printing adds its own margins, headers and footers.',
+    more: 'If it has to be the browser: <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>P</kbd>, then <em>Margins: None</em>, <em>Background graphics: On</em> and <em>Headers and footers: Off</em>. Safari honours none of the three reliably — expect white edges there.',
+    print: 'Print anyway', open: 'Open print dialog', ok: 'Got it',
+    over: p => 'Page ' + p + ' does not quite fit the sheet in this browser.',
+    overBody: ' The overflow is cut off. The PDF from the editor is what counts — or shorten the text there. ',
+  },
+  fr: {
+    lead: 'Ce fichier sert à consulter et à partager.',
+    body: " Pour imprimer ou postuler, prenez le PDF de l'éditeur — l'impression par le navigateur ajoute ses propres marges, en-têtes et pieds de page.",
+    more: "Si ce doit être le navigateur : <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>P</kbd>, puis <em>Marges : aucune</em>, <em>Graphiques d'arrière-plan : activés</em> et <em>En-têtes et pieds de page : désactivés</em>. Safari ne respecte pas les trois — il y restera des bords blancs.",
+    print: 'Imprimer quand même', open: "Ouvrir l'impression", ok: 'Compris',
+    over: p => 'La page ' + p + " ne tient pas tout à fait sur la feuille dans ce navigateur.",
+    overBody: " Le dépassement est coupé. C'est le PDF de l'éditeur qui fait foi — ou raccourcissez le texte. ",
+  },
+  es: {
+    lead: 'Este archivo es para ver y compartir.',
+    body: ' Para imprimir o para la candidatura usa el PDF del editor: la impresión del navegador añade sus propios márgenes, encabezados y pies de página.',
+    more: 'Si aun así ha de ser el navegador: <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>P</kbd>, luego <em>Márgenes: ninguno</em>, <em>Gráficos de fondo: activados</em> y <em>Encabezados y pies: desactivados</em>. Safari no respeta los tres — allí quedan bordes blancos.',
+    print: 'Imprimir de todos modos', open: 'Abrir impresión', ok: 'Entendido',
+    over: p => 'La página ' + p + ' no cabe del todo en la hoja en este navegador.',
+    overBody: ' Lo que sobra se recorta. Vale el PDF del editor, o acorta el texto allí. ',
+  },
+};
+
+function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', jsonLd?: string, lang: Lang = 'de'): string {
   const fmt = getPageFormat(pageFormat);
+  const t = TIP[lang] ?? TIP.de;
   const w = `${fmt.widthMm}mm`;
   const h = `${fmt.heightMm}mm`;
 
@@ -81,7 +128,7 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
   // N-mal ausgegeben und per `translateY` verschoben; genau daher kamen die
   // Schnitte mitten im Satz.
   return `<!doctype html>
-<html lang="de">
+<html lang="${lang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -163,24 +210,42 @@ ${jsonLd || ''}
   .cv-page [data-cv-section] { break-inside: avoid; }
   .cv-page p { orphans: 2; widows: 2; }
 
-  /* Sticky print-tip banner — visible on screen, hidden when printing. */
+  /* Hinweisband — am Bildschirm sichtbar, im Druck weg.
+
+     Bis zum 17.09.2026 stand hier ein „Druck-Tipp": zwei Einstellungen, und
+     schon käme ein sauberes PDF heraus. Das war eine Zusage, die diese Datei
+     nicht halten kann. Über das Blatt entscheidet nicht sie, sondern der
+     Druckdialog des jeweiligen Browsers: Safari ignoriert die Anweisung, ohne
+     Rand zu drucken, weitgehend; Firefox nimmt „Keine" nur, wenn man es
+     anklickt; und in jedem Browser sind Kopf- und Fußzeile (Adresse, Datum, Seitenzahl) per
+     Voreinstellung an und landen quer über der Vorlage. Was dann herauskommt,
+     hat weiße Kanten, verschobene Farbflächen und fremde Zeilen darauf.
+
+     Also sagt das Band jetzt, was die Datei ist: eine Ansicht zum Weitergeben.
+     Gedruckt wird das PDF. Wer es trotzdem versuchen will, klappt die
+     Einstellungen auf — aber er weiß vorher, worauf er sich einlässt. */
   .print-tip {
     position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
     z-index: 9999; background: #1C1917; color: #F5F4F1;
-    padding: 10px 18px; font-size: 12px; font-weight: 600;
-    letter-spacing: 0.04em; box-shadow: 0 6px 24px rgba(0,0,0,0.18);
-    max-width: 92vw; line-height: 1.5; border-radius: 4px;
+    padding: 11px 18px; font-size: 12px; font-weight: 500;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+    max-width: 92vw; line-height: 1.55; border-radius: 4px;
   }
+  .print-tip strong { font-weight: 700; }
   .print-tip kbd {
     background: rgba(245,244,241,0.18); padding: 1px 6px;
     border-radius: 3px; font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px; font-weight: 500;
   }
+  .print-tip .tip-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
   .print-tip button {
-    margin-left: 14px; background: transparent; border: 1px solid rgba(245,244,241,0.4);
-    color: #F5F4F1; padding: 3px 10px; font-size: 11px; cursor: pointer;
+    background: transparent; border: 1px solid rgba(245,244,241,0.4);
+    color: #F5F4F1; padding: 4px 11px; font-size: 11px; cursor: pointer;
     font-family: inherit; border-radius: 3px;
   }
+  .print-tip button:hover { background: rgba(245,244,241,0.12); }
+  .print-tip .tip-more { display: none; margin-top: 8px; color: #D6D3D1; font-size: 11.5px; }
+  .print-tip.is-open .tip-more { display: block; }
   @media print {
     html, body { width: ${w}; height: auto; background: #ffffff !important; }
     body { display: block !important; }
@@ -205,8 +270,12 @@ ${jsonLd || ''}
 </head>
 <body>
 <div class="print-tip" id="print-tip">
-  <strong>Druck-Tipp:</strong> Strg/⌘+P → <em>Ränder: Keine</em>, <em>Hintergrundgrafiken: An</em>.
-  <button onclick="document.getElementById('print-tip').remove()">Verstanden</button>
+  <strong>${t.lead}</strong>${t.body}
+  <div class="tip-more" id="tip-more">${t.more}</div>
+  <div class="tip-actions">
+    <button id="tip-toggle" data-open="${t.open}">${t.print}</button>
+    <button onclick="document.getElementById('print-tip').remove()">${t.ok}</button>
+  </div>
 </div>
 ${body}
 <script>
@@ -229,13 +298,39 @@ function checkOverflow() {
     if (max - p.clientHeight > 2) over.push(i + 1);
   }
   if (!over.length) return;
-  tip.innerHTML = '<strong>Hinweis:</strong> In diesem Browser passt der Inhalt von Seite '
-    + over.join(', ') + ' nicht ganz auf das Blatt; der Überhang wird abgeschnitten. '
-    + 'Das PDF aus dem Editor ist maßgeblich \u2014 oder im Editor etwas kürzen.'
-    + '<button onclick="this.parentNode.remove()">Verstanden</button>';
+  /* Die Meldung ersetzt den Hinweistext, nicht das ganze Band: die Knöpfe
+     darunter behalten ihre Ereignisse, und der Satz „dafür ist das PDF da"
+     steht ohnehin schon darin. */
+  var lead = tip.querySelector('strong');
+  if (lead) lead.textContent = ${JSON.stringify(t.over('\u0000'))}.replace('\u0000', over.join(', '));
+  var first = lead && lead.nextSibling;
+  if (first) first.textContent = ' Der Überhang wird abgeschnitten. Maßgeblich ist das PDF aus dem Editor — oder dort etwas kürzen. ';
   tip.style.background = '#fef3c7';
   tip.style.color = '#7c2d12';
+  var btns = tip.querySelectorAll('button');
+  for (var k = 0; k < btns.length; k++) {
+    btns[k].style.borderColor = 'rgba(124,45,18,0.4)';
+    btns[k].style.color = '#7c2d12';
+  }
 }
+
+/* „Trotzdem drucken": erst die Einstellungen zeigen, dann den Dialog
+   öffnen. Ein Klick, der sofort druckt, erzeugt genau den Fehldruck, vor
+   dem das Band warnt. */
+function wirePrintToggle() {
+  var tip = document.getElementById('print-tip');
+  var btn = document.getElementById('tip-toggle');
+  if (!tip || !btn) return;
+  btn.addEventListener('click', function () {
+    if (!tip.classList.contains('is-open')) {
+      tip.classList.add('is-open');
+      btn.textContent = btn.getAttribute('data-open') || 'Print';
+      return;
+    }
+    window.print();
+  });
+}
+wirePrintToggle();
 /* Erst messen, wenn Schriften und Bild geladen sind: mit Ersatzschrift ist der
    Satz höher, das ergäbe einen Fehlalarm. */
 window.addEventListener('load', function () {
@@ -270,7 +365,7 @@ function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
   // 'Lebenslauf_Lena-Brandt_2026-06-01_0930' format instead of the prosey
   // 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
   const title = exportFilename('lebenslauf', data.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data));
+  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data), (data.labels?.lang ?? 'de') as Lang);
 }
 
 function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
@@ -280,7 +375,7 @@ function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: Expo
     createElement(CoverLetterRenderer, { cvData, clData, theme, pairing, metrics: cfg.metrics ?? metricsFor(0, cfg.density ?? 1), pageFormat: cfg.pageFormat }),
   );
   const title = exportFilename('anschreiben', cvData.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat);
+  return wrapDocument(title, body, cfg.pageFormat, undefined, (cvData.labels?.lang ?? 'de') as Lang);
 }
 
 /**

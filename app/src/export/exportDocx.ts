@@ -1,12 +1,19 @@
 // DOCX-Export in zwei Fassungen — beide laufen vollständig im Browser und
 // öffnen in Word wie in LibreOffice.
 //
-//   'design'  Die gewählte Vorlage, so nah wie Word es zulässt: Farbfläche der
-//             Seitenspalte als Tabellenzelle mit Hintergrund, Akzentfarben,
-//             Datumsspalte, Kopfbalken. Eine Einschränkung, die nicht zu
-//             beheben ist: Word kennt keine randabfallende Farbfläche über die
-//             ganze Blatthöhe — die Fläche endet dort, wo ihr Inhalt endet.
-//             Wer das braucht, verschickt das PDF.
+//   'design'  Die gewählte Vorlage, so nah wie Word es zulässt: randabfallende
+//             Farbfläche der Seitenspalte, Akzentfarben, Datumsspalte,
+//             Kopfbalken.
+//
+//             Bis zum 17.09.2026 stand hier, eine Farbfläche über die ganze
+//             Blatthöhe sei in Word nicht zu haben — sie endete dort, wo ihr
+//             Inhalt endete, und Seite 2 zeigte einen halbhohen Farbklotz mit
+//             ausgefranster Unterkante. Das stimmte nur für den Weg, den wir
+//             genommen hatten (Hintergrund einer Tabellenzelle). Word kennt
+//             sehr wohl frei auf der Seite verankerte Objekte: ein
+//             einfarbiges Bild in der Kopfzeile, an der Seite ausgerichtet,
+//             hinter dem Text — das wiederholt sich von selbst auf jedem
+//             Blatt und reicht bis an alle vier Kanten. Siehe `sideBandHeader`.
 //   'ats'     Einspaltig, ohne Tabellen, ohne Flächen: Word-Überschriftsstile,
 //             native Aufzählungen, linearer Textfluss. Das ist die Fassung für
 //             Portale, die die Datei maschinell auslesen.
@@ -18,6 +25,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat,
   TabStopType, BorderStyle, Table, TableRow, TableCell, TableLayoutType,
   WidthType, ShadingType, VerticalAlign, ImageRun, LineRuleType,
+  Header, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType,
 } from 'docx';
 import type { CVData, PersonalInfo } from '../data/types';
 import { getTheme } from '../templates/theme';
@@ -140,11 +148,85 @@ function photoRun(dataUrl: string, widthMm: number, heightMm: number, alignment?
   }
 }
 
+/**
+ * Eine einfarbige Fläche als PNG — der Baustein für die randabfallende
+ * Seitenspalte.
+ *
+ * Word kennt kein Rechteck, das man auf ein Blatt legt; es kennt aber ein
+ * **Bild**, das man frei auf der Seite verankert. Ein Bild aus einer einzigen
+ * Farbe ist dasselbe wie ein Rechteck, nur dass Word es versteht. Gezeichnet
+ * wird auf der Leinwand, weil der Export ohnehin im Browser läuft und der
+ * Rest der Datei (Farbumrechnung, Foto) dieselbe benutzt.
+ *
+ * Bewusst 64×288 statt 1×1: manche Betrachter glätten beim Hochskalieren, und
+ * ein einzelner Bildpunkt, der auf 297 mm gezogen wird, kann an den Kanten
+ * ausfransen. Eine Vollton-PNG dieser Größe wiegt ein paar hundert Byte.
+ */
+function solidPng(hex: string): Uint8Array | null {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 288;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = `#${hex}`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const b64 = canvas.toDataURL('image/png').split(',')[1];
+    if (!b64) return null;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
 /** mm → Twips (1/1440 Zoll). */
 const mm = (v: number) => Math.round((v / 25.4) * 1440);
 
 const PAGE_W = mm(210);
 const PAGE_H = mm(297);
+
+/**
+ * Die Seitenspalte als randabfallende Farbfläche — auf jedem Blatt.
+ *
+ * Der Träger ist die Kopfzeile, nicht der Textkörper: Was in der Kopfzeile
+ * steht, setzt Word auf jede Seite, ohne dass wir wissen müssen, wie viele es
+ * werden. Das Bild selbst fließt nicht mit (`floating`), ist an der **Seite**
+ * ausgerichtet statt am Satzspiegel und liegt hinter dem Text — es verschiebt
+ * also nichts und verdeckt nichts.
+ *
+ * `x` ist der linke Rand der Fläche in Twips: 0 bei linker Seitenspalte,
+ * Blattbreite minus Spaltenbreite bei rechter.
+ */
+function sideBandHeader(fillHex: string, x: number, widthTw: number, heightTw: number): Header | null {
+  const data = solidPng(fillHex);
+  if (!data) return null;
+  const emu = (tw: number) => Math.round(tw * 635); // 1 Twip = 635 EMU
+  const px = (tw: number) => Math.round(tw / 15); // 1440 Twip = 96 Bildpunkte
+  return new Header({
+    children: [new Paragraph({
+      /* Die Kopfzeile trägt nur das Bild. Ein leerer Absatz bekäme trotzdem
+       * die volle Standardzeilenhöhe und schöbe den Text nach unten — ein
+       * Kleinstlauf mit fester Zeilenhöhe hält sie flach. */
+      spacing: { before: 0, after: 0, line: 14, lineRule: LineRuleType.EXACT },
+      children: [new ImageRun({
+        data,
+        type: 'png',
+        transformation: { width: px(widthTw), height: px(heightTw) },
+        floating: {
+          horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, offset: emu(x) },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, offset: 0 },
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          wrap: { type: TextWrappingType.NONE },
+          behindDocument: true,
+          allowOverlap: true,
+        },
+      })],
+    })],
+  });
+}
 
 /** Welche Fassung gebaut wird — siehe Kopfkommentar. */
 export type DocxVariant = 'design' | 'ats';
@@ -177,6 +259,7 @@ function makeParts(
   rightTab: number,
   dateTab: number | null,
   headStyle: HeadStyle = 'caps-tracked',
+  bulletChar = '\u25AA',
 ) {
   const val2 = val;
   /* Sektionsüberschriften.
@@ -241,7 +324,7 @@ function makeParts(
      * Hauptspalte trägt die Überschriftsebenen, und ein Parser liest die
      * Nebenspalte ohnehin als Block. */
     const base = {
-      ...(aside ? {} : { heading: HeadingLevel.HEADING_1 }),
+      ...(aside ? {} : { heading: HeadingLevel.HEADING_1, keepNext: true }),
       spacing: { before: aside ? 220 : 260, after: st === 'serif' ? 0 : (aside ? 70 : 90) },
       children: [run],
     };
@@ -272,18 +355,27 @@ function makeParts(
   /** Dieselbe Form in der schmalen Spalte, nur kleiner gesetzt. */
   const H1Plain = (text: string) => H1For(text, true);
   const H2 = (text: string) =>
-    new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 160, after: 20 }, children: [new TextRun({ text, bold: true, color: pal.ink, font: fonts.heading })] });
+    new Paragraph({ heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { before: 160, after: 20 }, children: [new TextRun({ text, bold: true, color: pal.ink, font: fonts.heading })] });
 
   /** Eintragskopf. Zwei Formen, je nach Vorlage:
    *  — Datum rechtsbündig am Textrand (Sidebar- und Bandlayouts)
    *  — Datum in einer linken Spalte (tabellarische, DIN-nahe Vorlagen)
    *  Beides über Tabstopps, nicht über verschachtelte Tabellen: ein Tabstopp
    *  ist für jeden Parser schlicht Leerraum, eine Tabelle nicht. */
-  const H2Dated = (text: string, dates: string) => {
-    if (!dates) return H2(text);
+  const H2Dated = (text: string, dates0: string) => {
+    if (!dates0) return H2(text);
+    /* Die Datumsangabe darf nicht umbrechen.
+     *
+     * Sie hängt an einem rechten Tabstopp. Passt sie hinter einen langen Titel
+     * nicht mehr in die Zeile, schiebt Word sie weiter — und bricht sie dann
+     * mitten entzwei: „2010 –" in der einen Zeile, „2014" in der nächsten.
+     * Mit geschützten Leerzeichen rutscht sie als Ganzes in die Folgezeile,
+     * rechtsbündig, und bleibt lesbar. */
+    const dates = dates0.replace(/ /g, ' ');
     if (dateTab !== null) {
       return new Paragraph({
         heading: HeadingLevel.HEADING_2,
+        keepNext: true,
         spacing: { before: 170, after: 20 },
         indent: { left: dateTab, hanging: dateTab },
         tabStops: [{ type: TabStopType.LEFT, position: dateTab }],
@@ -296,6 +388,7 @@ function makeParts(
     }
     return new Paragraph({
       heading: HeadingLevel.HEADING_2,
+      keepNext: true,
       spacing: { before: 160, after: 20 },
       tabStops: [{ type: TabStopType.RIGHT, position: rightTab }],
       children: [
@@ -308,6 +401,7 @@ function makeParts(
    *  Vorlagen auf dieselbe Kante wie der Titel darüber. */
   const meta = (text: string, opts: { bold?: boolean } = {}) =>
     new Paragraph({
+      keepNext: true,
       spacing: { after: 40 },
       indent: dateTab !== null ? { left: dateTab } : undefined,
       children: [new TextRun({ text, color: pal.accent, bold: opts.bold, size: 20, font: fonts.body })],
@@ -354,11 +448,21 @@ function makeParts(
         if (val2(e.notes)) out.push(para(val2(e.notes), { color: pal.soft, size: 19 }));
       }
     }
+    /* Skill-Gruppen als Liste, nicht als Komma-Wurst.
+     *
+     * Hier stand `items.join(', ')`: Aus fünf Stichpunkten wurde ein Fließsatz
+     * — „HubSpot (CRM, CMS, Formulare, Reporting), Salesforce (als Anwender),
+     * GA4, Umami, …". Bei Einträgen, die selbst Kommas enthalten, ist nicht
+     * mehr zu erkennen, wo einer aufhört. In der Vorschau steht dort eine
+     * Aufzählung; in Word jetzt auch, mit demselben Zeichen wie die übrigen
+     * Listen der Vorlage. Zweispaltig wie in der Vorschau wäre eine
+     * verschachtelte Tabelle — die kostet mehr an Maschinenlesbarkeit, als
+     * die gesparten Zeilen wert sind. */
     for (const g of skills) {
       const items = (g.items || []).map(val2).filter(Boolean);
       if (!items.length) continue;
       out.push(...H1(val2(g.label) || 'Skills'));
-      out.push(para(items.join(', ')));
+      for (const it of items) out.push(bullet(it));
     }
     const add = (cv.additionalExperience || []).map(val2).filter(Boolean);
     if (add.length) { out.push(...H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
@@ -426,7 +530,22 @@ function makeParts(
       if (!items.length) continue;
       out.push(...H1Plain(val2(g.label) || 'Skills'));
       for (const it of items) {
-        out.push(new Paragraph({ spacing: { after: 30 }, children: [new TextRun({ text: `· ${it}`, color: pal.ink, size: 18, font: fonts.body })] }));
+        /* Nicht über die Word-Nummerierung: die traegt die Akzentfarbe der
+         * Hauptspalte, und die ist auf der Farbflaeche oft dieselbe wie der
+         * Untergrund — bei Bordeaux waere das Zeichen weinrot auf weinrot.
+         * Also ein gesetztes Zeichen in der Farbe DIESER Spalte.
+         *
+         * Der haengende Einzug ist der eigentliche Punkt: vorher stand das
+         * Zeichen im Text („· Wissensraeume und Dokumentation"), und die
+         * zweite Zeile ruckte unter das Zeichen statt unter den Text. */
+        out.push(new Paragraph({
+          spacing: { after: 30 },
+          indent: { left: 170, hanging: 170 },
+          children: [
+            new TextRun({ text: `${bulletChar}\u2002`, color: pal.accent, size: 16, font: fonts.body }),
+            new TextRun({ text: it, color: pal.ink, size: 18, font: fonts.body }),
+          ],
+        }));
       }
     }
     return out;
@@ -496,7 +615,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
 
   // ── Einspaltige Fassung (ATS) ────────────────────────────────────────────
   if (!hasAside && !tabular) {
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, null, headStyle);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, null, headStyle, bulletChar);
     const kids: Paragraph[] = [];
     kids.push(new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 20 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true })] }));
     if (val(p.title)) kids.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19 })] }));
@@ -521,7 +640,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
     // 02/2021" breiter als die Vorlagenschrift, und ein Datum, das in den
     // Titel läuft, ist schlimmer als vier Millimeter mehr Spalte.
     const dateTab = mm(30);
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, dateTab, headStyle);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, dateTab, headStyle, bulletChar);
     const centered = layout === 'top-centered';
     const kids: Paragraph[] = [];
     /* Befund vom 14.09.2026, zweiter Teil: Der tabellarische Zweig hatte nie
@@ -582,21 +701,42 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   const mainW = PAGE_W - sideW;
   const mainPadL = mm(11);
   const mainPadR = mm(12);
-  const Pm = makeParts(cv, { ink, soft, accent, accentInk }, fonts, mainW - mainPadL - mainPadR, null, headStyle);
+  const Pm = makeParts(cv, { ink, soft, accent, accentInk }, fonts, mainW - mainPadL - mainPadR, null, headStyle, bulletChar);
   const band = layout === 'header-band';
+  /* Seitenspalte ohne Farbfläche.
+   *
+   * Sechs Vorlagen — Rotterdam, Lille, Antwerpen und Nachbarn — setzen
+   * `panelFill: false`: Die Spalte ist dort kein Farbfeld, sondern nur eine
+   * Spalte, getrennt durch eine Haarlinie. Der Export hat das nie gelesen und
+   * die Zelle trotzdem mit `panelBg` hinterlegt; dass nichts auffiel, lag
+   * allein daran, dass `panelBg` dieser Vorlagen weiß ist. Wer die
+   * Papierfarbe wechselt, hätte den Balken gesehen, den die Vorlage gerade
+   * nicht haben will. Jetzt steht es da, wo es hingehört. */
+  const plainPanel = !band && theme?.panelFill === false;
   // Im Bandlayout trägt nur der Kopfbalken die Farbfläche; die Nebenspalte
   // darunter steht — wie in der Vorlage — auf Weiß mit feiner Trennlinie.
-  const asidePal = band
+  const asidePal = band || plainPanel
     ? { ink, soft, accent, accentInk }
     : { ink: panelInk, soft: panelSoft, accent: panelAccent, accentInk: panelBg };
-  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null, headStyle);
+  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null, headStyle, bulletChar);
 
   // Word liest Tabellen zeilenweise von links: bei linker Seitenspalte steht
   // deren Inhalt im Dokument VOR der Hauptspalte. Deshalb wandert der Name dort
   // in die Spalte — sonst begänne die Datei für jeden Parser mit „PERSÖNLICHES,
   // E-MAIL, …" und der Name käme irgendwann später. Bei rechter Seitenspalte
   // und im Bandlayout führt die Hauptspalte ohnehin.
-  const nameInAside = layout === 'sidebar-left';
+  /* Wo der Name steht, entscheidet die Vorlage — nicht der Export.
+   *
+   * Hier stand `layout === 'sidebar-left'`: In JEDER Vorlage mit linker
+   * Seitenspalte wanderte der Name in die Spalte, mit dem Argument, ein
+   * Parser lese Tabellen zeilenweise und fände ihn sonst zu spät. Nur setzen
+   * die Vorlagen selbst ein Merkmal dafür (`nameInSidebar`), und die meisten
+   * setzen es NICHT — Bordeaux etwa zeigt den Namen als große Serifenzeile
+   * oben in der Hauptspalte. Die Word-Datei zeigte ihn klein unter dem Foto.
+   * Wer eine Vorlage aussucht, bekommt damit im Word-Export eine andere.
+   * Das Parser-Argument trägt ohnehin nicht weit: die Seitenspalte führt so
+   * oder so, und für Maschinen steht die ATS-Fassung daneben. */
+  const nameInAside = !!theme?.nameInSidebar;
   const asideSkills = (cv.skillGroups || []).slice(0, 2);
   const mainSkills = (cv.skillGroups || []).slice(2);
 
@@ -613,9 +753,9 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
 
   const asideCell = new TableCell({
     width: { size: sideW, type: WidthType.DXA },
-    shading: band ? undefined : { type: ShadingType.CLEAR, color: 'auto', fill: panelBg },
-    borders: band
-      ? { ...NO_BORDERS, right: { style: BorderStyle.SINGLE, size: 4, color: toHex(theme?.colors.rule ?? '#cccccc', 'CCCCCC') } }
+    shading: band || plainPanel ? undefined : { type: ShadingType.CLEAR, color: 'auto', fill: panelBg },
+    borders: band || plainPanel
+      ? { ...NO_BORDERS, [layout === 'sidebar-right' ? 'left' : 'right']: { style: BorderStyle.SINGLE, size: 4, color: toHex(theme?.colors.rule ?? '#cccccc', 'CCCCCC') } }
       : undefined,
     margins: { top: mm(14), bottom: mm(16), left: mm(9), right: mm(9) },
     verticalAlign: VerticalAlign.TOP,
@@ -670,10 +810,25 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   }
   children.push(body);
 
+  /* Die randabfallende Farbfläche. Nur für die Seitenspalten-Layouts: Im
+   * Bandlayout ist die Fläche der Kopfbalken selbst, der endet gewollt mit
+   * seinem Inhalt. Die Zelle behält ihre Hinterlegung — sie deckt denselben
+   * Bereich in derselben Farbe ab und springt ein, falls das Bild nicht
+   * zustande kommt (Leinwand nicht verfügbar). Man sieht keine Naht. */
+  const header = band || plainPanel
+    ? null
+    : sideBandHeader(panelBg, layout === 'sidebar-right' ? PAGE_W - sideW : 0, sideW, PAGE_H);
+
   return new Document({
     ...docMeta, numbering, styles,
     sections: [{
-      properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: 0, bottom: 0, left: 0, right: 0 } } },
+      properties: {
+        page: {
+          size: { width: PAGE_W, height: PAGE_H },
+          margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 },
+        },
+      },
+      ...(header ? { headers: { default: header } } : {}),
       children,
     }],
   });

@@ -655,7 +655,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <>
             <ExportButton
               icon="globe" label="HTML"
-              sub="Anschreiben als Webseite, druckfertig"
+              sub="Anschreiben als Webseite — zum Ansehen und Weitergeben. Gedruckt wird das PDF."
               onClick={() => coverLetter && exportCoverLetterHtml(data, coverLetter, exportConfig)}
             />
             <ExportButton
@@ -676,7 +676,13 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               sub="Einspaltig, ohne Tabellen und Flächen. Für Portale, die die Datei maschinell auslesen."
               onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig.themeId, 'ats'); }}
             />
-            <ExportButton icon="globe" label="HTML" sub="Webseite, druckfertig (Ränder: Keine, Hintergrundgrafiken: An)" onClick={() => exportHtml(data, exportConfig)} />
+            {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
+                Was der Browserdruck aus einer HTML-Datei macht, entscheidet
+                sein Druckdialog, nicht die Datei: eigene Ränder, Kopf- und
+                Fußzeilen, in Safari auch dann, wenn die Datei das Gegenteil
+                verlangt. Wer danach ein schiefes Blatt in der Hand hält, hat
+                nichts falsch gemacht — ihm wurde etwas versprochen. */}
+            <ExportButton icon="globe" label="HTML" sub="Webseite zum Ansehen und Weitergeben. Gedruckt wird das PDF — der Browserdruck legt eigene Ränder und Kopfzeilen darüber." onClick={() => exportHtml(data, exportConfig)} />
             <ExportButton icon="markdown" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="braces" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
             <ExportButton icon="puzzle" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
