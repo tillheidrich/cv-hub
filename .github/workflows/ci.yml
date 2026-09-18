@@ -57,4 +57,12 @@ jobs:
         # Die Muster stehen in scripts/neutralcheck.sh, nicht hier: Sie müssen
         # auch VOR dem Push laufen können. Zwei Kopien derselben Regel laufen
         # auseinander — und dann meldet die CI etwas, das lokal nie auffiel.
+        #
+        # Anschrift, Telefonnummer und private Maildomain des ursprünglichen
+        # Betreibers stehen NICHT im Skript — sie kommen aus dem Secret
+        # NEUTRAL_EXTRA (ein ERE, Muster durch | verbunden). Fehlt es, prüft
+        # der Wächter weniger und sagt das als Warnung; bei einem Fork ist
+        # genau das richtig, im eigenen Repo gehört das Secret gesetzt.
+        env:
+          NEUTRAL_EXTRA: ${{ secrets.NEUTRAL_EXTRA }}
         run: ./scripts/neutralcheck.sh

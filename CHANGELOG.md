@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-09-18 (fix 2)
+
+**The guard was publishing the data it searched for.** Its pattern list held the
+previous operator's street, postcode, phone number and private mail domain
+verbatim — in a public repository, in a file that excludes itself from its own
+search. The lines had been in `.github/workflows/ci.yml` since CI was first added
+and travelled into `scripts/neutralcheck.sh` with yesterday's refactor.
+
+Those patterns now come from outside the repository: `NEUTRAL_EXTRA` (env or
+repository secret), `NEUTRAL_EXTRA_FILE`, or `../cv-tool/scripts/neutral-extra.txt`
+when the private twin sits beside this checkout. What remains in the script is
+only what is not secret anyway — generic credential shapes and the operator
+traces the README's demo link already makes public. Without extra patterns the
+check still runs and warns instead of failing, which is the right behaviour for a
+fork.
+
+Verified by planting a leak and confirming the guard fires through all three
+loading paths, and that it stays quiet — with a visible warning — when none is
+available. This does not unpublish anything: the patterns remain in git history
+and must be treated as disclosed.
+
 ## 2026-09-18 (fix)
 
 **The neutralization guard fired, and it was right.** Mirroring from the private

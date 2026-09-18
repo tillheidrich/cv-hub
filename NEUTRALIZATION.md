@@ -39,7 +39,36 @@ content change. And before every push:
 ```
 
 The guard itself found **one of three** leaks in this incident — it knew only the
-domain. Wordmark, company name and location have been in it since.
+domain. Wordmark and company name have been in it since.
+
+### The guard was publishing what it searched for (finding, same day)
+
+Re-reading the sharpened guard turned up a worse problem than the one it was
+written for. Its pattern list held the previous operator's **street, postcode,
+phone number and private mail domain — verbatim, in a public repository**, in a
+file that excludes itself from its own search. Those lines had been in
+`.github/workflows/ci.yml` since the first CI commit; moving them into
+`scripts/neutralcheck.sh` carried them along. A guard that publishes the data it
+is looking for cancels itself out.
+
+Those patterns now come from outside the repository:
+
+| Source | Used for |
+|--------|----------|
+| `NEUTRAL_EXTRA` (env / repository secret) | CI runs on the origin repository |
+| `NEUTRAL_EXTRA_FILE` | an explicit path |
+| `../cv-tool/scripts/neutral-extra.txt` | picked up automatically when the private twin sits next to this checkout |
+
+What stays in the script is only what is not a secret in the first place:
+generic credential shapes (`ghp_…`, `AKIA…`, private-key headers) and the
+operator traces that the README's demo link already makes public. **If no extra
+patterns are loaded the check still runs** and says so as a warning rather than
+failing — for a fork that is the correct behaviour, and a silent gap would be
+worse than a loud one.
+
+Note this does **not** unpublish anything: the patterns are in the git history of
+the public repository and must be treated as disclosed. The fix stops the leak
+from continuing, it does not undo it.
 
 ## Done
 
