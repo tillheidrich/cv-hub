@@ -31,6 +31,21 @@ export interface EditorStrings {
   // Blätter und Menü auf dem Telefon
   close: string; menu: string; chooseTemplate: string; typeAndPage: string;
   docTypeLabel: string; langLabel: string;
+  // Sprache der Oberfläche — bewusst getrennt von langLabel (Sprache des
+  // Lebenslaufs). Beide Schalter zeigen DE EN FR ES; ohne eigene Benennung
+  // hält man den einen für den anderen.
+  uiLangLabel: string;
+  // Einstellungen („Aa") — dieses Panel war bis zuletzt nur auf Deutsch
+  // beschriftet. Aufgefallen ist das erst, als die Oberfläche im Editor
+  // überhaupt umschaltbar wurde.
+  spFontSize: string; spTypeface: string; spAccent: string; spPaper: string;
+  spFormat: string; spPageCount: string; spSections: string;
+  spPaperAuto: string; spPaperOverride: string;
+  spTooLong: (zeichen: number, zeilen: number) => string;
+  spEnough: string; spPartly: string;
+  spShowAgain: string; spHide: string;
+  spAccentTemplate: string; spPaperTemplate: string;
+  spWhichPage: string;
 }
 
 export const ET: Record<UiLang, EditorStrings> = {
@@ -52,6 +67,17 @@ export const ET: Record<UiLang, EditorStrings> = {
     zoomDone: 'Fertig', tapToWrite: 'Text antippen und schreiben',
     close: 'Schließen', menu: 'Menü', chooseTemplate: 'Vorlage wählen', typeAndPage: 'Darstellung',
     docTypeLabel: 'Dokument', langLabel: 'Sprache des Lebenslaufs',
+    uiLangLabel: 'Sprache der Oberfläche',
+    spFontSize: 'Schriftgröße', spTypeface: 'Schriftart', spAccent: 'Akzentfarbe', spPaper: 'Papier',
+    spFormat: 'Format', spPageCount: 'Seitenzahl', spSections: 'Sektionen',
+    spPaperAuto: ' — das Papier, für das die Vorlage gebaut wurde.',
+    spPaperOverride: ' — überschreibt das Papier der Vorlage.',
+    spTooLong: (z, l) => `Rund ${z} Zeichen zu viel (${l} ${l === 1 ? 'Zeile' : 'Zeilen'}). Diese Stellen geben es her:`,
+    spEnough: 'Zusammen reicht das.',
+    spPartly: 'Das bringt schon einen Teil — danach neu schauen.',
+    spShowAgain: 'Wieder einblenden', spHide: 'Ausblenden',
+    spAccentTemplate: 'Vorlagenfarbe', spPaperTemplate: 'Vorlagenfarbe',
+    spWhichPage: 'Auf welcher Seite soll diese Sektion erscheinen?',
   },
   en: {
     home: 'HOME',
@@ -71,6 +97,17 @@ export const ET: Record<UiLang, EditorStrings> = {
     zoomDone: 'Done', tapToWrite: 'Tap any text to write',
     close: 'Close', menu: 'Menu', chooseTemplate: 'Choose a template', typeAndPage: 'Appearance',
     docTypeLabel: 'Document', langLabel: 'Language of the CV',
+    uiLangLabel: 'Interface language',
+    spFontSize: 'Font size', spTypeface: 'Typeface', spAccent: 'Accent colour', spPaper: 'Paper',
+    spFormat: 'Format', spPageCount: 'Pages', spSections: 'Sections',
+    spPaperAuto: ' — the paper this template was built for.',
+    spPaperOverride: " — overrides the template's paper.",
+    spTooLong: (z, l) => `About ${z} characters too many (${l} ${l === 1 ? 'line' : 'lines'}). These passages can give them up:`,
+    spEnough: 'Together that is enough.',
+    spPartly: 'That covers part of it — look again afterwards.',
+    spShowAgain: 'Show again', spHide: 'Hide',
+    spAccentTemplate: 'Template colour', spPaperTemplate: 'Template colour',
+    spWhichPage: 'Which page should this section appear on?',
   },
   fr: {
     home: 'ACCUEIL',
@@ -90,6 +127,17 @@ export const ET: Record<UiLang, EditorStrings> = {
     zoomDone: 'Terminé', tapToWrite: 'Touchez un texte pour écrire',
     close: 'Fermer', menu: 'Menu', chooseTemplate: 'Choisir un modèle', typeAndPage: 'Apparence',
     docTypeLabel: 'Document', langLabel: 'Langue du CV',
+    uiLangLabel: "Langue de l'interface",
+    spFontSize: 'Taille de police', spTypeface: 'Police', spAccent: "Couleur d'accent", spPaper: 'Papier',
+    spFormat: 'Format', spPageCount: 'Nombre de pages', spSections: 'Sections',
+    spPaperAuto: ' — le papier pour lequel ce modèle a été conçu.',
+    spPaperOverride: ' — remplace le papier du modèle.',
+    spTooLong: (z, l) => `Environ ${z} caractères de trop (${l} ${l === 1 ? 'ligne' : 'lignes'}). Ces passages peuvent les céder :`,
+    spEnough: 'Ensemble, cela suffit.',
+    spPartly: "Cela en règle une partie — à revoir ensuite.",
+    spShowAgain: 'Réafficher', spHide: 'Masquer',
+    spAccentTemplate: 'Couleur du modèle', spPaperTemplate: 'Couleur du modèle',
+    spWhichPage: 'Sur quelle page cette section doit-elle apparaître ?',
   },
   es: {
     home: 'INICIO',
@@ -109,6 +157,17 @@ export const ET: Record<UiLang, EditorStrings> = {
     zoomDone: 'Listo', tapToWrite: 'Toca un texto para escribir',
     close: 'Cerrar', menu: 'Menú', chooseTemplate: 'Elegir plantilla', typeAndPage: 'Apariencia',
     docTypeLabel: 'Documento', langLabel: 'Idioma del CV',
+    uiLangLabel: 'Idioma de la interfaz',
+    spFontSize: 'Tamaño de fuente', spTypeface: 'Tipografía', spAccent: 'Color de acento', spPaper: 'Papel',
+    spFormat: 'Formato', spPageCount: 'Número de páginas', spSections: 'Secciones',
+    spPaperAuto: ' — el papel para el que se creó esta plantilla.',
+    spPaperOverride: ' — sustituye el papel de la plantilla.',
+    spTooLong: (z, l) => `Unos ${z} caracteres de más (${l} ${l === 1 ? 'línea' : 'líneas'}). Estos pasajes pueden cederlos:`,
+    spEnough: 'Juntos bastan.',
+    spPartly: 'Eso cubre una parte — después vuelve a mirar.',
+    spShowAgain: 'Volver a mostrar', spHide: 'Ocultar',
+    spAccentTemplate: 'Color de la plantilla', spPaperTemplate: 'Color de la plantilla',
+    spWhichPage: '¿En qué página debe aparecer esta sección?',
   },
 };
 
@@ -708,3 +767,88 @@ export const EP: Record<UiLang, PanelStrings> = {
 // works fine in a .ts module (no JSX here).
 export const PanelI18nCtx = createContext<PanelStrings>(EP.de);
 export function usePanelT() { return useContext(PanelI18nCtx); }
+
+/**
+ * Texte der geteilten Ansicht (`/share/<token>`).
+ *
+ * Eigene Tabelle, weil diese Seite **niemandem aus dem Konto** gehört: Sie wird
+ * an Fremde verschickt. Zwei verschiedene Sprachquellen, und beide sind es mit
+ * Absicht:
+ *
+ *   • Der Rahmen um ein geladenes Dokument folgt der **Sprache des Dokuments**.
+ *     Wer einen englischen Lebenslauf verschickt, will nicht, dass die
+ *     Personalerin „geteilte Vorschau" liest.
+ *   • Die Fehlerseite kann das nicht — es gibt kein Dokument, dessen Sprache
+ *     man nehmen könnte. Sie folgt deshalb dem Browser des Empfängers.
+ */
+export interface ShareStrings {
+  sharedPreview: string;
+  resume: string;
+  coverLetter: string;
+  loading: string;
+  fallbackName: string;
+  revokedTitle: string; revokedBody: string;
+  expiredTitle: string; expiredBody: string;
+  missingTitle: string; missingBody: string;
+  unavailableTitle: string; unavailableBody: string;
+  buildYourOwn: string;
+}
+
+export const SHARE: Record<UiLang, ShareStrings> = {
+  de: {
+    sharedPreview: 'geteilte Vorschau',
+    resume: 'Lebenslauf', coverLetter: 'Anschreiben',
+    loading: 'Lade…', fallbackName: 'Lebenslauf',
+    revokedTitle: 'Link wurde widerrufen',
+    revokedBody: 'Wer den Link erstellt hat, hat ihn zurückgezogen. Frag nach einem neuen.',
+    expiredTitle: 'Link ist abgelaufen',
+    expiredBody: 'Dieser Link hatte ein Ablaufdatum, und das liegt zurück. Frag nach einem neuen.',
+    missingTitle: 'Link existiert nicht',
+    missingBody: 'Zu dieser Adresse gibt es nichts. Vielleicht ist beim Kopieren ein Zeichen verloren gegangen.',
+    unavailableTitle: 'Nicht verfügbar',
+    unavailableBody: 'Der Link lässt sich gerade nicht öffnen. Später noch einmal versuchen.',
+    buildYourOwn: 'Selbst einen Lebenslauf bauen →',
+  },
+  en: {
+    sharedPreview: 'shared preview',
+    resume: 'Résumé', coverLetter: 'Cover letter',
+    loading: 'Loading…', fallbackName: 'Résumé',
+    revokedTitle: 'This link was revoked',
+    revokedBody: 'Whoever created the link has withdrawn it. Ask them for a new one.',
+    expiredTitle: 'This link has expired',
+    expiredBody: 'The link had an expiry date and it has passed. Ask for a new one.',
+    missingTitle: 'No such link',
+    missingBody: 'There is nothing at this address. A character may have been lost when it was copied.',
+    unavailableTitle: 'Not available',
+    unavailableBody: 'The link cannot be opened right now. Please try again later.',
+    buildYourOwn: 'Build your own résumé →',
+  },
+  fr: {
+    sharedPreview: 'aperçu partagé',
+    resume: 'CV', coverLetter: 'Lettre de motivation',
+    loading: 'Chargement…', fallbackName: 'CV',
+    revokedTitle: 'Ce lien a été révoqué',
+    revokedBody: "La personne qui l'a créé l'a retiré. Demandez-lui-en un nouveau.",
+    expiredTitle: 'Ce lien a expiré',
+    expiredBody: "Le lien avait une date d'expiration, désormais passée. Demandez-en un nouveau.",
+    missingTitle: "Ce lien n'existe pas",
+    missingBody: "Il n'y a rien à cette adresse. Un caractère a peut-être été perdu lors de la copie.",
+    unavailableTitle: 'Indisponible',
+    unavailableBody: "Le lien ne peut pas être ouvert pour l'instant. Réessayez plus tard.",
+    buildYourOwn: 'Créer votre propre CV →',
+  },
+  es: {
+    sharedPreview: 'vista compartida',
+    resume: 'CV', coverLetter: 'Carta de presentación',
+    loading: 'Cargando…', fallbackName: 'CV',
+    revokedTitle: 'El enlace fue revocado',
+    revokedBody: 'Quien creó el enlace lo ha retirado. Pídele uno nuevo.',
+    expiredTitle: 'El enlace ha caducado',
+    expiredBody: 'El enlace tenía fecha de caducidad y ya pasó. Pide uno nuevo.',
+    missingTitle: 'El enlace no existe',
+    missingBody: 'No hay nada en esta dirección. Puede que se perdiera un carácter al copiarla.',
+    unavailableTitle: 'No disponible',
+    unavailableBody: 'El enlace no se puede abrir ahora mismo. Inténtalo más tarde.',
+    buildYourOwn: 'Crea tu propio CV →',
+  },
+};

@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import type { CVData, CoverLetterData } from '../data/types';
 import { extractExportText, type ExportRenderConfig } from '../export/exportHtml';
 import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
+import { ATS_I18N, type AtsStrings } from '../ui/i18n/ats';
+import { useUiLang } from '../ui/useUiLang';
 
 interface Props {
   data: CVData;
@@ -31,6 +33,7 @@ interface Props {
  * not "Microsoft Office". This tool makes that gap visible.
  */
 export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose }: Props) {
+  const t = ATS_I18N[useUiLang()];
   const [tab, setTab] = useState<'notepad' | 'keywords'>('notepad');
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -41,19 +44,19 @@ export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose
         <div style={{ padding: '24px 28px 18px', borderBottom: B.hairline }}>
           <div style={{ ...TYPE.micromono, color: C.gold, marginBottom: '8px' }}>ATS · APPLICANT TRACKING SYSTEM</div>
           <div style={{ fontFamily: F.display, fontSize: '30px', fontWeight: 400, color: C.ink, lineHeight: 1, letterSpacing: '-0.02em', marginBottom: '14px' }}>
-            So sieht eine Maschine deinen <em style={{ fontStyle: 'italic', color: C.gold }}>Lebenslauf.</em>
+            {t.titleLead}<em style={{ fontStyle: 'italic', color: C.gold }}>{t.titleEm}</em>
           </div>
           <div style={{ display: 'flex', gap: '24px' }}>
-            {(['notepad', 'keywords'] as const).map(t => (
-              <button key={t} type="button" onClick={() => setTab(t)}
+            {(['notepad', 'keywords'] as const).map(tt => (
+              <button key={tt} type="button" onClick={() => setTab(tt)}
                 style={{
                   padding: '4px 2px', background: 'transparent', border: 'none',
-                  borderBottom: tab === t ? `2px solid ${C.ink}` : '2px solid transparent',
+                  borderBottom: tab === tt ? `2px solid ${C.ink}` : '2px solid transparent',
                   fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-                  color: tab === t ? C.ink : C.fade,
+                  color: tab === tt ? C.ink : C.fade,
                   cursor: 'pointer', fontFamily: F.ui,
                 }}>
-                {t === 'notepad' ? 'Notepad-Vorschau' : 'Keyword-Match'}
+                {tt === 'notepad' ? t.tabNotepad : t.tabKeywords}
               </button>
             ))}
           </div>
@@ -66,7 +69,7 @@ export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose
         <div style={{ padding: '14px 28px', borderTop: B.hairline, display: 'flex', justifyContent: 'flex-end' }}>
           <button type="button" onClick={onClose}
             style={{ padding: '11px 22px', background: C.ink, color: C.paper, border: 'none', fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: F.ui }}>
-            Schließen
+            {t.close}
           </button>
         </div>
       </div>
@@ -77,6 +80,7 @@ export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose
 // ── Tab 1: Notepad-Vorschau ─────────────────────────────────────────────────
 
 function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverLetter?: CoverLetterData; exportConfig?: ExportRenderConfig }) {
+  const t = ATS_I18N[useUiLang()];
   void coverLetter; // currently CV-only — cover letter is plain prose anyway
 
   /* Der Text kommt aus dem tatsächlich exportierten Dokument. Vorher wurde er
@@ -87,16 +91,16 @@ function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverL
     if (!exportConfig) return null;
     try { return extractExportText(data, exportConfig); } catch { return null; }
   }, [data, exportConfig]);
-  const text = useMemo(() => fromExport || buildNotepadText(data), [fromExport, data]);
+  const text = useMemo(() => fromExport || buildNotepadText(data, t), [fromExport, data, t]);
 
   const issues = useMemo(() => {
     const out: string[] = [];
     const p = data.personal;
-    if (!p.email) out.push('E-Mail fehlt — ATS-Parser brauchen sie für den Pflicht-Eintrag „Kontaktdaten".');
-    if (!p.phone) out.push('Telefon fehlt — ATS-Filter werfen Bewerbungen ohne Telefonnummer oft direkt aus.');
-    if (!p.name) out.push('Name fehlt — ohne Name kein Match auf den Pflicht-Eintrag „Vor- und Nachname".');
-    if (!data.experience.some(e => !e.hidden)) out.push('Keine Berufserfahrung gepflegt.');
-    if (data.experience.some(e => e.role && !e.start)) out.push('Mindestens eine Berufserfahrung ohne Start-Datum — eine lückenhafte Chronologie fällt sowohl Menschen als auch Filtern auf.');
+    if (!p.email) out.push(t.issueEmail);
+    if (!p.phone) out.push(t.issuePhone);
+    if (!p.name) out.push(t.issueName);
+    if (!data.experience.some(e => !e.hidden)) out.push(t.issueNoExperience);
+    if (data.experience.some(e => e.role && !e.start)) out.push(t.issueMissingStart);
 
     /* Prüfungen, die erst möglich sind, weil hier das echte Exportdokument
        gelesen wird — und die die eigentlichen Exportfehler finden. */
@@ -104,36 +108,34 @@ function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverL
       const flat = fromExport.replace(/\s+/g, ' ').toLowerCase();
       const head = fromExport.split('\n').filter(Boolean).slice(0, 3).join(' ').toLowerCase();
       if (p.name && !head.includes(p.name.toLowerCase().split(' ')[0])) {
-        out.push('Der Name steht nicht am Anfang des Dokuments — im Textstrom kommt zuerst etwas anderes. Parser, die ohne Layoutanalyse arbeiten, lesen dann den falschen Namen zuerst.');
+        out.push(t.issueNameNotFirst);
       }
       if (p.email && !flat.includes(p.email.toLowerCase())) {
-        out.push('Die E-Mail-Adresse taucht im exportierten Dokument nicht als Text auf.');
+        out.push(t.issueEmailNotInExport);
       }
       for (const e of data.experience.filter(x => !x.hidden)) {
         if (e.company && !flat.includes(e.company.toLowerCase().slice(0, 12))) {
-          out.push(`„${e.company}" fehlt im exportierten Dokument — die Station wird beim Auslesen nicht gefunden.`);
+          out.push(t.issueCompanyMissing(e.company));
           break;
         }
       }
       const dupe = data.experience.filter(x => !x.hidden)[0]?.company;
       if (dupe && flat.split(dupe.toLowerCase()).length > 3) {
-        out.push(`„${dupe}" steht mehrfach im Dokument — vermutlich rendert die Vorlage eine Sektion doppelt.`);
+        out.push(t.issueCompanyDuplicate(dupe));
       }
     }
     return out;
-  }, [data, fromExport]);
+  }, [data, fromExport, t]);
 
   return (
     <>
       <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '16px', maxWidth: '60ch' }}>
-        {fromExport
-          ? 'Das ist der Text deines tatsächlich exportierten Dokuments, in genau der Reihenfolge, in der er auch im PDF steht. Fehlt hier etwas oder steht es verdreht, liegt der Fehler im Export — nicht in deinen Eingaben. Was ein bestimmtes System am Ende daraus macht, hängt von dessen Parser ab; geprüft ist hier Reihenfolge und Vollständigkeit.'
-          : 'Deine Eingaben als Fließtext. Hinweis: das ist noch nicht das exportierte Dokument — öffne den Check aus dem Export-Bereich, dann wird die echte Datei gelesen.'}
+        {fromExport ? t.notepadIntroExport : t.notepadIntroFallback}
       </div>
 
       {issues.length > 0 && (
         <div style={{ background: '#fff5f3', border: B.hairline, padding: '12px 14px', marginBottom: '16px' }}>
-          <div style={{ ...TYPE.overline, color: C.error, marginBottom: '6px' }}>{issues.length} kritische {issues.length === 1 ? 'Lücke' : 'Lücken'}</div>
+          <div style={{ ...TYPE.overline, color: C.error, marginBottom: '6px' }}>{t.issuesHeading(issues.length)}</div>
           <ul style={{ margin: 0, paddingLeft: '18px', fontFamily: F.ui, fontSize: '12.5px', color: C.pencil, lineHeight: 1.55 }}>
             {issues.map((m, i) => <li key={i}>{m}</li>)}
           </ul>
@@ -152,10 +154,10 @@ function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverL
   );
 }
 
-function buildNotepadText(data: CVData): string {
+function buildNotepadText(data: CVData, t: AtsStrings): string {
   const p = data.personal;
   const out: string[] = [];
-  out.push(p.name || '[Name fehlt]');
+  out.push(p.name || t.notepadNameMissing);
   if (p.title) out.push(p.title);
   out.push('');
   if (p.email) out.push(`Email: ${p.email}`);
@@ -240,7 +242,8 @@ function tokenize(text: string): Set<string> {
   const folded = text.toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[äöüß]/g, ch => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' } as Record<string, string>)[ch] || ch);
-  const tokens = folded.split(/[^a-z0-9+#./\-]+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
+  // Bindestrich steht am Ende der Klasse und braucht dort keine Maskierung.
+  const tokens = folded.split(/[^a-z0-9+#./-]+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
   return new Set(tokens);
 }
 
@@ -271,6 +274,7 @@ function extractCandidates(jd: string): string[] {
 }
 
 function KeywordMatchView({ data }: { data: CVData }) {
+  const t = ATS_I18N[useUiLang()];
   const [jd, setJd] = useState('');
 
   const result = useMemo<MatchResult[] | null>(() => {
@@ -339,10 +343,10 @@ function KeywordMatchView({ data }: { data: CVData }) {
   return (
     <>
       <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '12px', maxWidth: '60ch' }}>
-        Stellenanzeige reinpasten. Das Tool sucht Hard Skills, Tools und Akronyme aus der Anzeige im Lebenslauf — wortwörtlich, kein Synonym. ATS-Filter zählen wortwörtliche Matches.
+        {t.keywordIntro}
       </div>
       <textarea value={jd} onChange={e => setJd(e.target.value)} rows={8}
-        placeholder="Stellenanzeige hier einfügen (Anforderungsprofil, Aufgaben, Über uns) …"
+        placeholder={t.jdPlaceholder}
         style={{
           width: '100%', padding: '12px 14px',
           fontFamily: F.ui, fontSize: '13px', color: C.ink,
@@ -351,21 +355,21 @@ function KeywordMatchView({ data }: { data: CVData }) {
           resize: 'vertical', lineHeight: 1.55, marginBottom: '12px',
         }} />
       <div style={{ fontFamily: F.ui, fontSize: '11px', color: C.fade, marginBottom: '18px' }}>
-        {jd.length} Zeichen · empfohlen: mindestens 200
+        {t.charCount(jd.length)}
       </div>
 
       {result && (
         <>
           <div style={{ display: 'flex', gap: '20px', marginBottom: '14px' }}>
-            <Counter label="Wortwörtlich gefunden" value={hits} color={C.success} />
-            <Counter label="Im CV fehlt" value={misses} color={C.error} />
-            <Counter label="Erkannte Skills" value={result.length} color={C.gold} />
+            <Counter label={t.counterHits} value={hits} color={C.success} />
+            <Counter label={t.counterMisses} value={misses} color={C.error} />
+            <Counter label={t.counterSkills} value={result.length} color={C.gold} />
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {result.map(r => (
               <span key={r.skill}
-                title={r.foundInResume ? 'Im CV gefunden' : 'Fehlt — verbatim ergänzen, falls du es beherrschst'}
+                title={r.foundInResume ? t.chipFound : t.chipMissing}
                 style={{
                   padding: '5px 11px',
                   background: r.foundInResume ? '#f0f7f0' : '#fff5f3',
@@ -381,20 +385,18 @@ function KeywordMatchView({ data }: { data: CVData }) {
 
           {punkte && (punkte.mit.length > 0 || punkte.ohne.length > 0) && (
             <div style={{ marginTop: '26px', borderTop: B.hairline, paddingTop: '18px' }}>
-              <div style={{ ...TYPE.overline, color: C.fade, marginBottom: '4px' }}>Beitrag zu dieser Anzeige</div>
+              <div style={{ ...TYPE.overline, color: C.fade, marginBottom: '4px' }}>{t.contribOverline}</div>
               <div style={{ fontFamily: F.ui, fontSize: '12px', color: C.pencil, lineHeight: 1.55, marginBottom: '14px', maxWidth: '62ch' }}>
-                Wer kürzen muss, kürzt zuerst dort, wo für diese Anzeige nichts anschlägt — nicht chronologisch von unten.
-                Ein Punkt ohne Treffer kann trotzdem der beste im Lebenslauf sein; die Liste sagt nur, dass er für
-                <em> diese</em> Stelle nichts beiträgt.
+                {t.contribBody1}<em>{t.contribBodyEm}</em>{t.contribBody2}
               </div>
 
               <Punkteliste
-                titel={`Mit Bezug zur Anzeige (${punkte.mit.length})`}
+                titel={t.listWithMatches(punkte.mit.length)}
                 farbe={C.success}
                 eintraege={punkte.mit.map(p => ({ rolle: p.rolle, text: p.text, zusatz: p.treffer.join(' · ') }))}
               />
               <Punkteliste
-                titel={`Ohne Treffer (${punkte.ohne.length})`}
+                titel={t.listWithoutMatches(punkte.ohne.length)}
                 farbe={C.fade}
                 eintraege={punkte.ohne.map(p => ({ rolle: p.rolle, text: p.text }))}
               />

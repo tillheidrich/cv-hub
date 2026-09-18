@@ -3,6 +3,8 @@ import { saveText } from './saveFile';
 import { Icon, type IconName } from '../ui/Icon';
 import type { CVData, CoverLetterData, AppProfile, Lang } from '../data/types';
 import AtsCheckModal from '../screens/AtsCheckModal';
+import { useUiLang } from '../ui/useUiLang';
+import { EXP_I18N, type ExportStrings } from '../ui/i18n/export';
 
 // ── Lightweight structural diff for MD-import previews ─────────────────────
 interface DiffRow {
@@ -12,36 +14,36 @@ interface DiffRow {
   changed: boolean;
 }
 
-function summariseCv(cv: CVData | undefined): Record<string, string> {
+function summariseCv(cv: CVData | undefined, t: ExportStrings): Record<string, string> {
   if (!cv) return {};
   return {
-    'Name': cv.personal?.name || '',
-    'Position': cv.personal?.title || '',
-    'Ort': cv.personal?.location || '',
-    'E-Mail': cv.personal?.email || '',
-    'Telefon': cv.personal?.phone || '',
-    'Profiltext': cv.profile?.text || '',
-    'Stationen': String((cv.experience || []).length),
-    'Bullets gesamt': String((cv.experience || []).reduce((s, e) => s + (e.bullets?.length || 0), 0)),
-    'Ausbildung': String((cv.education || []).length),
-    'Skill-Gruppen': String((cv.skillGroups || []).length),
-    'Sprachen': String((cv.languages || []).length),
+    [t.fName]: cv.personal?.name || '',
+    [t.fPosition]: cv.personal?.title || '',
+    [t.fLocation]: cv.personal?.location || '',
+    [t.fEmail]: cv.personal?.email || '',
+    [t.fPhone]: cv.personal?.phone || '',
+    [t.fProfileText]: cv.profile?.text || '',
+    [t.fStations]: String((cv.experience || []).length),
+    [t.fBulletsTotal]: String((cv.experience || []).reduce((s, e) => s + (e.bullets?.length || 0), 0)),
+    [t.fEducation]: String((cv.education || []).length),
+    [t.fSkillGroups]: String((cv.skillGroups || []).length),
+    [t.fLanguages]: String((cv.languages || []).length),
   };
 }
 
-function summariseCl(cl: CoverLetterData | undefined): Record<string, string> {
+function summariseCl(cl: CoverLetterData | undefined, t: ExportStrings): Record<string, string> {
   if (!cl) return {};
   return {
-    'Empfänger-Firma': cl.company || '',
-    'Ansprechpartner': cl.contactPerson || '',
-    'Betreff': cl.subject || '',
-    'Anrede': cl.salutation || '',
-    'Einstieg': cl.intro || '',
-    'Hauptteil': cl.mainBody || '',
-    'Firmenbezug': cl.companyReference || '',
-    'Motivation': cl.motivation || '',
-    'Abschluss': cl.closing || '',
-    'Grußformel': cl.signoff || '',
+    [t.fClCompany]: cl.company || '',
+    [t.fClContact]: cl.contactPerson || '',
+    [t.fClSubject]: cl.subject || '',
+    [t.fClSalutation]: cl.salutation || '',
+    [t.fClIntro]: cl.intro || '',
+    [t.fClMain]: cl.mainBody || '',
+    [t.fClCompanyRef]: cl.companyReference || '',
+    [t.fClMotivation]: cl.motivation || '',
+    [t.fClClosing]: cl.closing || '',
+    [t.fClSignoff]: cl.signoff || '',
   };
 }
 
@@ -91,32 +93,8 @@ interface ExportPanelProps {
 // AI never needs to fetch a URL (ChatGPT's browsing tool is unreliable). URL
 // variant kept as a last-resort fallback when the content is too big to fit
 // in a query string.
-const RESUME_PROMPT_INLINE = (md: string) =>
-  `Hier ist mein Lebenslauf als Markdown:
-
-${md}
-
-Bitte:
-1. Schlage Verbesserungen vor: Bullets nach Schema „Aktion + Kontext + Ergebnis/Wirkung" schärfen, Profil prägnanter machen, deutsche Bewerbungssprache. Erfinde KEINE Zahlen.
-2. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`;
-
-const RESUME_PROMPT_URL = (mdUrl: string) =>
-  `Hier ist mein Lebenslauf als Markdown:
-${mdUrl}
-
-Bitte:
-1. Lies meinen Lebenslauf (lade die URL oben, oder bitte mich, dir den Markdown-Text direkt einzufügen, falls du keine URLs lesen kannst).
-2. Schlage Verbesserungen vor: Bullets nach Schema „Aktion + Kontext + Ergebnis/Wirkung" schärfen, Profil prägnanter machen, deutsche Bewerbungssprache. Erfinde KEINE Zahlen.
-3. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`;
-
-const COVER_LETTER_PROMPT_URL = (mdUrl: string) =>
-  `Hier ist mein Anschreiben als Markdown:
-${mdUrl}
-
-Bitte:
-1. Lies mein Anschreiben (lade die URL oben, oder bitte mich, den Text direkt einzufügen).
-2. Verbessere Aufbau, Sprache und Tonalität für eine deutsche Bewerbung. Halte die Sektionen Einstieg / Hauptteil / Firmenbezug / Motivation / Abschluss. Erfinde KEINE Fakten.
-3. Gib mir am Ende die VOLLSTÄNDIGE, überarbeitete Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 zurückimportieren kann.`;
+// Der Wortlaut selbst steht in EXP_I18N (`promptResumeInline`,
+// `promptResumeUrl`, `promptCoverUrl`).
 
 const s = {
   panel: {
@@ -143,7 +121,7 @@ const s = {
   },
   subtitle: {
     fontSize: '11px',
-    color: '#999',
+    color: '#767676',
     fontFamily: "'Inter', sans-serif",
   },
   section: {
@@ -154,7 +132,7 @@ const s = {
     fontWeight: 700,
     letterSpacing: '1.2px',
     textTransform: 'uppercase' as const,
-    color: '#bbb',
+    color: '#767676',
     marginBottom: '8px',
     fontFamily: "'Inter', sans-serif",
   },
@@ -192,7 +170,7 @@ const s = {
   },
   btnSub: {
     fontSize: '10.5px',
-    color: '#aaa',
+    color: '#767676',
     fontFamily: "'Inter', sans-serif",
   },
   statusBox: {
@@ -260,6 +238,7 @@ function ExportButton({
   icon, label, sub, onClick, busy,
 }: { icon: IconName; label: string; sub: string; onClick: () => void; busy?: boolean }) {
   const [hover, setHover] = useState(false);
+  const t = EXP_I18N[useUiLang()];
   return (
     <button
       type="button"
@@ -272,7 +251,7 @@ function ExportButton({
       <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : <Icon name={icon} />}</div>
       <div>
         <div style={s.btnLabel}>{label}</div>
-        <div style={s.btnSub}>{busy ? 'Wird gebaut…' : sub}</div>
+        <div style={s.btnSub}>{busy ? t.buttonBusy : sub}</div>
       </div>
     </button>
   );
@@ -294,6 +273,7 @@ function asShares(d: unknown): ShareLink[] {
 }
 
 export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock }: ExportPanelProps) {
+  const t = EXP_I18N[useUiLang()];
   const [pdfHover, setPdfHover] = useState(false);
   const [pdfState, setPdfState] = useState<'idle' | 'busy' | 'error'>('idle');
   const [kitBusy, setKitBusy] = useState(false);
@@ -332,19 +312,19 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   async function buildPrompt(): Promise<string> {
     if (isCover) {
       // No public CL share URL — keep the URL-fallback variant for now.
-      return COVER_LETTER_PROMPT_URL(resumeMdUrl);
+      return t.promptCoverUrl(resumeMdUrl);
     }
-    if (!resumeId) return RESUME_PROMPT_URL(resumeMdUrl);
+    if (!resumeId) return t.promptResumeUrl(resumeMdUrl);
     try {
       const r = await fetch(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}.md`, { credentials: 'include' });
       if (!r.ok) throw new Error(`fetch ${r.status}`);
       const md = await r.text();
-      const inline = RESUME_PROMPT_INLINE(md);
+      const inline = t.promptResumeInline(md);
       // 12KB safety threshold for the encoded URL query string.
       if (encodeURIComponent(inline).length < 12000) return inline;
-      return RESUME_PROMPT_URL(resumeMdUrl);
+      return t.promptResumeUrl(resumeMdUrl);
     } catch {
-      return RESUME_PROMPT_URL(resumeMdUrl);
+      return t.promptResumeUrl(resumeMdUrl);
     }
   }
 
@@ -381,13 +361,13 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         : await api.importMarkdown(resumeId, importText, true);
       const lang = (data as CVData & { settings?: { lang?: string } }).labels?.lang || 'de';
       const beforeMap = isCover
-        ? summariseCl(coverLetter)
-        : summariseCv(data);
+        ? summariseCl(coverLetter, t)
+        : summariseCv(data, t);
       const afterMap = isCover
-        ? summariseCl(r.payload.coverLetters?.[lang as 'de' | 'en'])
-        : summariseCv(r.payload.data?.[lang as 'de' | 'en']);
+        ? summariseCl(r.payload.coverLetters?.[lang as 'de' | 'en'], t)
+        : summariseCv(r.payload.data?.[lang as 'de' | 'en'], t);
       setImportDiff(diffMaps(beforeMap, afterMap));
-    } catch (e) { setImportErr(e instanceof Error ? e.message : 'Vorschau fehlgeschlagen.'); }
+    } catch (e) { setImportErr(e instanceof Error ? e.message : t.previewFailed); }
     finally { setImportBusy(false); }
   }
 
@@ -401,7 +381,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         : await api.importMarkdown(resumeId, importText);
       onProfileUpdated?.(r.payload);
       setImportOpen(false); setImportText(''); setImportDiff(null);
-    } catch (e) { setImportErr(e instanceof Error ? e.message : 'Import fehlgeschlagen.'); }
+    } catch (e) { setImportErr(e instanceof Error ? e.message : t.importFailed); }
     finally { setImportBusy(false); }
   }
 
@@ -425,16 +405,16 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     setMdNote(null);
     try {
       const r = await fetch(pfad, { credentials: 'include' });
-      if (!r.ok) throw new Error(`Der Server antwortete mit ${r.status}.`);
+      if (!r.ok) throw new Error(t.serverAnswered(r.status));
       const text = await r.text();
-      if (!text.trimStart().startsWith('---')) throw new Error('Die Antwort war kein Markdown.');
+      if (!text.trimStart().startsWith('---')) throw new Error(t.notMarkdown);
       saveText(exportFilename(art, data.personal.name, 'md'), text, 'text/markdown');
     } catch (e) {
       if (art === 'lebenslauf') {
         exportMarkdown(data);
-        setMdNote(`${e instanceof Error ? e.message : 'Der Server war nicht erreichbar.'} Heruntergeladen wurde die lokale Fassung — sie enthält denselben Text, aber keine Server-Einstellungen.`);
+        setMdNote(t.mdFallbackNote(e instanceof Error ? e.message : t.serverUnreachable));
       } else {
-        setMdNote(`${e instanceof Error ? e.message : 'Der Server war nicht erreichbar.'} Das Anschreiben konnte nicht geladen werden.`);
+        setMdNote(t.clLoadFailed(e instanceof Error ? e.message : t.serverUnreachable));
       }
     }
   }
@@ -453,12 +433,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     reader.onload = async () => {
       try {
         const parsed = JSON.parse(String(reader.result || ''));
-        if (!parsed || typeof parsed !== 'object') throw new Error('Ungültiges JSON');
+        if (!parsed || typeof parsed !== 'object') throw new Error(t.invalidJson);
 
         // JSON Resume (jsonresume.org) or a bare CVData → map into the active
         // language's data via the replace callback (autosaves like any edit).
         if (isJsonResume(parsed) || (parsed.personal && parsed.experience !== undefined)) {
-          if (!onReplaceData) throw new Error('Import hier nicht verfügbar.');
+          if (!onReplaceData) throw new Error(t.importUnavailable);
           const cv = isJsonResume(parsed) ? jsonResumeToCv(parsed, data) : (parsed as CVData);
           onReplaceData(cv);
           setImportOpen(false);
@@ -467,7 +447,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
 
         // Full profile export from this tool.
         if (parsed.id && parsed.data) {
-          if (!resumeId) throw new Error('Kein aktives Profil — bitte erst eines anlegen.');
+          if (!resumeId) throw new Error(t.noActiveProfile);
           const updated: AppProfile = { ...parsed, id: resumeId || parsed.id };
           await api.saveResumeWithSnapshot(updated, 'json_import');
           onProfileUpdated?.(updated);
@@ -475,11 +455,11 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           return;
         }
 
-        throw new Error('JSON-Format unbekannt. Erwartet: Profil-Export, JSON Resume oder CVData.');
-      } catch (e) { setImportErr(e instanceof Error ? e.message : 'JSON-Import fehlgeschlagen.'); }
+        throw new Error(t.unknownJsonFormat);
+      } catch (e) { setImportErr(e instanceof Error ? e.message : t.jsonImportFailed); }
       finally { setImportBusy(false); }
     };
-    reader.onerror = () => { setImportBusy(false); setImportErr('Datei konnte nicht gelesen werden.'); };
+    reader.onerror = () => { setImportBusy(false); setImportErr(t.fileUnreadable); };
     reader.readAsText(file);
   }
 
@@ -498,7 +478,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     try {
       setLiBefund(await importLinkedIn(file, data));
     } catch (e) {
-      setLiErr(e instanceof Error ? e.message : 'Das Archiv ließ sich nicht lesen.');
+      setLiErr(e instanceof Error ? e.message : t.liReadError);
     } finally { setLiBusy(false); }
   }
 
@@ -533,7 +513,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     try {
       await api.createShare(resumeId, { includeCoverLetter: newShareIncludeCl });
       setShares(asShares(await api.listShares(resumeId)));
-    } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
+    } catch (e) { setShareErr(e instanceof Error ? e.message : t.shareError); }
     finally { setShareBusy(false); }
   }
   async function toggleShareCl(token: string, next: boolean) {
@@ -541,27 +521,27 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     try {
       await api.updateShare(token, { includeCoverLetter: next });
       setShares(asShares(await api.listShares(resumeId)));
-    } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
+    } catch (e) { setShareErr(e instanceof Error ? e.message : t.shareError); }
   }
   async function revokeShare(token: string) {
     if (!resumeId) return;
-    if (!window.confirm('Diesen Link widerrufen? Verbindungen damit funktionieren danach nicht mehr.')) return;
+    if (!window.confirm(t.shareRevokeConfirm)) return;
     try {
       await api.revokeShare(token);
       setShares(asShares(await api.listShares(resumeId)));
-    } catch (e) { setShareErr(e instanceof Error ? e.message : 'Fehler.'); }
+    } catch (e) { setShareErr(e instanceof Error ? e.message : t.shareError); }
   }
   function relativeTime(iso: string | null): string {
-    if (!iso) return 'noch nie';
+    if (!iso) return t.never;
     const diff = Date.now() - new Date(iso).getTime();
     const m = Math.floor(diff / 60000);
-    if (m < 1) return 'gerade eben';
-    if (m < 60) return `vor ${m} min`;
+    if (m < 1) return t.justNow;
+    if (m < 60) return t.minutesAgo(m);
     const h = Math.floor(m / 60);
-    if (h < 24) return `vor ${h} h`;
+    if (h < 24) return t.hoursAgo(h);
     const d = Math.floor(h / 24);
-    if (d < 30) return `vor ${d} Tagen`;
-    return new Date(iso).toLocaleDateString('de-DE');
+    if (d < 30) return t.daysAgo(d);
+    return new Date(iso).toLocaleDateString(t.locale);
   }
   function shareUrlOf(token: string) {
     return `${window.location.origin}/share/${token}`;
@@ -585,12 +565,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       const res = await exportPdf({ data, cfg: exportConfig, isCover, coverLetter });
       track('export_pdf', { docType: isCover ? 'cover' : 'resume', demo: !!demoMode });
       setPdfState('idle');
-      setPdfDone(`PDF fertig · ${res.pages === 1 ? 'eine Seite' : `${res.pages} Seiten`} · ${Math.max(1, Math.round(res.bytes / 1024))} KB. Liegt in deinem Download-Ordner.`);
+      setPdfDone(t.pdfReady(res.pages, Math.max(1, Math.round(res.bytes / 1024))));
       setTimeout(() => setPdfDone(null), 9000);
     } catch (err) {
       if (demoMode && onPrint) { setPdfState('idle'); onPrint(); return; }
       setPdfState('error');
-      setPdfErrMsg(err instanceof Error ? err.message : 'PDF-Dienst-Fehler');
+      setPdfErrMsg(err instanceof Error ? err.message : t.pdfServiceError);
       setTimeout(() => setPdfState('idle'), 8000);
     }
   }
@@ -603,34 +583,34 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   return (
     <div style={s.panel}>
       <div style={s.header}>
-        <div style={s.title}>{docWord} exportieren</div>
-        <div style={s.subtitle}>Wähle Format und starte den Download</div>
+        <div style={s.title}>{t.exportTitle(docWord)}</div>
+        <div style={s.subtitle}>{t.exportSubtitle}</div>
       </div>
 
       {/* Status: what's being exported */}
       <div style={s.statusBox}>
-        <div style={s.statusLabel}>Wird exportiert</div>
+        <div style={s.statusLabel}>{t.statusLabel}</div>
         <div style={s.statusRow}>
-          <span>Dokument</span>
+          <span>{t.statusDocument}</span>
           <span style={s.statusValue}>{docWord}</span>
         </div>
         <div style={s.statusRow}>
-          <span>Name</span>
+          <span>{t.statusName}</span>
           <span style={s.statusValue}>{data.personal.name}</span>
         </div>
         <div style={s.statusRow}>
-          <span>Sprache</span>
+          <span>{t.statusLanguage}</span>
           <span style={s.statusValue}>{langLabel}</span>
         </div>
         <div style={s.statusRow}>
-          <span>Vorlage</span>
+          <span>{t.statusTemplate}</span>
           <span style={s.statusValue}>{template}</span>
         </div>
       </div>
 
       {/* PDF — primary action: direct download, no print dialog */}
       <div style={s.section}>
-        <div style={s.sectionLabel}>Als PDF speichern</div>
+        <div style={s.sectionLabel}>{t.pdfSection}</div>
         <button
           type="button"
           onClick={handlePdf}
@@ -640,15 +620,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           style={{ ...s.pdfBtn, margin: 0, width: '100%', background: pdfState === 'busy' ? '#555' : (pdfHover ? '#333' : 'oklch(0.21 0.021 264)'), cursor: pdfState === 'busy' ? 'default' : 'pointer' }}
         >
           {pdfState === 'busy'
-            ? <><span className="cv-spin" aria-hidden /> PDF wird gebaut …</>
-            : <><span>↓</span> {docWord} als PDF herunterladen</>}
+            ? <><span className="cv-spin" aria-hidden /> {t.pdfBuilding}</>
+            : <><span>↓</span> {t.pdfDownload(docWord)}</>}
         </button>
         <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'oklch(0.50 0.014 264)', lineHeight: 1.55, marginTop: '8px', fontFamily: "'Inter', sans-serif" }}>
           {pdfState === 'error'
-            ? `PDF-Export fehlgeschlagen: ${pdfErrMsg || 'unbekannter Fehler'}`
+            ? t.pdfFailed(pdfErrMsg || t.pdfUnknownError)
             : pdfDone
               ? pdfDone
-              : 'Ein Klick, ein Download. Vektor-PDF, echte Textebene, kein Druckdialog — die Seiten sind exakt die aus der Vorschau.'}
+              : t.pdfHint}
         </div>
 
         <button
@@ -663,14 +643,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
         >
-          <span>ATS prüfen — so sieht eine Maschine deinen CV</span>
+          <span>{t.atsCheck}</span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 400 }}>→</span>
         </button>
       </div>
 
       <div style={s.divider} />
       <div style={s.section}>
-        <div style={s.sectionLabel}>Weitere Formate</div>
+        <div style={s.sectionLabel}>{t.moreFormats}</div>
         {mdNote && (
           <div style={{ background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', color: '#8a6500', marginBottom: '8px', lineHeight: 1.5, fontFamily: "'Inter', sans-serif" }}>
             {mdNote}
@@ -680,12 +660,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <>
             <ExportButton
               icon="globe" label="HTML"
-              sub="Anschreiben als Webseite — zum Ansehen und Weitergeben. Gedruckt wird das PDF."
+              sub={t.clHtmlSub}
               onClick={() => coverLetter && exportCoverLetterHtml(data, coverLetter, exportConfig)}
             />
             <ExportButton
               icon="markdown" label="Markdown"
-              sub="Anschreiben als .md (rund-um-bearbeitbar)"
+              sub={t.clMdSub}
               onClick={downloadCoverLetterMd}
             />
           </>
@@ -693,12 +673,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <>
             <ExportButton
               icon="file-text" label="Word (.docx)"
-              sub="Die gewählte Vorlage in Word — Farbfläche, Akzentfarben, Datumsspalte. Öffnet in Word und LibreOffice."
+              sub={t.docxSub}
               onClick={() => { track('export_docx'); exportDocx(data, exportConfig.themeId, 'design'); }}
             />
             <ExportButton
-              icon="file-text" label="Word — ATS-Fassung"
-              sub="Einspaltig, ohne Tabellen und Flächen. Für Portale, die die Datei maschinell auslesen."
+              icon="file-text" label={t.docxAtsLabel}
+              sub={t.docxAtsSub}
               onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig.themeId, 'ats'); }}
             />
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
@@ -707,15 +687,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                 Fußzeilen, in Safari auch dann, wenn die Datei das Gegenteil
                 verlangt. Wer danach ein schiefes Blatt in der Hand hält, hat
                 nichts falsch gemacht — ihm wurde etwas versprochen. */}
-            <ExportButton icon="globe" label="HTML" sub="Webseite zum Ansehen und Weitergeben. Gedruckt wird das PDF — der Browserdruck legt eigene Ränder und Kopfzeilen darüber." onClick={() => exportHtml(data, exportConfig)} />
-            <ExportButton icon="markdown" label="Markdown" sub="Server-Bridge-Format (rund-um-bearbeitbar)" onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
-            <ExportButton icon="braces" label="JSON" sub="Vollständige Daten, re-importierbar" onClick={() => exportJson(data)} />
-            <ExportButton icon="puzzle" label="JSON Resume" sub="Standard-Schema (jsonresume.org) — portabel, re-importierbar" onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
+            <ExportButton icon="globe" label="HTML" sub={t.htmlSub} onClick={() => exportHtml(data, exportConfig)} />
+            <ExportButton icon="markdown" label="Markdown" sub={t.mdSub} onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
+            <ExportButton icon="braces" label="JSON" sub={t.jsonSub} onClick={() => exportJson(data)} />
+            <ExportButton icon="puzzle" label="JSON Resume" sub={t.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
             {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus
                 alles, was ein Mensch oder eine KI braucht, um es zu füllen. */}
             <ExportButton
-              icon="package" label="Vorlage ohne Daten"
-              sub="ZIP mit HTML, Word, leerem JSON und Anleitung — das Design zum Selbstbefüllen, auch ohne dieses Werkzeug."
+              icon="package" label={t.kitLabel}
+              sub={t.kitSub}
               busy={kitBusy}
               onClick={async () => {
                 track('export_template_kit');
@@ -738,15 +718,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         <>
           <div style={s.divider} />
           <div style={s.section}>
-            <div style={s.sectionLabel}>Lebenslauf mitbringen</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
-              Du musst nichts abtippen, was du schon hast. Das Archiv wird im Browser gelesen — es geht an keinen Server, auch nicht an unseren.
+            <div style={s.sectionLabel}>{t.bringCv}</div>
+            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+              {t.bringCvHint}
             </div>
             <label style={{ ...s.exportBtn(false), cursor: liBusy ? 'wait' : 'pointer' }}>
               <div style={s.btnIcon}><Icon name="upload" /></div>
               <div>
-                <div style={s.btnLabel}>{liBusy ? 'Lese Archiv…' : 'LinkedIn-Datenexport'}</div>
-                <div style={s.btnSub}>ZIP aus „Eine Kopie deiner Daten erhalten" — Stationen, Ausbildung, Skills, Sprachen</div>
+                <div style={s.btnLabel}>{liBusy ? t.liReading : t.liLabel}</div>
+                <div style={s.btnSub}>{t.liSub}</div>
               </div>
               <input type="file" accept=".zip,.csv" hidden disabled={liBusy}
                 onChange={e => { const f = e.target.files?.[0]; if (f) linkedinLesen(f); e.target.value = ''; }} />
@@ -756,7 +736,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                  kein Tippziel, sondern ein Glücksspiel. Der Prüflauf hat
                  genau das gemeldet, als dieser Link neu war. */
               style={{ display: 'flex', alignItems: 'center', minHeight: '32px', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', fontFamily: "'Inter', sans-serif", textDecoration: 'none' }}>
-              Archiv bei LinkedIn anfordern →
+              {t.liRequest}
             </a>
             {liErr && (
               <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '11.5px', color: '#c0392b', marginTop: '8px', fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }}>{liErr}</div>
@@ -770,17 +750,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         <>
           <div style={s.divider} />
           <div style={s.section}>
-            <div style={s.sectionLabel}>Importieren</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
-              {isCover
-                ? 'Anschreiben aus Markdown wiederherstellen oder ein komplettes Profil-JSON zurückspielen.'
-                : 'Lebenslauf aus Markdown wiederherstellen oder ein komplettes Profil-JSON zurückspielen.'}
+            <div style={s.sectionLabel}>{t.importSection}</div>
+            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+              {isCover ? t.importHintCl : t.importHintCv}
             </div>
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
               <div style={s.btnIcon}><Icon name="upload" /></div>
               <div>
-                <div style={s.btnLabel}>Markdown hochladen</div>
-                <div style={s.btnSub}>{isCover ? 'Importiert ins Anschreiben' : 'Importiert in den Lebenslauf'}</div>
+                <div style={s.btnLabel}>{t.uploadMd}</div>
+                <div style={s.btnSub}>{isCover ? t.uploadMdSubCl : t.uploadMdSubCv}</div>
               </div>
               <input type="file" accept=".md,text/markdown,text/plain" hidden onChange={e => { const f = e.target.files?.[0]; if (f) pickMdFile(f); e.target.value = ''; }} />
             </label>
@@ -788,15 +766,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               style={{ ...s.exportBtn(false), cursor: 'pointer', width: '100%', textAlign: 'left' }}>
               <div style={s.btnIcon}><Icon name="markdown" /></div>
               <div>
-                <div style={s.btnLabel}>Leere Markdown-Vorlage</div>
-                <div style={s.btnSub}>Zum Ausfüllen in deinem Editor (LM-Studio, VS Code, Obsidian …)</div>
+                <div style={s.btnLabel}>{t.emptyMdTemplate}</div>
+                <div style={s.btnSub}>{t.emptyMdTemplateSub}</div>
               </div>
             </button>
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
               <div style={s.btnIcon}><Icon name="braces" /></div>
               <div>
-                <div style={s.btnLabel}>JSON hochladen</div>
-                <div style={s.btnSub}>Vollständiger Profil-Import (überschreibt aktiv)</div>
+                <div style={s.btnLabel}>{t.uploadJson}</div>
+                <div style={s.btnSub}>{t.uploadJsonSub}</div>
               </div>
               <input type="file" accept=".json,application/json" hidden onChange={e => { const f = e.target.files?.[0]; if (f) importJsonFile(f); e.target.value = ''; }} />
             </label>
@@ -808,15 +786,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         <>
           <div style={s.divider} />
           <div style={s.section}>
-            <div style={s.sectionLabel}>Demo-Modus</div>
-            <div style={{ fontSize: '11.5px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.55, marginBottom: '12px', fontFamily: "'Inter', sans-serif" }}>
-              Du arbeitest gerade ohne Konto. HTML, Markdown und JSON-Export funktionieren lokal. <strong>Sharelinks und KI-Bearbeitung</strong> brauchen eine Registrierung.
+            <div style={s.sectionLabel}>{t.demoSection}</div>
+            <div style={{ fontSize: '11.5px', color: 'oklch(0.42 0.017 264)', lineHeight: 1.55, marginBottom: '12px', fontFamily: "'Inter', sans-serif" }}>
+              {t.demoBefore}<strong>{t.demoStrong}</strong>{t.demoAfter}
             </div>
             <button
               type="button"
               onClick={() => onDemoBlock?.('Sharelinks')}
               style={{ width: '100%', padding: '11px', background: 'oklch(0.21 0.021 264)', color: 'oklch(0.985 0.003 264)', border: 'none', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-              Konto anlegen →
+              {t.demoCta}
             </button>
           </div>
         </>
@@ -826,25 +804,25 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         <>
           <div style={s.divider} />
           <div style={s.section}>
-            <div style={s.sectionLabel}>Link teilen</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
-              Read-only Link, kein Login nötig — auch für Anschreiben (das Anschreiben wird im Link mit angezeigt).
+            <div style={s.sectionLabel}>{t.shareSection}</div>
+            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+              {t.shareHint}
             </div>
             {shareErr && (
               <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '7px 10px', fontSize: '11.5px', color: '#c0392b', marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
                 {shareErr}
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif", marginBottom: '8px', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", marginBottom: '8px', cursor: 'pointer' }}>
               <input type="checkbox" checked={newShareIncludeCl} onChange={e => setNewShareIncludeCl(e.target.checked)} />
-              Anschreiben im Link sichtbar machen
+              {t.shareIncludeCl}
             </label>
             <button type="button" onClick={createShare} disabled={shareBusy}
               style={{ width: '100%', padding: '9px', background: shareBusy ? '#666' : 'oklch(0.55 0.216 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: shareBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif", marginBottom: '10px' }}>
-              {shareBusy ? '…' : '+ Neuen Link erzeugen'}
+              {shareBusy ? '…' : t.shareCreate}
             </button>
             {shares.length === 0 && (
-              <div style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>Noch keine Links.</div>
+              <div style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>{t.shareNone}</div>
             )}
             {shares.map(sh => (
               <div key={sh.token} style={{ background: 'oklch(0.985 0.003 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', opacity: sh.revoked ? 0.5 : 1 }}>
@@ -855,35 +833,35 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                   {!sh.revoked && (
                     <button type="button" onClick={() => copyLink(sh.token)}
                       style={{ background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', color: '#666', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                      {justCopied === sh.token ? '✓ kopiert' : 'Link kopieren'}
+                      {justCopied === sh.token ? t.shareCopied : t.shareCopy}
                     </button>
                   )}
                   {!sh.revoked && (
                     <button type="button" onClick={() => revokeShare(sh.token)}
                       style={{ background: 'transparent', border: 'none', color: '#c0392b', fontSize: '10.5px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                      Widerrufen
+                      {t.shareRevoke}
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: "'Inter', sans-serif", marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
-                  <span><b style={{ color: 'oklch(0.44 0.017 264)', fontWeight: 600 }}>{sh.view_count}</b> Aufrufe</span>
-                  <span>Letzter Zugriff: {relativeTime(sh.last_viewed_at)}</span>
-                  {sh.expires_at && <span>läuft ab {new Date(sh.expires_at).toLocaleDateString('de-DE')}</span>}
+                <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                  <span><b style={{ color: 'oklch(0.42 0.017 264)', fontWeight: 600 }}>{sh.view_count}</b> {t.shareViewsSuffix}</span>
+                  <span>{t.shareLastAccess(relativeTime(sh.last_viewed_at))}</span>
+                  {sh.expires_at && <span>{t.shareExpires(new Date(sh.expires_at).toLocaleDateString(t.locale))}</span>}
                 </div>
                 {sh.recent_views && sh.recent_views.length > 0 && (
                   <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     {sh.recent_views.slice(0, 5).map((v, i) => (
-                      <span key={i} title={`${v.variant} · ${new Date(v.viewed_at).toLocaleString('de-DE')}`}
-                        style={{ background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '4px', padding: '1px 6px', fontSize: '9.5px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif" }}>
-                        {v.ua_summary || 'Unbekannt'}{v.variant === 'md' ? ' · md' : ''}
+                      <span key={i} title={`${v.variant} · ${new Date(v.viewed_at).toLocaleString(t.locale)}`}
+                        style={{ background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '4px', padding: '1px 6px', fontSize: '9.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif" }}>
+                        {v.ua_summary || t.shareUnknownUa}{v.variant === 'md' ? ' · md' : ''}
                       </span>
                     ))}
                   </div>
                 )}
                 {!sh.revoked && (
-                  <label style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif", cursor: 'pointer' }}>
+                  <label style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", cursor: 'pointer' }}>
                     <input type="checkbox" checked={sh.include_cover_letter} onChange={e => toggleShareCl(sh.token, e.target.checked)} />
-                    Anschreiben sichtbar
+                    {t.shareClVisible}
                   </label>
                 )}
               </div>
@@ -893,44 +871,44 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           {/* ── Mit KI bearbeiten ─────────────────────────────────────────── */}
           <div style={s.divider} />
           <div style={s.section}>
-            <div style={s.sectionLabel}>Mit KI bearbeiten</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={s.sectionLabel}>{t.aiSection}</div>
+            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
               {isCover
-                ? 'Lade dein Anschreiben oben als .md herunter und füge den Text in deinen KI-Chat ein. Die KI gibt dir eine überarbeitete Version zurück, die du hier importierst.'
-                : 'Gib der KI deinen Lebenslauf als Markdown-Link. Sie kann ihn lesen und dir eine korrigierte Markdown-Version zurückgeben, die du hier importierst.'}
+                ? t.aiHintCl
+                : t.aiHintCv}
             </div>
             {!isCover && !activeShare ? (
-              <div style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic', marginBottom: '10px' }}>
-                Erzeuge oben erst einen Link.
+              <div style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic', marginBottom: '10px' }}>
+                {t.aiNeedLink}
               </div>
             ) : !isCover && activeShare ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
                 <button type="button" onClick={copyPrompt}
                   style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif", textAlign: 'left' }}>
                   {justCopied === 'prompt'
-                ? <><Icon name="check" size={13} /> Prompt kopiert</>
-                : <><Icon name="clipboard" size={13} /> Prompt + Markdown-Link kopieren</>}
+                ? <><Icon name="check" size={13} /> {t.aiPromptCopied}</>
+                : <><Icon name="clipboard" size={13} /> {t.aiCopyPrompt}</>}
                 </button>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button type="button" onClick={() => openInAi('chatgpt')}
                     style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                    In ChatGPT öffnen ↗
+                    {t.aiOpenChatgpt}
                   </button>
                   <button type="button" onClick={() => openInAi('claude')}
                     style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                    In Claude öffnen ↗
+                    {t.aiOpenClaude}
                   </button>
                   <button type="button" onClick={() => openInAi('gemini')}
-                    title="Prompt wird in die Zwischenablage kopiert, Gemini öffnet sich — drüben mit Cmd/Strg+V einfügen."
+                    title={t.aiGeminiTitle}
                     style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                    In Gemini öffnen ↗
+                    {t.aiOpenGemini}
                   </button>
                 </div>
               </div>
             ) : null}
             <button type="button" onClick={() => { setImportOpen(true); setImportErr(null); setImportDiff(null); }}
-              style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'oklch(0.44 0.017 264)', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-              ↑ Korrigierte Markdown-Version importieren
+              style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'oklch(0.42 0.017 264)', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+              {t.aiImportBack}
             </button>
           </div>
         </>
@@ -943,14 +921,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         <div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => setLiBefund(null)}>
           <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '620px', maxHeight: '88vh', overflowY: 'auto', padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', marginBottom: '4px' }}>
-              Das steht im Archiv
+              {t.liModalTitle}
             </div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
-              Noch ist nichts ersetzt. Übernimmst du, werden Stationen, Ausbildung, Skills und Sprachen durch die aus dem Archiv ersetzt.
+            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
+              {t.liModalBody}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '14px' }}>
-              {([['Stationen', liBefund.gefunden.stationen], ['Ausbildung', liBefund.gefunden.ausbildung], ['Skills', liBefund.gefunden.skills], ['Sprachen', liBefund.gefunden.sprachen]] as [string, number][]).map(([l, n]) => (
+              {([[t.countStations, liBefund.gefunden.stationen], [t.countEducation, liBefund.gefunden.ausbildung], [t.countSkills, liBefund.gefunden.skills], [t.countLanguages, liBefund.gefunden.sprachen]] as [string, number][]).map(([l, n]) => (
                 <div key={l} style={{ background: n > 0 ? '#f0f7f0' : 'oklch(0.97 0.003 264)', borderRadius: '8px', padding: '10px 12px', fontFamily: "'Inter', sans-serif" }}>
                   <div style={{ fontSize: '20px', fontWeight: 700, color: n > 0 ? '#2c5e2c' : 'oklch(0.62 0.012 264)', lineHeight: 1.1 }}>{n}</div>
                   <div style={{ fontSize: '10.5px', color: 'oklch(0.50 0.014 264)', marginTop: '2px' }}>{l}</div>
@@ -959,15 +937,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             </div>
 
             <div style={{ border: '1px solid oklch(0.91 0.005 264)', borderRadius: '9px', overflow: 'hidden', marginBottom: '14px' }}>
-              {diffMaps(summariseCv(data), summariseCv(liBefund.cv)).filter(r => r.changed).length === 0 ? (
-                <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>
-                  Keine Unterschiede zum aktuellen Stand — der Import wäre folgenlos.
+              {diffMaps(summariseCv(data, t), summariseCv(liBefund.cv, t)).filter(r => r.changed).length === 0 ? (
+                <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>
+                  {t.liNoDiff}
                 </div>
-              ) : diffMaps(summariseCv(data), summariseCv(liBefund.cv)).filter(r => r.changed).map((row, i) => (
+              ) : diffMaps(summariseCv(data, t), summariseCv(liBefund.cv, t)).filter(r => r.changed).map((row, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '8px', padding: '9px 12px', borderTop: i ? '1px solid oklch(0.96 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: "'Inter', sans-serif" }}>
-                  <div style={{ fontWeight: 700, color: 'oklch(0.44 0.017 264)' }}>{row.label}</div>
-                  <div style={{ background: '#fff0f0', padding: '5px 7px', borderRadius: '5px', color: '#7a2c2c', wordBreak: 'break-word' }}>{row.before || <em style={{ color: '#c0a0a0' }}>leer</em>}</div>
-                  <div style={{ background: '#f0f7f0', padding: '5px 7px', borderRadius: '5px', color: '#2c5e2c', wordBreak: 'break-word' }}>{row.after || <em style={{ color: '#a0c0a0' }}>leer</em>}</div>
+                  <div style={{ fontWeight: 700, color: 'oklch(0.42 0.017 264)' }}>{row.label}</div>
+                  <div style={{ background: '#fff0f0', padding: '5px 7px', borderRadius: '5px', color: '#7a2c2c', wordBreak: 'break-word' }}>{row.before || <em style={{ color: '#c0a0a0' }}>{t.valueEmpty}</em>}</div>
+                  <div style={{ background: '#f0f7f0', padding: '5px 7px', borderRadius: '5px', color: '#2c5e2c', wordBreak: 'break-word' }}>{row.after || <em style={{ color: '#a0c0a0' }}>{t.valueEmpty}</em>}</div>
                 </div>
               ))}
             </div>
@@ -980,9 +958,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setLiBefund(null)}
-                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>Abbrechen</button>
+                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>{t.cancel}</button>
               <button type="button" onClick={linkedinUebernehmen}
-                style={{ padding: '8px 16px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Übernehmen</button>
+                style={{ padding: '8px 16px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>{t.apply}</button>
             </div>
           </div>
         </div>
@@ -993,37 +971,37 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '720px', maxHeight: '88vh', overflowY: 'auto', padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', marginBottom: '4px' }}>
               {importDiff
-                ? 'Änderungen prüfen vor Übernahme'
-                : isCover ? 'Anschreiben aus Markdown importieren' : 'Lebenslauf aus Markdown importieren'}
+                ? t.modalReviewTitle
+                : isCover ? t.modalImportClTitle : t.modalImportCvTitle}
             </div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
               {importDiff
-                ? 'Folgende Felder ändern sich. Aktuelle Fassung wird vor der Übernahme automatisch als Version gesichert.'
+                ? t.modalReviewBody
                 : isCover
-                ? 'Füge das überarbeitete Anschreiben-Markdown ein (mit oder ohne Frontmatter). Vorhandenes Anschreiben wird überschrieben.'
-                : 'Füge die von der KI zurückgegebene Markdown-Version ein. Inklusive des Frontmatter-Blocks (---). Foto bleibt erhalten. Du siehst vor der Übernahme eine Diff-Vorschau.'}
+                ? t.modalImportClBody
+                : t.modalImportCvBody}
             </div>
 
             {!importDiff && (
-              <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="---&#10;template: hamburg&#10;lang: de&#10;---&#10;&#10;# Dein Name&#10;**Berufsbezeichnung**&#10;&#10;## Kontakt&#10;…" rows={14}
+              <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder={t.mdPlaceholder} rows={14}
                 style={{ width: '100%', padding: '10px 12px', fontSize: '12px', fontFamily: 'monospace', color: 'oklch(0.21 0.021 264)', background: '#ffffff', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, marginBottom: '10px' }} />
             )}
 
             {importDiff && (
               <div style={{ marginBottom: '14px', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', overflow: 'hidden' }}>
                 {importDiff.filter(r => r.changed).length === 0 && (
-                  <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>Keine Änderungen erkannt — Import wäre folgenlos.</div>
+                  <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>{t.noChanges}</div>
                 )}
                 {importDiff.filter(r => r.changed).map((row, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr', gap: '8px', padding: '10px 12px', borderBottom: i < importDiff.filter(r => r.changed).length - 1 ? '1px solid oklch(0.985 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: "'Inter', sans-serif", background: 'oklch(0.985 0.003 264)' }}>
-                    <div style={{ fontWeight: 700, color: 'oklch(0.44 0.017 264)', alignSelf: 'start' }}>{row.label}</div>
+                    <div style={{ fontWeight: 700, color: 'oklch(0.42 0.017 264)', alignSelf: 'start' }}>{row.label}</div>
                     <div style={{ background: '#fff0f0', padding: '6px 8px', borderRadius: '5px', color: '#7a2c2c', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a86060', marginBottom: '2px' }}>vorher</div>
-                      {row.before || <em style={{ color: '#c0a0a0' }}>leer</em>}
+                      <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a86060', marginBottom: '2px' }}>{t.valueBefore}</div>
+                      {row.before || <em style={{ color: '#c0a0a0' }}>{t.valueEmpty}</em>}
                     </div>
                     <div style={{ background: '#f0f7f0', padding: '6px 8px', borderRadius: '5px', color: '#2c5e2c', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '1px', color: '#608060', marginBottom: '2px' }}>nachher</div>
-                      {row.after || <em style={{ color: '#a0c0a0' }}>leer</em>}
+                      <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '1px', color: '#608060', marginBottom: '2px' }}>{t.valueAfter}</div>
+                      {row.after || <em style={{ color: '#a0c0a0' }}>{t.valueEmpty}</em>}
                     </div>
                   </div>
                 ))}
@@ -1036,21 +1014,21 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               {importDiff ? (
                 <button type="button" onClick={() => setImportDiff(null)} disabled={importBusy}
                   style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>
-                  ← Zurück
+                  {t.back}
                 </button>
               ) : <div />}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" onClick={() => { setImportOpen(false); setImportDiff(null); setImportText(''); }} disabled={importBusy}
-                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>Abbrechen</button>
+                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>{t.cancel}</button>
                 {!importDiff ? (
                   <button type="button" onClick={previewImport} disabled={importBusy || importText.trim().length < 10}
                     style={{ padding: '8px 16px', background: importBusy ? '#666' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                    {importBusy ? 'Prüfe…' : 'Vorschau anzeigen'}
+                    {importBusy ? t.checking : t.showPreview}
                   </button>
                 ) : (
                   <button type="button" onClick={confirmImport} disabled={importBusy}
                     style={{ padding: '8px 16px', background: importBusy ? '#666' : '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                    {importBusy ? 'Übernehme…' : 'Änderungen übernehmen'}
+                    {importBusy ? t.applying : t.applyChanges}
                   </button>
                 )}
               </div>

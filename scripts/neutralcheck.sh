@@ -37,8 +37,14 @@ HART='ghp_[A-Za-z0-9]{20,}|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|-----BEGIN [
 # keine fremde Marke in seiner Fußzeile. Diese Muster stehen offen hier, weil
 # die Demo-Adresse ohnehin in der README steht — und weil genau dieser Teil des
 # Wächters den Vorfall vom 18.09. gefunden hat.
+# Groß-/Kleinschreibung wird ignoriert. Grund: In `ui/i18n.ts` stand die
+# Wortmarke als HEIDRICH/CV — in Großbuchstaben, weil es eine Fußzeile war.
+# Das Muster suchte `Heidrich/cv` und ging daran vorbei. Eine Spur hört nicht
+# auf, eine Spur zu sein, weil sie in Versalien gesetzt ist.
 WEICH='heidrich-digital|Heidrich/cv|Heidrich Digital'
-ERLAUBT='https://cv\.heidrich-digital\.de'
+# Zwei Adressen dürfen stehen: die Demo-Instanz in der README und die eigene
+# Klon-Adresse dieses Repositorys — beides ist keine Spur, sondern Zweck.
+ERLAUBT='https://cv\.heidrich-digital\.de|github\.com/[A-Za-z0-9_.-]+/cv-hub'
 
 AUS=(-- . ':!package-lock.json' ':!**/package-lock.json' ':!.github/workflows/ci.yml' ':!scripts/neutralcheck.sh')
 
@@ -54,7 +60,7 @@ fi
 FEHLER=0
 
 if [ -n "$EXTRA" ]; then
-  if git grep -nIE "$EXTRA" "${AUS[@]}"; then
+  if git grep -nIEi "$EXTRA" "${AUS[@]}"; then
     echo "::error::Personenbezogene Daten des ursprünglichen Betreibers gefunden."
     FEHLER=1
   fi
@@ -69,7 +75,7 @@ if git grep -nIE "$HART" "${AUS[@]}"; then
   FEHLER=1
 fi
 
-REST=$(git grep -nIE "$WEICH" "${AUS[@]}" | grep -vE "$ERLAUBT" || true)
+REST=$(git grep -nIEi "$WEICH" "${AUS[@]}" | grep -viE "$ERLAUBT" || true)
 if [ -n "$REST" ]; then
   echo "$REST"
   echo "::error::Spur des ursprünglichen Betreibers außerhalb des Demo-Links in der README."

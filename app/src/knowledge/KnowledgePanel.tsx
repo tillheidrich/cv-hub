@@ -390,7 +390,7 @@ function KnowledgeCard({ card }: { card: Card }) {
                   fontWeight: 600,
                   letterSpacing: '0.8px',
                   textTransform: 'uppercase',
-                  color: 'oklch(0.60 0.012 264)',
+                  color: 'oklch(0.52 0.012 264)',
                   background: 'oklch(0.985 0.003 264)',
                   padding: '2px 6px',
                   borderRadius: '4px',
@@ -536,7 +536,7 @@ export default function KnowledgePanel() {
         {/* Category description */}
         <div style={{
           fontSize: '11px',
-          color: 'oklch(0.60 0.012 264)',
+          color: 'oklch(0.52 0.012 264)',
           fontFamily: UI_FONT,
           marginBottom: '12px',
           lineHeight: 1.5,

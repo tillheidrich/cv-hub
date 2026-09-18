@@ -1,5 +1,77 @@
 # Changelog
 
+## 2026-09-18 — the interface really does speak four languages now
+
+The switch was missing inside the editor. Once you were in, you were stuck with
+whatever language the browser had guessed — and because nobody could switch
+there, nobody ever saw that half the application had no translation at all.
+
+**The switch.** A menu in the top bar, not a second row of four buttons: right
+next to it there is already a DE EN FR ES row for the language of the **CV**.
+Two identical-looking rows would be a trap — you hit the wrong one and find out
+from the finished document. The existing row now carries its purpose in
+`aria-label` and `title`. On the phone both groups sit in the menu sheet, each
+under its own heading.
+
+**What that made visible, and what is now translated:** export, home, the ATS
+check, account and connected apps, versions, password reset, the appearance
+panel, and the shared view. Around 340 strings in four languages, one table per
+area under `app/src/ui/i18n/`. Areas pull the language themselves through
+`useUiLang()` instead of threading it through a dozen signatures; `setUiLang`
+announces the change as an event so an open panel switches immediately.
+
+The **shared view** follows the language of the *document*, not the sender's:
+if you send an English résumé, you do not want the recipient to read "geteilte
+Vorschau". Its error page cannot do that — there is no document — so it follows
+the recipient's browser. It now tells the cases apart by HTTP status instead of
+by German words in the server message (`ApiError` carries the status).
+
+**Found along the way, fixed with it**
+
+- `ui/i18n.ts` held a full landing translation nothing read any more — claiming
+  "twenty templates" (there are 26) and "MIT-LICENSED" (this project is
+  AGPL-3.0). Invisibly wrong is the worst kind of wrong. What renders remains.
+- The same stale number was on the home screen, twice.
+- Escape did not close the template list; the invisible layer over the page
+  stayed and killed half the top bar. The settings panel had that exact bug
+  fixed once before — this one had not.
+- Dates were pinned to `de-DE` in four places.
+- The delete-account confirmation word was hard-coded `LÖSCHEN`, untypable in a
+  French interface.
+
+**Accessibility: axe-core over five views.** 0 violations, down from 51. Fixed:
+contrast (the `pencil` and `fade` colour tokens, plus greys `#999`/`#aaa`/
+`#bbb`), three selects with no accessible name, and a dimmed button that pushed
+its own text below the threshold. The old `fade` token carried the comment
+"~4.5:1 (WCAG AA)" — measured against the background it is actually used on, it
+was 3.58:1.
+
+One exemption, stated rather than hidden: `target-size` on the running text
+inside the document (29×). WCAG 2.2 exempts exactly this in 2.5.8 — text whose
+words had to be 24px tall would not be text. `scripts/axecheck.mjs` counts the
+exemptions and prints them.
+
+**Verified** with two new scripts: `langcheck.mjs` switches the language in a
+browser and checks that the areas follow; `axecheck.mjs` measures against the
+real background. Plus contrastcheck (1404 combinations), inlinecheck,
+onepagecheck (26/26), linkedincheck, docxsweep, and mobilecheck at 320 / 360 /
+390 / 430 px.
+
+Still German, and named as such: the backend and its e-mails, export filenames,
+the knowledge panel and the admin panel.
+
+## 2026-09-18 (fix 3) — the guard was case-sensitive
+
+Making the operator-trace patterns case-insensitive immediately turned up two
+leaks that had been live in this repository: the home screen rendered the
+original operator's wordmark in its top bar and company name in its footer, in
+capitals. The patterns were written in the wordmark's mixed-case spelling and
+walked straight past the all-caps one. A trace does not stop being a trace
+because it is set in capitals.
+
+Both now read from `APP_NAME`. The allow-list also covers this repository's own
+clone URL, which is a purpose rather than a trace.
+
 ## 2026-09-18 (fix 2)
 
 **The guard was publishing the data it searched for.** Its pattern list held the

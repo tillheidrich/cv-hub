@@ -11,7 +11,7 @@ const SURFACE = 'oklch(100% 0 0)';
 const RAISED = 'oklch(96.6% 0.004 264)';
 const INK = 'oklch(21% 0.021 264)';
 const SOFT = 'oklch(44% 0.017 264)';
-const FAINT = 'oklch(60% 0.012 264)';
+const FAINT = 'oklch(52% 0.012 264)';
 const GHOST = 'oklch(72% 0.008 264)';
 const LINE = 'oklch(91% 0.005 264)';
 const LINE_STRONG = 'oklch(85% 0.008 264)';
@@ -344,8 +344,8 @@ export default function AuthScreen({
       </main>
 
       <div style={{ borderTop: `1px solid ${LINE}`, padding: '14px clamp(20px, 5vw, 44px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ ...micromono, color: GHOST }}>CV-Hub</div>
-        <div style={{ ...micromono, color: GHOST }}>{APP_NAME}</div>
+        <div style={{ ...micromono, color: FAINT }}>CV-Hub</div>
+        <div style={{ ...micromono, color: FAINT }}>{APP_NAME}</div>
       </div>
     </div>
   );

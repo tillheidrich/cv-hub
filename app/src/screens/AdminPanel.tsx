@@ -93,9 +93,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         <div style={{ padding: '22px 26px 16px', borderBottom: '1px solid oklch(0.91 0.005 264)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontFamily: SERIF, fontSize: '21px', fontWeight: 700, color: 'oklch(0.21 0.021 264)' }}>Admin</div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Einladungscodes & Nutzerverwaltung</div>
+            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>Einladungscodes & Nutzerverwaltung</div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Schließen" style={{ background: 'none', border: 'none', fontSize: '22px', color: '#aaa', cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button type="button" onClick={onClose} aria-label="Schließen" style={{ background: 'none', border: 'none', fontSize: '22px', color: '#767676', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
 
         <div style={{ padding: '20px 26px' }}>
@@ -108,7 +108,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               ] as [string, number, boolean?][]).map(([l, v, hot]) => (
                 <div key={l} style={{ ...card, textAlign: 'center', ...(hot ? { borderColor: 'oklch(0.55 0.216 264)', background: 'oklch(0.97 0.02 264)' } : {}) }}>
                   <div style={{ fontSize: '22px', fontWeight: 700, color: hot ? 'oklch(0.55 0.216 264)' : 'oklch(0.21 0.021 264)', fontFamily: SERIF }}>{v}</div>
-                  <div style={{ fontSize: '10px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>{l}</div>
+                  <div style={{ fontSize: '10px', color: 'oklch(0.52 0.012 264)', fontFamily: UI, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>{l}</div>
                 </div>
               ))}
             </div>
@@ -131,19 +131,19 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               <div style={{ ...card, marginBottom: '14px' }}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
                   <div>
-                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.44 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Nutzungen</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.42 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Nutzungen</div>
                     <input type="number" min={1} max={500} value={maxUses} onChange={e => setMaxUses(Math.max(1, parseInt(e.target.value, 10) || 1))}
                       style={{ width: '64px', padding: '7px 9px', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontFamily: UI, fontSize: '13px' }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.44 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Notiz (optional)</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.42 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Notiz (optional)</div>
                     <input value={note} onChange={e => setNote(e.target.value)} placeholder="z. B. für Anna"
                       style={{ width: '100%', padding: '7px 9px', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontFamily: UI, fontSize: '13px', boxSizing: 'border-box' }} />
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginTop: '10px' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.44 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Direkt per E-Mail einladen (optional)</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'oklch(0.42 0.017 264)', marginBottom: '4px', fontFamily: UI }}>Direkt per E-Mail einladen (optional)</div>
                     <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="name@example.com — sendet die Einladung automatisch"
                       style={{ width: '100%', padding: '7px 9px', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontFamily: UI, fontSize: '13px', boxSizing: 'border-box' }} />
                   </div>
@@ -157,11 +157,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                 )}
               </div>
 
-              {invites.length === 0 && <div style={{ fontSize: '12.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Noch keine Codes.</div>}
+              {invites.length === 0 && <div style={{ fontSize: '12.5px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>Noch keine Codes.</div>}
               {invites.map(c => (
                 <div key={c.code} style={{ ...card, display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', opacity: c.revoked || c.uses >= c.max_uses ? 0.5 : 1 }}>
                   <code style={{ fontFamily: 'monospace', fontSize: '14px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', letterSpacing: '1px' }}>{c.code}</code>
-                  <span style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>
+                  <span style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>
                     {c.uses}/{c.max_uses} genutzt{c.note ? ` · ${c.note}` : ''}{c.revoked ? ' · widerrufen' : ''}
                   </span>
                   <div style={{ flex: 1 }} />
@@ -182,7 +182,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                 <div key={u.id} style={{ ...card, display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', opacity: u.disabled ? 0.55 : 1 }}>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', fontFamily: UI }}>{u.username}</span>
                   {u.role === 'admin' && <span style={{ fontSize: '9.5px', fontWeight: 700, background: 'oklch(0.55 0.216 264)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontFamily: UI }}>ADMIN</span>}
-                  <span style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>{u.resume_count} CVs</span>
+                  <span style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>{u.resume_count} CVs</span>
                   <div style={{ flex: 1 }} />
                   {u.role !== 'admin' && (
                     <>
@@ -203,7 +203,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
           {tab === 'requests' && (
             <>
-              {requests.length === 0 && <div style={{ fontSize: '12.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Keine Anfragen.</div>}
+              {requests.length === 0 && <div style={{ fontSize: '12.5px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>Keine Anfragen.</div>}
               {requests.map(r => {
                 const decided = r.status !== 'pending';
                 return (
@@ -223,8 +223,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                         </>
                       )}
                     </div>
-                    {r.message && <div style={{ fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', fontFamily: UI, marginTop: '8px', whiteSpace: 'pre-wrap' }}>{r.message}</div>}
-                    <div style={{ fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: UI, marginTop: '6px' }}>
+                    {r.message && <div style={{ fontSize: '12.5px', color: 'oklch(0.42 0.017 264)', fontFamily: UI, marginTop: '8px', whiteSpace: 'pre-wrap' }}>{r.message}</div>}
+                    <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', fontFamily: UI, marginTop: '6px' }}>
                       {new Date(r.created_at).toLocaleString('de-DE')}{r.ua_summary ? ` · ${r.ua_summary}` : ''}
                     </div>
                   </div>

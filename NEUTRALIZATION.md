@@ -41,6 +41,18 @@ content change. And before every push:
 The guard itself found **one of three** leaks in this incident — it knew only the
 domain. Wordmark and company name have been in it since.
 
+### The guard was case-sensitive (finding, same day)
+
+Turning the soft patterns case-insensitive found two leaks that were live in
+this repository: `app/src/screens/HomeScreen.tsx` rendered the original
+operator's wordmark in the top bar and their company name in the footer, both in
+capitals. The patterns were written in the wordmark's mixed-case spelling and
+went straight past the all-caps one.
+
+**Rule from this:** a trace does not stop being a trace because it is set in
+capitals. `git grep` for operator traces runs with `-i`. The credential patterns
+stay case-sensitive, because their shape is part of what identifies them.
+
 ### The guard was publishing what it searched for (finding, same day)
 
 Re-reading the sharpened guard turned up a worse problem than the one it was

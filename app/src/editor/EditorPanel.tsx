@@ -59,7 +59,7 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
   padding: '11px 15px',
   fontSize: '12.5px',
   fontWeight: active ? 700 : 500,
-  color: active ? 'oklch(0.21 0.021 264)' : '#7c7468',
+  color: active ? 'oklch(0.21 0.021 264)' : '#6b6458',
   background: active ? '#fff' : 'none',
   border: 'none',
   borderBottom: active ? '2px solid oklch(0.55 0.216 264)' : '2px solid transparent',
@@ -89,7 +89,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.4px',
   textTransform: 'none',
-  color: 'oklch(0.44 0.017 264)',
+  color: 'oklch(0.42 0.017 264)',
   marginBottom: '5px',
   fontFamily: editorFont,
 };
@@ -135,7 +135,7 @@ const addBtn: React.CSSProperties = {
   fontFamily: editorFont,
 };
 
-const iconBtn = (color = '#aaa'): React.CSSProperties => ({
+const iconBtn = (color = '#767676'): React.CSSProperties => ({
   padding: '4px 6px',
   background: 'none',
   border: 'none',
@@ -256,7 +256,7 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
     <div style={fieldGroup}>
       <label style={labelStyle}>{t.socialsLabel}</label>
       {initialSocials.length === 0 && (
-        <div style={{ fontSize: '11px', color: '#bbb', fontStyle: 'italic', marginBottom: '8px', fontFamily: editorFont }}>
+        <div style={{ fontSize: '11px', color: '#767676', fontStyle: 'italic', marginBottom: '8px', fontFamily: editorFont }}>
           {t.socialsEmpty}
         </div>
       )}
@@ -267,6 +267,9 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
             <select
               value={s.platform}
               onChange={e => update(i, { platform: e.target.value as SocialPlatform })}
+              /* Ohne Namen meldet axe „critical": Ein Screenreader liest nur den
+                 aktuellen Wert vor, nicht wonach gefragt wird. */
+              aria-label={t.socialsLabel}
               style={{ ...inputStyle, width: '120px', fontSize: '12px' }}
             >
               {(Object.keys(SOCIAL_PLATFORMS) as SocialPlatform[]).map(k => (
@@ -284,7 +287,7 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
               type="button"
               onClick={() => remove(i)}
               title={t.remove}
-              style={{ padding: '6px 8px', background: 'transparent', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '6px', fontSize: '14px', color: '#bbb', cursor: 'pointer' }}
+              style={{ padding: '6px 8px', background: 'transparent', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '6px', fontSize: '14px', color: '#767676', cursor: 'pointer' }}
             >
               ×
             </button>
@@ -464,7 +467,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           </div>
         ) : (
           <>
-            <div style={{ fontSize: '10px', color: '#bbb', marginTop: '5px', fontFamily: editorFont }}>
+            <div style={{ fontSize: '10px', color: '#767676', marginTop: '5px', fontFamily: editorFont }}>
               {t.photoUrlHint}
             </div>
             <input
@@ -495,7 +498,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
 
       <div style={sectionDivider} />
 
-      <div style={{ fontSize: '11px', color: 'oklch(0.60 0.012 264)', marginBottom: '12px', lineHeight: 1.5, fontFamily: editorFont, background: 'oklch(0.968 0.004 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '9px 11px' }}>
+      <div style={{ fontSize: '11px', color: 'oklch(0.52 0.012 264)', marginBottom: '12px', lineHeight: 1.5, fontFamily: editorFont, background: 'oklch(0.968 0.004 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '9px 11px' }}>
         {t.personalNote}
       </div>
 
@@ -510,7 +513,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           Vorlagenwechsel unauffindbar. */}
       <div style={{ borderTop: '1px solid oklch(0.91 0.005 264)', margin: '18px 0 14px' }} />
       <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.50 0.014 264)', marginBottom: '8px', fontFamily: editorFont }}>{t.signatureHead}</div>
-      <div style={{ fontSize: '11px', color: '#999', marginBottom: '12px', lineHeight: 1.6, fontFamily: editorFont }}>{t.signatureHint}</div>
+      <div style={{ fontSize: '11px', color: '#767676', marginBottom: '12px', lineHeight: 1.6, fontFamily: editorFont }}>{t.signatureHint}</div>
       <Field label={t.signatureCity} value={p.signatureCity ?? ''} onChange={v => updatePersonal('signatureCity', v)} />
       <Field label={t.signatureDate} value={p.signatureDate ?? ''} onChange={v => updatePersonal('signatureDate', v)} />
     </div>
@@ -523,7 +526,7 @@ function ProfileEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
   const t = usePanelT();
   return (
     <div style={scrollArea}>
-      <div style={{ fontSize: '11px', color: '#999', marginBottom: '14px', lineHeight: 1.6, fontFamily: editorFont }}>
+      <div style={{ fontSize: '11px', color: '#767676', marginBottom: '14px', lineHeight: 1.6, fontFamily: editorFont }}>
         {t.profileHint}
       </div>
       <TextareaField
@@ -578,7 +581,7 @@ function LabelsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData) 
 
   return (
     <div style={scrollArea}>
-      <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px', lineHeight: 1.6, fontFamily: editorFont }}>
+      <div style={{ fontSize: '11px', color: '#767676', marginBottom: '4px', lineHeight: 1.6, fontFamily: editorFont }}>
         {t.labelsIntro}
       </div>
 
@@ -658,7 +661,7 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
   return (
     <div style={scrollArea}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-        <span style={{ fontSize: '11px', color: '#999', fontFamily: editorFont }}>
+        <span style={{ fontSize: '11px', color: '#767676', fontFamily: editorFont }}>
           {data.experience.length} {t.entries} · ⋮⋮ {t.dragToReorder}
         </span>
         <button type="button" onClick={addExp} style={addBtn}>{t.add}</button>
@@ -784,7 +787,7 @@ function EducationEditor({ data, onChange }: { data: CVData; onChange: (d: CVDat
   return (
     <div style={scrollArea}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-        <span style={{ fontSize: '11px', color: '#999', fontFamily: editorFont }}>
+        <span style={{ fontSize: '11px', color: '#767676', fontFamily: editorFont }}>
           {data.education.length} {t.entries}
         </span>
         <button type="button" onClick={addEdu} style={addBtn}>{t.add}</button>
@@ -854,7 +857,7 @@ function SkillsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData) 
 
   return (
     <div style={scrollArea}>
-      <div style={{ fontSize: '11px', color: '#999', marginBottom: '14px', lineHeight: 1.5, fontFamily: editorFont }}>
+      <div style={{ fontSize: '11px', color: '#767676', marginBottom: '14px', lineHeight: 1.5, fontFamily: editorFont }}>
         {t.skillsHint}
       </div>
 
@@ -1166,7 +1169,7 @@ function DotRatingInput({ value, onChange }: { value?: number; onChange: (v: num
         <button
           type="button"
           onClick={() => onChange(undefined)}
-          style={{ marginLeft: '6px', padding: '2px 8px', background: 'transparent', border: 'none', fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', cursor: 'pointer', fontFamily: editorFont }}
+          style={{ marginLeft: '6px', padding: '2px 8px', background: 'transparent', border: 'none', fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', cursor: 'pointer', fontFamily: editorFont }}
           title={t.scaleClearTitle}
         >
           {t.auto}

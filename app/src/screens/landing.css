@@ -17,8 +17,8 @@
 .lp-root {
   /* ── Ink hierarchy ─────────────────────────────────────────── */
   --ink:          oklch(21% 0.021 264);
-  --ink-soft:     oklch(44% 0.017 264);
-  --ink-faint:    oklch(60% 0.012 264);
+  --ink-soft:     oklch(42% 0.017 264);
+  --ink-faint:    oklch(52% 0.012 264);
   --ink-ghost:    oklch(72% 0.008 264);
 
   /* ── Surfaces ──────────────────────────────────────────────── */
@@ -391,7 +391,10 @@
 .lp-footer-marks .lp-fm { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
 .lp-footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 28px; flex-wrap: wrap; }
 .lp-footer-bar .lp-nav-links button { font-size: 15px; }
-.lp-footer-meta { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 40px; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--ink-ghost); text-transform: uppercase; }
+.lp-footer-meta { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 40px; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--ink-faint); text-transform: uppercase; }
+/* --ink-ghost bleibt für die Strichzeichnungen; als Textfarbe reichte der
+   Kontrast nicht (2,36:1 bei 11,5 px). Dekoration und Text brauchen nicht
+   dieselbe Farbe, nur weil sie beide zurücktreten sollen. */
 
 /* ── MOTION-REDUCE ──────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {

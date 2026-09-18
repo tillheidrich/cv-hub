@@ -5,7 +5,9 @@ import DocumentPreview from '../preview/DocumentPreview';
 import { contentKeyOf } from '../preview/contentKey';
 import type { Metrics } from '../templates/metrics';
 import { getTheme, resolvePairing } from '../templates/theme';
-import { api } from '../data/api';
+import { api, ApiError } from '../data/api';
+import { SHARE } from '../ui/editorI18n';
+import { detectInitialUiLang, type UiLang } from '../ui/i18n';
 import { withAllLangs } from '../data/storage';
 import { getPageFormat } from '../data/pageFormats';
 import type { AppProfile, FontPairingId, PageMode, PageFormat } from '../data/types';
@@ -16,7 +18,9 @@ const SERIF = "'Playfair Display', serif";
 /** Public read-only view of a shared résumé, served at /share/<token>. */
 export default function ShareView({ token }: { token: string }) {
   const [profile, setProfile] = useState<AppProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /* Grund statt Meldung: Welcher Fall vorliegt, sagt der Statuscode
+     (404/403/410) — nicht der Wortlaut eines deutschen Satzes. */
+  const [fehler, setFehler] = useState<'revoked' | 'expired' | 'missing' | 'unknown' | null>(null);
   const [doc, setDoc] = useState<'resume' | 'cover-letter'>('resume');
   /* Auf dem Telefon lag das Dokument bisher in voller A4-Breite in einem
    * 390-px-Fenster: rechts abgeschnitten, Adresse und Profiltext halb weg.
@@ -37,7 +41,11 @@ export default function ShareView({ token }: { token: string }) {
   useEffect(() => {
     api.fetchShare(token)
       .then(d => setProfile(withAllLangs(d.resume)))
-      .catch(e => setError(e instanceof Error ? e.message : 'Link nicht verfügbar.'));
+      .catch(e => setFehler(
+        e instanceof ApiError
+          ? (e.status === 403 ? 'revoked' : e.status === 410 ? 'expired' : e.status === 404 ? 'missing' : 'unknown')
+          : 'unknown',
+      ));
   }, [token]);
 
   const lang = profile?.settings?.lang ?? 'de';
@@ -80,19 +88,20 @@ export default function ShareView({ token }: { token: string }) {
     return () => { window.clearTimeout(t); ro.disconnect(); };
   }, [seitenBreitePx, doc, profile]);
 
-  if (error) {
-    // Differentiated copy depending on what kind of failure we got from the
-    // backend. The api layer surfaces the raw message; we pick the headline.
-    const lower = error.toLowerCase();
-    const headline = lower.includes('widerrufen') ? 'Link wurde widerrufen'
-      : lower.includes('abgelaufen') ? 'Link ist abgelaufen'
-      : lower.includes('nicht gefunden') ? 'Link existiert nicht'
-      : 'Nicht verfügbar';
+  if (fehler) {
+    /* Die Fehlerseite hat kein Dokument, dessen Sprache sie übernehmen könnte
+       — sie folgt deshalb dem Browser des Empfängers. */
+    const ts = SHARE[detectInitialUiLang()];
+    const { headline, body } =
+      fehler === 'revoked' ? { headline: ts.revokedTitle, body: ts.revokedBody }
+      : fehler === 'expired' ? { headline: ts.expiredTitle, body: ts.expiredBody }
+      : fehler === 'missing' ? { headline: ts.missingTitle, body: ts.missingBody }
+      : { headline: ts.unavailableTitle, body: ts.unavailableBody };
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ede8', padding: '24px' }}>
         <div style={{ background: '#fff', padding: '36px 40px', borderRadius: '14px', boxShadow: '0 12px 36px rgba(0,0,0,0.12)', maxWidth: '420px', textAlign: 'center', fontFamily: UI }}>
           <div style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: 700, marginBottom: '8px', color: '#1a1a1a' }}>{headline}</div>
-          <div style={{ fontSize: '13px', color: '#6b6356', lineHeight: 1.6, marginBottom: '20px' }}>{error}</div>
+          <div style={{ fontSize: '13px', color: '#6b6356', lineHeight: 1.6, marginBottom: '20px' }}>{body}</div>
           <a
             href="/"
             style={{
@@ -102,20 +111,22 @@ export default function ShareView({ token }: { token: string }) {
               textTransform: 'uppercase', fontFamily: UI,
             }}
           >
-            Selbst einen Lebenslauf bauen →
+            {ts.buildYourOwn}
           </a>
         </div>
       </div>
     );
   }
   if (!profile) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ede8', fontFamily: UI, color: '#9a9183', fontSize: '13px' }}>Lade…</div>;
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ede8', fontFamily: UI, color: '#9a9183', fontSize: '13px' }}>{SHARE[detectInitialUiLang()].loading}</div>;
   }
 
   const cvData = profile.data[lang];
   const clData = profile.coverLetters?.[lang];
   const hasCoverLetter = clData && (clData.intro || clData.mainBody || clData.subject);
-  const name = cvData?.personal?.name || 'Lebenslauf';
+  /* Ab hier liegt ein Dokument vor — der Rahmen spricht dessen Sprache. */
+  const t = SHARE[(lang as UiLang)] ?? SHARE.de;
+  const name = cvData?.personal?.name || t.fallbackName;
 
   const render = (metrics: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) =>
     doc === 'cover-letter' && clData
@@ -126,13 +137,13 @@ export default function ShareView({ token }: { token: string }) {
     <div style={{ minHeight: '100vh', background: '#eceae5', display: 'flex', flexDirection: 'column' }}>
       <header style={{ background: '#fff', borderBottom: '1px solid #e8e4de', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
         <div style={{ fontFamily: SERIF, fontSize: '17px', fontWeight: 700, color: '#1a1a1a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-        <div style={{ fontSize: '11px', color: '#9a9183', fontFamily: UI, whiteSpace: 'nowrap' }}>geteilte Vorschau</div>
+        <div style={{ fontSize: '11px', color: '#9a9183', fontFamily: UI, whiteSpace: 'nowrap' }}>{t.sharedPreview}</div>
         {hasCoverLetter && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', background: '#f5f2ee', borderRadius: '7px', padding: '3px' }}>
             {(['resume', 'cover-letter'] as const).map(dt => (
               <button key={dt} type="button" onClick={() => setDoc(dt)}
                 style={{ padding: '5px 12px', background: doc === dt ? '#fff' : 'transparent', color: doc === dt ? '#1a1a1a' : '#888', border: 'none', borderRadius: '5px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: UI, boxShadow: doc === dt ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                {dt === 'resume' ? 'Lebenslauf' : 'Anschreiben'}
+                {dt === 'resume' ? t.resume : t.coverLetter}
               </button>
             ))}
           </div>

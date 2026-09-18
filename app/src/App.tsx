@@ -150,6 +150,20 @@ function MobileSheet({ title, onClose, closeLabel, children }: {
 
 function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { current: TemplateName; onChange: (t: TemplateName) => void; isMobile?: boolean; t: EditorStrings; uiLang: UiLang }) {
   const [open, setOpen] = useState(false);
+  /* Escape schließt die Liste.
+   *
+   * Beim Einstellungs-Panel war genau das schon einmal ein Befund: Ein
+   * unsichtbarer Kasten lag über der ganzen App, und Escape tat nichts — wer
+   * mit der Tastatur aus der Liste heraustabbte, konnte nichts mehr anklicken.
+   * Behoben wurde es dort, hier nicht: dieselbe Falle, zwei Bauteile weiter.
+   * Gefunden vom Sprach-Prüflauf, der über den liegengebliebenen Kasten
+   * stolperte. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
   const cur = getTheme(current);
   const cats: string[] = ['klassisch', 'modern', 'kreativ', 'minimal'];
 
@@ -170,7 +184,7 @@ function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { curren
    * was sie ausdrücklich NICHT verspricht. */
   const legende = (
     <div style={{ borderTop: '1px solid oklch(0.93 0.004 264)', margin: '8px 0 0', padding: '10px 8px 4px', fontFamily: UI_FONT }}>
-      <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#b0a896', marginBottom: '7px' }}>
+      <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#7d7566', marginBottom: '7px' }}>
         {ATS_LEGEND[uiLang].title}
       </div>
       {(['high', 'medium', 'low'] as const).map(lv => {
@@ -192,7 +206,7 @@ function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { curren
 
   const list = cats.map(cat => (
     <div key={cat}>
-      <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#b0a896', padding: '8px 8px 4px' }}>{CAT_LABELS[cat]}</div>
+      <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#7d7566', padding: '8px 8px 4px' }}>{CAT_LABELS[cat]}</div>
       {PICKABLE_THEMES.filter(t => t.category === cat).map(t => (
         <button key={t.id} type="button" onClick={() => { onChange(t.id); setOpen(false); }}
           style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', minHeight: isMobile ? '48px' : undefined, padding: '8px', background: t.id === current ? 'oklch(0.985 0.003 264)' : 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', marginBottom: '2px' }}>
@@ -203,7 +217,7 @@ function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { curren
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: UI_FONT }}>{t.name}</span>
-            <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.44 0.017 264)', fontFamily: UI_FONT }}>{t.description}</span>
+            <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.42 0.017 264)', fontFamily: UI_FONT }}>{t.description}</span>
           </span>
           {(() => {
             const lv = atsLevelForLayout(t.layout);
@@ -232,7 +246,7 @@ function TemplatePicker({ current, onChange, isMobile, t: et, uiLang }: { curren
         style={{ display: 'flex', alignItems: 'center', gap: '7px', minHeight: isMobile ? '40px' : undefined, maxWidth: isMobile ? '118px' : undefined, padding: isMobile ? '5px 10px' : '5px 10px', background: '#fff', border: '1px solid oklch(0.85 0.008 264)', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#2a2a2a', fontFamily: UI_FONT, whiteSpace: 'nowrap' }}>
         <span style={{ width: '14px', height: '14px', borderRadius: '4px', background: cur.colors.accent, flexShrink: 0 }} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cur.name}</span>
-        <span style={{ fontSize: '9px', color: '#999', flexShrink: 0 }}>▾</span>
+        <span style={{ fontSize: '9px', color: '#767676', flexShrink: 0 }}>▾</span>
       </button>
       {open && (isMobile ? (
         <MobileSheet title={et.chooseTemplate} closeLabel={et.close} onClose={() => setOpen(false)}>{list}{legende}</MobileSheet>
@@ -257,6 +271,70 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   languages:   'Sprachen',
   additional:  'Weiteres',
 };
+
+/** Reihenfolge der Oberflächensprachen — dieselbe wie auf Landing und Anmeldung. */
+const LANG_ORDER: UiLang[] = ['de', 'en', 'fr', 'es'];
+
+/**
+ * Kleines Menü für die Sprache der Oberfläche.
+ *
+ * Warum ein Menü und keine vier Knöpfe in der Leiste: Direkt daneben steht
+ * bereits eine Reihe DE EN FR ES für die Sprache des Lebenslaufs. Zwei gleich
+ * aussehende Reihen nebeneinander wären eine Falle — man trifft die falsche und
+ * merkt es erst am fertigen Dokument.
+ *
+ * Schließt bei Escape und bei einem Klick daneben; beides fehlte beim
+ * Einstellungs-Panel lange und kostete Tastaturnutzer den Ausweg.
+ */
+function UiLangMenu({ current, label, onPick, onClose }: {
+  current: UiLang;
+  label: string;
+  onPick: (l: UiLang) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    // capture: sonst schließt der Knopf das Menü im selben Klick wieder auf.
+    document.addEventListener('mousedown', onDown, true);
+    ref.current?.querySelector<HTMLButtonElement>('button[aria-checked="true"]')?.focus();
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div ref={ref} role="menu" aria-label={label}
+      style={{
+        position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60,
+        background: 'oklch(0.995 0.002 264)', border: '1px solid oklch(0.91 0.005 264)',
+        borderRadius: '8px', boxShadow: '0 8px 24px oklch(0.21 0.021 264 / 0.12)',
+        padding: '5px', minWidth: '148px',
+      }}>
+      {LANG_ORDER.map(l => (
+        <button key={l} type="button" role="menuitemradio" aria-checked={current === l}
+          onClick={() => onPick(l)}
+          style={{
+            /* tapTarget liegt in der App-Komponente; hier steht das Maß direkt,
+               damit der Eintrag auch am Touch-Bildschirm treffbar bleibt. */
+            minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', gap: '10px', padding: '7px 9px', background: 'transparent', border: 'none',
+            borderRadius: '5px', cursor: 'pointer', fontFamily: UI_FONT, fontSize: '12.5px',
+            color: current === l ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)',
+            fontWeight: current === l ? 700 : 500, textAlign: 'left',
+          }}>
+          <span>{LANG_NAMES[l]}</span>
+          <span style={{ fontSize: '9.5px', letterSpacing: '0.12em', opacity: 0.65 }}>{l.toUpperCase()}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, accent, onAccent, paper, onPaper, vorlagenPapier, pageMode, onPageMode, pageFormat, onPageFormat, sectionOrder, hiddenSections, sectionPages, respectTemplateStructure, onSectionOrder, onToggleSection, onSectionPage, onRespectTemplateStructure, fit, onClose, isMobile, t: et, data, onJump }: {
   fontScale: number; onFontScale: (s: number) => void;
@@ -320,13 +398,13 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
         {/* Font size slider */}
         <div style={{ marginBottom: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '9px' }}>
-            <span style={heading}>Schriftgröße</span>
+            <span style={heading}>{et.spFontSize}</span>
             <span style={{ fontSize: '12px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', fontFamily: UI_FONT }}>{(FS.body * fontScale * 0.75).toFixed(1).replace('.', ',')} pt</span>
           </div>
           <input type="range" min={USER_SCALE.min} max={USER_SCALE.max} step={0.01} value={fontScale}
             onChange={e => onFontScale(parseFloat(e.target.value))}
             style={{ width: '100%', accentColor: 'oklch(0.55 0.216 264)', cursor: 'pointer' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#b3aa98', marginTop: '2px', fontFamily: UI_FONT }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: '#7d7566', marginTop: '2px', fontFamily: UI_FONT }}>
             <span>{(FS.body * USER_SCALE.min * 0.75).toFixed(1).replace('.', ',')} pt</span>
             <span>{(FS.body * 0.75).toFixed(1).replace('.', ',')} pt</span>
             <span>{(FS.body * USER_SCALE.max * 0.75).toFixed(1).replace('.', ',')} pt</span>
@@ -347,8 +425,8 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
 
         {/* Font pairing */}
         <div style={{ marginBottom: '18px' }}>
-          <div style={heading}>Schriftart</div>
-          <select value={fontPairing} onChange={e => onFontPairing(e.target.value as FontPairingId)}
+          <div style={heading}>{et.spTypeface}</div>
+          <select value={fontPairing} onChange={e => onFontPairing(e.target.value as FontPairingId)} aria-label={et.spTypeface}
             style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', color: 'oklch(0.21 0.021 264)', border: '1px solid oklch(0.85 0.008 264)', borderRadius: '7px', background: '#fff', fontFamily: UI_FONT, cursor: 'pointer' }}>
             {FONT_PAIRING_LIST.map(p => (
               <option key={p.id} value={p.id}>{p.name} — {p.note}</option>
@@ -359,8 +437,8 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
         {/* Akzentfarbe — ersetzt die früheren Farbvarianten-Vorlagen. Die Werte
             liegen alle über 6,9:1 auf Weiß, in beide Richtungen WCAG AA. */}
         <div style={{ marginBottom: '18px' }}>
-          <div style={heading}>Akzentfarbe</div>
-          <div role="radiogroup" aria-label="Akzentfarbe" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={heading}>{et.spAccent}</div>
+          <div role="radiogroup" aria-label={et.spAccent} style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {ACCENTS.map(a => {
               const active = accent === a.id;
               return (
@@ -373,13 +451,13 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
                     border: active ? '2px solid oklch(0.21 0.021 264)' : '1px solid oklch(0.85 0.008 264)',
                     boxShadow: active ? '0 0 0 2px #fff inset' : 'none',
                   }}>
-                  <span className="cv-sr-only">{a.name}</span>
+                  <span className="cv-sr-only">{a.id === 'auto' ? et.spAccentTemplate : a.name}</span>
                 </button>
               );
             })}
           </div>
           <div style={{ fontSize: '10.5px', color: 'oklch(0.50 0.014 264)', marginTop: '7px', fontFamily: UI_FONT, lineHeight: 1.5 }}>
-            {ACCENTS.find(a => a.id === accent)?.name}
+            {accent === 'auto' ? et.spAccentTemplate : ACCENTS.find(a => a.id === accent)?.name}
             {accent === 'auto' ? ' — die Farbe, für die die Vorlage gebaut wurde.' : ' — überschreibt die Farbe der Vorlage.'}
           </div>
         </div>
@@ -387,8 +465,8 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
         {/* Papierfarbe. Einige Vorlagen bringen Creme mit; das muss sich
             zurücknehmen lassen, ohne die Vorlage zu wechseln. */}
         <div style={{ marginBottom: '18px' }}>
-          <div style={heading}>Papier</div>
-          <div role="radiogroup" aria-label="Papierfarbe" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={heading}>{et.spPaper}</div>
+          <div role="radiogroup" aria-label={et.spPaper} style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {PAPERS.map(pp => {
               const active = paper === pp.id;
               return (
@@ -401,21 +479,21 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
                     border: active ? '2px solid oklch(0.21 0.021 264)' : '1px solid oklch(0.78 0.008 264)',
                     boxShadow: active ? '0 0 0 2px #fff inset' : 'none',
                   }}>
-                  <span className="cv-sr-only">{pp.name}</span>
+                  <span className="cv-sr-only">{pp.id === 'auto' ? et.spPaperTemplate : pp.name}</span>
                 </button>
               );
             })}
           </div>
           <div style={{ fontSize: '10.5px', color: 'oklch(0.50 0.014 264)', marginTop: '7px', fontFamily: UI_FONT, lineHeight: 1.5 }}>
-            {PAPERS.find(pp => pp.id === paper)?.name}
-            {paper === 'auto' ? ' — das Papier, für das die Vorlage gebaut wurde.' : ' — überschreibt das Papier der Vorlage.'}
+            {paper === 'auto' ? et.spPaperTemplate : PAPERS.find(pp => pp.id === paper)?.name}
+            {paper === 'auto' ? et.spPaperAuto : et.spPaperOverride}
           </div>
         </div>
 
         {/* Page format */}
         <div style={{ marginBottom: '18px' }}>
-          <div style={heading}>Format</div>
-          <select value={pageFormat} onChange={e => onPageFormat(e.target.value as PageFormat)}
+          <div style={heading}>{et.spFormat}</div>
+          <select value={pageFormat} onChange={e => onPageFormat(e.target.value as PageFormat)} aria-label={et.spFormat}
             style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', color: 'oklch(0.21 0.021 264)', border: '1px solid oklch(0.85 0.008 264)', borderRadius: '7px', background: '#fff', fontFamily: UI_FONT, cursor: 'pointer' }}>
             {PAGE_FORMAT_LIST.map(f => (
               <option key={f.id} value={f.id}>{f.label} ({f.widthMm}×{f.heightMm} mm) — {f.hint}</option>
@@ -425,7 +503,7 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
 
         {/* Page mode */}
         <div>
-          <div style={heading}>Seitenzahl</div>
+          <div style={heading}>{et.spPageCount}</div>
           {/* Die Seitenzahl ist eine Frage an den Menschen, nicht an den
               Parser: weder Personio noch Textkernel nennen sie als Kriterium.
               Was sie nennen, steht an den Reglern darüber. */}
@@ -456,7 +534,7 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
               {fit.overflow && cuts.cuts.length > 0 && (
                 <div style={{ marginTop: '8px', background: 'oklch(0.975 0.012 40)', border: '1px solid oklch(0.90 0.03 40)', borderRadius: '8px', padding: '10px 11px' }}>
                   <div style={{ fontWeight: 700, color: '#8d4630', marginBottom: '6px' }}>
-                    Rund {cuts.deficitChars} Zeichen zu viel ({fit.overflowLines} {fit.overflowLines === 1 ? 'Zeile' : 'Zeilen'}). Diese Stellen geben es her:
+                    {et.spTooLong(cuts.deficitChars, fit.overflowLines)}
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     {cuts.cuts.map((c, i) => (
@@ -473,8 +551,8 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
                     {cuts.hopeless
                       ? 'Auch alles zusammen reicht nicht. Dann ist nicht der Text zu lang, sondern dieses Layout zu teuer: Bei einspaltigen Vorlagen stehen Kontakt, Eckdaten, Sprachen und Skills IM Textfluss, bei Vorlagen mit Seitenspalte daneben. Nimm zwei Seiten — oder eine Vorlage mit Spalte (Hamburg, Lüneburg, Aarhus …).'
                       : cuts.covered >= fit.overflowLines
-                        ? 'Zusammen reicht das.'
-                        : 'Das bringt schon einen Teil — danach neu schauen.'}
+                        ? et.spEnough
+                        : et.spPartly}
                   </div>
                 </div>
               )}
@@ -489,7 +567,7 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
 
         {/* Section order + visibility */}
         <div style={{ marginTop: '20px', borderTop: '1px solid oklch(0.91 0.005 264)', paddingTop: '16px' }}>
-          <div style={heading}>Sektionen</div>
+          <div style={heading}>{et.spSections}</div>
 
           {/* Struktur-vom-Design-übernehmen Toggle */}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px', cursor: 'pointer', fontFamily: UI_FONT }}>
@@ -503,14 +581,14 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
               <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', lineHeight: 1.35 }}>
                 Struktur vom Design übernehmen
               </div>
-              <div style={{ fontSize: '10.5px', color: 'oklch(0.44 0.017 264)', marginTop: '3px', lineHeight: 1.45 }}>
+              <div style={{ fontSize: '10.5px', color: 'oklch(0.42 0.017 264)', marginTop: '3px', lineHeight: 1.45 }}>
                 Beim Vorlagen-Wechsel wird die ideale Reihenfolge des neuen Designs gezeigt.
                 Aus = deine eigene Reihenfolge bleibt erhalten.
               </div>
             </div>
           </label>
 
-          <div style={{ fontSize: '10.5px', color: 'oklch(0.44 0.017 264)', marginBottom: '8px', fontFamily: UI_FONT, lineHeight: 1.45 }}>
+          <div style={{ fontSize: '10.5px', color: 'oklch(0.42 0.017 264)', marginBottom: '8px', fontFamily: UI_FONT, lineHeight: 1.45 }}>
             Reihenfolge ändern: ⋮⋮ ziehen oder ↑/↓ benutzen. Bei Sidebar-Vorlagen (Oslo, Patterson, Azurill…) leben Skills/Sprachen/Eckdaten in der Seitenleiste — Reorder gilt dort für die Haupt-Spalte.
           </div>
           {sectionOrder.map((key, idx) => {
@@ -574,11 +652,12 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
                     value={sectionPages[key] ?? 1}
                     onChange={(e) => { e.stopPropagation(); onSectionPage(key, parseInt(e.target.value, 10) || 1); }}
                     onClick={(e) => e.stopPropagation()}
-                    title="Auf welcher Seite soll diese Sektion erscheinen?"
+                    title={et.spWhichPage}
+                    aria-label={et.spWhichPage}
                     style={{
                       border: '1px solid oklch(0.87 0.006 264)', borderRadius: '4px',
                       padding: '2px 6px', fontSize: '10.5px', fontWeight: 600,
-                      color: 'oklch(0.44 0.017 264)', background: '#ffffff', fontFamily: UI_FONT,
+                      color: 'oklch(0.42 0.017 264)', background: '#ffffff', fontFamily: UI_FONT,
                       marginRight: '6px', cursor: 'pointer',
                     }}
                   >
@@ -590,7 +669,7 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleSection(key); }}
-                  title={hidden ? 'Wieder einblenden' : 'Ausblenden'}
+                  title={hidden ? et.spShowAgain : et.spHide}
                   style={{
                     background: 'transparent', border: '1px solid oklch(0.87 0.006 264)',
                     borderRadius: '4px', padding: '2px 8px',
@@ -648,6 +727,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('edit');
   const [docType, setDocType] = useState<DocType>('resume');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [uiLangOpen, setUiLangOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [printing, setPrinting] = useState(false);
@@ -1080,7 +1160,7 @@ export default function App() {
   // Editorial mode tab: caps + tracking, underline-on-active, no fill.
   const modeTabStyle = (active: boolean): React.CSSProperties => ({
     padding: '4px 2px', background: 'transparent',
-    color: active ? 'oklch(0.21 0.021 264)' : 'oklch(0.44 0.017 264)',
+    color: active ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)',
     border: 'none',
     borderBottom: active ? '2px solid oklch(0.21 0.021 264)' : '2px solid transparent',
     fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
@@ -1101,7 +1181,7 @@ export default function App() {
   const langBtnStyle = (active: boolean): React.CSSProperties => ({
     ...tapTarget,
     padding: isMobile ? '3px 8px' : '3px 6px', background: 'transparent',
-    color: active ? 'oklch(0.21 0.021 264)' : 'oklch(0.44 0.017 264)',
+    color: active ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)',
     border: 'none',
     borderBottom: active ? '1.5px solid oklch(0.21 0.021 264)' : '1.5px solid transparent',
     fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em',
@@ -1128,7 +1208,7 @@ export default function App() {
   // ── Auth gate ─────────────────────────────────────────────────────────────
   if (authLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.60 0.012 264)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.52 0.012 264)' }}>
         {APP_NAME} wird geladen…
       </div>
     );
@@ -1147,7 +1227,7 @@ export default function App() {
   }
   if (!dataLoaded) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.60 0.012 264)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'oklch(0.985 0.003 264)', fontFamily: UI_FONT, fontSize: '13px', color: 'oklch(0.52 0.012 264)' }}>
         Profile werden geladen…
       </div>
     );
@@ -1168,7 +1248,7 @@ export default function App() {
   if (printing) {
     return (
       <div id="print-only-root" style={{ background: 'oklch(0.985 0.003 264)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '40px' }}>
-        <div data-noprint style={{ fontFamily: UI_FONT, fontSize: '12px', color: '#aaa', marginBottom: '24px' }}>Druckvorschau wird vorbereitet…</div>
+        <div data-noprint style={{ fontFamily: UI_FONT, fontSize: '12px', color: '#767676', marginBottom: '24px' }}>Druckvorschau wird vorbereitet…</div>
         <DocumentPreview
           render={renderDoc}
           userScale={fontScale}
@@ -1245,7 +1325,7 @@ export default function App() {
                   style={{
                     ...tapTarget,
                     padding: isMobile ? '4px 8px' : '4px 2px', background: 'transparent',
-                    color: docType === dt ? 'oklch(0.21 0.021 264)' : 'oklch(0.44 0.017 264)',
+                    color: docType === dt ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)',
                     border: 'none',
                     borderBottom: docType === dt ? '2px solid oklch(0.55 0.216 264)' : '2px solid transparent',
                     fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
@@ -1283,10 +1363,44 @@ export default function App() {
         <TemplatePicker current={template} onChange={t => updateSettings({ template: t })} isMobile={isMobile} t={et} uiLang={uiLang} />
 
         {!isMobile && (
-          <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+          /* Diese Reihe schaltet die Sprache des LEBENSLAUFS. Daneben steht der
+             Schalter für die Oberfläche, und beide zeigen DE EN FR ES — ohne
+             eigene Benennung hält man den einen für den anderen. Deshalb tragen
+             die Knöpfe den Zweck im title, die Gruppe ihn als aria-label. */
+          <div role="group" aria-label={et.langLabel} style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
             {ALL_LANGS.map(l => (
-              <button key={l} type="button" onClick={() => updateSettings({ lang: l })} style={langBtnStyle(lang === l)} title={LANG_NAMES[l]}>{l.toUpperCase()}</button>
+              <button key={l} type="button" onClick={() => updateSettings({ lang: l })} style={langBtnStyle(lang === l)}
+                title={`${et.langLabel}: ${LANG_NAMES[l]}`} aria-pressed={lang === l}>{l.toUpperCase()}</button>
             ))}
+          </div>
+        )}
+
+        {/* Sprache der Oberfläche. Bis hierher ließ sie sich nur auf Landing und
+            Anmeldung wechseln: Wer einmal im Editor war, saß in der Sprache
+            fest, die der Browser vorgab. Ein Menü statt einer zweiten Reihe aus
+            vier Knöpfen — die Leiste ist voll, und zwei gleich aussehende
+            Reihen wären schlimmer als keine. */}
+        {!isMobile && (
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button type="button" onClick={() => setUiLangOpen(v => !v)}
+              title={et.uiLangLabel} aria-label={`${et.uiLangLabel}: ${LANG_NAMES[uiLang]}`}
+              aria-haspopup="menu" aria-expanded={uiLangOpen}
+              style={{ ...tapTarget, display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 4px',
+                background: 'transparent', border: 'none',
+                borderBottom: uiLangOpen ? '2px solid oklch(0.21 0.021 264)' : '2px solid transparent',
+                fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em',
+                color: uiLangOpen ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)',
+                cursor: 'pointer', fontFamily: UI_FONT }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" />
+              </svg>
+              {uiLang.toUpperCase()}
+            </button>
+            {uiLangOpen && (
+              <UiLangMenu current={uiLang} label={et.uiLangLabel}
+                onPick={l => { handleLangChange(l); setUiLangOpen(false); }}
+                onClose={() => setUiLangOpen(false)} />
+            )}
           </div>
         )}
 
@@ -1296,7 +1410,7 @@ export default function App() {
               borderBottom: settingsOpen ? '2px solid oklch(0.21 0.021 264)' : '2px solid transparent',
               fontSize: isMobile ? '13px' : '10.5px', fontWeight: 700,
               letterSpacing: isMobile ? 'normal' : '0.12em', textTransform: isMobile ? 'none' : 'uppercase',
-              color: settingsOpen ? 'oklch(0.21 0.021 264)' : 'oklch(0.44 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT }}
+              color: settingsOpen ? 'oklch(0.21 0.021 264)' : 'oklch(0.42 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT }}
             aria-haspopup="dialog" aria-expanded={settingsOpen} aria-label={et.ttFont}>
             {isMobile ? 'Aa' : et.font}
           </button>
@@ -1335,14 +1449,14 @@ export default function App() {
 
             {activeId && (
               <button type="button" onClick={() => gateAction('Versionen') && setVersionsOpen(true)} title={et.ttVersions}
-                style={{ ...tapTarget, padding: '4px 2px', background: 'transparent', border: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'oklch(0.44 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0, opacity: demoMode ? 0.55 : 1 }}>
+                style={{ ...tapTarget, padding: '4px 2px', background: 'transparent', border: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'oklch(0.42 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0, opacity: demoMode ? 0.85 : 1 }}>
                 {et.versions}
               </button>
             )}
             {/* Konto-Button only for logged-in users — demo has no account. */}
             {!demoMode && (
               <button type="button" onClick={() => setKeysOpen(true)} title={et.ttAccount}
-                style={{ padding: '4px 2px', background: 'transparent', border: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'oklch(0.44 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0 }}>
+                style={{ padding: '4px 2px', background: 'transparent', border: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'oklch(0.42 0.017 264)', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0 }}>
                 {et.account}
               </button>
             )}
@@ -1364,8 +1478,8 @@ export default function App() {
               </>
             ) : (
               <>
-                <span style={{ fontSize: '11.5px', color: '#888', fontFamily: UI_FONT, whiteSpace: 'nowrap', flexShrink: 0 }}>{authUser?.username}</span>
-                <button type="button" onClick={handleLogout} title={et.ttSignOut} style={{ padding: '4px 9px', background: 'transparent', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '5px', fontSize: '11px', color: '#888', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0 }}>{et.signOut}</button>
+                <span style={{ fontSize: '11.5px', color: '#6e6e6e', fontFamily: UI_FONT, whiteSpace: 'nowrap', flexShrink: 0 }}>{authUser?.username}</span>
+                <button type="button" onClick={handleLogout} title={et.ttSignOut} style={{ padding: '4px 9px', background: 'transparent', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '5px', fontSize: '11px', color: '#6e6e6e', cursor: 'pointer', fontFamily: UI_FONT, flexShrink: 0 }}>{et.signOut}</button>
               </>
             )}
           </>
@@ -1464,9 +1578,20 @@ export default function App() {
               <div style={sheetHeading}>{et.langLabel}</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {ALL_LANGS.map(l => (
-                  <button key={l} type="button" title={LANG_NAMES[l]}
+                  <button key={l} type="button" title={`${et.langLabel}: ${LANG_NAMES[l]}`} aria-pressed={lang === l}
                     onClick={() => updateSettings({ lang: l })}
                     style={{ ...sheetChoice(lang === l), flex: 1 }}>{l.toUpperCase()}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={sheetHeading}>{et.uiLangLabel}</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {LANG_ORDER.map(l => (
+                  <button key={l} type="button" title={`${et.uiLangLabel}: ${LANG_NAMES[l]}`} aria-pressed={uiLang === l}
+                    onClick={() => handleLangChange(l)}
+                    style={{ ...sheetChoice(uiLang === l), flex: 1 }}>{l.toUpperCase()}</button>
                 ))}
               </div>
             </div>
@@ -1532,16 +1657,16 @@ export default function App() {
       {softWall && (
         <div onClick={() => setSoftWall(null)} style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'rgba(28,25,23,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: UI_FONT }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: 'oklch(0.985 0.003 264)', border: '1px solid oklch(0.21 0.021 264)', width: '100%', maxWidth: '460px', padding: '32px 36px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'oklch(0.44 0.017 264)', marginBottom: '8px' }}>{et.swLimit}</div>
+            <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'oklch(0.42 0.017 264)', marginBottom: '8px' }}>{et.swLimit}</div>
             <div style={{ fontFamily: SERIF_FONT, fontSize: '28px', fontWeight: 400, color: 'oklch(0.21 0.021 264)', lineHeight: 0.98, marginBottom: '14px', letterSpacing: '-0.02em' }}>
               {et.swTitle} <em style={{ fontStyle: 'italic', color: 'oklch(0.55 0.216 264)' }}>{et.swTitleAccent}</em>
             </div>
-            <div style={{ fontSize: '13px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.55, marginBottom: '20px' }}>
+            <div style={{ fontSize: '13px', color: 'oklch(0.42 0.017 264)', lineHeight: 1.55, marginBottom: '20px' }}>
               {et.swBody}
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setSoftWall(null)}
-                style={{ padding: '11px 18px', background: 'transparent', border: '1px solid oklch(0.85 0.008 264)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'oklch(0.44 0.017 264)', cursor: 'pointer' }}>
+                style={{ padding: '11px 18px', background: 'transparent', border: '1px solid oklch(0.85 0.008 264)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'oklch(0.42 0.017 264)', cursor: 'pointer' }}>
                 {et.swStay}
               </button>
               <button type="button" onClick={() => { setSoftWall(null); exitDemo(); }}

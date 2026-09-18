@@ -32,7 +32,7 @@ const labelStyle: React.CSSProperties = {
   fontSize: '11px',
   fontWeight: 700,
   letterSpacing: '0.4px',
-  color: 'oklch(0.44 0.017 264)',
+  color: 'oklch(0.42 0.017 264)',
   marginBottom: '5px',
   display: 'block',
   fontFamily: F,
@@ -59,7 +59,7 @@ function Section({ title, hint, open, onToggle, children }: {
         <span style={{ fontSize: '13px', color: 'oklch(0.55 0.216 264)', width: '12px' }}>{open ? '▾' : '▸'}</span>
         <span style={{ flex: 1 }}>
           <span style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', fontFamily: F }}>{title}</span>
-          <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: F, marginTop: '1px' }}>{hint}</span>
+          <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', fontFamily: F, marginTop: '1px' }}>{hint}</span>
         </span>
       </button>
       {open && <div style={{ padding: '14px', borderTop: '1px solid oklch(0.91 0.005 264)', display: 'flex', flexDirection: 'column', gap: '12px' }}>{children}</div>}
@@ -80,7 +80,7 @@ function Switch({ label, hint, on, onChange }: {
         style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: 'oklch(0.55 0.216 264)', cursor: 'pointer', flexShrink: 0 }} />
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: F }}>{label}</span>
-        <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.60 0.012 264)', fontFamily: F, marginTop: '1px', lineHeight: 1.45 }}>{hint}</span>
+        <span style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', fontFamily: F, marginTop: '1px', lineHeight: 1.45 }}>{hint}</span>
       </span>
     </label>
   );
@@ -124,7 +124,7 @@ export default function CoverLetterEditor({ data, onUpdate, uiLang }: Props) {
     <div style={{ width: '404px', maxWidth: '100%', minWidth: 0, flexShrink: 1, background: '#fff', borderRight: '1px solid oklch(0.91 0.005 264)', display: 'flex', flexDirection: 'column', overflowY: 'auto', fontFamily: F }}>
       <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid oklch(0.91 0.005 264)', background: 'oklch(0.985 0.003 264)' }}>
         <div style={{ fontSize: '14px', fontWeight: 700, color: 'oklch(0.21 0.021 264)' }}>{t.clTitle}</div>
-        <div style={{ fontSize: '11.5px', color: 'oklch(0.60 0.012 264)', marginTop: '2px' }}>{t.clSubtitle}</div>
+        <div style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', marginTop: '2px' }}>{t.clSubtitle}</div>
       </div>
 
       <div style={{ padding: '14px 16px calc(40px + env(safe-area-inset-bottom, 0px))' }}>
@@ -159,7 +159,7 @@ export default function CoverLetterEditor({ data, onUpdate, uiLang }: Props) {
             on={data.showSignature !== false} onChange={v => set('showSignature', v)} />
         </Section>
 
-        <div style={{ padding: '11px 13px', background: 'oklch(0.968 0.004 264)', borderRadius: '9px', border: '1px solid oklch(0.91 0.005 264)', fontSize: '11px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.55 }}>
+        <div style={{ padding: '11px 13px', background: 'oklch(0.968 0.004 264)', borderRadius: '9px', border: '1px solid oklch(0.91 0.005 264)', fontSize: '11px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55 }}>
           {t.clFooter}
         </div>
       </div>

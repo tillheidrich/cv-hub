@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import type { AppProfile } from '../data/types';
 import { createDemoProfile, createBlankProfile } from '../data/storage';
 import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
+import { useUiLang } from '../ui/useUiLang';
+import { HOME_I18N } from '../ui/i18n/home';
+import { APP_NAME } from '../brand';
 
 function useViewport() {
   const [w, setW] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -33,6 +36,7 @@ function CreateModal({ onConfirm, onClose }: {
 }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState<'blank' | 'demo'>('blank');
+  const t = HOME_I18N[useUiLang()];
 
   function handleCreate() {
     const trimmed = name.trim();
@@ -58,26 +62,26 @@ function CreateModal({ onConfirm, onClose }: {
         style={{ background: C.paper, border: B.inkStrong, padding: '40px 44px', maxWidth: '540px', width: '100%' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>NEU · LEBENSLAUF</div>
+        <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>{t.modalOverline}</div>
         <div style={{ fontFamily: F.display, fontSize: '38px', fontWeight: 400, color: C.ink, lineHeight: 0.95, letterSpacing: '-0.02em', marginBottom: '28px' }}>
-          Neuen Lebenslauf<br/><em style={{ fontStyle: 'italic' }}>anlegen.</em>
+          {t.modalTitle}<br/><em style={{ fontStyle: 'italic' }}>{t.modalTitleAccent}</em>
         </div>
 
-        <div style={overline}>Wie soll er heißen?</div>
+        <div style={overline}>{t.nameLabel}</div>
         <input
           type="text" value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleCreate()}
-          placeholder="z. B. Bewerbung Stadtwerke"
+          placeholder={t.namePlaceholder}
           autoFocus
           style={input}
         />
 
-        <div style={{ ...overline, marginTop: '32px' }}>Womit anfangen?</div>
+        <div style={{ ...overline, marginTop: '32px' }}>{t.startLabel}</div>
         <div style={{ display: 'flex', gap: '0', borderTop: B.hairline, borderBottom: B.hairline }}>
           {[
-            { id: 'blank' as const, label: 'Leer anfangen', desc: 'Alle Felder leer — du tippst deine eigenen Daten ein' },
-            { id: 'demo' as const, label: 'Mit Beispiel', desc: 'Ausgefüllter Muster-Lebenslauf zum Überschreiben' },
+            { id: 'blank' as const, label: t.blankLabel, desc: t.blankDesc },
+            { id: 'demo' as const, label: t.sampleLabel, desc: t.sampleDesc },
           ].map((opt, i) => (
             <button
               key={opt.id}
@@ -103,7 +107,7 @@ function CreateModal({ onConfirm, onClose }: {
         <div style={{ display: 'flex', gap: '0', justifyContent: 'flex-end', marginTop: '32px' }}>
           <button type="button" onClick={onClose}
             style={{ padding: '12px 22px', background: 'transparent', border: B.hairline, fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.pencil, cursor: 'pointer', fontFamily: F.ui }}>
-            Abbrechen
+            {t.cancel}
           </button>
           <button type="button" onClick={handleCreate} disabled={!name.trim()}
             style={{
@@ -113,7 +117,7 @@ function CreateModal({ onConfirm, onClose }: {
               fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
               cursor: name.trim() ? 'pointer' : 'default', fontFamily: F.ui,
             }}>
-            Profil anlegen →
+            {t.createProfile}
           </button>
         </div>
       </div>
@@ -215,10 +219,11 @@ const STRIP_TILES: { id: string; name: string; render: (g: string, ink: string, 
 ];
 
 function TemplateStrip({ isMobile }: { isMobile: boolean }) {
+  const t = HOME_I18N[useUiLang()];
   // Resolve the OKLCH tokens to real strings the SVG renderer accepts.
   return (
     <div>
-      <div style={{ ...TYPE.overline, color: C.gold, marginBottom: '12px' }}>Zwanzig Vorlagen, sechs Archetypen</div>
+      <div style={{ ...TYPE.overline, color: C.gold, marginBottom: '12px' }}>{t.stripOverline}</div>
       <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
@@ -246,7 +251,8 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hover, setHover] = useState(false);
-  const created = new Date(profile.createdAt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
+  const t = HOME_I18N[useUiLang()];
+  const created = new Date(profile.createdAt).toLocaleDateString(t.dateLocale, { day: '2-digit', month: 'short', year: 'numeric' });
   const num = String(index + 1).padStart(2, '0');
   // Exponential ease-out (cubic-bezier ≈ ease-out-expo). No layout properties get animated.
   const EXPO_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
@@ -258,7 +264,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Lebenslauf „${profile.displayName}" öffnen`}
+      aria-label={t.openAria(profile.displayName)}
       onClick={onOpen}
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
@@ -290,8 +296,8 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
           {profile.displayName}
         </div>
         <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.pencil, letterSpacing: '0.02em' }}>
-          {featured && <span style={{ ...TYPE.overline, color: C.gold, marginRight: '12px' }}>ZULETZT GEÖFFNET</span>}
-          {profile.settings.template} · {profile.settings.lang.toUpperCase()} · angelegt {created}
+          {featured && <span style={{ ...TYPE.overline, color: C.gold, marginRight: '12px' }}>{t.lastOpened}</span>}
+          {t.metaLine(profile.settings.template, profile.settings.lang.toUpperCase(), created)}
         </div>
       </div>
 
@@ -300,12 +306,12 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
           <button type="button"
             onClick={e => { e.stopPropagation(); onDelete(); }}
             style={{ padding: '8px 14px', background: C.error, color: C.paper, border: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: F.ui }}>
-            Wirklich löschen
+            {t.confirmDelete}
           </button>
         ) : (
           <button type="button"
             onClick={e => { e.stopPropagation(); setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}
-            title="Profil löschen"
+            title={t.ttDelete}
             style={{ padding: '8px 10px', background: 'transparent', border: 'none', fontSize: '14px', color: C.fade, cursor: 'pointer' }}>
             ×
           </button>
@@ -316,7 +322,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
           color: hover ? C.gold : C.pencil,
           transition: `color 380ms ${EXPO_OUT}`,
         }}>
-          Öffnen →
+          {t.open}
         </div>
       </div>
     </div>
@@ -328,6 +334,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
 export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const { isMobile } = useViewport();
+  const t = HOME_I18N[useUiLang()];
 
   function handleCreate(profile: AppProfile) {
     setShowCreate(false);
@@ -342,22 +349,22 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
       {/* Top metadata bar — brand left, account controls right */}
       <div style={{ borderBottom: B.hairline, padding: '12px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', background: C.paper }}>
         <div style={{ ...TYPE.micromono, color: C.ink }}>
-          HEIDRICH/CV · LEBENSLAUF & ANSCHREIBEN
+          {APP_NAME.toUpperCase()} · {t.topBarTagline}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
           {username && (
             <span style={{ ...TYPE.micromono, color: C.fade, whiteSpace: 'nowrap' }}>{username}</span>
           )}
           {isAdmin && onOpenAdmin && (
-            <button type="button" onClick={onOpenAdmin} title="Admin-Bereich"
+            <button type="button" onClick={onOpenAdmin} title={t.ttAdmin}
               style={{ padding: '5px 11px', background: C.ink, color: C.paper, border: 'none', fontFamily: F.ui, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
-              Admin
+              {t.admin}
             </button>
           )}
           {onLogout && (
-            <button type="button" onClick={onLogout} title="Abmelden"
+            <button type="button" onClick={onLogout} title={t.ttSignOut}
               style={{ padding: '5px 12px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '11px', fontWeight: 600, color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Abmelden
+              {t.signOut}
             </button>
           )}
         </div>
@@ -368,29 +375,29 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
 
           {/* Hero */}
           <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 7' }}>
-            <div style={{ ...TYPE.overline, color: C.gold, marginBottom: '16px' }}>Lebenslauf-Werkstatt</div>
+            <div style={{ ...TYPE.overline, color: C.gold, marginBottom: '16px' }}>{t.heroOverline}</div>
             <h1 style={{
               fontFamily: F.display, fontSize: 'clamp(56px, 7.4vw, 104px)', fontWeight: 400,
               color: C.ink, lineHeight: 0.9, letterSpacing: '-0.028em', margin: 0,
               fontVariationSettings: '"opsz" 144',
               fontFeatureSettings: '"liga" 1, "calt" 1, "onum" 1',
             }}>
-              Lebensläufe<br/>
-              lesen sich heute<br/>
-              wie <em style={{ fontStyle: 'italic', fontWeight: 300, color: C.gold }}>Formulare.</em>
+              {t.heroLine1}<br/>
+              {t.heroLine2}<br/>
+              {t.heroLine3}<em style={{ fontStyle: 'italic', fontWeight: 300, color: C.gold }}>{t.heroAccent}</em>
             </h1>
             <div style={{ marginTop: '20px', fontFamily: F.display, fontSize: 'clamp(20px, 2.3vw, 28px)', fontWeight: 400, lineHeight: 1.25, color: C.ink, letterSpacing: '-0.005em', maxWidth: '34ch' }}>
-              Hier nicht.
+              {t.heroAnswer}
             </div>
           </div>
 
           <div style={{ gridColumn: isMobile ? '1 / -1' : '8 / span 5', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
             <div style={{ fontFamily: F.ui, fontSize: '14px', fontWeight: 400, lineHeight: 1.6, color: C.pencil, marginBottom: '20px', maxWidth: '32ch' }}>
-              Zwanzig Vorlagen, die wie editoriale Spreads gesetzt sind. Auto-Fit auf A4. Markdown-Bridge, falls eine KI Korrektur lesen soll. Druckfertig.
+              {t.heroBlurb}
             </div>
             <div style={{ borderTop: B.hairline, paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <div style={{ ...TYPE.micromono, color: C.gold }}>FAMILY & FRIENDS</div>
-              <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.fade }}>Invite-only · kein Tracking</div>
+              <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.fade }}>{t.heroNote}</div>
             </div>
           </div>
 
@@ -404,11 +411,11 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
 
           {/* Profiles section */}
           <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 3' }}>
-            <div style={{ ...TYPE.overline, color: C.ink, marginBottom: '8px' }}>Deine Lebensläufe</div>
+            <div style={{ ...TYPE.overline, color: C.ink, marginBottom: '8px' }}>{t.profilesOverline}</div>
             <div style={{ fontFamily: F.ui, fontSize: '12px', color: C.pencil, lineHeight: 1.55 }}>
               {profiles.length === 0
-                ? 'Noch nichts angelegt. Fang mit einem leeren Lebenslauf an — oder nimm den Beispiel-Inhalt und überschreib ihn Feld für Feld.'
-                : `${profiles.length} Lebenslauf${profiles.length === 1 ? '' : 'e'} in deinem Konto. Klick auf einen, um ihn zu öffnen.`}
+                ? t.profilesEmpty
+                : t.profilesCount(profiles.length)}
             </div>
             <button type="button" onClick={() => setShowCreate(true)}
               style={{
@@ -419,11 +426,10 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
               <span style={{ fontFamily: F.mono, fontSize: '14px', fontWeight: 400 }}>＋</span>
-              Neuer Lebenslauf
+              {t.newResume}
             </button>
             <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.pencil, lineHeight: 1.6, marginTop: '14px', maxWidth: '46ch' }}>
-              Danach: links eintragen, rechts sofort sehen. Gespeichert wird automatisch —
-              du kannst jederzeit rausgehen und später weitermachen.
+              {t.profilesHint}
             </div>
           </div>
 
@@ -443,9 +449,9 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 borderTop: B.hairline, borderBottom: B.hairline,
                 padding: '64px 0', textAlign: 'center',
               }}>
-                <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>NULL · PROFILE</div>
+                <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>{t.emptyOverline}</div>
                 <div style={{ fontFamily: F.display, fontSize: '32px', fontWeight: 300, fontStyle: 'italic', color: C.pencil }}>
-                  Hier wird's bald voll.
+                  {t.emptyHeadline}
                 </div>
               </div>
             )}
@@ -454,7 +460,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           {/* Footer */}
           <div style={{ gridColumn: '1 / -1', borderTop: B.hairline, paddingTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' }}>
             <div style={{ ...TYPE.micromono, color: C.fade }}>
-              HEIDRICH DIGITAL · {new Date().getFullYear()}
+              {APP_NAME.toUpperCase()} · {new Date().getFullYear()}
             </div>
             <div style={{ ...TYPE.micromono, color: C.fade }}>
               Family &amp; Friends · invite-only

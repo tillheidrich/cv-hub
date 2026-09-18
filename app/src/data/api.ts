@@ -79,6 +79,25 @@ export interface OauthConnection {
   revoked: boolean;
 }
 
+/**
+ * Fehler mit Statuscode.
+ *
+ * Vorher warf `req` einen blanken `Error` mit der Meldung des Servers — und die
+ * Oberfläche musste raten, was passiert war, indem sie deutsche Wörter in
+ * dieser Meldung suchte („widerrufen", „abgelaufen"). Das band die Anzeige an
+ * die Sprache des Servers: Sobald eine Meldung anders formuliert wäre, fiele
+ * die Unterscheidung still auf „unbekannt" zurück. Der Statuscode sagt
+ * dasselbe, sprachunabhängig.
+ */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
@@ -86,7 +105,7 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
     ...opts,
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error((data as { error?: string }).error || `Fehler ${r.status}`);
+  if (!r.ok) throw new ApiError((data as { error?: string }).error || `Fehler ${r.status}`, r.status);
   return data as T;
 }
 

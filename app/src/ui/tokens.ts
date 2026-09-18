@@ -21,8 +21,14 @@ export const COLORS = {
 
   // Ink — near-black with a faint cool tint, never pure black
   ink:    'oklch(0.21 0.021 264)',
-  pencil: 'oklch(0.44 0.017 264)',
-  fade:   'oklch(0.60 0.012 264)',       // ~4.5:1 on paper (WCAG AA)
+  // Beide Werte sind am 18.09.2026 abgesenkt worden (pencil 0.44 → 0.42,
+  // fade 0.60 → 0.52). Am alten `fade` stand „~4.5:1 on paper (WCAG AA)" —
+  // die Rechnung stimmte gegen reines Papier, benutzt wird die Farbe aber auf
+  // den leicht getönten Flächen der Oberfläche. Dort waren es gemessene
+  // 3,58:1. Eine Zusage im Kommentar ersetzt keine Messung: `axecheck.mjs`
+  // misst jetzt gegen den echten Hintergrund.
+  pencil: 'oklch(0.42 0.017 264)',
+  fade:   'oklch(0.52 0.012 264)',
 
   // Rules — cool hairlines
   rule:       'oklch(0.85 0.008 264)',
