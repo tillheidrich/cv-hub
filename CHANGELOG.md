@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-09-18 (fix)
+
+**The neutralization guard fired, and it was right.** Mirroring from the private
+tool copied `app/src/screens/LandingScreen.tsx` **wholesale**, which overwrote the
+neutralized version: the footer lost `{APP_NAME}` for a hard-coded domain, the
+wordmark and copyright became the original operator's, and four languages named the
+original operator's data-centre location, which is simply wrong for anyone
+else's instance. Restored from the last clean revision, with this
+session's content changes (the two new FAQ answers, the corrected template count,
+the escape cleanup) re-applied on top.
+
+`mcp/README.md` had the same damage in smaller form: the server name carried the
+original operator's brand, and the rewrite had dropped the **operator section**
+with its two warnings — the hosted service belongs behind `location /mcp` on the
+same domain (OAuth discovery expects that), and **`CV_API_KEY` must not be set in
+HTTP mode**, because it would make every caller the same account. Both are back,
+in this repo and upstream.
+
+**The guard itself was the more interesting finding: it caught one leak out of
+three.** It looked only for the domain, so the wordmark and the location walked
+straight past it. It now also watches for the operator's wordmark, company name
+and data-centre location.
+
+**`scripts/neutralcheck.sh` is new, and CI calls it** instead of keeping its own
+copy of the patterns. The rule now exists once and can run *before* a push —
+which is the actual lesson: the check existed, but only after the fact, and
+nothing ran it locally.
+
 ## 2026-09-18
 
 **The MCP address was written nowhere.** The endpoint has been running for

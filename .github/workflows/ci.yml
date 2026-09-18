@@ -54,34 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Muster suchen, die hier nichts verloren haben
-        run: |
-          # Zwei Klassen, weil sie unterschiedlich streng sind.
-          #
-          # HART: darf nirgends stehen, ohne Ausnahme — Anschrift, Telefonnummer,
-          # private Mailadresse, Zugangsdaten jeder Art.
-          HART='Rotdornweg|21255 Tostedt|73953819|tillheidrich\.de|ghp_[A-Za-z0-9]{20,}|github_pat_|xox[baprs]-|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
-          #
-          # WEICH: die Domain des Autors. Sie darf an GENAU EINER Stelle stehen —
-          # als Adresse der Demo-Instanz in der README. Überall sonst ist sie ein
-          # Rückfall in die Zeit vor der Entpersonalisierung: eine fest verdrahtete
-          # Domain, ein Analytics-Host, ein Standardwert, der die Daten fremder
-          # Betreiber zum Autor schickt. Genau das soll hier auffallen.
-          WEICH='heidrich-digital'
-          ERLAUBT='https://cv\.heidrich-digital\.de'
-          AUS=(-- . ':!package-lock.json' ':!**/package-lock.json' ':!.github/workflows/ci.yml')
-
-          FEHLER=0
-          if git grep -nIE "$HART" "${AUS[@]}"; then
-            echo "::error::Personenbezogene Daten oder Zugangsdaten gefunden."
-            FEHLER=1
-          fi
-          # Treffer der weichen Klasse, bei denen die erlaubte Demo-Adresse NICHT
-          # die Erklärung ist.
-          REST=$(git grep -nIE "$WEICH" "${AUS[@]}" | grep -vE "$ERLAUBT" || true)
-          if [ -n "$REST" ]; then
-            echo "$REST"
-            echo "::error::Domain des Autors außerhalb des Demo-Links in der README."
-            FEHLER=1
-          fi
-          [ "$FEHLER" -eq 0 ] && echo "sauber"
-          exit $FEHLER
+        # Die Muster stehen in scripts/neutralcheck.sh, nicht hier: Sie müssen
+        # auch VOR dem Push laufen können. Zwei Kopien derselben Regel laufen
+        # auseinander — und dann meldet die CI etwas, das lokal nie auffiel.
+        run: ./scripts/neutralcheck.sh

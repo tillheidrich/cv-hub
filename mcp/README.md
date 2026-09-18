@@ -31,11 +31,11 @@ Adresse einsetzen, im Browser bestätigen.
 **Codex** — in `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.heidrich-cv]
+[mcp_servers.cv-hub]
 url = "https://DEINE-DOMAIN/mcp"
 ```
 
-Danach einmal `codex mcp login heidrich-cv`. Codex unterstützt Remote-Server über
+Danach einmal `codex mcp login cv-hub`. Codex unterstützt Remote-Server über
 Streamable HTTP samt OAuth; ein `bearer_token_env_var` ist nicht nötig, weil die
 Anmeldung über den Login-Befehl läuft.
 
@@ -59,7 +59,7 @@ Schlüssel**; beginnt mit `cvk_`, wird nur einmal angezeigt) und eintragen:
 ```json
 {
   "mcpServers": {
-    "heidrich-cv": {
+    "cv-hub": {
       "command": "node",
       "args": ["/ABSOLUTER/PFAD/zu/mcp/cv-mcp.mjs"],
       "env": { "CV_API_KEY": "cvk_dein_schluessel" }
@@ -70,6 +70,25 @@ Schlüssel**; beginnt mit `cvk_`, wird nur einmal angezeigt) und eintragen:
 
 Derselbe Server läuft mit `MCP_HTTP=1` als HTTP-Dienst — so wird Variante A
 betrieben (hinter `location /mcp` in `app/nginx.conf`).
+
+## Für Betreiber: den gehosteten Dienst bereitstellen
+
+Weg A setzt voraus, dass jemand den Server als Web-Dienst betreibt. Dann
+verbindet sich **jeder Nutzer der Instanz** mit seinem eigenen KI-Client und
+sieht ausschließlich seine eigenen Daten — niemand kopiert einen Schlüssel.
+
+Derselbe Server, gestartet mit `MCP_HTTP=1`, ist dieser Dienst. Er gehört hinter
+`location /mcp` des Frontends (siehe `app/nginx.conf`), damit er unter derselben
+Domain liegt wie das Werkzeug — die OAuth-Discovery erwartet das.
+
+Der Client registriert sich selbst (OAuth 2.1 mit dynamischer
+Client-Registrierung und PKCE), die Instanz öffnet sich, der Nutzer ist bereits
+angemeldet und bestätigt einmal. Verbindungen lassen sich im Konto unter
+*Einstellungen → Verbundene Apps* jederzeit beenden.
+
+> **`CV_API_KEY` im HTTP-Modus nicht setzen.** Er würde **jeden** Aufrufer zu
+> demselben Konto machen — genau das, was der Mehrbenutzerbetrieb vermeidet.
+> Der Schlüssel gehört ausschließlich in den lokalen stdio-Betrieb (Weg B).
 
 ## Umgebungsvariablen
 

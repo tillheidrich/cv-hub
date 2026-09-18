@@ -22,6 +22,25 @@ generalized for public/self-host use and what is still in progress.
   bottom of the last page for every filled-sidebar template — 12/12),
   `app/scripts/docxsweep.mjs` (all 36 templates x both Word variants).
 
+## How the neutralization breaks (finding, 2026-09-18)
+
+**Not through carelessness in the details, but through mirroring whole files.**
+While syncing with the private tool, `LandingScreen.tsx` was copied over in one
+piece. Every bit of hand work in it was gone: `{APP_NAME}` became a hard-coded
+domain, wordmark and copyright belonged to the original operator again, and four
+languages named a data-centre location that is wrong for any other instance.
+
+**Rule from this:** files that carry neutralization are **never** mirrored whole.
+Look at the diff against the last clean revision first, then transfer only the
+content change. And before every push:
+
+```bash
+./scripts/neutralcheck.sh
+```
+
+The guard itself found **one of three** leaks in this incident — it knew only the
+domain. Wordmark, company name and location have been in it since.
+
 ## Done
 
 - **License:** AGPL-3.0-or-later (`LICENSE`, `NOTICE`).
