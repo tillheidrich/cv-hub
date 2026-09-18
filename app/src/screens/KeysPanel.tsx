@@ -5,8 +5,16 @@ import type { TwoFaStatus, OauthConnection } from '../data/api';
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
 
-// Renders the "Einstellungen" modal — currently just password change.
-// (MCP server was removed in favor of the Markdown bridge for AI editing.)
+/* „Einstellungen": Passwort, E-Mail, Zwei-Faktor, verbundene KI-Clients,
+ * Datenexport, Kontolöschung.
+ *
+ * Hier stand bis zum 18.09.2026 „MCP server was removed in favor of the
+ * Markdown bridge" — das stimmte längst nicht mehr: Der MCP-Endpunkt läuft
+ * unter /mcp, samt OAuth-Discovery nach RFC 9728 und dynamischer
+ * Client-Registrierung. Nur stand die Adresse nirgends, weshalb der Abschnitt
+ * „Verbundene Apps" eine Liste verwaltete, zu der niemand etwas hinzufügen
+ * konnte. Ein Kommentar, der die Wirklichkeit falsch beschreibt, ist
+ * schlimmer als keiner. */
 export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () => void; onAccountDeleted?: () => void }) {
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -31,6 +39,19 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
   // ── Verbundene KI-Clients (OAuth/MCP) ──────────────────────────────────────
   const [conns, setConns] = useState<OauthConnection[] | null>(null);
   const [connBusy, setConnBusy] = useState<number | null>(null);
+  /* Die Adresse des MCP-Endpunkts kommt aus dem eigenen Ursprung, nicht aus
+   * einer festen Zeichenkette: Wer das Werkzeug selbst betreibt, soll hier
+   * SEINE Adresse sehen, nicht unsere. */
+  const mcpUrl = `${window.location.origin}/mcp`;
+  const [kopiert, setKopiert] = useState<string | null>(null);
+  const [clientHilfe, setClientHilfe] = useState<'claude' | 'codex' | 'cursor' | null>(null);
+
+  function kopieren(was: string, text: string) {
+    navigator.clipboard?.writeText(text).then(
+      () => { setKopiert(was); setTimeout(() => setKopiert(null), 1600); },
+      () => { /* Zwischenablage gesperrt — der Text steht sichtbar daneben. */ },
+    );
+  }
 
   useEffect(() => {
     (async () => {
@@ -188,11 +209,72 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
           {/* ── Verbundene KI-Clients (OAuth/MCP) ───────────────────────── */}
           <div style={{ ...sectionH, marginTop: '28px' }}>Verbundene Apps</div>
           <div style={card}>
-            <div style={{ fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.55, marginBottom: conns && conns.length ? '12px' : 0, fontFamily: UI }}>
+            <div style={{ fontSize: '12.5px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.55, marginBottom: '12px', fontFamily: UI }}>
               KI-Clients, denen du über den MCP-Endpunkt Zugriff auf deine Lebensläufe
               erlaubt hast. „Beenden" entzieht den Zugriff sofort — der Client muss
               dann neu fragen.
             </div>
+
+            {/* Die Adresse. Ohne sie ist dieser Abschnitt eine Liste, zu der
+                niemand etwas hinzufügen kann. */}
+            <label style={{ ...inputLabel, marginTop: '2px' }}>Adresse für deinen KI-Client</label>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+              <input readOnly value={mcpUrl} onFocus={e => e.currentTarget.select()}
+                style={{ ...input, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12px', background: '#fff' }} />
+              <button type="button" onClick={() => kopieren('url', mcpUrl)}
+                style={{ flex: '0 0 auto', padding: '8px 12px', background: kopiert === 'url' ? '#2e7d32' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: UI, whiteSpace: 'nowrap' }}>
+                {kopiert === 'url' ? 'Kopiert' : 'Kopieren'}
+              </button>
+            </div>
+            <div style={{ fontSize: '11px', color: 'oklch(0.60 0.012 264)', lineHeight: 1.5, marginTop: '6px', fontFamily: UI }}>
+              Kein Schlüssel nötig: Der Client meldet sich selbst an, du bestätigst im Browser.
+              Danach steht er in der Liste unten und kann dort jederzeit beendet werden.
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+              {([['claude', 'Claude Desktop'], ['codex', 'Codex'], ['cursor', 'Cursor & andere']] as const).map(([id, label]) => (
+                <button key={id} type="button" onClick={() => setClientHilfe(clientHilfe === id ? null : id)}
+                  style={{ padding: '5px 10px', background: clientHilfe === id ? 'oklch(0.21 0.021 264)' : '#fff', color: clientHilfe === id ? '#fff' : 'oklch(0.44 0.017 264)', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '999px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', fontFamily: UI }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {clientHilfe && (
+              <div style={{ marginTop: '10px', background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '11px 13px', fontSize: '12px', color: 'oklch(0.44 0.017 264)', lineHeight: 1.6, fontFamily: UI }}>
+                {clientHilfe === 'claude' && (
+                  <>
+                    <strong>Claude Desktop</strong> — Einstellungen → Connectors → „Custom connector hinzufügen",
+                    Adresse oben einsetzen. Es öffnet sich ein Browserfenster zum Bestätigen.
+                  </>
+                )}
+                {clientHilfe === 'codex' && (
+                  <>
+                    <strong>Codex</strong> — in <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>~/.codex/config.toml</code>:
+                    <pre style={{ margin: '7px 0', padding: '8px 10px', background: 'oklch(0.97 0.003 264)', borderRadius: '6px', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '11px', overflowX: 'auto', whiteSpace: 'pre' }}>
+{`[mcp_servers.heidrich-cv]\nurl = "${mcpUrl}"`}
+                    </pre>
+                    Danach einmal <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>codex mcp login heidrich-cv</code> —
+                    das öffnet die Bestätigung im Browser.
+                    <button type="button" onClick={() => kopieren('codex', `[mcp_servers.heidrich-cv]\nurl = "${mcpUrl}"`)}
+                      style={{ display: 'block', marginTop: '7px', padding: '4px 9px', background: kopiert === 'codex' ? '#2e7d32' : '#fff', color: kopiert === 'codex' ? '#fff' : 'oklch(0.44 0.017 264)', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: UI }}>
+                      {kopiert === 'codex' ? 'Kopiert' : 'Abschnitt kopieren'}
+                    </button>
+                  </>
+                )}
+                {clientHilfe === 'cursor' && (
+                  <>
+                    <strong>Cursor, Zed, VS Code und andere</strong> — überall dort, wo ein
+                    „MCP-Server" mit <em>URL</em> oder <em>Streamable HTTP</em> eingetragen wird,
+                    gehört die Adresse oben hinein. Clients, die nur lokale Programme starten
+                    können, brauchen stattdessen den Server aus dem Ordner <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>mcp/</code> —
+                    siehe dortige README.
+                  </>
+                )}
+              </div>
+            )}
+
+            <div style={{ height: '1px', background: 'oklch(0.91 0.005 264)', margin: '14px 0 10px' }} />
             {conns === null && (
               <div style={{ fontSize: '12px', color: 'oklch(0.60 0.012 264)', fontFamily: UI }}>Lädt…</div>
             )}

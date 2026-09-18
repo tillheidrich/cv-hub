@@ -752,7 +752,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                 onChange={e => { const f = e.target.files?.[0]; if (f) linkedinLesen(f); e.target.value = ''; }} />
             </label>
             <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'block', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', marginTop: '2px', fontFamily: "'Inter', sans-serif", textDecoration: 'none' }}>
+              /* Mindestens 32 px hoch: Auf dem Telefon ist eine 16-px-Zeile
+                 kein Tippziel, sondern ein Glücksspiel. Der Prüflauf hat
+                 genau das gemeldet, als dieser Link neu war. */
+              style={{ display: 'flex', alignItems: 'center', minHeight: '32px', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', fontFamily: "'Inter', sans-serif", textDecoration: 'none' }}>
               Archiv bei LinkedIn anfordern →
             </a>
             {liErr && (

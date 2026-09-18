@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-18
+
+**The MCP address was written nowhere.** The endpoint has been running for
+weeks: `/mcp` answers, with OAuth discovery per RFC 9728, dynamic client
+registration, PKCE (S256) and refresh tokens. But the address appeared in **no
+place in the interface**, so the "Connected apps" section managed a list nobody
+could add to.
+
+The address, a copy button and per-client setup now sit where the connections are
+managed. The address comes from `window.location.origin`, not a hard-coded
+string, so a self-hoster sees their own. **Codex is covered explicitly** — it
+supports remote servers over Streamable HTTP with OAuth, so the `config.toml`
+block is there with a copy button, plus `codex mcp login`. No key needed.
+
+`mcp/README.md` is reordered: route A (hosted, just enter the address,
+recommended) before route B (local stdio with a `cvk_` key, only for clients
+without remote support). It used to describe only B. And the stale comment at the
+top of `KeysPanel.tsx` — "MCP server was removed in favor of the Markdown bridge"
+— is gone. A comment that describes the world wrongly is worse than none.
+
+**FAQ: two missing answers, and the numbers were wrong.** "Do I have to retype my
+résumé?" and "Can I upload my own templates?", both in all four languages. The
+second is a reasoned no: the templates are measured typesetting, not picture
+frames; what stands ready instead is the "template without data" export and, when
+self-hosting, `theme.ts`. And "eighteen templates" was wrong — in all four
+languages, in three places each. It is **26 in the picker** (36 in total; ten
+older ones that were really colour variants are out of the picker but still
+render for saved profiles).
+
+**Small things.** The new "request your archive at LinkedIn" link was 16 px tall
+and therefore not a tap target on a phone — `scripts/mobilecheck.mjs` reported it
+at all four widths, found by the check and not by a user. Nine unnecessary escapes
+removed from the French landing copy. `dev-keys.html` is new: a probe for the
+settings dialog that otherwise sits behind the login.
+
 ## 2026-09-17 (import)
 
 **Bring your CV with you, instead of typing it again.** The competitive review

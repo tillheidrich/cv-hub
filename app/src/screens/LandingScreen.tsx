@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { APP_NAME } from '../brand';
 import type { UiLang } from '../ui/i18n';
 import { api } from '../data/api';
 import { track } from '../data/track';
@@ -53,7 +52,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
         <div className="lp-wrap lp-nav-inner">
           <button type="button" className="lp-brand" onClick={scrollTo('lp-top')} aria-label="Startseite">
             <Mark />
-            <span className="lp-word">CV<span className="lp-sub">-Hub</span></span>
+            <span className="lp-word">Heidrich<span className="lp-sub">/cv</span></span>
           </button>
           <nav className="lp-nav-links" aria-label="Hauptnavigation">
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
@@ -292,7 +291,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           <div className="lp-footer-bar">
             <button type="button" className="lp-brand" onClick={scrollTo('lp-top')}>
               <Mark />
-              <span className="lp-word">CV<span className="lp-sub">-Hub</span></span>
+              <span className="lp-word">Heidrich<span className="lp-sub">/cv</span></span>
             </button>
             <nav className="lp-nav-links" style={{ display: 'flex' }} aria-label="Footer-Navigation">
               <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
@@ -300,13 +299,17 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
               <button type="button" onClick={() => onLegal?.('impressum')}>Impressum</button>
               <button type="button" onClick={() => onLegal?.('privacy')}>{({ de: 'Datenschutz', en: 'Privacy', fr: 'Confidentialité', es: 'Privacidad' } as Record<UiLang, string>)[lang]}</button>
+              {/* Der Quelltext ist das stärkste Argument dieser Seite: „self-hosted"
+                  behaupten viele, nachlesbar ist es hier. Deshalb in die
+                  Fußzeilennavigation und nicht ins Kleingedruckte. */}
+              <a href="https://github.com/tillheidrich/cv-hub" target="_blank" rel="noopener noreferrer">{t.nav.source}</a>
             </nav>
             <button type="button" className="lp-btn lp-ghost" onClick={openRequest}>{t.nav.cta}</button>
           </div>
           <div className="lp-footer-meta">
-            <span>{APP_NAME}</span>
+            <span>cv.heidrich-digital.de</span>
             <span>{t.footer.meta}</span>
-            <span>© {new Date().getFullYear()} CV-Hub</span>
+            <span>© {new Date().getFullYear()} Heidrich Digital</span>
           </div>
         </div>
       </footer>
@@ -549,10 +552,10 @@ function Sheet({ variant }: { variant: 'single' | 'sidebar' | 'band' | 'wien' | 
 // ── Content (DE/EN) ────────────────────────────────────────────────────────
 
 const DE = {
-  nav: { templates: 'Vorlagen', howItWorks: "So funktioniert's", faq: 'FAQ', cta: 'Zugang anfragen', signin: 'Anmelden' },
+  nav: { templates: 'Vorlagen', howItWorks: "So funktioniert's", faq: 'FAQ', cta: 'Zugang anfragen', signin: 'Anmelden', source: 'Quelltext' },
   request: {
     title: 'Zugang anfragen',
-    lede: 'CV-Hub ist Invite-only. Sag kurz, wer du bist — nach der Freigabe kommt dein Einladungslink per E-Mail.',
+    lede: 'Heidrich/cv ist Invite-only. Sag kurz, wer du bist — nach der Freigabe kommt dein Einladungslink per E-Mail.',
     name: 'Name', email: 'E-Mail', message: 'Nachricht (optional)',
     messagePlaceholder: 'Worum geht’s? Wofür möchtest du das Tool nutzen?',
     submit: 'Anfrage senden', sending: 'Senden',
@@ -613,11 +616,11 @@ const DE = {
       { num: '02', tag: 'Satz', title: 'Auto-Fit auf A4. Es passt einfach.', body: 'Inhalt fließt, das Raster hält. Verdichtet wird in der Reihenfolge, in der ein Setzer verdichtet — erst Weißraum, dann Ränder, dann Zeilenabstand, zuletzt die Schrift, und die nie unter 8,4 pt. Passt es dann nicht, kommt eine Seite dazu und das Tool sagt es dir, statt heimlich zu schrumpfen.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Schreiben', title: 'Klick in den Text. Tipp.', body: 'Die Vorschau ist das Dokument, nicht sein Abbild. Position, Firma, Stichpunkte, Profil — direkt anklicken und ändern. Enter legt den nächsten Stichpunkt an. Was es bewusst nicht gibt: frei platzierbare Textkästen. Genau die sind der Grund, warum Word-Lebensläufe beim Bearbeiten auseinanderfallen.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word mit Design, Markdown.', body: 'Das PDF bekommt exakt die Seiten aus der Vorschau. Word gibt es zweimal: als deine Vorlage mit Farbfläche und Akzenten — geprüft in Word und LibreOffice — und einspaltig ohne Tabellen für Portale, die die Datei maschinell auslesen. Dazu Markdown, damit eine KI gegenlesen kann.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Auswahl', title: 'Achtzehn Vorlagen, neun Farben, fünfzig Profile.', body: 'Achtzehn Vorlagen, die sich in der Konstruktion unterscheiden — nicht in der Farbe. Die wählst du selbst: neun Akzente, jede Kombination auf Kontrast geprüft. Und für jede Bewerbungsrichtung ein eigenes Profil.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Auswahl', title: 'Sechsundzwanzig Vorlagen, neun Farben, fünfzig Profile.', body: 'Sechsundzwanzig Vorlagen, die sich in der Konstruktion unterscheiden — nicht in der Farbe. Die wählst du selbst: neun Akzente, jede Kombination auf Kontrast geprüft. Und für jede Bewerbungsrichtung ein eigenes Profil.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Achtzehn Vorlagen · sechs Archetypen',
+    eyebrow: 'Sechsundzwanzig Vorlagen · sechs Archetypen',
     h: 'Ein System. Sechs Handschriften.',
     cards: [
       { name: 'Einspaltig', tag: '1 Spalte', desc: 'Alles untereinander, Datum in einer eigenen Spalte links. Die Form, die im DACH-Raum erwartet wird — und die jeder Parser sicher liest.' },
@@ -633,7 +636,7 @@ const DE = {
     h: 'Vom leeren Profil zum druckfertigen PDF.',
     items: [
       { num: '01', title: 'Profil anlegen', body: 'Bis zu fünfzig Profile pro Konto. Lege für jede Bewerbungsrichtung eines an.' },
-      { num: '02', title: 'Vorlage und Farbe wählen', body: 'Achtzehn Vorlagen, sechs Archetypen, neun Akzentfarben — jederzeit umschaltbar, ohne dass du etwas neu tippst.' },
+      { num: '02', title: 'Vorlage und Farbe wählen', body: 'Sechsundzwanzig Vorlagen, sechs Archetypen, neun Akzentfarben — jederzeit umschaltbar, ohne dass du etwas neu tippst.' },
       { num: '03', title: 'Im Dokument schreiben', body: 'Klick in den Text und tipp. Raster, Ränder und Umbrüche regelt der Satz, nicht du.' },
       { num: '04', title: 'Exportieren', body: 'PDF mit genau den Seiten aus der Vorschau, Word mit deinem Design, oder Markdown für die KI-Korrektur.' },
     ],
@@ -642,10 +645,12 @@ const DE = {
     eyebrow: 'Häufige Fragen', h: 'Kurz erklärt.',
     items: [
       { q: 'Was heißt „maschinenlesbar"?', a: 'Jeder Lebenslauf lässt sich als sauberes, strukturiertes Markdown exportieren. So kann eine KI den Inhalt verlässlich gegenlesen, kürzen oder auf eine Stelle zuschneiden — ohne dass das Layout darunter leidet. Das gesetzte PDF und die maschinenlesbare Fassung stammen aus derselben Quelle.' },
-      { q: 'Wie komme ich rein?', a: 'CV-Hub ist Invite-only — gedacht für Family & Friends. Du fragst Zugang an, bekommst einen Link und kannst sofort loslegen. Kein öffentliches Massen-Signup, keine Warteliste-Show.' },
-      { q: 'Werde ich getrackt?', a: 'Nein klassisches Tracking. Wir nutzen Umami — selbst gehostet vom Betreiber dieser Instanz — für anonyme Page-Views — kein Cookie, kein Fingerprinting, keine IP-Speicherung. Deine Profile gehören dir und werden nicht zu Geld gemacht.' },
+      { q: 'Wie komme ich rein?', a: 'Heidrich/cv ist Invite-only — gedacht für Family & Friends. Du fragst Zugang an, bekommst einen Link und kannst sofort loslegen. Kein öffentliches Massen-Signup, keine Warteliste-Show.' },
+      { q: 'Werde ich getrackt?', a: 'Nein klassisches Tracking. Wir nutzen Umami self-hosted in Falkenstein für anonyme Page-Views — kein Cookie, kein Fingerprinting, keine IP-Speicherung. Deine Profile gehören dir und werden nicht zu Geld gemacht.' },
       { q: 'Welche Formate kann ich exportieren?', a: 'Druckfertiges PDF mit Auto-Fit auf A4/Letter/Legal/A5 — mit exakt den Seiten, die in der Vorschau stehen. Word in zwei Fassungen: einmal mit dem Design deiner Vorlage (geprüft in Word und LibreOffice), einmal einspaltig ohne Tabellen für Portale, die die Datei maschinell auslesen. Dazu HTML, JSON und strukturiertes Markdown. Alles aus derselben Quelle, immer synchron.' },
-      { q: 'Kann ich Vorlagen mitten in der Bewerbung wechseln?', a: 'Ja. Inhalt und Layout sind getrennt. Schalte zwischen achtzehn Vorlagen, sechs Archetypen und neun Akzentfarben um — der Satz fügt deinen Inhalt neu ein, ohne dass du etwas neu tippst. Die Farbe ist dabei eine eigene Entscheidung und keine eigene Vorlage: deshalb achtzehn statt fünfundzwanzig, ohne dass etwas fehlt.' },
+      { q: 'Kann ich Vorlagen mitten in der Bewerbung wechseln?', a: 'Ja. Inhalt und Layout sind getrennt. Schalte zwischen sechsundzwanzig Vorlagen, sechs Archetypen und neun Akzentfarben um — der Satz fügt deinen Inhalt neu ein, ohne dass du etwas neu tippst. Die Farbe ist dabei eine eigene Entscheidung und keine eigene Vorlage: Zehn ältere Vorlagen, die faktisch nur Farbvarianten waren, sind aus der Auswahl genommen — gespeicherte Profile behalten sie.' },
+      { q: 'Muss ich meinen Lebenslauf neu abtippen?', a: 'Nein. Lade das ZIP aus dem LinkedIn-Datenexport („Eine Kopie deiner Daten erhalten") hoch — Stationen, Ausbildung, Skills, Sprachen, E-Mail und Telefon werden daraus gelesen. Die Datei wird im Browser geparst und geht an keinen Server, auch nicht an unseren; deshalb geht das schon in der Demo ohne Konto. Vor dem Übernehmen siehst du, was gefunden wurde und was nicht. Foto und Profiltext bleiben unangetastet — die kennt LinkedIn nicht. Wer ein bestehendes PDF hat, geht über den Markdown-Weg: Text in die Vorlage, von einer KI strukturieren lassen, zurückimportieren.' },
+      { q: 'Kann ich eigene Vorlagen hochladen?', a: 'Nein, und das ist eine Entscheidung. Die Vorlagen sind kein Bilderrahmen, sondern gemessener Satz: Schriftgrad, Sperrung, Zeilenabstand und Umbruch hängen zusammen, und jede Vorlage wird gegen das geprüft, was am Ende aus dem PDF wieder herausgelesen wird. Eine hochgeladene Datei könnte das nicht mitbringen. Was du stattdessen bekommst: den Export „Vorlage ohne Daten" — ein ZIP mit dem Design als eigenständigem HTML und als Word-Datei, Platzhaltern mit ihrem JSON-Pfad und einer leeren daten.json. Damit gehört dir das Design, auch ohne dieses Werkzeug. Und wer selbst hostet, legt eigene Vorlagen direkt in theme.ts an.' },
       { q: 'Was ist mit ATS-Bewerbungen?', a: 'Jede Vorlage wird gegen das gemessen, was am Ende wirklich herauskommt: das gedruckte PDF wird ausgelesen und Seite für Seite mit der Vorschau verglichen — Text, Lesereihenfolge, Wortgrenzen, Trennstriche. Dazu ein ATS-Check im Editor, der deinen Lebenslauf als reinen Text zeigt, so wie ein Parser ihn sieht, plus Abgleich mit einer Stellenanzeige. Spalten sind dabei kein Ausschlusskriterium — mindestens 15 % aller Lebensläufe haben sie. Entscheidend ist, dass die Reihenfolge stimmt, und die wird hier erzwungen.' },
     ],
   },
@@ -658,10 +663,10 @@ const DE = {
 };
 
 const EN: typeof DE = {
-  nav: { templates: 'Templates', howItWorks: 'How it works', faq: 'FAQ', cta: 'Request access', signin: 'Sign in' },
+  nav: { templates: 'Templates', howItWorks: 'How it works', faq: 'FAQ', cta: 'Request access', signin: 'Sign in', source: 'Source' },
   request: {
     title: 'Request access',
-    lede: 'CV-Hub is invite-only. Tell us briefly who you are — once approved, your invite link arrives by e-mail.',
+    lede: 'Heidrich/cv is invite-only. Tell us briefly who you are — once approved, your invite link arrives by e-mail.',
     name: 'Name', email: 'E-mail', message: 'Message (optional)',
     messagePlaceholder: 'What is this about? What would you use the tool for?',
     submit: 'Send request', sending: 'Sending',
@@ -722,11 +727,11 @@ const EN: typeof DE = {
       { num: '02', tag: 'Typesetting', title: 'Auto-fit to A4. It just fits.', body: 'Content flows, the grid holds. Condensing happens in the order a typesetter would condense: whitespace first, then margins, then leading, and type last — never below 8.4 pt. If it still does not fit, a page is added and the tool tells you, instead of shrinking in silence.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Writing', title: 'Click into the text. Type.', body: 'The preview is the document, not a picture of it. Role, company, bullet points, profile — click and change them in place. Enter starts the next bullet. What deliberately does not exist: free-floating text boxes. They are the reason Word résumés fall apart the moment you edit them.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word with the design, Markdown.', body: 'The PDF gets exactly the pages you saw in the preview. Word comes twice: as your template with its colour panel and accents — checked in Word and LibreOffice — and single-column without tables for portals that read the file by machine. Plus Markdown, so an AI can proofread.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Choice', title: 'Eighteen templates, nine colours, fifty profiles.', body: 'Eighteen templates that differ in construction — not in colour. You pick that yourself: nine accents, every combination checked for contrast. And a separate profile for every direction you apply in.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Choice', title: 'Twenty-six templates, nine colours, fifty profiles.', body: 'Twenty-six templates that differ in construction — not in colour. You pick that yourself: nine accents, every combination checked for contrast. And a separate profile for every direction you apply in.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Eighteen templates · six archetypes',
+    eyebrow: 'Twenty-six templates · six archetypes',
     h: 'One system. Six voices.',
     cards: [
       { name: 'Single column', tag: '1 column', desc: 'Everything below each other, dates in their own column on the left. The shape expected in German-speaking markets — and the one every parser reads safely.' },
@@ -742,7 +747,7 @@ const EN: typeof DE = {
     h: 'From empty profile to print-ready PDF.',
     items: [
       { num: '01', title: 'Create a profile', body: 'Up to fifty profiles per account. Set one up for every direction you apply in.' },
-      { num: '02', title: 'Pick template and colour', body: 'Eighteen templates, six archetypes, nine accent colours — switch any time without re-typing a thing.' },
+      { num: '02', title: 'Pick template and colour', body: 'Twenty-six templates, six archetypes, nine accent colours — switch any time without re-typing a thing.' },
       { num: '03', title: 'Write in the document', body: 'Click into the text and type. Grid, margins and breaks are the typesetter’s job, not yours.' },
       { num: '04', title: 'Export', body: 'PDF with exactly the pages from the preview, Word with your design, or Markdown for the AI pass.' },
     ],
@@ -751,10 +756,12 @@ const EN: typeof DE = {
     eyebrow: 'Frequent questions', h: 'In short.',
     items: [
       { q: 'What does "machine-readable" mean?', a: 'Every résumé can be exported as clean, structured Markdown. So an AI can reliably review, shorten or tailor the content to a job posting — without breaking the layout. The set PDF and the machine-readable version come from the same source.' },
-      { q: 'How do I get in?', a: 'CV-Hub is invite-only — built for family and friends. You request access, get a link, and start. No public mass-signup, no waitlist theatre.' },
-      { q: 'Will I be tracked?', a: 'Not in the classic sense. We use Umami, self-hosted by whoever runs this instance, for anonymous page views — no cookies, no fingerprinting, no IP storage. Your profiles are yours and are not monetized.' },
+      { q: 'How do I get in?', a: 'Heidrich/cv is invite-only — built for family and friends. You request access, get a link, and start. No public mass-signup, no waitlist theatre.' },
+      { q: 'Will I be tracked?', a: 'Not in the classic sense. We use Umami self-hosted in Falkenstein for anonymous page views — no cookies, no fingerprinting, no IP storage. Your profiles are yours and are not monetized.' },
       { q: 'What formats can I export?', a: 'Print-ready PDF with auto-fit on A4/Letter/Legal/A5 — with exactly the pages you see in the preview. Word in two versions: one with your template’s design (checked in Word and LibreOffice), one single-column without tables for portals that read the file by machine. Plus HTML, JSON and structured Markdown. All from the same source, always in sync.' },
-      { q: 'Can I switch templates mid-application?', a: 'Yes. Content and layout are separate. Switch between eighteen templates, six archetypes and nine accent colours — the typesetter places your content again, without re-typing anything. Colour is its own decision here, not its own template: that is why there are eighteen instead of twenty-five, with nothing missing.' },
+      { q: 'Can I switch templates mid-application?', a: 'Yes. Content and layout are separate. Switch between twenty-six templates, six archetypes and nine accent colours — the typesetter places your content again, without re-typing anything. Colour is its own decision here, not its own template: ten older templates that were really just colour variants have been taken out of the picker — saved profiles keep them.' },
+      { q: 'Do I have to retype my résumé?', a: 'No. Upload the ZIP from LinkedIn\'s data export ("Get a copy of your data") — positions, education, skills, languages, email and phone are read from it. The file is parsed in the browser and reaches no server, not even ours, so it works in the demo without an account. Before anything is replaced you see what was found and what was not. Photo and profile text stay untouched — LinkedIn does not know them. For an existing PDF, take the Markdown route: text into the template, let an AI structure it, import it back.' },
+      { q: 'Can I upload my own templates?', a: 'No, and that is a decision. The templates are not picture frames but measured typesetting: font size, tracking, leading and page breaks hang together, and every template is checked against what can actually be read back out of the finished PDF. An uploaded file could not bring that with it. What you get instead is the "template without data" export — a ZIP with the design as standalone HTML and as a Word file, placeholders carrying their JSON path, and an empty daten.json. The design is yours, with or without this tool. And if you self-host, you add your own templates directly in theme.ts.' },
       { q: 'What about ATS applications?', a: 'Every template is measured against what actually comes out: the printed PDF is read back and compared with the preview page by page — text, reading order, word boundaries, hyphens. Plus an ATS check in the editor that shows your résumé as plain text, the way a parser sees it, and matches it against a job ad. Columns are not a knock-out criterion — at least 15% of all résumés have them. What matters is that the order is right, and here it is enforced.' },
     ],
   },
@@ -767,10 +774,10 @@ const EN: typeof DE = {
 };
 
 const FR: typeof DE = {
-  nav: { templates: 'Modèles', howItWorks: 'Comment ça marche', faq: 'FAQ', cta: "Demander l'accès", signin: 'Se connecter' },
+  nav: { templates: 'Modèles', howItWorks: 'Comment ça marche', faq: 'FAQ', cta: "Demander l'accès", signin: 'Se connecter', source: 'Code source' },
   request: {
     title: "Demander l'accès",
-    lede: "CV-Hub est sur invitation. Dites brièvement qui vous êtes — une fois validé, votre lien d'invitation arrive par e-mail.",
+    lede: "Heidrich/cv est sur invitation. Dites brièvement qui vous êtes — une fois validé, votre lien d'invitation arrive par e-mail.",
     name: 'Nom', email: 'E-mail', message: 'Message (facultatif)',
     messagePlaceholder: "De quoi s'agit-il ? À quoi vous servirait l'outil ?",
     submit: 'Envoyer la demande', sending: 'Envoi',
@@ -808,9 +815,9 @@ const FR: typeof DE = {
     intro: "Un Applicant Tracking System (ATS) est le logiciel de recrutement qui lit automatiquement les CV entrants, les découpe en champs de données, les passe au crible des mots-clés et pré-trie les candidats pour le recruteur. Le piège : le logiciel lit un PDF dans l'ordre où le texte y est stocké — pas dans celui où il apparaît sur le papier. Ce qui est enfermé dans des tableaux, des cadres de texte ou des images manque tout simplement. Les colonnes ne sont pas éliminatoires tant que l'ordre est bon ; dans les modèles Word et Canva, il ne l'est généralement pas.",
     facts: [
       { value: '88 %', label: 'des employeurs le disent eux-mêmes : des candidats qualifiés sont écartés par le système parce qu\'ils ne reprennent pas les critères au mot près.', src: 'Harvard Business School & Accenture, « Hidden Workers », 2021' },
-      { value: '≥ 15 %', label: "des CV utilisent une mise en page en colonnes — les colonnes sont donc normales. L\'éditeur de parseurs Textkernel porte ainsi à 90 % la part des documents correctement reconstruits : un sur dix échoue quand même. C\'est pourquoi cet outil impose l\'ordre de lecture au lieu d\'espérer l\'analyse du destinataire.", src: 'Textkernel, extraction des CV en colonnes, 2023' },
-      { value: '≤ 8 pt', label: "Personio cite explicitement les corps inférieurs à cette limite comme cause documentée d\'échec de lecture. Ici, le plancher est à 8,4 pt — rien n\'est composé en dessous ; une page est ajoutée à la place.", src: 'Personio, documentation éditeur' },
-      { value: '0,08 em', label: "est la limite d\'interlettrage pour les lignes en capitales — mesurée ici. À partir de 0,10 em, « OBSERVABILITY » se décompose en « O B S E R VA B I L I T Y » à l\'extraction, et ce sont précisément ces lignes qui servent au parseur à découper le CV en sections.", src: 'Mesure propre avec Chromium et Poppler, 09/2026' },
+      { value: '≥ 15 %', label: "des CV utilisent une mise en page en colonnes — les colonnes sont donc normales. L'éditeur de parseurs Textkernel porte ainsi à 90 % la part des documents correctement reconstruits : un sur dix échoue quand même. C'est pourquoi cet outil impose l'ordre de lecture au lieu d'espérer l'analyse du destinataire.", src: 'Textkernel, extraction des CV en colonnes, 2023' },
+      { value: '≤ 8 pt', label: "Personio cite explicitement les corps inférieurs à cette limite comme cause documentée d'échec de lecture. Ici, le plancher est à 8,4 pt — rien n'est composé en dessous ; une page est ajoutée à la place.", src: 'Personio, documentation éditeur' },
+      { value: '0,08 em', label: "est la limite d'interlettrage pour les lignes en capitales — mesurée ici. À partir de 0,10 em, « OBSERVABILITY » se décompose en « O B S E R VA B I L I T Y » à l'extraction, et ce sont précisément ces lignes qui servent au parseur à découper le CV en sections.", src: 'Mesure propre avec Chromium et Poppler, 09/2026' },
     ],
     biasTitle: "Et la machine n'est pas neutre.",
     bias: "En 2018, Amazon a dû arrêter son propre outil de recrutement par IA : il avait appris à dévaloriser systématiquement les CV contenant le mot « women's ». La présélection automatique peut amplifier les biais existants au lieu de les réduire — une raison de plus de garder un CV techniquement propre, neutre et lisible.",
@@ -831,11 +838,11 @@ const FR: typeof DE = {
       { num: '02', tag: 'Composition', title: 'Ajustement automatique en A4. Ça tient.', body: 'Le contenu coule, la grille tient. La densification suit l’ordre d’un typographe : d’abord les blancs, puis les marges, puis l’interligne, et le corps en dernier — jamais sous 8,4 pt. Si ça ne tient toujours pas, une page s’ajoute et l’outil vous le dit, au lieu de réduire en silence.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Écriture', title: 'Cliquez dans le texte. Tapez.', body: 'L’aperçu est le document, pas son image. Poste, entreprise, puces, profil — cliquez et modifiez sur place. Entrée crée la puce suivante. Ce qui n’existe volontairement pas : des cadres de texte libres. C’est précisément pour cela que les CV Word se désagrègent dès qu’on les modifie.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word avec le design, Markdown.', body: 'Le PDF reçoit exactement les pages vues dans l’aperçu. Word existe en deux versions : votre modèle avec son aplat de couleur et ses accents — vérifié dans Word et LibreOffice — et une version à une colonne sans tableaux pour les portails qui lisent le fichier par machine. Plus Markdown, pour qu’une IA puisse relire.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Choix', title: 'Dix-huit modèles, neuf couleurs, cinquante profils.', body: 'Dix-huit modèles qui diffèrent par la construction — pas par la couleur. Celle-ci, vous la choisissez : neuf accents, chaque combinaison vérifiée en contraste. Et un profil par direction de candidature.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Choix', title: 'Vingt-six modèles, neuf couleurs, cinquante profils.', body: 'Vingt-six modèles qui diffèrent par la construction — pas par la couleur. Celle-ci, vous la choisissez : neuf accents, chaque combinaison vérifiée en contraste. Et un profil par direction de candidature.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Dix-huit modèles · six archétypes',
+    eyebrow: 'Vingt-six modèles · six archétypes',
     h: 'Un système. Six écritures.',
     cards: [
       { name: 'Une colonne', tag: '1 colonne', desc: 'Tout les uns sous les autres, les dates dans leur propre colonne à gauche. La forme attendue dans l’espace germanophone — et celle que tout parseur lit sans risque.' },
@@ -851,7 +858,7 @@ const FR: typeof DE = {
     h: 'Du profil vierge au PDF prêt à imprimer.',
     items: [
       { num: '01', title: 'Créer un profil', body: 'Jusqu’à cinquante profils par compte. Un par direction de candidature.' },
-      { num: '02', title: 'Choisir modèle et couleur', body: 'Dix-huit modèles, six archétypes, neuf couleurs d’accent — modifiables à tout moment, sans rien retaper.' },
+      { num: '02', title: 'Choisir modèle et couleur', body: 'Vingt-six modèles, six archétypes, neuf couleurs d’accent — modifiables à tout moment, sans rien retaper.' },
       { num: '03', title: 'Écrire dans le document', body: 'Cliquez dans le texte et tapez. Grille, marges et césures, c’est l’affaire de la composition, pas la vôtre.' },
       { num: '04', title: 'Exporter', body: 'PDF avec exactement les pages de l’aperçu, Word avec votre design, ou Markdown pour la relecture par une IA.' },
     ],
@@ -860,10 +867,12 @@ const FR: typeof DE = {
     eyebrow: 'Questions fréquentes', h: 'En bref.',
     items: [
       { q: 'Que signifie « lisible par la machine » ?', a: "Chaque CV s'exporte en Markdown propre et structuré. Une IA peut ainsi le relire, le raccourcir ou l'ajuster à un poste de façon fiable — sans abîmer la mise en page. Le PDF composé et la version lisible par la machine viennent de la même source." },
-      { q: "Comment obtenir l'accès ?", a: "CV-Hub est sur invitation — pensé pour Family & Friends. Vous demandez l'accès, recevez un lien et démarrez aussitôt. Pas d'inscription de masse, pas de liste d'attente pour la forme." },
-      { q: 'Suis-je pisté ?', a: "Pas de pistage classique. Nous utilisons Umami, auto-hébergé par l'exploitant de cette instance, pour des pages vues anonymes — sans cookie, sans empreinte, sans stockage d'IP. Vos profils vous appartiennent et ne sont pas monétisés." },
+      { q: "Comment obtenir l'accès ?", a: "Heidrich/cv est sur invitation — pensé pour Family & Friends. Vous demandez l'accès, recevez un lien et démarrez aussitôt. Pas d'inscription de masse, pas de liste d'attente pour la forme." },
+      { q: 'Suis-je pisté ?', a: "Pas de pistage classique. Nous utilisons Umami auto-hébergé à Falkenstein pour des pages vues anonymes — sans cookie, sans empreinte, sans stockage d'IP. Vos profils vous appartiennent et ne sont pas monétisés." },
       { q: 'Quels formats puis-je exporter ?', a: "PDF prêt à imprimer avec ajustement automatique en A4/Letter/Legal/A5 — avec exactement les pages de l'aperçu. Word en deux versions : l'une avec le design de votre modèle (vérifiée dans Word et LibreOffice), l'autre à une colonne sans tableaux pour les portails qui lisent le fichier par machine. Plus HTML, JSON et Markdown structuré. Tout vient de la même source, toujours synchronisé." },
-      { q: 'Puis-je changer de modèle en pleine candidature ?', a: "Oui. Le contenu et la mise en page sont séparés. Passez d'un modèle à l'autre parmi les dix-huit, les six archétypes et les neuf couleurs d'accent — la composition replace votre contenu sans que vous ne retapiez rien. La couleur est ici une décision à part, pas un modèle à part : d'où dix-huit au lieu de vingt-cinq, sans rien perdre." },
+      { q: 'Puis-je changer de modèle en pleine candidature ?', a: "Oui. Le contenu et la mise en page sont séparés. Passez d'un modèle à l'autre parmi les vingt-six, les six archétypes et les neuf couleurs d'accent — la composition replace votre contenu sans que vous ne retapiez rien. La couleur est ici une décision à part, pas un modèle à part : dix anciens modèles qui n'étaient que des variantes de couleur ont été retirés du choix — les profils enregistrés les conservent." },
+      { q: 'Dois-je retaper mon CV ?', a: "Non. Téléversez le ZIP de l'export de données LinkedIn (« Obtenir une copie de vos données ») — postes, formation, compétences, langues, e-mail et téléphone en sont extraits. Le fichier est lu dans le navigateur et n'atteint aucun serveur, pas même le nôtre ; cela fonctionne donc dès la démo, sans compte. Avant tout remplacement, vous voyez ce qui a été trouvé et ce qui ne l'a pas été. Photo et texte de profil restent intacts — LinkedIn ne les connaît pas. Pour un PDF existant, passez par le Markdown : le texte dans le modèle, structuré par une IA, réimporté." },
+      { q: 'Puis-je téléverser mes propres modèles ?', a: "Non, et c'est un choix. Les modèles ne sont pas des cadres mais une composition mesurée : corps, approche, interlignage et coupures tiennent ensemble, et chaque modèle est vérifié contre ce que l'on peut réellement relire dans le PDF final. Un fichier téléversé ne pourrait pas apporter cela. À la place : l'export « modèle sans données » — un ZIP avec le design en HTML autonome et en fichier Word, des champs porteurs de leur chemin JSON et un daten.json vide. Le design vous appartient, avec ou sans cet outil. Et en auto-hébergement, vos modèles s'ajoutent directement dans theme.ts." },
       { q: 'Et pour les candidatures ATS ?', a: "Chaque modèle est mesuré sur ce qui sort réellement : le PDF imprimé est relu et comparé page par page à l'aperçu — texte, ordre de lecture, limites de mots, césures. S'y ajoute un contrôle ATS dans l'éditeur qui montre votre CV en texte brut, tel qu'un parseur le voit, avec comparaison à une offre d'emploi. Les colonnes ne sont pas éliminatoires — au moins 15 % des CV en ont. Ce qui compte, c'est l'ordre, et il est imposé ici." },
     ],
   },
@@ -876,10 +885,10 @@ const FR: typeof DE = {
 };
 
 const ES: typeof DE = {
-  nav: { templates: 'Plantillas', howItWorks: 'Cómo funciona', faq: 'FAQ', cta: 'Solicitar acceso', signin: 'Iniciar sesión' },
+  nav: { templates: 'Plantillas', howItWorks: 'Cómo funciona', faq: 'FAQ', cta: 'Solicitar acceso', signin: 'Iniciar sesión', source: 'Código' },
   request: {
     title: 'Solicitar acceso',
-    lede: 'CV-Hub es solo por invitación. Cuéntanos brevemente quién eres — una vez aprobado, tu enlace de invitación llegará por e-mail.',
+    lede: 'Heidrich/cv es solo por invitación. Cuéntanos brevemente quién eres — una vez aprobado, tu enlace de invitación llegará por e-mail.',
     name: 'Nombre', email: 'E-mail', message: 'Mensaje (opcional)',
     messagePlaceholder: '¿De qué se trata? ¿Para qué usarías la herramienta?',
     submit: 'Enviar solicitud', sending: 'Enviando',
@@ -940,11 +949,11 @@ const ES: typeof DE = {
       { num: '02', tag: 'Composición', title: 'Ajuste automático a A4. Simplemente encaja.', body: 'El contenido fluye, la retícula aguanta. Se compacta en el orden en que lo haría un tipógrafo: primero el blanco, luego los márgenes, luego el interlineado y la letra al final — nunca por debajo de 8,4 pt. Si aun así no cabe, se añade una página y la herramienta te lo dice, en lugar de encoger en silencio.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Escribir', title: 'Haz clic en el texto. Escribe.', body: 'La vista previa es el documento, no su imagen. Puesto, empresa, viñetas, perfil — haz clic y cámbialos ahí mismo. Intro crea la siguiente viñeta. Lo que deliberadamente no existe: cuadros de texto libres. Son justo la razón por la que los CV de Word se desmontan al editarlos.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Exportar', title: 'PDF, Word con el diseño, Markdown.', body: 'El PDF recibe exactamente las páginas de la vista previa. Word viene dos veces: como tu plantilla con su franja de color y sus acentos — comprobado en Word y LibreOffice — y a una columna sin tablas para portales que leen el archivo por máquina. Además Markdown, para que una IA pueda revisarlo.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Elección', title: 'Dieciocho plantillas, nueve colores, cincuenta perfiles.', body: 'Dieciocho plantillas que se diferencian en la construcción — no en el color. Ese lo eliges tú: nueve acentos, cada combinación comprobada en contraste. Y un perfil propio para cada dirección en la que te postules.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Elección', title: 'Veintiséis plantillas, nueve colores, cincuenta perfiles.', body: 'Veintiséis plantillas que se diferencian en la construcción — no en el color. Ese lo eliges tú: nueve acentos, cada combinación comprobada en contraste. Y un perfil propio para cada dirección en la que te postules.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Dieciocho plantillas · seis arquetipos',
+    eyebrow: 'Veintiséis plantillas · seis arquetipos',
     h: 'Un sistema. Seis firmas.',
     cards: [
       { name: 'Una columna', tag: '1 columna', desc: 'Todo uno debajo de otro, las fechas en su propia columna a la izquierda. La forma que se espera en el ámbito germanohablante — y la que cualquier parseador lee con seguridad.' },
@@ -960,7 +969,7 @@ const ES: typeof DE = {
     h: 'Del perfil vacío al PDF listo para imprimir.',
     items: [
       { num: '01', title: 'Crear un perfil', body: 'Hasta cincuenta perfiles por cuenta. Uno por cada dirección en la que te postules.' },
-      { num: '02', title: 'Elegir plantilla y color', body: 'Dieciocho plantillas, seis arquetipos, nueve colores de acento — cambiables en cualquier momento, sin volver a escribir nada.' },
+      { num: '02', title: 'Elegir plantilla y color', body: 'Veintiséis plantillas, seis arquetipos, nueve colores de acento — cambiables en cualquier momento, sin volver a escribir nada.' },
       { num: '03', title: 'Escribir en el documento', body: 'Haz clic en el texto y escribe. Retícula, márgenes y saltos son cosa de la composición, no tuya.' },
       { num: '04', title: 'Exportar', body: 'PDF con exactamente las páginas de la vista previa, Word con tu diseño, o Markdown para la revisión con IA.' },
     ],
@@ -969,10 +978,12 @@ const ES: typeof DE = {
     eyebrow: 'Preguntas frecuentes', h: 'En breve.',
     items: [
       { q: '¿Qué significa «legible por máquina»?', a: 'Cada CV se exporta como Markdown limpio y estructurado. Así una IA puede revisarlo, acortarlo o ajustarlo a un puesto de forma fiable, sin estropear la maquetación. El PDF compuesto y la versión legible por máquina salen de la misma fuente.' },
-      { q: '¿Cómo entro?', a: 'CV-Hub es solo por invitación, pensado para Family & Friends. Solicitas acceso, recibes un enlace y empiezas al instante. Sin registro masivo, sin lista de espera de escaparate.' },
-      { q: '¿Me rastrean?', a: 'Nada de rastreo clásico. Usamos Umami, autoalojado por quien opera esta instancia, para vistas de página anónimas: sin cookies, sin fingerprinting, sin almacenar IP. Tus perfiles son tuyos y no se monetizan.' },
+      { q: '¿Cómo entro?', a: 'Heidrich/cv es solo por invitación, pensado para Family & Friends. Solicitas acceso, recibes un enlace y empiezas al instante. Sin registro masivo, sin lista de espera de escaparate.' },
+      { q: '¿Me rastrean?', a: 'Nada de rastreo clásico. Usamos Umami autoalojado en Falkenstein para vistas de página anónimas: sin cookies, sin fingerprinting, sin almacenar IP. Tus perfiles son tuyos y no se monetizan.' },
       { q: '¿Qué formatos puedo exportar?', a: 'PDF listo para imprimir con ajuste automático en A4/Letter/Legal/A5 — con exactamente las páginas de la vista previa. Word en dos versiones: una con el diseño de tu plantilla (comprobada en Word y LibreOffice) y otra a una columna sin tablas para portales que leen el archivo por máquina. Además HTML, JSON y Markdown estructurado. Todo de la misma fuente, siempre sincronizado.' },
-      { q: '¿Puedo cambiar de plantilla a mitad de candidatura?', a: 'Sí. Contenido y maquetación van por separado. Cambia entre dieciocho plantillas, seis arquetipos y nueve colores de acento: la composición recoloca tu contenido sin que reescribas nada. Aquí el color es una decisión propia, no una plantilla propia: por eso son dieciocho en vez de veinticinco, sin que falte nada.' },
+      { q: '¿Puedo cambiar de plantilla a mitad de candidatura?', a: 'Sí. Contenido y maquetación van por separado. Cambia entre veintiséis plantillas, seis arquetipos y nueve colores de acento: la composición recoloca tu contenido sin que reescribas nada. Aquí el color es una decisión propia, no una plantilla propia: diez plantillas antiguas que en realidad solo eran variantes de color se han retirado de la selección — los perfiles guardados las conservan.' },
+      { q: '¿Tengo que reescribir mi currículum?', a: 'No. Sube el ZIP de la exportación de datos de LinkedIn («Obtener una copia de tus datos»): puestos, formación, competencias, idiomas, correo y teléfono se leen de ahí. El archivo se procesa en el navegador y no llega a ningún servidor, tampoco al nuestro; por eso funciona ya en la demo, sin cuenta. Antes de sustituir nada ves qué se encontró y qué no. La foto y el texto de perfil quedan intactos: LinkedIn no los conoce. Si tienes un PDF, ve por la vía Markdown: el texto a la plantilla, que una IA lo estructure, y reimportar.' },
+      { q: '¿Puedo subir mis propias plantillas?', a: 'No, y es una decisión. Las plantillas no son marcos sino composición medida: cuerpo, interletraje, interlineado y saltos de página van juntos, y cada plantilla se comprueba contra lo que realmente se puede volver a leer del PDF final. Un archivo subido no podría traer eso. A cambio tienes la exportación «plantilla sin datos»: un ZIP con el diseño como HTML independiente y como archivo de Word, marcadores con su ruta JSON y un daten.json vacío. El diseño es tuyo, con o sin esta herramienta. Y si te autoalojas, añades tus plantillas directamente en theme.ts.' },
       { q: '¿Y las candidaturas ATS?', a: 'Cada plantilla se mide contra lo que realmente sale: el PDF impreso se vuelve a leer y se compara página por página con la vista previa — texto, orden de lectura, límites de palabra, guiones. Además, una comprobación ATS en el editor muestra tu CV como texto plano, tal como lo ve un parseador, y lo contrasta con una oferta. Las columnas no son un criterio de exclusión: al menos el 15 % de los CV las tienen. Lo que cuenta es que el orden sea correcto, y aquí se impone.' },
     ],
   },

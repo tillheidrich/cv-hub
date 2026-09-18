@@ -6,115 +6,90 @@ Anschreiben als **Markdown lesen, überarbeiten und zurückschreiben** — die
 gleiche Markdown-Brücke, die auch im Editor steckt.
 
 Im Tool selbst ist **keine KI eingebaut.** Der MCP-Server ist die programmatische
-Variante der Markdown-Brücke und steht **nur registrierten Nutzern** offen
-(Auth per persönlichem API-Key). Der Demo-Modus hat keine Schlüssel und ist
-bewusst außen vor.
+Variante der Markdown-Brücke und steht **nur registrierten Nutzern** offen.
+Der Demo-Modus ist bewusst außen vor.
 
-## 1. API-Key erzeugen
+## Zwei Wege — und für die meisten ist der erste richtig
 
-Im Konto anmelden → **Einstellungen → Schlüssel** → neuen Schlüssel erzeugen.
-Der Schlüssel (beginnt mit `cvk_`) wird **nur einmal** angezeigt — sofort
-kopieren. Widerrufen kannst du ihn jederzeit an gleicher Stelle.
+### A. Gehostet: nur die Adresse eintragen (empfohlen)
 
-## 2. Abhängigkeiten installieren
+Der Server läuft bereits auf derselben Domain wie das Werkzeug. Es gibt **nichts
+zu installieren und keinen Schlüssel zu erzeugen** — der Client meldet sich
+selbst an (OAuth 2.1 mit dynamischer Client-Registrierung und PKCE), du
+bestätigst einmal im Browser.
 
-```bash
-cd mcp
-npm install
+```
+https://DEINE-DOMAIN/mcp
 ```
 
-Benötigt Node.js ≥ 18 (nutzt das globale `fetch`).
+Die genaue Adresse steht im
+Werkzeug unter **Einstellungen → Verbundene Apps**, mit Kopierknopf.
 
-## 3. In den MCP-Client eintragen
+**Claude Desktop** — Einstellungen → Connectors → „Custom connector hinzufügen",
+Adresse einsetzen, im Browser bestätigen.
 
-### Claude Desktop
+**Codex** — in `~/.codex/config.toml`:
 
-`claude_desktop_config.json` (macOS:
-`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```toml
+[mcp_servers.heidrich-cv]
+url = "https://DEINE-DOMAIN/mcp"
+```
+
+Danach einmal `codex mcp login heidrich-cv`. Codex unterstützt Remote-Server über
+Streamable HTTP samt OAuth; ein `bearer_token_env_var` ist nicht nötig, weil die
+Anmeldung über den Login-Befehl läuft.
+
+**Cursor, Zed, VS Code und andere** — überall dort, wo ein MCP-Server mit *URL*
+oder *Streamable HTTP* eingetragen wird, gehört diese Adresse hinein.
+
+Erteilte Zugriffe stehen im Werkzeug unter **Einstellungen → Verbundene Apps**
+und lassen sich dort einzeln beenden.
+
+### B. Lokal über stdio (für Clients ohne Remote-Unterstützung)
+
+Nur nötig, wenn der Client ausschließlich lokale Programme starten kann.
+
+```bash
+cd mcp && npm install     # Node.js >= 18
+```
+
+Dann einen persönlichen Schlüssel im Konto erzeugen (**Einstellungen →
+Schlüssel**; beginnt mit `cvk_`, wird nur einmal angezeigt) und eintragen:
 
 ```json
 {
   "mcpServers": {
-    "cv-hub": {
+    "heidrich-cv": {
       "command": "node",
       "args": ["/ABSOLUTER/PFAD/zu/mcp/cv-mcp.mjs"],
-      "env": {
-        "CV_API_KEY": "cvk_dein_schluessel"
-      }
+      "env": { "CV_API_KEY": "cvk_dein_schluessel" }
     }
   }
 }
 ```
 
-### Cursor / andere Clients
-
-Analog: Command `node`, Argument der absolute Pfad zu `cv-mcp.mjs`, und
-`CV_API_KEY` als Umgebungsvariable.
-
-Danach den Client neu starten.
-
-## Gehosteter Betrieb (mehrbenutzerfähig)
-
-Der Server läuft auch als Web-Dienst. Dann verbindet sich **jeder Nutzer deiner
-Instanz** mit seinem eigenen KI-Client und sieht ausschließlich seine eigenen
-Daten — niemand muss einen Schlüssel kopieren.
-
-Im mitgelieferten `docker-compose.yml` ist der Dienst enthalten. Der Nutzer
-trägt in seinem Client nur die Adresse ein:
-
-```
-https://deine-domain/mcp
-```
-
-Der Client registriert sich selbst (OAuth 2.1 mit Dynamic Client Registration
-und PKCE), die Instanz öffnet sich, der Nutzer ist bereits angemeldet,
-bestätigt einmal — fertig. Verbindungen lassen sich im Konto unter
-*Einstellungen → Verbundene Apps* jederzeit beenden.
-
-Warum OAuth und nicht einfach ein Token: Entfernte MCP-Clients verbinden sich
-ausschließlich so. **Ein Feld für ein statisches Bearer-Token gibt es dort
-nicht.**
-
-> **`CV_API_KEY` im HTTP-Modus nicht setzen.** Er würde jeden Aufrufer zu
-> demselben Konto machen — genau das, was der Mehrbenutzerbetrieb vermeidet.
+Derselbe Server läuft mit `MCP_HTTP=1` als HTTP-Dienst — so wird Variante A
+betrieben (hinter `location /mcp` in `app/nginx.conf`).
 
 ## Umgebungsvariablen
 
-| Variable         | Pflicht | Standard | Zweck |
-|------------------|:-------:|----------|-------|
-| `CV_API_KEY`     | nur stdio | – | Persönlicher Schlüssel (`cvk_…`). Im HTTP-Modus **nicht** setzen |
-| `CV_API_BASE`    | nein | `http://localhost:8080/pdfapi` | API-Basis. HTTPS Pflicht, außer localhost oder ein Dienstname ohne Punkt im eigenen Netz |
-| `MCP_HTTP`       | nur HTTP | – | `1` = gehosteter Web-Dienst statt stdio |
-| `PORT`           | nein | `3000` | Port im HTTP-Modus |
-| `MCP_PUBLIC_URL` | HTTP: empfohlen | Host-Header | Öffentliche Basis-Adresse. Steht im Wegweiser zum Anmeldedienst |
-| `MCP_AUTH_BASE`  | nein | `<MCP_PUBLIC_URL>/oauth` | Öffentliche Adresse der OAuth-Endpunkte. Nur nötig, wenn ein Proxy dem Backend ein Pfadpräfix abschneidet — dann kann der Dienst seine eigene Adresse nicht kennen |
+| Variable      | Pflicht | Standard                                   | Zweck                          |
+|---------------|:-------:|--------------------------------------------|--------------------------------|
+| `CV_API_KEY`  | nur stdio | –                                        | Persönlicher Schlüssel (`cvk_…`) |
+| `MCP_HTTP`    |  nein   | –                                          | `1` → HTTP-Dienst statt stdio  |
+| `PORT`        |  nein   | `3000`                                     | Port im HTTP-Modus             |
+| `CV_API_BASE` |  nein   | `https://DEINE-DOMAIN/pdfapi`    | API-Basis (für Self-Hosting)   |
 
 ## Tools
 
 | Tool                            | Zweck                                              |
 |---------------------------------|----------------------------------------------------|
-| `create_resume`                 | **Neuen** Lebenslauf anlegen (nie einen bestehenden überschreiben) |
-| `rename_resume`                 | Anzeigenamen ändern                                |
 | `list_resumes`                  | Alle Lebensläufe des Kontos auflisten (mit id)     |
 | `get_resume_markdown`           | Lebenslauf als Markdown lesen                      |
 | `update_resume_markdown`        | Überarbeitetes Lebenslauf-Markdown zurückschreiben |
 | `get_cover_letter_markdown`     | Anschreiben als Markdown lesen                     |
 | `update_cover_letter_markdown`  | Überarbeitetes Anschreiben zurückschreiben         |
 | `list_templates`                | Verfügbare Design-Vorlagen auflisten               |
-| `get_resume_settings`           | Vorlage, Sprache und Satz-Einstellungen lesen      |
-| `update_resume_settings`        | Dieselben ändern                                   |
-| `set_resume_photo`              | Profilfoto setzen                                  |
-| `remove_resume_photo`           | Profilfoto entfernen                               |
-
-Ein Profil führt **alle vier Sprachfassungen getrennt**. Die Markdown-Tools
-arbeiten ohne Angabe auf der eingestellten Sprache; mit `lang` (`de`/`en`/`fr`/`es`)
-auf einer anderen. Wer nur eine Fassung überarbeitet, lässt die übrigen
-unverändert stehen — das fällt erst auf, wenn dort jemand exportiert. Eine
-Übersetzung einzuspielen stellt die eingestellte Sprache des Profils nicht um.
-
-Kein `delete_resume`: Löschen bleibt in der Oberfläche. Ein Werkzeug, mit dem
-ein Modell Lebensläufe entfernen kann, ist ein schlechter Tausch gegen den
-Komfort, den es bringt.
 
 Die `update_*`-Tools legen serverseitig **vor jedem Speichern automatisch eine
 Version** an — Fehlbearbeitungen lassen sich im Editor über die Versionshistorie
@@ -130,6 +105,11 @@ zurückrollen. Mit `dry_run: true` wird nur validiert, nichts gespeichert.
 
 ## Sicherheit
 
-- Der Schlüssel ist an dein Konto gebunden und hat genau deine Rechte.
-- Serverseitig wird nur der **Hash** des Schlüssels gespeichert.
-- Bei Verdacht: im Konto widerrufen — der MCP-Server verliert sofort den Zugriff.
+- **Gehostet (A):** Der Client bekommt ein Token mit genau deinen Rechten, nie dein
+  Passwort. Jede Verbindung steht namentlich unter *Einstellungen → Verbundene
+  Apps* und ist dort einzeln zu beenden — der Zugriff endet sofort.
+- **Lokal (B):** Der Schlüssel ist an dein Konto gebunden und hat genau deine
+  Rechte. Serverseitig wird nur der **Hash** gespeichert. Bei Verdacht im Konto
+  widerrufen.
+- In beiden Fällen legen die `update_*`-Tools vor jedem Speichern eine Version
+  an. Eine missratene Bearbeitung ist im Editor zurückzurollen, nicht verloren.
