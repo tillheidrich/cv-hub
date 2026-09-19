@@ -20,6 +20,8 @@ import { LABELS } from '../data/labels';
 import { buildResumeHtmlForTest, type ExportRenderConfig } from './exportHtml';
 import { buildDocx } from './exportDocx';
 import { getTheme } from '../templates/theme';
+import { demoDE } from '../data/demo-de';
+import { demoEN } from '../data/demo-en';
 
 /** Platzhalter in doppelten geschweiften Klammern — das Format, das jede KI
  *  und jede Template-Engine ohne Erklärung versteht. */
@@ -166,11 +168,21 @@ Erzeugt mit CV-Hub.
 }
 
 /** Baut das Paket und lädt es herunter. */
+/* Das Beispiel ist eine Musterperson, NICHT der eigene Lebenslauf.
+ *
+ * Vorher reichte der Aufrufer `data` durch — die echten Daten des Nutzers.
+ * Das ZIP heißt „Vorlage ohne Daten", und `beispiel.json` enthielt Name,
+ * Anschrift, Geburtsdatum und sämtliche Stationen. Wer das ZIP weitergegeben
+ * hat, weil die Beschriftung sagt, es seien keine Daten drin, hat seinen
+ * vollständigen Lebenslauf verschickt.
+ *
+ * Der Parameter ist deshalb weg, nicht nur der eine Aufruf geändert: Solange
+ * man echte Daten übergeben KANN, übergibt sie früher oder später jemand. */
 export async function exportTemplateKit(
   cfg: ExportRenderConfig,
   lang: Lang,
-  example: CVData,
 ): Promise<void> {
+  const example: CVData = lang === 'de' ? demoDE : demoEN;
   const theme = getTheme(cfg.themeId, cfg.accentId, cfg.paperId);
   const ph = placeholderCV(lang);
 
@@ -179,7 +191,13 @@ export async function exportTemplateKit(
   // `pageBlocks` bleibt weg: die Vorlage soll frei umbrechen, nicht die
   // Seitenaufteilung eines fremden Lebenslaufs mitschleppen.
   const html = buildResumeHtmlForTest(ph, { ...cfg, pageBlocks: undefined });
-  const docx = await Packer.toBlob(buildDocx(ph, cfg.themeId, 'design'));
+  /* Die Vorlage zeigt die Vorlage — nicht die Gliederung eines Fremden.
+   * `hiddenSections` und `sectionOrder` gehören dem Lebenslauf des Nutzers,
+   * nicht dem Muster im ZIP: Wer „Eckdaten" in seinem eigenen Dokument
+   * ausblendet, will deshalb keine Vorlage ohne Eckdatenblock. Vorlagenfarbe,
+   * Akzent, Papier und Blattmaß bleiben dagegen drin — die hat er für dieses
+   * Design gewählt. */
+  const docx = await Packer.toBlob(buildDocx(ph, { ...cfg, hiddenSections: [], sectionOrder: undefined }, 'design'));
 
   const zip = new JSZip();
   zip.file('vorlage.html', html);

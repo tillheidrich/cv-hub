@@ -51,6 +51,21 @@ check(!!leer.labels?.sections?.experience, 'Beschriftungen liegen im JSON, nicht
 
 const bsp = JSON.parse(readFileSync(join(dir, 'beispiel.json'), 'utf8'));
 check(!!bsp.personal?.name, 'beispiel.json ist ausgefüllt');
+/* Und zwar mit einer Musterperson, nicht mit dem geladenen Lebenslauf.
+ *
+ * Die Zeile darüber gab es schon, und sie war grün, während `beispiel.json`
+ * die echten Daten des Nutzers enthielt — Name, Anschrift, Geburtsdatum,
+ * alle Stationen. Das ZIP heißt „Vorlage ohne Daten". Eine Prüfung, die nur
+ * fragt „steht da etwas?", übersieht genau den Fall, auf den es ankommt.
+ *
+ * Der Prüfstand lädt ein Profil mit einem bekannten Namen; taucht der im
+ * Beispiel auf, ist es der falsche Inhalt. */
+const ausProfil = /Till Heidrich|Lina Sandmann|Katharina Vogt/;
+check(!ausProfil.test(JSON.stringify(bsp)),
+  'beispiel.json enthält eine Musterperson, nicht den geladenen Lebenslauf');
+const mail = String(bsp.personal?.email || '');
+check(mail === '' || /@example\./i.test(mail) || /@(mail|muster|demo)\./i.test(mail),
+  `beispiel.json trägt keine echte Mailadresse (${mail || 'leer'})`);
 
 const md = readFileSync(join(dir, 'ANLEITUNG.md'), 'utf8');
 check(md.includes('0,08 em'), 'Anleitung nennt die gemessene Sperrungsgrenze');

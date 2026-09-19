@@ -39,9 +39,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
+        working-directory: pdf-service
       - name: Syntax
         run: |
           for f in pdf-service/*.js mcp/*.mjs; do node --check "$f"; done
+      - name: Namen, die es nicht gibt
+        # `node --check` sieht Syntax und sonst nichts. Genau deshalb konnte in
+        # server.js eine Zeile stehen, die zwei entfernte Variablen benutzte:
+        # syntaktisch tadellos, zur Laufzeit ein ReferenceError, der den Dienst
+        # beendete. `no-undef` findet das in einer Zehntelsekunde.
+        run: npx eslint .
+        working-directory: pdf-service
       - name: Tests (SSRF-Schutz und OAuth)
         run: node --test
         working-directory: pdf-service

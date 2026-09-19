@@ -482,7 +482,7 @@ export function markdownToCl(md, existing, targetLang) {
           else if (/datum|date/.test(k)) cl.date = v;
         }
       }
-    } else if (cl.hasOwnProperty(section)) {
+    } else if (Object.prototype.hasOwnProperty.call(cl, section)) {
       cl[section] = buf.join('\n').trim();
     }
     buf = [];

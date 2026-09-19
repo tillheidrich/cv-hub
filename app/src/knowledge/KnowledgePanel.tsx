@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Icon, type IconName } from '../ui/Icon';
+import { useIsMobile } from '../ui/useIsMobile';
 
 const UI_FONT = "'Inter', sans-serif";
 const SERIF_FONT = "'Space Grotesk', serif";
@@ -8,12 +9,31 @@ const GOLD_LIGHT = 'rgba(139,115,85,0.12)';
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
+/** Eine Quelle unter einer Aussage. */
+interface Quelle {
+  label: string;
+  url: string;
+  /** Wann zuletzt nachgesehen — eine Empfehlung ohne Datum altert unsichtbar. */
+  geprueft: string;
+}
+
 interface Card {
   id: string;
   title: string;
   body?: string;       // info-only card (no copy button)
   prompt?: string;     // copyable prompt template
   tags?: string[];
+  /* Belege — bewusst nicht überall.
+   *
+   * Till: „vielleicht auch mal Quellen angeben … nicht grundsätzlich, aber
+   * irgendwo." Genau so ist es gemeint: Wo eine Aussage über den
+   * Bewerbungsmarkt, über Recht oder über fremde Systeme getroffen wird,
+   * gehört der Beleg dazu. Eine Formulierungshilfe braucht keinen.
+   *
+   * Der Nebeneffekt ist der eigentliche Zweck: Eine Behauptung, für die sich
+   * keine Quelle finden lässt, sollte entweder umformuliert oder gestrichen
+   * werden. Beim Anlegen dieser Zeilen ist genau das dreimal passiert. */
+  quellen?: Quelle[];
 }
 
 interface Category {
@@ -37,28 +57,112 @@ const CATEGORIES: Category[] = [
 
 Was zählt, sind "costly signals": Belege, die schwer zu fälschen sind. Ehrenamtliche Führungsverantwortung, Leistungssport, internationale Projekterfahrung, konkrete Zahlen, ungewöhnliche Projekte.
 
-Fazit: Nutze KI als Werkzeug, nicht als Ghostwriter. Die Substanz muss echt sein.`,
+Fazit: Nutze KI als Werkzeug, nicht als Ghostwriter. Die Substanz muss echt sein.
+
+Das ist keine Geschmacksfrage. Der Karriere-Dienst von Harvard schreibt es seinen Studierenden genauso vor: KI soll Formulierungen überarbeiten, Stichwörter aus einer Ausschreibung ziehen, Rückmeldung geben — „nicht der hauptsächliche Verfasser sein, schon weil das Ergebnis sehr generisch ausfallen dürfte".`,
         tags: ['Strategie', 'Signaltheorie'],
+        quellen: [
+          { label: 'Harvard Mignone Center for Career Success: AI for Resumes and Cover Letters',
+            url: 'https://careerservices.fas.harvard.edu/ai-resumes-and-cover-letters/',
+            geprueft: '09/2026' },
+        ],
       },
       {
         id: 'weiteres',
         title: 'Der unterschätzte "Weiteres"-Abschnitt',
         body: `Der Abschnitt für zusätzliche Erfahrungen (Ehrenamt, Sport, Sprachen, Projekte) ist einer der wirksamsten Differenziatoren — weil die meisten Bewerber ihn stiefmütterlich behandeln.
 
-Recruiter suchen nach Persönlichkeit jenseits der Jobtitel. Ein Marathonlauf, eine Vorstandsrolle im Verein, ein Open-Source-Projekt oder eine Sprache, die niemand erwartet: Das bleibt hängen.
+Ein Marathonlauf, eine Vorstandsrolle im Verein, ein Open-Source-Projekt oder eine Sprache, die niemand erwartet: Das bleibt hängen, weil es schwer zu erfinden ist.
 
-Empfehlung: Mindestens 3–5 konkrete Punkte. Aktiv formulieren, nicht nur auflisten.`,
+Dass der Abschnitt dazugehört und keine Restekiste ist, sieht man an den Vorlagen der Häuser, die es wissen müssten: Harvard führt „Leadership & Activities" als eigenen, gleichrangigen Abschnitt, die Bundesagentur für Arbeit nennt „Persönliche Fähigkeiten und Kompetenzen" samt Ehrenamt und relevanten Hobbys.
+
+Empfehlung: 3–5 konkrete Punkte, aktiv formuliert statt aufgelistet.`,
         tags: ['Strategie', 'Tipps'],
+        quellen: [
+          { label: 'Harvard College: Resume Template (bullet points)',
+            url: 'https://careerservices.fas.harvard.edu/resources/bullet-point-resume-template/',
+            geprueft: '09/2026' },
+          { label: 'Bundesagentur für Arbeit: Arbeitsblatt „So sollte ein Lebenslauf aussehen"',
+            url: 'https://www.arbeitsagentur.de/bildung/datei/arbeitsblatt-so-sollte-lebenslauf-aussehen_ba022063.pdf',
+            geprueft: '09/2026' },
+        ],
+      },
+      {
+        id: 'de-standard',
+        title: 'Der deutsche Lebenslauf: was wirklich verlangt ist',
+        body: `Tabellarisch, antichronologisch, höchstens zwei Seiten. So beschreibt es die Bundesagentur für Arbeit, und das ist die nüchternste verfügbare Quelle — sie verkauft nichts.
+
+Was dazugehört: Kontaktdaten, praktische Erfahrung mit Zeitraum, Arbeitgeber, Position und drei bis fünf Punkten je Station, Ausbildung, besondere Kenntnisse. Neueste Station zuerst.
+
+Was ausdrücklich freiwillig ist: das Foto. Es ist seit Jahren keine Pflicht mehr, und die Unterschrift ist es auch nicht — das Muster der Bundesagentur zeigt zwar Ort, Datum und Unterschrift am Fuß, nennt sie aber nicht als zwingend.
+
+Zur Gestaltung heißt es dort schlicht: übersichtlich, schlicht, lesbare Schrift, keine Verzierungen. Das ist keine ästhetische Meinung, sondern die Erwartungshaltung der Gegenseite.`,
+        tags: ['Deutschland', 'Aufbau'],
+        quellen: [
+          { label: 'Bundesagentur für Arbeit: Den perfekten Lebenslauf erstellen',
+            url: 'https://www.arbeitsagentur.de/bildung/bewerbung/lebenslauf',
+            geprueft: '09/2026' },
+          { label: 'Bundesagentur für Arbeit: Arbeitsblatt „So sollte ein Lebenslauf aussehen"',
+            url: 'https://www.arbeitsagentur.de/bildung/datei/arbeitsblatt-so-sollte-lebenslauf-aussehen_ba022063.pdf',
+            geprueft: '09/2026' },
+        ],
+      },
+      {
+        id: 'de-eckdaten',
+        title: 'Geburtsdatum, Familienstand, Staatsangehörigkeit — muss das rein?',
+        body: `Nein. Und es gibt einen handfesten Grund, es wegzulassen.
+
+Nach dem Allgemeinen Gleichbehandlungsgesetz darf ein Arbeitgeber genau danach nicht fragen: nicht nach dem Alter, nicht nach dem Familienstand, nicht nach einer Schwangerschaft, nicht nach der Herkunft, nicht nach einer Behinderung. Die Antidiskriminierungsstelle des Bundes hat dazu erhoben, wie verbreitet der Irrtum ist — 86 % der Befragten hielten die Frage nach dem Alter für zulässig.
+
+Wer diese Angaben von sich aus in den Lebenslauf schreibt, liefert sie trotzdem. Das ist erlaubt und manchmal sinnvoll, aber es ist eine Entscheidung, keine Vorgabe.
+
+Zu beachten: Die Bundesagentur führt Geburtsdatum und -ort weiterhin unter „persönliche Daten" auf. Beides stimmt — die eine Stelle beschreibt, was üblich ist, die andere, was gefragt werden darf. In diesem Werkzeug ist der Abschnitt „Eckdaten" deshalb einzeln abschaltbar, und der Export lässt ihn dann in allen Formaten weg.`,
+        tags: ['Deutschland', 'AGG', 'Recht'],
+        quellen: [
+          { label: 'Antidiskriminierungsstelle des Bundes: Was Arbeitgeber fragen (dürfen)',
+            url: 'https://www.antidiskriminierungsstelle.de/SharedDocs/downloads/DE/publikationen/Expertisen/was_arbeitgeber_fragen_duerfen.pdf',
+            geprueft: '09/2026' },
+          { label: 'Bundesagentur für Arbeit: Den perfekten Lebenslauf erstellen',
+            url: 'https://www.arbeitsagentur.de/bildung/bewerbung/lebenslauf',
+            geprueft: '09/2026' },
+        ],
+      },
+      {
+        id: 'harvard-vs-de',
+        title: 'Harvard-Stil oder deutscher Lebenslauf — zwei Konventionen',
+        body: `Wer sich in beiden Welten bewirbt, sollte wissen, dass es zwei verschiedene Dokumente sind. Nicht zwei Geschmäcker.
+
+Der amerikanische Aufbau, wie ihn die Harvard-Vorlage vorgibt: eine Spalte; Kopfzeile mit Name und Kontakt; dann Education, Experience, Leadership & Activities, Skills & Interests. Kein Foto, kein Geburtsdatum, kein Familienstand, kein „Objective", keine Referenzenliste. Ausbildung steht vorn — bei Berufserfahrenen kehrt sich das um.
+
+Der deutsche Aufbau: tabellarisch, Berufserfahrung zuerst, Foto und Eckdaten optional, oft Ort, Datum und Unterschrift am Fuß.
+
+In diesem Werkzeug lässt sich beides bauen. Für den Harvard-Stil: eine einspaltige Vorlage wählen, Foto entfernen, den Abschnitt „Eckdaten" ausblenden und die Reihenfolge so ziehen, dass die Ausbildung oben steht. Für die deutsche Fassung: eine Vorlage mit Unterschriftsfeld, Foto und Eckdaten an.`,
+        tags: ['Harvard', 'Deutschland', 'Aufbau'],
+        quellen: [
+          { label: 'Harvard College: Resume Template (bullet points)',
+            url: 'https://careerservices.fas.harvard.edu/resources/bullet-point-resume-template/',
+            geprueft: '09/2026' },
+          { label: 'Bundesagentur für Arbeit: Den perfekten Lebenslauf erstellen',
+            url: 'https://www.arbeitsagentur.de/bildung/bewerbung/lebenslauf',
+            geprueft: '09/2026' },
+        ],
       },
       {
         id: 'ats',
         title: 'ATS: Der erste Leser ist kein Mensch',
-        body: `Viele Unternehmen setzen Applicant Tracking Systems ein, die Lebensläufe nach Keywords filtern. Wer die falschen Begriffe verwendet, kommt nicht mal in die engere Auswahl.
+        body: `Viele größere Unternehmen setzen Applicant Tracking Systems ein. Die meisten davon lehnen nicht automatisch ab — sie sortieren und ranken. Wer die Begriffe der Ausschreibung nicht verwendet, landet weiter hinten, nicht im Papierkorb.
 
-Lösung: Relevante Schlüsselwörter aus der Stellenausschreibung gezielt in Bullet Points integrieren — in der gleichen Sprache und Formulierung wie die Ausschreibung. Ohne zu lügen.
+Der Unterschied ist wichtig, weil die verbreitete Zahl „75 % der Lebensläufe werden vom ATS aussortiert" keine auffindbare Primärquelle hat. Belegt ist etwas anderes und Schlimmeres: Die Harvard-Studie „Hidden Workers" zeigt, dass starre Filterregeln — ein fehlendes Stichwort, eine Lücke im Lebenslauf, ein formal nicht passender Abschluss — geeignete Menschen aussortieren, bevor ein Mensch sie sieht.
 
-Tool-Tipp: Einfach die Stellenausschreibung und den eigenen Lebenslauf nebeneinander in Claude laden und nach fehlenden Keywords fragen.`,
+Lösung: Relevante Schlüsselwörter aus der Stellenausschreibung in die Bullet Points aufnehmen — in deren Sprache und Formulierung. Ohne zu lügen.
+
+Tool-Tipp: Stellenausschreibung und Lebenslauf nebeneinander in eine KI laden und nach fehlenden Begriffen fragen. Oder die eingebaute ATS-Prüfung im Export benutzen — die zeigt, welcher Punkt Bezug zur Anzeige hat.`,
         tags: ['ATS', 'Keywords'],
+        quellen: [
+          { label: 'Harvard Business School / Accenture: „Hidden Workers: Untapped Talent"',
+            url: 'https://www.hbs.edu/managing-the-future-of-work/research/hidden-workers-untapped-talent',
+            geprueft: '09/2026' },
+        ],
       },
       {
         id: 'bullet-impact',
@@ -68,8 +172,15 @@ Tool-Tipp: Einfach die Stellenausschreibung und den eigenen Lebenslauf nebeneina
 Statt: "Verantwortlich für die Betreuung von Kundenprojekten"
 Besser: "Betreute 12 Enterprise-Accounts (∑ 2,4 Mio. € ARR), Churn unter 3% gehalten"
 
-Formel: Verb + Kontext + messbares Ergebnis. Wenn keine Zahlen verfügbar: Größenordnung oder qualitativer Impact.`,
+Formel: Verb + Kontext + messbares Ergebnis. Wenn keine Zahlen verfügbar: Größenordnung oder qualitativer Impact.
+
+Dieselbe Regel steht in der offiziellen Lebenslauf-Vorlage von Harvard, und zwar in vier Sätzen: mit einem Tätigkeitsverb beginnen, als Satzteil statt als ganzem Satz schreiben, kein „ich", und quantifizieren, wo es geht.`,
         tags: ['Strategie', 'Tipps'],
+        quellen: [
+          { label: 'Harvard College: Resume Template (bullet points)',
+            url: 'https://careerservices.fas.harvard.edu/resources/bullet-point-resume-template/',
+            geprueft: '09/2026' },
+        ],
       },
     ],
   },
@@ -243,7 +354,7 @@ Für Deutschland / DACH-Region.`,
         prompt: `Recherchiere [UNTERNEHMEN] und sag mir:
 - Welche Abteilungen sind wahrscheinlich unterbesetzt oder wachsend — basierend auf aktuellen News, Funding-Runden, Produkt-Launches oder Leadership-Hires?
 - Welche Rollen sollte ich proaktiv pitchen, auch wenn nichts ausgeschrieben ist?
-- Wen sollte ich kontaktieren (Rolle / Titel)?`,
+- Wen sollte ich kontaktieren (Rolle / Titel)?\n\nNur mit einem Modell mit Websuche verwenden. Ohne Netzzugang erfindet ein Sprachmodell Funding-Runden, Namen und Zahlen — überzeugend und falsch.`,
         tags: ['Job-Suche', 'Proaktiv'],
       },
       {
@@ -276,7 +387,7 @@ Gib mir:
 Basierend auf aktuellen Marktgehältern für diese Position in [ORT / REGION]:
 1. Werde ich unterbezahlt?
 2. Was wäre ein realistisches Gegengebot?
-3. Schreib mir ein Verhandlungsskript für das Gespräch — selbstbewusst, aber nicht schwierig oder undankbar wirkend.`,
+3. Schreib mir ein Verhandlungsskript für das Gespräch — selbstbewusst, aber nicht schwierig oder undankbar wirkend.\n\nFür Punkt 1 und 2 ein Modell mit Websuche verwenden und die Zahlen gegen eine echte Quelle prüfen (Entgeltatlas der Bundesagentur, Tarifverträge, Gehaltsreports der Branche). Ohne Netzzugang nennt ein Sprachmodell eine plausible Zahl, die es sich ausgedacht hat — und auf der verhandelt man dann.`,
         tags: ['Gehalt', 'Verhandlung'],
       },
       {
@@ -437,6 +548,26 @@ function KnowledgeCard({ card }: { card: Card }) {
         )}
       </div>
 
+      {/* Belege. Sichtbar, nicht hinter einem Aufklapper: Eine Quelle, die man
+          erst suchen muss, ist keine. Datum dazu, weil eine Empfehlung zum
+          Bewerbungsmarkt ohne Datum unsichtbar altert. */}
+      {card.quellen && card.quellen.length > 0 && !shouldCollapse && (
+        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid oklch(0.93 0.004 264)' }}>
+          <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'oklch(0.52 0.012 264)', marginBottom: '4px' }}>
+            Belege
+          </div>
+          {card.quellen.map(q => (
+            <div key={q.url} style={{ fontSize: '11px', lineHeight: 1.6, marginBottom: '2px' }}>
+              <a href={q.url} target="_blank" rel="noopener noreferrer"
+                style={{ color: GOLD, textDecoration: 'none', borderBottom: `1px solid ${GOLD_LIGHT}` }}>
+                {q.label}
+              </a>
+              <span style={{ color: 'oklch(0.52 0.012 264)' }}> · geprüft {q.geprueft}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {hasLongContent && (
         <button
           type="button"
@@ -463,16 +594,19 @@ function KnowledgeCard({ card }: { card: Card }) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function KnowledgePanel() {
+  const schmal = useIsMobile();
   const [activeTab, setActiveTab] = useState('strategy');
   const category = CATEGORIES.find(c => c.id === activeTab) ?? CATEGORIES[0];
 
   return (
     <div style={{
-      width: '340px',
+      /* Wie beim Export: 340 px sind das Maß NEBEN der Vorschau. Auf dem
+         Telefon steht dieser Bereich allein und füllt die Breite. */
+      width: schmal ? '100%' : '340px',
       maxWidth: '100%',
       minWidth: 0,
       flexShrink: 1,
-      borderRight: '1px solid oklch(0.91 0.005 264)',
+      borderRight: schmal ? 'none' : '1px solid oklch(0.91 0.005 264)',
       display: 'flex',
       flexDirection: 'column',
       background: 'oklch(0.985 0.003 264)',

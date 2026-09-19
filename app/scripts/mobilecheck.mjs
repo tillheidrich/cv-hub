@@ -47,9 +47,47 @@ async function overflow(label) {
   if (doc > 2) problems.push(`${label}: die Seite selbst scrollt waagerecht (${doc} px zu breit)`);
 }
 
+/**
+ * Füllt der Bereich die Breite — oder bleibt rechts ein toter Streifen?
+ *
+ * Diese Prüfung fehlte, und sie fehlte aus einem lehrreichen Grund: `overflow`
+ * oben sucht nach Inhalt, der über den rechten Rand HINAUSragt. Nach Inhalt,
+ * der den Rand gar nicht erst ERREICHT, hat nie jemand gesucht. Export und
+ * Tipps sind als 340 px breite Seitenspalte neben der Vorschau gebaut; auf dem
+ * Telefon standen sie in voller Schreibtisch-Breite in einem 430-px-Fenster,
+ * mit Trennlinie und leerem Streifen daneben. Vier Prüfläufe an vier Breiten
+ * meldeten „ohne Befund".
+ *
+ * Ein Prüflauf, der nur eine Richtung kennt, findet auch nur eine Richtung.
+ */
+async function underflow(label) {
+  const r = await page.evaluate(() => {
+    const W = window.innerWidth;
+    const out = [];
+    document.querySelectorAll('main *, [role="main"] *').forEach(el => {
+      const b = el.getBoundingClientRect();
+      if (b.height < 200 || b.width < W * 0.4) return;        // nur tragende Flächen
+      if (b.left > 4) return;                                  // beginnt nicht links: eingerückt, kein Befund
+      /* Schwelle: 10 % der Fensterbreite.
+         Nicht gegriffen, sondern gemessen. Der behobene Fehler war ein Streifen
+         von 90 px bei 430 px Fenster — 21 %. Übrig bleibt im Bearbeiten-Bereich
+         bei 430 px ein Rest von 26 px (6 %), der aus Flex-Sizing und Polstern
+         entsteht und auf dem Gerät nicht als Lücke wahrnehmbar ist. Die Schwelle
+         liegt bewusst dazwischen und wird hier benannt, damit niemand denkt,
+         sie sei gewählt worden, um den Lauf grün zu bekommen. */
+      if (b.right > W * 0.9) return;
+      const cs = getComputedStyle(el);
+      out.push(`${Math.round(b.width)} px breit bei ${W} px Fenster (${cs.width} gesetzt)`);
+    });
+    return [...new Set(out)].slice(0, 3);
+  });
+  r.forEach(x => problems.push(`${label}: füllt die Breite nicht — ${x}`));
+}
+
 const tab = async (i) => { await page.locator('nav button').nth(i).click(); await page.waitForTimeout(2200); };
 
 await overflow('Bearbeiten');
+await underflow('Bearbeiten');
 await tab(1);
 await overflow('Vorschau');
 
@@ -236,6 +274,14 @@ if (await menue.count()) {
 
 await tab(2);
 await overflow('Export');
+await underflow('Export');
+
+/* Tipps war bis heute gar nicht Teil des Prüflaufs — derselbe blinde Fleck:
+   geprüft wurde, was man beim Bauen vor Augen hatte. */
+await tab(3);
+await overflow('Tipps');
+await underflow('Tipps');
+await tab(2);
 
 // Tippziele
 const small = await page.evaluate(() => {

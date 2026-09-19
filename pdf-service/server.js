@@ -1031,7 +1031,14 @@ app.get(/^\/share\/([0-9a-fA-F]+)\/?$/, async (req, res, next) => {
   );
   const photo = sameOriginPhoto ? rawPhoto : '';
   const description = [title, location].filter(Boolean).join(' · ') || 'Lebenslauf in editorialem Layout — geteilte Vorschau.';
-  const url = `${reqProto}://${reqHost}/share/${req.params[0]}`;
+  /* `reqProto`/`reqHost` gab es hier einmal. Die Härtung gegen gefälschte
+     `X-Forwarded-Host`-Header hat die beiden Definitionen entfernt und diese
+     Verwendung stehen lassen — seitdem warf jeder Crawler-Aufruf dieser Route
+     einen ReferenceError, und weil es keine Fehler-Middleware gab, beendete
+     das den Prozess. Die Basis-URL steht zwei Zeilen weiter oben schon da.
+     Fehlt sie, lassen wir `og:url` weg: Eine Karte ohne kanonische Adresse
+     ist ein kleiner Mangel, ein abgestürzter Dienst ist keiner. */
+  const url = ownBase ? `${ownBase}/share/${req.params[0]}` : '';
   res.type('html').send(`<!doctype html>
 <html lang="de">
 <head>
@@ -1041,7 +1048,7 @@ app.get(/^\/share\/([0-9a-fA-F]+)\/?$/, async (req, res, next) => {
 <meta property="og:type" content="profile">
 <meta property="og:title" content="${escapeHtml(name)} — Lebenslauf">
 <meta property="og:description" content="${escapeHtml(description)}">
-<meta property="og:url" content="${escapeHtml(url)}">
+${url ? `<meta property="og:url" content="${escapeHtml(url)}">` : ''}
 ${photo ? `<meta property="og:image" content="${escapeHtml(photo)}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(name)} — Lebenslauf">
@@ -1555,7 +1562,7 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
       .replace(/ö/g, 'oe').replace(/Ö/g, 'Oe')
       .replace(/ü/g, 'ue').replace(/Ü/g, 'Ue')
       .replace(/ß/g, 'ss')
-      .replace(/[^\w.\-]/g, '_');
+      .replace(/[^\w.-]/g, '_');   // Bindestrich am Ende braucht keine Maskierung
     logEvent(req.user?.id ?? null, 'pdf');
     res.setHeader('Content-Type', 'application/pdf');
     // RFC 5987 — modern browsers prefer the filename* with UTF-8 encoding.
@@ -1604,6 +1611,36 @@ async function bootstrapAdmin() {
     console.error('bootstrap: admin reset failed:', err);
   }
 }
+
+/* ── Auffangnetz ───────────────────────────────────────────────────────────
+ *
+ * Bis hierher gab es weder eine Fehler-Middleware noch einen Handler für
+ * unbehandelte Promises. Express 4 fängt einen Fehler aus einem `async`
+ * Handler nicht ab; Node beendet daraufhin den Prozess. Das war keine
+ * theoretische Lage: Eine einzige Route warf bei jedem Crawler-Aufruf, und
+ * jede Route, die einen Pfadparameter ungeprüft in eine Integer-Spalte
+ * schiebt (`/api/resumes/:id/versions/abc`), bringt Postgres dazu, mit
+ * `22P02` zu antworten — ein eingeladener Nutzer hätte den Dienst für alle
+ * beenden können.
+ *
+ * Die Middleware ersetzt keine Eingabeprüfung. Sie sorgt nur dafür, dass ein
+ * Fehler den Aufrufer trifft und nicht die anderen Nutzer. */
+app.use((err, req, res, _next) => {
+  const status = err && err.status && Number.isInteger(err.status) ? err.status : 500;
+  // Postgres meldet eine unbrauchbare Eingabe mit 22P02/22003 — das ist ein
+  // Fehler des Aufrufers, keine Störung.
+  const code = err && err.code;
+  const eingabe = code === '22P02' || code === '22003';
+  console.error('unhandled:', req.method, req.originalUrl, code || '', err && err.message);
+  if (res.headersSent) return;
+  res.status(eingabe ? 400 : status).json({ error: eingabe ? 'Ungültiger Parameter.' : 'Interner Fehler.' });
+});
+
+process.on('unhandledRejection', (grund) => {
+  // Nicht beenden: Eine einzelne fehlgeschlagene Zusage ist kein Grund, alle
+  // offenen Sitzungen mitzunehmen. Sichtbar bleibt sie trotzdem.
+  console.error('unhandledRejection:', grund);
+});
 
 const port = process.env.PORT || 3000;
 initDb()

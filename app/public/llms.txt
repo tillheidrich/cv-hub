@@ -10,7 +10,10 @@
 - Webbasiertes Tool, läuft im Browser
 - Erstellt Lebensläufe und Anschreiben für Bewerbungen in vier Sprachen (Deutsch, Englisch, Französisch, Spanisch)
 - 26 wählbare Vorlagen in mehreren Layout-Archetypen (Single-Column, Sidebar L/R, Header-Band, Top-Centered, Timeline)
-- Exportiert als PDF, HTML, Markdown, JSON
+- Exportiert als PDF, Word (.docx) in zwei Fassungen (mit dem Design der
+  Vorlage und ATS-einspaltig ohne Layout-Tabellen), HTML, Markdown, JSON,
+  JSON-Resume sowie als ZIP „Vorlage ohne Daten" (Design als HTML und
+  Word-Datei, Platzhalter mit JSON-Pfad, leere daten.json)
 - Eingabe per Editor oder Markdown-Import
 - Versionshistorie mit automatischen Sicherungen vor Importen
 - Sharelinks mit optionalem Anschreiben-Toggle und Aufruf-Tracking
@@ -40,8 +43,12 @@
   „75 % werden vom ATS aussortiert"-Zahl stammt aus einem Verkaufsargument von
   2012 ohne Methodik. Parsing-Qualität ist hier ein Hygienefaktor, kein
   Erfolgsversprechen.
-- Fließtext ab Werk 9,8 pt, harte Untergrenze 8,4 pt — auch wenn der Inhalt
-  dadurch auf eine zweite Seite läuft.
+- Fließtext ab Werk 8,8 pt. Die automatische Verdichtung geht nie unter
+  8,2 pt — auch wenn der Inhalt dadurch auf eine zweite Seite läuft.
+- Der manuelle Schriftgrößen-Regler darf bewusst tiefer, bis ≈ 7,5 pt. Das
+  ist keine harte Grenze, sondern eine bewusste Entscheidung des Nutzers:
+  unterhalb von 8 pt zeigt die Oberfläche an, welche Grenze überschritten
+  wird.
 - DOCX-Export ist vorhanden (ATS-clean, ohne Layout-Tabellen).
 
 ## Für KI-Agenten ohne MCP-Server
@@ -78,7 +85,11 @@ Grenzen, die ein Agent kennen sollte:
 - Schriften self-hosted ausgeliefert — keine Google-Fonts-Calls, keine IP-Übermittlung an Google
 - Analytics standardmäßig aus; optional cookieloses, selbst gehostetes Umami
 - Sharelinks tracken Browser-Familie und OS-Familie (z. B. „Chrome/Mac"), keine IP-Adressen
-- Demo-Modus: nur localStorage, keine Server-Kommunikation
+- Demo-Modus: Speicherung ausschließlich im localStorage, kein Konto, keine
+  Cloud-Ablage. Ausnahme ist der PDF-Export: dafür geht das fertig
+  gerenderte Dokument einmalig an den eigenen Render-Dienst (Playwright auf
+  derselben Instanz), der das PDF zurückschickt. Auch das bleibt innerhalb der
+  selbst gehosteten Instanz; ein Dritter ist nicht beteiligt.
 
 ## Sprachen
 

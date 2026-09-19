@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-09-19 — a pass through the whole app, and four urgent findings
+
+**The service could be stopped by anyone.** `server.js` used two identifiers in
+its share card that no longer existed — the hardening against forged
+`X-Forwarded-Host` headers had removed their definitions and left one use
+standing. Every crawler hit on the share route threw a `ReferenceError`, and
+with neither error middleware nor an `unhandledRejection` handler that ended the
+process. Both are in place now.
+
+Why nobody saw it: CI checked the backend with `node --check`, which sees syntax
+and nothing else. There is now an ESLint config with `no-undef`, and CI runs it.
+Its first run found the next thing: the refresh-token lifetime constant was
+declared and never used, so refresh tokens never expired. They now carry an
+absolute deadline that is passed along on renewal rather than reissued.
+
+**"Template without data" shipped the full data.** The ZIP is named that, and
+`beispiel.json` carried the user's name, address, date of birth and every entry.
+Anyone who passed the file on — because the label says there is no data in it —
+sent their whole résumé. The example is a sample person now, and the parameter
+that accepted real data is gone: as long as you *can* pass it, someone will. The
+check only asked whether the file was filled in, and was green throughout.
+
+**The Word export showed a different document than the preview.** It ignored
+`hiddenSections`: hide the personal-details block — date of birth, nationality,
+marital status — and Word still printed it. Those are the fields people remove
+to avoid discrimination. Also ignored: section order, the chosen accent and
+paper colour, and the page format (Word was always A4, even for US Letter). It
+now receives the same configuration as HTML and PDF.
+
+**On phones a dead strip was left on the right.** Export and tips are built as a
+340px column beside the preview; on a phone there is nothing beside them. The
+mobile check looked for content that overflows the right edge, never for content
+that fails to reach it — four widths, four times "no findings". The other
+direction is checked now, with a threshold that is justified rather than picked.
+
+**Numbers and claims that were wrong:** "18 templates" on the home screen, "28"
+in the JSON-LD (26 is correct); a lower type-size bound of 8.4pt that appears
+nowhere in the code (8.2pt automatic, ~7.5pt on the manual slider); "9.8pt out
+of the box" (8.8); "nine accent colours" (eight plus the template colour); "demo
+mode: no server communication" when the PDF export does send the document to the
+render service; "no tracking" next to a loaded analytics script; and an ATS
+legend describing a case the code never assigns.
+
+**The tips carry their sources now.** Every claim about recruiters, law or
+third-party systems cites where it comes from, with the date it was last
+checked. Writing those lines rewrote three claims that had no findable source —
+which is what the column is for. The ATS card no longer says that the wrong
+keywords keep you out of consideration; the widely repeated "75 % are filtered
+out" figure has no traceable primary source, and the card says so.
+
+New, with sources: what a German CV actually requires, why date of birth and
+marital status are voluntary there, and the difference between the Harvard
+layout and a German CV — both can be built here, it was just written nowhere.
+
 ## 2026-09-18 — the interface really does speak four languages now
 
 The switch was missing inside the editor. Once you were in, you were stuck with

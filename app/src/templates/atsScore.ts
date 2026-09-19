@@ -61,22 +61,22 @@ const LABELS: Record<AtsLang, Record<AtsLevel, string>> = {
 const NOTES: Record<AtsLang, Record<AtsLevel, string>> = {
   de: {
     high: 'Eine Spalte, lineare Lesereihenfolge. Das ist die Form, die Parser zuverlässig in Felder überführen.',
-    medium: 'Kopfband bzw. Nebenspalte: liegt im normalen Textfluss der Seite (keine PDF-Kopfzeile), wird meist korrekt gelesen. Restrisiko bleibt.',
+    medium: 'Kopfband: liegt im normalen Textfluss der Seite (keine PDF-Kopfzeile), wird meist korrekt gelesen. Restrisiko bleibt.',
     low: 'Zweispaltig. Personio und Greenhouse nennen mehrspaltige Layouts ausdrücklich als Parsing-Fehlerursache; selbst der Marktführer unter den Parsern liest rund jeden zehnten Spalten-Lebenslauf falsch. Sieht gut aus — kostet aber Verlässlichkeit.',
   },
   en: {
     high: 'One column, linear reading order. This is the shape parsers turn into fields reliably.',
-    medium: 'Header band or side column: sits in the normal text flow of the page (not a PDF header), usually read correctly. Some risk remains.',
+    medium: 'Header band: sits in the normal text flow of the page (not a PDF header), usually read correctly. Some risk remains.',
     low: 'Two columns. Personio and Greenhouse name multi-column layouts explicitly as a cause of parsing failure; even the leading parser misreads roughly one in ten column résumés. Looks good — costs reliability.',
   },
   fr: {
     high: 'Une colonne, ordre de lecture linéaire. C\'est la forme que les analyseurs convertissent en champs de façon fiable.',
-    medium: 'Bandeau ou colonne latérale : dans le flux normal de la page (pas un en-tête PDF), généralement bien lu. Un risque subsiste.',
+    medium: 'Bandeau : dans le flux normal de la page (pas un en-tête PDF), généralement bien lu. Un risque subsiste.',
     low: 'Deux colonnes. Personio et Greenhouse citent explicitement les mises en page multi-colonnes comme cause d\'échec d\'analyse ; même le principal analyseur du marché se trompe sur environ un CV en colonnes sur dix. C\'est beau — au prix de la fiabilité.',
   },
   es: {
     high: 'Una columna, orden de lectura lineal. Es la forma que los analizadores convierten en campos de manera fiable.',
-    medium: 'Banda superior o columna lateral: está en el flujo normal de la página (no en un encabezado del PDF) y suele leerse bien. Queda un riesgo residual.',
+    medium: 'Banda superior: está en el flujo normal de la página (no en un encabezado del PDF) y suele leerse bien. Queda un riesgo residual.',
     low: 'Dos columnas. Personio y Greenhouse mencionan expresamente los diseños de varias columnas como causa de fallo al analizar; incluso el analizador líder lee mal alrededor de uno de cada diez currículums a columnas. Se ve bien — cuesta fiabilidad.',
   },
 };

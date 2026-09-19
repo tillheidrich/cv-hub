@@ -5,6 +5,7 @@ import type { CVData, CoverLetterData, AppProfile, Lang } from '../data/types';
 import AtsCheckModal from '../screens/AtsCheckModal';
 import { useUiLang } from '../ui/useUiLang';
 import { EXP_I18N, type ExportStrings } from '../ui/i18n/export';
+import { useIsMobile } from '../ui/useIsMobile';
 
 // ── Lightweight structural diff for MD-import previews ─────────────────────
 interface DiffRow {
@@ -97,13 +98,15 @@ interface ExportPanelProps {
 // `promptResumeUrl`, `promptCoverUrl`).
 
 const s = {
+  /* 340 px ist das Maß der Seitenspalte NEBEN der Vorschau. Auf dem Telefon
+     steht daneben nichts — dort füllt der Bereich die Breite. Vorher blieb er
+     bei 340 px stehen, mit Trennlinie und totem Streifen rechts daneben.
+     Die konkrete Breite setzt die Komponente, siehe `panelBreite`. */
   panel: {
-    width: '340px',
     maxWidth: '100%',
     minWidth: 0,
     flexShrink: 1,
     background: '#fff',
-    borderRight: '1px solid oklch(0.91 0.005 264)',
     display: 'flex',
     flexDirection: 'column' as const,
     overflowY: 'auto' as const,
@@ -274,6 +277,7 @@ function asShares(d: unknown): ShareLink[] {
 
 export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock }: ExportPanelProps) {
   const t = EXP_I18N[useUiLang()];
+  const schmal = useIsMobile();
   const [pdfHover, setPdfHover] = useState(false);
   const [pdfState, setPdfState] = useState<'idle' | 'busy' | 'error'>('idle');
   const [kitBusy, setKitBusy] = useState(false);
@@ -581,7 +585,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const langLabel = LANG_NAMES[lang as keyof typeof LANG_NAMES] ?? lang.toUpperCase();
 
   return (
-    <div style={s.panel}>
+    <div style={{
+      ...s.panel,
+      /* Am Schreibtisch eine 340-px-Spalte mit Trennlinie zur Vorschau,
+         auf dem Telefon die volle Breite ohne Linie — dort gibt es nichts,
+         wovon zu trennen wäre. */
+      width: schmal ? '100%' : '340px',
+      borderRight: schmal ? 'none' : '1px solid oklch(0.91 0.005 264)',
+    }}>
       <div style={s.header}>
         <div style={s.title}>{t.exportTitle(docWord)}</div>
         <div style={s.subtitle}>{t.exportSubtitle}</div>
@@ -674,12 +685,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <ExportButton
               icon="file-text" label="Word (.docx)"
               sub={t.docxSub}
-              onClick={() => { track('export_docx'); exportDocx(data, exportConfig.themeId, 'design'); }}
+              onClick={() => { track('export_docx'); exportDocx(data, exportConfig, 'design'); }}
             />
             <ExportButton
               icon="file-text" label={t.docxAtsLabel}
               sub={t.docxAtsSub}
-              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig.themeId, 'ats'); }}
+              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig, 'ats'); }}
             />
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
                 Was der Browserdruck aus einer HTML-Datei macht, entscheidet
@@ -700,7 +711,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               onClick={async () => {
                 track('export_template_kit');
                 setKitBusy(true);
-                try { await exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang, data); }
+                try { await exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang); }
                 finally { setKitBusy(false); }
               }}
             />

@@ -313,14 +313,27 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
     res.redirect(302, back.toString());
   });
 
+  /* Der Refresh-Token hat eine ABSOLUTE Lebensdauer.
+   *
+   * Beim Erneuern einen frischen Refresh-Token mit voller Frist auszugeben,
+   * hieße: Wer einmal einen Token hat, behält den Zugang für immer, solange er
+   * ihn einmal im Jahr benutzt. Deshalb wird das Ende der Kette beim ersten
+   * Ausstellen festgelegt und beim Erneuern weitergereicht. */
+  function refreshTtlFor(ende) {
+    if (!ende) return REFRESH_TTL_S;
+    const rest = Math.floor((new Date(ende).getTime() - Date.now()) / 1000);
+    return Math.max(60, Math.min(REFRESH_TTL_S, rest));
+  }
+
   /** Legt Access- und Refresh-Token an und gibt die Antwort nach RFC 6749 zurück. */
-  async function issue({ userId, clientId, clientName, scope }) {
+  async function issue({ userId, clientId, clientName, scope, refreshAbsoluteEnd = null }) {
     const access = 'cvm_' + crypto.randomBytes(32).toString('hex');
     const refresh = 'cvr_' + crypto.randomBytes(32).toString('hex');
     await pool.query(
-      `INSERT INTO oauth_tokens (token_hash, refresh_hash, user_id, client_id, client_name, scope, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 || ' seconds')::interval)`,
-      [sha256(access), sha256(refresh), userId, clientId, clientName || '', scope || 'cv', String(ACCESS_TTL_S)],
+      `INSERT INTO oauth_tokens (token_hash, refresh_hash, user_id, client_id, client_name, scope, expires_at, refresh_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 || ' seconds')::interval, now() + ($8 || ' seconds')::interval)`,
+      [sha256(access), sha256(refresh), userId, clientId, clientName || '', scope || 'cv',
+       String(ACCESS_TTL_S), String(refreshTtlFor(refreshAbsoluteEnd))],
     );
     return {
       access_token: access,
@@ -372,10 +385,19 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
       );
       const t = rows[0];
       if (!t || t.disabled) return res.status(400).json({ error: 'invalid_grant', error_description: 'refresh_token ungültig oder widerrufen.' });
+      /* Abgelaufene Kette: Der Client muss sich neu anmelden. Alte Zeilen ohne
+         `refresh_expires_at` (vor dieser Migration ausgestellt) bekommen die
+         Frist ab jetzt — sie stillschweigend für immer gelten zu lassen wäre
+         genau der Fehler, den diese Änderung behebt. */
+      if (t.refresh_expires_at && new Date(t.refresh_expires_at).getTime() < Date.now()) {
+        await pool.query('UPDATE oauth_tokens SET revoked = true WHERE id = $1', [t.id]);
+        return res.status(400).json({ error: 'invalid_grant', error_description: 'refresh_token abgelaufen.' });
+      }
       // Der alte Access-Token wird ersetzt, nicht ergänzt.
       await pool.query('UPDATE oauth_tokens SET revoked = true WHERE id = $1', [t.id]);
       return res.json(await issue({
         userId: t.user_id, clientId: t.client_id, clientName: t.client_name, scope: t.scope,
+        refreshAbsoluteEnd: t.refresh_expires_at,
       }));
     }
 

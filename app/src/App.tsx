@@ -32,6 +32,7 @@ import {
   saveProfiles as saveProfilesLocal, loadProfiles as loadProfilesLocal,
   createDemoProfile, withAllLangs,
 } from './data/storage';
+import { useIsMobile } from './ui/useIsMobile';
 import { ALL_LANGS, LANG_NAMES } from './data/labels';
 import type { CVData, CoverLetterData, AppProfile, Lang, TemplateName, FontPairingId, PageMode, SectionKey, PageFormat, AccentId, PaperId } from './data/types';
 import { DEFAULT_SECTION_ORDER } from './data/types';
@@ -75,15 +76,6 @@ const EMPTY_COVER_LETTER: CoverLetterData = {
   signoff: '',
 };
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 860);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 860);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-  return isMobile;
-}
 
 // ── Template picker ───────────────────────────────────────────────────────────
 

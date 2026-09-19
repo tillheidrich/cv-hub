@@ -211,6 +211,12 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   revoked      BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS oauth_tokens_user_idx ON oauth_tokens(user_id, created_at DESC);
+-- Der Refresh-Token hatte keinen Ablauf: die Konstante dafür war deklariert
+-- und wurde nie benutzt, der Grant prüfte nur das Widerrufs-Kennzeichen. Ein
+-- einmal abgeflossener Refresh-Token hätte auf unbestimmte Zeit frische
+-- Access-Token geliefert. (Backticks haben in dieser Datei nichts zu suchen:
+-- das SQL steht in einem Template-Literal.)
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS refresh_expires_at TIMESTAMPTZ;
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

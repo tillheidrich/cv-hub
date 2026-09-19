@@ -87,12 +87,15 @@ function Harness() {
   // damit scripts/kitcheck.mjs das echte Paket prüft und nicht eine
   // Nachbildung davon.
   (window as unknown as { __exportKit?: () => Promise<void> }).__exportKit = () =>
-    exportTemplateKit({ themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto' }, 'de', stretch(live));
+    exportTemplateKit({ themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto' }, 'de');
   // Word-Export im Prüfstand: liefert die fertige Datei als Base64, damit
   // scripts/docxcheck.mjs sie speichern, mit LibreOffice rendern und ansehen
   // kann. Behauptungen über „sieht in Word gut aus" sind sonst nicht prüfbar.
   (window as unknown as { __docx?: (v: DocxVariant) => Promise<string> }).__docx = async (v: DocxVariant) => {
-    const blob = await Packer.toBlob(buildDocx(v === 'design' ? await withRasterPhoto(stretch(live)) : stretch(live), tpl, v));
+    // Dieselbe Konfiguration wie für HTML und PDF oben — sonst prüft der
+    // Prüfstand eine Word-Datei, die es in der App so nicht gibt.
+    const docxCfg = { themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto' } as const;
+    const blob = await Packer.toBlob(buildDocx(v === 'design' ? await withRasterPhoto(stretch(live), docxCfg) : stretch(live), docxCfg, v));
     const buf = await blob.arrayBuffer();
     let bin = '';
     const bytes = new Uint8Array(buf);

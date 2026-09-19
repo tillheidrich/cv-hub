@@ -27,17 +27,16 @@ import {
   WidthType, ShadingType, VerticalAlign, ImageRun, LineRuleType,
   Header, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType,
 } from 'docx';
-import type { CVData, PersonalInfo } from '../data/types';
+import type { CVData, PersonalInfo, SectionKey } from '../data/types';
 import { getTheme } from '../templates/theme';
-import type { HeadingStyle } from '../templates/theme';
+import type { HeadingStyle, ResumeTheme } from '../templates/theme';
 import { socialLabel, socialDisplay } from '../templates/ResumeRenderer';
+import { getPageFormat } from '../data/pageFormats';
+import type { ExportRenderConfig } from './exportHtml';
+import { exportFilename } from './filename';
 import { saveBlob } from './saveFile';
 
 const val = (s?: string | null) => (s || '').trim();
-
-/** Rechte Textkante bei 0.5" Rändern auf A4: 21.0cm − 2×1.27cm ≈ 18.46 cm.
- *  In Twips (1/1440 Zoll): 18.46/2.54*1440 ≈ 10460. */
-const RIGHT_TAB = 10460;
 
 /**
  * Farbe des Themes in ein Hex umrechnen, das Word versteht.
@@ -82,8 +81,7 @@ function toHex(color: string, fallback = '1A1A1A'): string {
  * die seit Jahrzehnten überall liegt — das Dokument sieht dann beim Empfänger
  * so aus, wie es beim Absender aussah.
  */
-function wordFont(themeId?: string): { body: string; heading: string } {
-  const t = themeId ? getTheme(themeId) : undefined;
+function wordFont(t?: ResumeTheme): { body: string; heading: string } {
   const serifPairings = ['inter-playfair', 'lora-source', 'merri-source', 'garamond-archivo', 'plex-corporate', 'libre-inter'];
   const serifHeading = t ? serifPairings.includes(t.defaultPairing) : false;
   return { body: 'Calibri', heading: serifHeading ? 'Georgia' : 'Calibri' };
@@ -101,13 +99,21 @@ function multiRuns(text: string, opts: Record<string, unknown>): TextRun[] {
  *  Kopfzeilen): Umbruch wird zum Komma, nicht zum verschluckten Zeichen. */
 const oneLine = (s?: string | null) => (s || '').replace(/\s*\n\s*/g, ', ').trim();
 
-/** Contact + personal detail lines, ATS-friendly (label: value, plain text). */
-function personalLines(p: PersonalInfo, fields: CVData['labels']['fields']): string[] {
+/** Contact + personal detail lines, ATS-friendly (label: value, plain text).
+ *
+ * `hidden` ist nicht kosmetisch: Wer den Abschnitt „Eckdaten" ausblendet,
+ * nimmt Geburtsdatum, Geburtsort, Staatsangehörigkeit und Familienstand
+ * bewusst aus der Bewerbung — genau die Felder, an denen aussortiert wird,
+ * bevor jemand die Qualifikation liest. Bis zum 19.09.2026 hat der
+ * Word-Export diese Einstellung ignoriert und die Zeile trotzdem gesetzt:
+ * Vorschau ohne Eckdaten, Word-Datei mit. Wer die Datei verschickt hat, hat
+ * preisgegeben, was er ausdrücklich zurückhalten wollte. */
+function personalLines(p: PersonalInfo, fields: CVData['labels']['fields'], hidden: Set<SectionKey>): string[] {
   const contact = [val(p.email), val(p.phone), oneLine(p.location), val(p.website)].filter(Boolean);
   const socials = (p.socials || []).map(s => val(s.value)).filter(Boolean);
   if (val(p.linkedin)) socials.push(val(p.linkedin));
   const line1 = [...contact, ...socials].join('  ·  ');
-  const detail = [
+  const detail = hidden.has('details') ? '' : [
     p.birthDate && `${fields.birthDate}: ${val(p.birthDate)}`,
     p.birthPlace && `${fields.birthPlace}: ${val(p.birthPlace)}`,
     p.nationality && `${fields.nationality}: ${val(p.nationality)}`,
@@ -185,8 +191,8 @@ function solidPng(hex: string): Uint8Array | null {
 /** mm → Twips (1/1440 Zoll). */
 const mm = (v: number) => Math.round((v / 25.4) * 1440);
 
-const PAGE_W = mm(210);
-const PAGE_H = mm(297);
+/* Blattmaße standen hier als feste A4-Konstanten. Sie leben jetzt in
+ * `buildDocx`, abgeleitet aus dem gewählten Format (data/pageFormats.ts). */
 
 /**
  * Die Seitenspalte als randabfallende Farbfläche — auf jedem Blatt.
@@ -231,6 +237,47 @@ function sideBandHeader(fillHex: string, x: number, widthTw: number, heightTw: n
 /** Welche Fassung gebaut wird — siehe Kopfkommentar. */
 export type DocxVariant = 'design' | 'ats';
 
+/* Welche Abschnitte die Hauptspalte überhaupt tragen kann.
+ *
+ * Zwei Sätze, weil zwei Bauformen: Vorlagen mit Nebenspalte geben Sprachen
+ * (und die Eckdaten) dorthin ab, einspaltige tragen die Sprachen im Fluss.
+ * Das entspricht `MAIN_ORDER_SIDEBAR` / `DEFAULT_MAIN_ORDER` im Renderer
+ * (templates/ResumeRenderer.tsx). `details` fehlt in beiden, weil die Eckdaten
+ * in Word im Kopfbereich bzw. in der Nebenspalte stehen, nicht im Textfluss. */
+const MAIN_ORDER_ASIDE: SectionKey[] = ['profile', 'experience', 'education', 'skills', 'additional'];
+const MAIN_ORDER_FLOW: SectionKey[] = ['profile', 'experience', 'education', 'skills', 'languages', 'additional'];
+
+/**
+ * Die vom Nutzer gewählte Abschnittsreihenfolge auf das anwenden, was diese
+ * Bauform tragen kann.
+ *
+ * Wortgleich zur Rechnung im Renderer (ResumeRenderer.tsx, `mainOrder`) — und
+ * das ist der Punkt: Zwei Reihenfolgen-Algorithmen nebeneinander driften
+ * auseinander, und dann steht in Word etwas anderes als in der Vorschau.
+ * Abschnitte, die der Nutzer nicht sortiert hat, rutschen an die Stelle, an
+ * der sie in der Vorlagenreihenfolge stehen — vor den nächsten bekannten
+ * Nachbarn, statt hinten angehängt zu werden.
+ */
+function orderedSections(defaultOrder: SectionKey[], sectionOrder?: SectionKey[]): SectionKey[] {
+  if (!sectionOrder || !sectionOrder.length) return defaultOrder;
+  const ownable = new Set<SectionKey>(defaultOrder);
+  const userKeys = sectionOrder.filter(k => ownable.has(k));
+  const userSet = new Set<SectionKey>(userKeys);
+  const out: SectionKey[] = [...userKeys];
+  for (let i = 0; i < defaultOrder.length; i++) {
+    const k = defaultOrder[i];
+    if (userSet.has(k)) continue;
+    let insertAt = out.length;
+    for (let j = i + 1; j < defaultOrder.length; j++) {
+      const idx = out.indexOf(defaultOrder[j]);
+      if (idx >= 0) { insertAt = idx; break; }
+    }
+    out.splice(insertAt, 0, k);
+    userSet.add(k);
+  }
+  return out;
+}
+
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'auto' } as const;
 const NO_BORDERS = {
   top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER,
@@ -260,6 +307,9 @@ function makeParts(
   dateTab: number | null,
   headStyle: HeadStyle = 'caps-tracked',
   bulletChar = '\u25AA',
+  /** Abschnitte, die der Nutzer ausgeblendet hat. Siehe `personalLines`:
+   *  Das ist eine Datenschutz-Einstellung, keine Geschmacksfrage. */
+  hidden: Set<SectionKey> = new Set(),
 ) {
   const val2 = val;
   /* Sektionsüberschriften.
@@ -423,49 +473,92 @@ function makeParts(
   const sec = cv.labels.sections;
   const fields = cv.labels.fields;
 
-  /** Hauptspalte: Profil, Beruf, Ausbildung — die Abschnitte, die gelesen werden. */
-  const mainBlocks = (skills: CVData['skillGroups']): Paragraph[] => {
+  /** Hauptspalte: Profil, Beruf, Ausbildung — die Abschnitte, die gelesen werden.
+   *
+   * `order` kommt von außen, statt hier fest zu stehen: Die Reihenfolge der
+   * Abschnitte ist eine Einstellung des Nutzers (Profil nach vorn, Ausbildung
+   * vor den Beruf — je nachdem, worauf es in der Bewerbung ankommt). Bis zum
+   * 19.09.2026 war sie in Word fest verdrahtet, und die Word-Datei zeigte eine
+   * andere Gliederung als die Vorschau daneben. */
+  const mainBlocks = (skills: CVData['skillGroups'], order: SectionKey[]): Paragraph[] => {
     const out: Paragraph[] = [];
-    if (val2(cv.profile?.text)) { out.push(...H1(sec.profile)); out.push(para(val2(cv.profile.text), { color: pal.soft })); }
-    const exp = (cv.experience || []).filter(e => !e.hidden);
-    if (exp.length) {
-      out.push(...H1(sec.experience));
-      for (const e of exp) {
-        const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
-        if (val2(e.role)) out.push(H2Dated(val2(e.role), dates));
-        const m = [val2(e.company), val2(e.location)].filter(Boolean).join('  ·  ');
-        if (m) out.push(meta(m, { bold: true }));
-        for (const b of e.bullets || []) if (val2(b)) out.push(bullet(val2(b)));
+    for (const key of order) {
+      /* Ausgeblendetes bleibt ausgeblendet — auch hier. Siehe `personalLines`. */
+      if (hidden.has(key)) continue;
+
+      if (key === 'profile') {
+        if (val2(cv.profile?.text)) { out.push(...H1(sec.profile)); out.push(para(val2(cv.profile.text), { color: pal.soft })); }
+        continue;
       }
-    }
-    if ((cv.education || []).length) {
-      out.push(...H1(sec.education));
-      for (const e of cv.education) {
-        const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
-        if (val2(e.degree)) out.push(H2Dated(val2(e.degree), dates));
-        const m = [val2(e.institution), val2(e.location)].filter(Boolean).join('  ·  ');
-        if (m) out.push(meta(m));
-        if (val2(e.notes)) out.push(para(val2(e.notes), { color: pal.soft, size: 19 }));
+
+      if (key === 'experience') {
+        const exp = (cv.experience || []).filter(e => !e.hidden);
+        if (!exp.length) continue;
+        out.push(...H1(sec.experience));
+        for (const e of exp) {
+          const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
+          if (val2(e.role)) out.push(H2Dated(val2(e.role), dates));
+          const m = [val2(e.company), val2(e.location)].filter(Boolean).join('  ·  ');
+          if (m) out.push(meta(m, { bold: true }));
+          for (const b of e.bullets || []) if (val2(b)) out.push(bullet(val2(b)));
+        }
+        continue;
       }
+
+      if (key === 'education') {
+        if (!(cv.education || []).length) continue;
+        out.push(...H1(sec.education));
+        for (const e of cv.education) {
+          const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
+          if (val2(e.degree)) out.push(H2Dated(val2(e.degree), dates));
+          const m = [val2(e.institution), val2(e.location)].filter(Boolean).join('  ·  ');
+          if (m) out.push(meta(m));
+          if (val2(e.notes)) out.push(para(val2(e.notes), { color: pal.soft, size: 19 }));
+        }
+        continue;
+      }
+
+      if (key === 'skills') {
+        /* Skill-Gruppen als Liste, nicht als Komma-Wurst.
+         *
+         * Hier stand `items.join(', ')`: Aus fünf Stichpunkten wurde ein
+         * Fließsatz — „HubSpot (CRM, CMS, Formulare, Reporting), Salesforce
+         * (als Anwender), GA4, Umami, …". Bei Einträgen, die selbst Kommas
+         * enthalten, ist nicht mehr zu erkennen, wo einer aufhört. In der
+         * Vorschau steht dort eine Aufzählung; in Word jetzt auch, mit
+         * demselben Zeichen wie die übrigen Listen der Vorlage. Zweispaltig
+         * wie in der Vorschau wäre eine verschachtelte Tabelle — die kostet
+         * mehr an Maschinenlesbarkeit, als die gesparten Zeilen wert sind. */
+        for (const g of skills) {
+          const items = (g.items || []).map(val2).filter(Boolean);
+          if (!items.length) continue;
+          out.push(...H1(val2(g.label) || 'Skills'));
+          for (const it of items) out.push(bullet(it));
+        }
+        continue;
+      }
+
+      if (key === 'languages') {
+        /* Sprachen stehen nur dort im Fluss, wo die Vorlage keine Nebenspalte
+         * hat — sonst sitzen sie dort (siehe `asideBlocks`), und die
+         * Reihenfolge der Hauptspalte kennt sie gar nicht. */
+        if (!(cv.languages || []).length) continue;
+        out.push(...H1(sec.languages));
+        for (const l of cv.languages) {
+          const t = [val2(l.language), val2(l.level)].filter(Boolean).join(' — ');
+          if (t) out.push(bullet(t));
+        }
+        continue;
+      }
+
+      if (key === 'additional') {
+        const add = (cv.additionalExperience || []).map(val2).filter(Boolean);
+        if (add.length) { out.push(...H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
+        continue;
+      }
+      /* 'details' steht in dieser Fassung im Kopfbereich (siehe
+       * `personalLines`), nicht im Textfluss — deshalb hier kein Zweig. */
     }
-    /* Skill-Gruppen als Liste, nicht als Komma-Wurst.
-     *
-     * Hier stand `items.join(', ')`: Aus fünf Stichpunkten wurde ein Fließsatz
-     * — „HubSpot (CRM, CMS, Formulare, Reporting), Salesforce (als Anwender),
-     * GA4, Umami, …". Bei Einträgen, die selbst Kommas enthalten, ist nicht
-     * mehr zu erkennen, wo einer aufhört. In der Vorschau steht dort eine
-     * Aufzählung; in Word jetzt auch, mit demselben Zeichen wie die übrigen
-     * Listen der Vorlage. Zweispaltig wie in der Vorschau wäre eine
-     * verschachtelte Tabelle — die kostet mehr an Maschinenlesbarkeit, als
-     * die gesparten Zeilen wert sind. */
-    for (const g of skills) {
-      const items = (g.items || []).map(val2).filter(Boolean);
-      if (!items.length) continue;
-      out.push(...H1(val2(g.label) || 'Skills'));
-      for (const it of items) out.push(bullet(it));
-    }
-    const add = (cv.additionalExperience || []).map(val2).filter(Boolean);
-    if (add.length) { out.push(...H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
     return out;
   };
 
@@ -491,7 +584,11 @@ function makeParts(
         out.push(new Paragraph({ spacing: { after: 90 }, children: multiRuns(v, { color: pal.ink, size: 18, font: fonts.body }) }));
       }
     }
-    const details: [string, string][] = ([
+    /* Eckdaten in der Nebenspalte: dieselbe Einstellung, derselbe Grund wie in
+     * `personalLines` — ausgeblendet heißt ausgeblendet, auch in Word. Ohne
+     * diese Zeile stand Geburtsdatum und Staatsangehörigkeit in der
+     * Word-Datei, obwohl die Vorschau sie nicht zeigte. */
+    const details: [string, string][] = hidden.has('details') ? [] : ([
       [fields.birthDate, val2(p.birthDate)], [fields.birthPlace, val2(p.birthPlace)],
       [fields.nationality, val2(p.nationality)], [fields.maritalStatus, val2(p.maritalStatus)],
       [fields.driversLicense, val2(p.driversLicense)],
@@ -503,7 +600,7 @@ function makeParts(
         out.push(new Paragraph({ spacing: { after: 90 }, children: multiRuns(v, { color: pal.ink, size: 18, font: fonts.body }) }));
       }
     }
-    if ((cv.languages || []).length) {
+    if (!hidden.has('languages') && (cv.languages || []).length) {
       out.push(...H1Plain(sec.languages));
       for (const l of cv.languages) {
         /* Die Punkteskala steht in der Vorschau neben der Sprache und fehlte
@@ -525,7 +622,7 @@ function makeParts(
         if (val2(l.level)) out.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: val2(l.level), color: pal.soft, size: 17, font: fonts.body })] }));
       }
     }
-    for (const g of skills) {
+    for (const g of hidden.has('skills') ? [] : skills) {
       const items = (g.items || []).map(val2).filter(Boolean);
       if (!items.length) continue;
       out.push(...H1Plain(val2(g.label) || 'Skills'));
@@ -554,12 +651,33 @@ function makeParts(
   return { H1, H2, H2Dated, para, bullet, meta, mainBlocks, asideBlocks };
 }
 
-/** Build the DOCX document for a CV. */
-export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = 'design'): Document {
-  const sec = cv.labels.sections;
+/**
+ * Build the DOCX document for a CV.
+ *
+ * `cfg` ist dieselbe Konfiguration, aus der HTML und PDF gebaut werden
+ * (`ExportRenderConfig`, siehe export/exportHtml.ts). Bis zum 19.09.2026 bekam
+ * diese Funktion nur die Vorlagen-Kennung — und damit wich die Word-Datei in
+ * vier Punkten von dem ab, was der Nutzer in der Vorschau sah: ausgeblendete
+ * Abschnitte standen doch darin, die Abschnittsreihenfolge war fest
+ * verdrahtet, Akzent- und Papierfarbe fielen auf die Vorlagenwerte zurück,
+ * und gedruckt wurde immer auf A4. Ein Parameter für alles vier, damit der
+ * nächste Regler nicht wieder vergessen wird.
+ */
+export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVariant = 'design'): Document {
   const fields = cv.labels.fields;
   const p = cv.personal;
-  const theme = themeId ? getTheme(themeId) : undefined;
+  /* Akzent- und Papierfarbe gehören in die Vorlage hinein, nicht daneben.
+   * Für HTML und PDF ist das längst so (exportHtml.ts:27–32); ohne die beiden
+   * Kennungen druckte Word in der Farbe der Vorlage statt in der gewählten. */
+  const theme = cfg.themeId ? getTheme(cfg.themeId, cfg.accentId, cfg.paperId) : undefined;
+  /* Ausgeblendete Abschnitte — die Einstellung wiegt schwerer als sie aussieht,
+   * siehe `personalLines`. Gilt für BEIDE Fassungen, auch die ATS-Fassung. */
+  const hidden = new Set<SectionKey>(cfg.hiddenSections ?? []);
+  /* Blattmaß aus der Einstellung, nicht aus einer Konstante: Wer US Letter
+   * wählt, bekam PDF und HTML in Letter und die Word-Datei in A4. */
+  const fmt = getPageFormat(cfg.pageFormat);
+  const PAGE_W = mm(fmt.widthMm);
+  const PAGE_H = mm(fmt.heightMm);
   const accent = theme ? toHex(theme.colors.accent) : '1A1A1A';
   const ink = theme ? toHex(theme.colors.ink, '1A1A1A') : '1A1A1A';
   const soft = theme ? toHex(theme.colors.inkSoft, '5A5A5A') : '5A5A5A';
@@ -567,7 +685,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   /* Überschriftsform der Vorlage. Die ATS-Fassung bleibt bewusst bei der
    * schlichtesten Form: dort zählt Lesbarkeit für Maschinen, nicht Haltung. */
   const headStyle: HeadStyle = variant === 'ats' ? 'caps-plain' : (theme?.heading ?? 'caps-tracked');
-  const fonts = wordFont(themeId);
+  const fonts = wordFont(theme);
 
   /* Aufzählungszeichen wie in der Vorschau: die Vorlagen setzen Strich, Punkt,
    * Quadrat oder Pfeil — in Word stand überall derselbe schwarze Punkt. Die
@@ -615,19 +733,19 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
 
   // ── Einspaltige Fassung (ATS) ────────────────────────────────────────────
   if (!hasAside && !tabular) {
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, null, headStyle, bulletChar);
+    /* Rechte Textkante = Blattbreite minus der beiden 0.5"-Ränder unten.
+     * Vorher stand hier eine feste Zahl für A4; auf Letter oder A5 hing die
+     * Datumsspalte damit neben dem Blatt. */
+    const rightTab = PAGE_W - 720 - 720;
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, null, headStyle, bulletChar, hidden);
     const kids: Paragraph[] = [];
     kids.push(new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 20 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true })] }));
     if (val(p.title)) kids.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19 })] }));
-    for (const line of personalLines(p, fields)) kids.push(P.para(line));
-    kids.push(...P.mainBlocks(cv.skillGroups || []));
-    if ((cv.languages || []).length) {
-      kids.push(...P.H1(sec.languages));
-      for (const l of cv.languages) {
-        const t = [val(l.language), val(l.level)].filter(Boolean).join(' — ');
-        if (t) kids.push(P.bullet(t));
-      }
-    }
+    for (const line of personalLines(p, fields, hidden)) kids.push(P.para(line));
+    /* Auch die ATS-Fassung bleibt sonst, wie sie ist — einspaltig, ohne
+     * Tabelle, ohne Kopfzeile. Nur Ausgeblendetes und die Reihenfolge folgen
+     * dem, was der Nutzer eingestellt hat. */
+    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder)));
     return new Document({
       ...docMeta, numbering, styles,
       sections: [{ properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } }, children: kids }],
@@ -640,7 +758,10 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
     // 02/2021" breiter als die Vorlagenschrift, und ein Datum, das in den
     // Titel läuft, ist schlimmer als vier Millimeter mehr Spalte.
     const dateTab = mm(30);
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, RIGHT_TAB, dateTab, headStyle, bulletChar);
+    // Rechte Textkante aus dem Blattmaß und den Rändern dieser Bauform
+    // (unten: links 20 mm, rechts 18 mm) — nicht aus einer A4-Konstanten.
+    const rightTab = PAGE_W - mm(20) - mm(18);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, dateTab, headStyle, bulletChar, hidden);
     const centered = layout === 'top-centered';
     const kids: Paragraph[] = [];
     /* Befund vom 14.09.2026, zweiter Teil: Der tabellarische Zweig hatte nie
@@ -661,7 +782,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
       spacing: { after: 80 }, alignment: centered ? AlignmentType.CENTER : undefined,
       children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19, font: fonts.body })],
     }));
-    for (const line of personalLines(p, fields)) {
+    for (const line of personalLines(p, fields, hidden)) {
       kids.push(new Paragraph({
         spacing: { after: 40 }, alignment: centered ? AlignmentType.CENTER : undefined,
         border: undefined,
@@ -673,14 +794,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
       border: { bottom: { style: BorderStyle.SINGLE, size: 8, space: 6, color: accent } },
       children: [],
     }));
-    kids.push(...P.mainBlocks(cv.skillGroups || []));
-    if ((cv.languages || []).length) {
-      kids.push(...P.H1(sec.languages));
-      for (const l of cv.languages) {
-        const t = [val(l.language), val(l.level)].filter(Boolean).join(' — ');
-        if (t) kids.push(P.bullet(t));
-      }
-    }
+    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder)));
     return new Document({
       ...docMeta, numbering, styles,
       sections: [{ properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: mm(18), bottom: mm(16), left: mm(20), right: mm(18) } } }, children: kids }],
@@ -701,7 +815,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   const mainW = PAGE_W - sideW;
   const mainPadL = mm(11);
   const mainPadR = mm(12);
-  const Pm = makeParts(cv, { ink, soft, accent, accentInk }, fonts, mainW - mainPadL - mainPadR, null, headStyle, bulletChar);
+  const Pm = makeParts(cv, { ink, soft, accent, accentInk }, fonts, mainW - mainPadL - mainPadR, null, headStyle, bulletChar, hidden);
   const band = layout === 'header-band';
   /* Seitenspalte ohne Farbfläche.
    *
@@ -718,7 +832,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
   const asidePal = band || plainPanel
     ? { ink, soft, accent, accentInk }
     : { ink: panelInk, soft: panelSoft, accent: panelAccent, accentInk: panelBg };
-  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null, headStyle, bulletChar);
+  const Pa = makeParts(cv, asidePal, fonts, sideW - mm(18), null, headStyle, bulletChar, hidden);
 
   // Word liest Tabellen zeilenweise von links: bei linker Seitenspalte steht
   // deren Inhalt im Dokument VOR der Hauptspalte. Deshalb wandert der Name dort
@@ -749,7 +863,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
       children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19, font: fonts.body })],
     }));
   }
-  mainChildren.push(...Pm.mainBlocks(mainSkills));
+  mainChildren.push(...Pm.mainBlocks(mainSkills, orderedSections(MAIN_ORDER_ASIDE, cfg.sectionOrder)));
 
   const asideCell = new TableCell({
     width: { size: sideW, type: WidthType.DXA },
@@ -795,7 +909,7 @@ export function buildDocx(cv: CVData, themeId?: string, variant: DocxVariant = '
           : []),
         new Paragraph({ spacing: { after: 10 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true, size: 40, color: panelInk, font: fonts.heading })] }),
         ...(val(p.title) ? [new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: panelAccent, characterSpacing: 20, size: 18, font: fonts.body })] })] : []),
-        ...personalLines(p, fields).map(line => new Paragraph({
+        ...personalLines(p, fields, hidden).map(line => new Paragraph({
           spacing: { after: 20 }, children: [new TextRun({ text: line, color: panelSoft, size: 17, font: fonts.body })],
         })),
       ],
@@ -947,10 +1061,13 @@ export async function photoAsRaster(
 
 /** Liefert den Lebenslauf mit einem Foto, das Word einbetten kann — in der
  *  Form, die die Vorlage vorsieht, und auf ihrer Hintergrundfarbe. */
-export async function withRasterPhoto(cv: CVData, themeId?: string): Promise<CVData> {
+export async function withRasterPhoto(cv: CVData, cfg: ExportRenderConfig): Promise<CVData> {
   const src = val(cv.personal?.photo);
   if (!src) return cv;
-  const theme = themeId ? getTheme(themeId) : undefined;
+  // Auch hier die vollständige Konfiguration: Die gewählte Papierfarbe
+  // verschiebt `panelBg` — und das ist die Fläche, auf der das Foto sitzt und
+  // mit der seine Maske hinterlegt wird.
+  const theme = cfg.themeId ? getTheme(cfg.themeId, cfg.accentId, cfg.paperId) : undefined;
   const shape = (theme?.photo ?? 'rect') as PhotoShape;
   // Hinter dem Foto liegt die Fläche, auf der es im Dokument sitzt: im
   // Bandlayout und in der Nebenspalte die Panel-Farbe, sonst das Papier.
@@ -962,11 +1079,17 @@ export async function withRasterPhoto(cv: CVData, themeId?: string): Promise<CVD
 }
 
 /** Build + trigger a browser download. */
-export async function exportDocx(cv: CVData, themeId?: string, variant: DocxVariant = 'design'): Promise<void> {
+export async function exportDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVariant = 'design'): Promise<void> {
   // Foto zuerst in ein Format bringen, das Word kennt — sonst fehlt es
   // stillschweigend (siehe `photoAsRaster`).
-  const doc = buildDocx(variant === 'design' ? await withRasterPhoto(cv, themeId) : cv, themeId, variant);
+  const doc = buildDocx(variant === 'design' ? await withRasterPhoto(cv, cfg) : cv, cfg, variant);
   const blob = await Packer.toBlob(doc);
-  const name = (val(cv.personal?.name) || 'lebenslauf').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lebenslauf';
-  saveBlob(`${name}${variant === 'ats' ? '-ats' : ''}.docx`, blob);
+  /* Der Dateiname kommt aus `exportFilename` wie bei PDF, HTML und JSON.
+   * Vorher wurde er hier eigens gebaut („lena-brandt.docx") — zwei Exporte
+   * hintereinander hießen gleich, der Browser hängte „(1)" an, und im
+   * Postfach des Empfängers lag eine Datei, die nicht nach Bewerbung aussah.
+   * Die ATS-Fassung behält ihre Kennzeichnung, sonst sind die beiden Dateien
+   * im Ordner nicht auseinanderzuhalten. */
+  const name = exportFilename('lebenslauf', val(cv.personal?.name), 'docx');
+  saveBlob(variant === 'ats' ? name.replace(/\.docx$/, '-ATS.docx') : name, blob);
 }
