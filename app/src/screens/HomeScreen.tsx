@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { AppProfile } from '../data/types';
-import { createDemoProfile, createBlankProfile } from '../data/storage';
-import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
+import type { AppProfile, CVData, Lang } from '../data/types';
+import { createDemoProfile, createBlankProfile, withAllLangs } from '../data/storage';
+import { COLORS as C, RAW, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
+import { DESIGN_I18N } from '../ui/i18n/design';
+import { LOCAL_I18N } from '../ui/i18n/local';
+import { importLinkedIn } from '../import/linkedinImport';
+import { jsonResumeToCv, isJsonResume } from '../export/jsonResume';
+import { markdownToCvData, isCvMarkdown } from '../import/markdownBridge';
 import { useUiLang } from '../ui/useUiLang';
 import { HOME_I18N } from '../ui/i18n/home';
 import { APP_NAME } from '../brand';
@@ -26,97 +31,163 @@ interface Props {
   isAdmin?: boolean;
   onLogout?: () => void;
   onOpenAdmin?: () => void;
+  /** Lokalmodus: Sicherungsfenster öffnen (ui/BackupReminder.tsx). */
+  onOpenBackup?: () => void;
 }
 
 // ── Create Profile Modal ───────────────────────────────────────────────────
+
+type StartMode = 'blank' | 'demo' | 'import';
+
+/** Was eine Importdatei hergibt — vor dem Anlegen gelesen, damit der Mensch
+ *  sieht, was übernommen wird. */
+interface ImportResult { cv?: CVData; profile?: AppProfile; what: string }
+
+/** Liest eine mitgebrachte Datei — alle vorhandenen Importwege an einer
+ *  Stelle (Personas-Bericht, Hürde 7): LinkedIn-ZIP/CSV, Datensicherung des
+ *  Werkzeugs (JSON), JSON Resume und Markdown im Format der Brücke. Läuft
+ *  vollständig im Browser. */
+async function readImport(file: File, base: CVData): Promise<ImportResult> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.zip') || name.endsWith('.csv')) {
+    const befund = await importLinkedIn(file, base);
+    const g = befund.gefunden;
+    return { cv: befund.cv, what: `LinkedIn · ${g.stationen} / ${g.ausbildung} / ${g.skills} / ${g.sprachen}` };
+  }
+  const text = await file.text();
+  if (name.endsWith('.json') || text.trimStart().startsWith('{')) {
+    const parsed = JSON.parse(text);
+    if (isJsonResume(parsed)) return { cv: jsonResumeToCv(parsed, base), what: 'JSON Resume' };
+    if (parsed && parsed.id && parsed.data) return { profile: withAllLangs(parsed as AppProfile), what: 'JSON' };
+    if (parsed && parsed.personal && parsed.experience !== undefined) return { cv: parsed as CVData, what: 'JSON' };
+    throw new Error('json');
+  }
+  if (isCvMarkdown(text)) return { cv: markdownToCvData(text, base), what: 'Markdown' };
+  throw new Error('unknown');
+}
 
 function CreateModal({ onConfirm, onClose }: {
   onConfirm: (profile: AppProfile) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<'blank' | 'demo'>('blank');
-  const t = HOME_I18N[useUiLang()];
+  const uiLang = useUiLang();
+  const t = HOME_I18N[uiLang];
+  const d = DESIGN_I18N[uiLang];
+  const [title, setTitle] = useState('');
+  const [person, setPerson] = useState('');
+  const [mode, setMode] = useState<StartMode>('blank');
+  const [imp, setImp] = useState<ImportResult | null>(null);
+  const [impErr, setImpErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const lang: Lang = (['de', 'en', 'fr', 'es'] as Lang[]).includes(uiLang as Lang) ? uiLang as Lang : 'de';
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const effectiveTitle = title.trim() || person.trim();
+  const ready = !!effectiveTitle && (mode !== 'import' || !!imp);
+
+  async function pick(file: File) {
+    setBusy(true); setImpErr(null); setImp(null);
+    try {
+      const base = createBlankProfile('').data[lang];
+      setImp(await readImport(file, base));
+    } catch {
+      setImpErr(d.importFailed);
+    } finally { setBusy(false); }
+  }
 
   function handleCreate() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const profile = mode === 'demo' ? createDemoProfile(trimmed) : createBlankProfile(trimmed);
+    if (!ready) return;
+    let profile: AppProfile;
+    if (mode === 'demo') profile = createDemoProfile(effectiveTitle);
+    else if (mode === 'import' && imp?.profile) {
+      const fresh = createBlankProfile(effectiveTitle);
+      profile = { ...imp.profile, id: fresh.id, displayName: effectiveTitle, createdAt: fresh.createdAt };
+    } else {
+      profile = createBlankProfile(effectiveTitle);
+      if (mode === 'import' && imp?.cv) profile = { ...profile, data: { ...profile.data, [lang]: imp.cv } };
+    }
+    profile = { ...profile, settings: { ...profile.settings, lang } };
+    /* Der Name der Person steht im Lebenslauf, der Titel nur in der
+       Übersicht — getrennt, seit der Titel als Name im PDF landete. */
+    const nm = person.trim();
+    if (nm) {
+      const data = { ...profile.data };
+      (Object.keys(data) as Lang[]).forEach(l => { data[l] = { ...data[l], personal: { ...data[l].personal, name: nm } }; });
+      profile = { ...profile, data };
+    }
     onConfirm(profile);
   }
 
-  const overline: React.CSSProperties = { ...TYPE.overline, color: C.fade, marginBottom: '8px' };
-  const input: React.CSSProperties = {
-    width: '100%', padding: '14px 0', border: 'none',
-    borderBottom: B.hairline, background: 'transparent',
-    fontFamily: F.display, fontSize: '22px', fontWeight: 400, color: C.ink,
-    outline: 'none', boxSizing: 'border-box',
+  const field: React.CSSProperties = {
+    width: '100%', minHeight: '46px', padding: '0 14px', border: 0, borderRadius: '12px',
+    background: '#fff', boxShadow: 'inset 0 0 0 1px oklch(0.87 0.006 264)',
+    fontFamily: 'inherit', fontSize: '15px', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box',
   };
+  const label: React.CSSProperties = { display: 'block', fontSize: 'var(--t-sm)', fontWeight: 620, color: 'var(--ink)', margin: '0 0 6px' };
+  const hint: React.CSSProperties = { display: 'block', fontSize: 'var(--t-xs)', color: 'var(--ink-2)', marginTop: '5px' };
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(28,25,23,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+    <div className="ui"
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'oklch(0.21 0.021 264 / 0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
       onClick={onClose}
     >
-      <div
-        style={{ background: C.paper, border: B.inkStrong, padding: '40px 44px', maxWidth: '540px', width: '100%' }}
+      <div role="dialog" aria-modal="true" aria-labelledby="cv-create-title" className="ui-float"
+        style={{ background: 'var(--float-solid)', padding: 'clamp(20px, 4vw, 32px)', maxWidth: '620px', width: '100%', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ ...TYPE.micromono, color: C.fade, marginBottom: '12px' }}>{t.modalOverline}</div>
-        <div style={{ fontFamily: F.display, fontSize: '38px', fontWeight: 400, color: C.ink, lineHeight: 0.95, letterSpacing: '-0.02em', marginBottom: '28px' }}>
-          {t.modalTitle}<br/><em style={{ fontStyle: 'italic' }}>{t.modalTitleAccent}</em>
-        </div>
+        <div style={{ fontSize: 'var(--t-xs)', fontWeight: 600, color: 'var(--ink-2)', marginBottom: '6px' }}>{t.modalOverline}</div>
+        <h2 id="cv-create-title" style={{ margin: '0 0 18px', fontSize: '24px', fontWeight: 650, letterSpacing: '-0.015em', color: 'var(--ink)' }}>{d.startTitle}</h2>
 
-        <div style={overline}>{t.nameLabel}</div>
-        <input
-          type="text" value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleCreate()}
-          placeholder={t.namePlaceholder}
-          autoFocus
-          style={input}
-        />
-
-        <div style={{ ...overline, marginTop: '32px' }}>{t.startLabel}</div>
-        <div style={{ display: 'flex', gap: '0', borderTop: B.hairline, borderBottom: B.hairline }}>
-          {[
-            { id: 'blank' as const, label: t.blankLabel, desc: t.blankDesc },
-            { id: 'demo' as const, label: t.sampleLabel, desc: t.sampleDesc },
-          ].map((opt, i) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setMode(opt.id)}
-              style={{
-                flex: 1, padding: '18px 16px',
-                background: mode === opt.id ? C.ink : 'transparent',
-                color: mode === opt.id ? C.paper : C.ink,
-                border: 'none', borderLeft: i === 0 ? 'none' : B.hairline,
-                cursor: 'pointer', textAlign: 'left',
-                transition: 'background 120ms, color 120ms',
-              }}
-            >
-              <div style={{ fontFamily: F.ui, fontSize: '13px', fontWeight: 600, marginBottom: '3px' }}>
-                {opt.label}
-              </div>
-              <div style={{ fontFamily: F.ui, fontSize: '10.5px', opacity: 0.75 }}>{opt.desc}</div>
+        <div className="ui-start" role="radiogroup" aria-label={d.startTitle}>
+          {([
+            { id: 'blank' as const, label: d.startBlank, desc: d.startBlankDesc },
+            { id: 'demo' as const, label: d.startSample, desc: d.startSampleDesc },
+            { id: 'import' as const, label: d.startImport, desc: d.startImportDesc },
+          ]).map(o => (
+            <button key={o.id} type="button" role="radio" aria-checked={mode === o.id} onClick={() => setMode(o.id)}>
+              <strong>{o.label}</strong>
+              <span>{o.desc}</span>
             </button>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: '0', justifyContent: 'flex-end', marginTop: '32px' }}>
-          <button type="button" onClick={onClose}
-            style={{ padding: '12px 22px', background: 'transparent', border: B.hairline, fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.pencil, cursor: 'pointer', fontFamily: F.ui }}>
-            {t.cancel}
-          </button>
-          <button type="button" onClick={handleCreate} disabled={!name.trim()}
-            style={{
-              padding: '12px 28px',
-              background: name.trim() ? C.ink : C.fade,
-              color: C.paper, border: B.inkStrong, borderLeft: 'none',
-              fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-              cursor: name.trim() ? 'pointer' : 'default', fontFamily: F.ui,
-            }}>
+        {mode === 'import' && (
+          <div style={{ marginTop: '14px', padding: '14px', borderRadius: '14px', background: 'oklch(1 0 0 / 0.7)', boxShadow: 'var(--pill-shadow)' }}>
+            <p style={{ ...hint, marginTop: 0, marginBottom: '10px', fontSize: 'var(--t-sm)' }}>{d.importKinds}</p>
+            <label className="ui-btn ui-btn-soft" style={{ minHeight: '44px', cursor: busy ? 'wait' : 'pointer' }}>
+              {busy ? <span className="cv-spin" aria-hidden /> : null}{d.importPick}
+              <input type="file" accept=".zip,.csv,.json,.md,.markdown,.txt,application/json,text/markdown,text/plain" hidden disabled={busy}
+                onChange={e => { const f = e.target.files?.[0]; if (f) void pick(f); e.target.value = ''; }} />
+            </label>
+            <div role="status" aria-live="polite" style={{ ...hint, fontSize: 'var(--t-sm)', color: impErr ? 'var(--ats-low-ink)' : 'var(--ats-high-ink)' }}>
+              {impErr ?? (imp ? d.importRead(imp.what) : '')}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginTop: '18px' }}>
+          <div>
+            <label htmlFor="cv-create-person" style={label}>{d.personName}</label>
+            <input id="cv-create-person" type="text" value={person} onChange={e => setPerson(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()} placeholder={d.personNamePlaceholder} autoComplete="name" style={field} />
+            <span style={hint}>{d.personNameHint}</span>
+          </div>
+          <div>
+            <label htmlFor="cv-create-title-field" style={label}>{d.titleLabel}</label>
+            <input id="cv-create-title-field" type="text" value={title} onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()} placeholder={t.namePlaceholder} style={field} />
+            <span style={hint}>{d.titleHint}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px', flexWrap: 'wrap' }}>
+          <button type="button" onClick={onClose} className="ui-btn ui-btn-soft" style={{ minHeight: '44px' }}>{t.cancel}</button>
+          <button type="button" onClick={handleCreate} disabled={!ready} className="ui-btn ui-btn-primary" style={{ minHeight: '44px', padding: '0 20px' }}>
             {t.createProfile}
           </button>
         </div>
@@ -232,8 +303,9 @@ function TemplateStrip({ isMobile }: { isMobile: boolean }) {
         {STRIP_TILES.map(t => (
           <div key={t.id} style={{ border: B.hairline, background: C.white, padding: '6px' }}>
             <svg viewBox="0 0 92 96" preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: 'auto' }} aria-hidden>
-              <rect x="0" y="0" width="92" height="96" fill={C.paper} />
-              {t.render(C.gold, C.ink, C.rule)}
+              <rect x="0" y="0" width="92" height="96" fill={RAW.paper} />
+              {/* SVG-Attribute verstehen keine CSS-Variablen — hier die Literale. */}
+              {t.render(RAW.gold, RAW.ink, RAW.rule)}
             </svg>
             <div style={{ ...TYPE.micromono, color: C.fade, marginTop: '6px', textAlign: 'center' }}>{t.name}</div>
           </div>
@@ -331,10 +403,11 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
 
 // ── HomeScreen ───────────────────────────────────────────────────────────
 
-export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin }: Props) {
+export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const { isMobile } = useViewport();
-  const t = HOME_I18N[useUiLang()];
+  const uiLangHome = useUiLang();
+  const t = HOME_I18N[uiLangHome];
 
   function handleCreate(profile: AppProfile) {
     setShowCreate(false);
@@ -359,6 +432,12 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
             <button type="button" onClick={onOpenAdmin} title={t.ttAdmin}
               style={{ padding: '5px 11px', background: C.ink, color: C.paper, border: 'none', fontFamily: F.ui, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
               {t.admin}
+            </button>
+          )}
+          {onOpenBackup && (
+            <button type="button" onClick={onOpenBackup}
+              style={{ padding: '5px 12px', minHeight: '32px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '11px', fontWeight: 600, color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {LOCAL_I18N[uiLangHome].more}
             </button>
           )}
           {onLogout && (

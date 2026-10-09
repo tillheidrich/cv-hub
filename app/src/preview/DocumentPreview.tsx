@@ -523,8 +523,13 @@ export default function DocumentPreview({
         onClick={handlePreviewClick}
         style={{
           transformOrigin: 'top center',
-          transform: viewportScale < 1 ? `scale(${viewportScale})` : undefined,
-          width: viewportScale < 1 ? `${PAGE_WIDTH_MM}mm` : undefined,
+          /* Auch über 100 % (Zoom 125 % am Schreibtisch). Der umgebende
+             Kasten setzt die skalierte Breite und Höhe; hier wird nur
+             gezeichnet. Die Messung oben bleibt davon unberührt — sie läuft
+             im eigenen, ungeskalierten Exemplar. */
+          transform: viewportScale !== 1 ? `scale(${viewportScale})` : undefined,
+          width: viewportScale !== 1 ? `${PAGE_WIDTH_MM}mm` : undefined,
+          flexShrink: 0,
           position: 'relative',
           display: 'flex', flexDirection: 'column', gap: '28px',
         }}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../data/api';
+import { api, ApiError } from '../data/api';
 import type { TwoFaStatus, OauthConnection } from '../data/api';
 import { useUiLang } from '../ui/useUiLang';
 import { KEYS_I18N } from '../ui/i18n/keys';
@@ -35,6 +35,12 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
 
   // ── Sicherheit: E-Mail + Zwei-Faktor ───────────────────────────────────────
   const [email, setEmail] = useState('');
+  /** Die gespeicherte Adresse — um zu wissen, ob die alte benachrichtigt wird. */
+  const [savedEmail, setSavedEmail] = useState('');
+  /* Seit 08.10.2026 verlangt der Server für jeden E-Mail-Wechsel das aktuelle
+   * Passwort (Technik-Bericht N6): Wer eine Sitzung gekapert hatte, konnte
+   * sonst seine Adresse eintragen, 2FA einschalten und den Inhaber aussperren. */
+  const [emailPw, setEmailPw] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tfa, setTfa] = useState<TwoFaStatus | null>(null);
@@ -63,6 +69,7 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
       try {
         const [{ user }, status] = await Promise.all([api.me(), api.twofaStatus()]);
         setEmail(user.email ?? '');
+        setSavedEmail(user.email ?? '');
         setTfa(status);
       } catch { /* Panel bleibt nutzbar, Sicherheits-Sektion zeigt dann nichts */ }
       try {
@@ -80,14 +87,33 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
     finally { setConnBusy(null); }
   }
 
+  /** Fehlertext für die Oberfläche: bekannte Fälle in der Oberflächensprache,
+   *  sonst der Klartext des Servers. */
+  function errText(e: unknown, wrongPw: string): string {
+    if (e instanceof ApiError) {
+      if (e.code === 'password_required') return t.emailPasswordRequired;
+      if (e.code === 'password_wrong' || e.status === 403) return wrongPw;
+      if (e.status === 429) return t.tooManyAttempts(e.retryAfter);
+      return e.message || t.genericError;
+    }
+    return e instanceof Error ? e.message : t.genericError;
+  }
+
   async function saveEmail() {
-    setEmailMsg(null); setEmailBusy(true);
+    setEmailMsg(null);
+    if (!emailPw) { setEmailMsg({ kind: 'err', text: t.emailPasswordRequired }); return; }
+    setEmailBusy(true);
     try {
-      const { user } = await api.setEmail(email.trim());
+      const before = savedEmail.trim().toLowerCase();
+      const { user } = await api.setEmail(email.trim(), emailPw);
+      const now = (user.email ?? '').toLowerCase();
       setEmail(user.email ?? '');
+      setSavedEmail(user.email ?? '');
+      setEmailPw('');
       setTfa(await api.twofaStatus());
-      setEmailMsg({ kind: 'ok', text: user.email ? t.emailSaved : t.emailRemoved });
-    } catch (e) { setEmailMsg({ kind: 'err', text: e instanceof Error ? e.message : t.genericError }); }
+      const base = user.email ? t.emailSaved : t.emailRemoved;
+      setEmailMsg({ kind: 'ok', text: before && before !== now ? `${base} ${t.emailOldNotified}` : base });
+    } catch (e) { setEmailMsg({ kind: 'err', text: errText(e, t.emailPasswordWrong) }); }
     finally { setEmailBusy(false); }
   }
 
@@ -109,7 +135,10 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
     try {
       await api.deleteMe(delPw);
       onAccountDeleted?.();
-    } catch (e) { setDelErr(e instanceof Error ? e.message : t.genericError); }
+    } catch (e) {
+      // Hier heißt „falsches Passwort" 401; 403 ist das Admin-Konto (Klartext des Servers).
+      setDelErr(e instanceof ApiError && e.status === 401 ? t.pwWrong : e instanceof ApiError && e.status === 429 ? t.tooManyAttempts(e.retryAfter) : e instanceof Error ? e.message : t.genericError);
+    }
     finally { setDelBusy(false); }
   }
 
@@ -119,10 +148,16 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
     if (newPw !== newPw2) return setPwMsg({ kind: 'err', text: t.pwMismatch });
     setPwBusy(true);
     try {
-      await api.changePassword(curPw, newPw);
-      setPwMsg({ kind: 'ok', text: t.pwChanged });
+      const r = await api.changePassword(curPw, newPw);
+      /* Der Server trennt seit 08.10.2026 alle anderen Anmeldungen, API-Schlüssel
+       * und KI-Verbindungen (Befund 2) und meldet die Zahlen. Das gehört gesagt:
+       * Wer danach Claude öffnet und keine Verbindung mehr hat, soll wissen, warum. */
+      const counts = r.revoked ? ` (${t.pwRevokedCounts(r.revoked.apiKeys ?? 0, r.revoked.connections ?? 0)})` : '';
+      setPwMsg({ kind: 'ok', text: r.revoked ? `${t.pwChangedRevoked}${counts}` : t.pwChanged });
       setCurPw(''); setNewPw(''); setNewPw2('');
-    } catch (e) { setPwMsg({ kind: 'err', text: e instanceof Error ? e.message : t.genericError }); }
+      // Die Liste der KI-Verbindungen zeigt sonst noch die getrennten als aktiv.
+      try { setConns((await api.listConnections()).connections); } catch { /* bleibt, wie sie ist */ }
+    } catch (e) { setPwMsg({ kind: 'err', text: errText(e, t.pwWrong) }); }
     finally { setPwBusy(false); }
   }
 
@@ -170,9 +205,15 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
               {t.emailHint}
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ ...input, flex: 1 }} placeholder="name@example.com" autoComplete="email" />
-              <button type="button" onClick={saveEmail} disabled={emailBusy}
-                style={{ padding: '8px 14px', background: emailBusy ? '#666' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: emailBusy ? 'default' : 'pointer', fontFamily: UI, whiteSpace: 'nowrap' }}>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ ...input, flex: 1 }} placeholder="name@example.com" autoComplete="email" aria-label={t.emailLabel} />
+            </div>
+            <label style={{ ...inputLabel, marginTop: '10px' }} htmlFor="keys-email-pw">{t.emailPasswordLabel}</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <input id="keys-email-pw" type="password" value={emailPw} onChange={e => setEmailPw(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveEmail(); }}
+                style={{ ...input, flex: 1 }} autoComplete="current-password" />
+              <button type="button" onClick={saveEmail} disabled={emailBusy || !emailPw}
+                style={{ padding: '8px 14px', background: emailBusy ? '#666' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: emailBusy || !emailPw ? 'default' : 'pointer', opacity: emailPw ? 1 : 0.55, fontFamily: UI, whiteSpace: 'nowrap' }}>
                 {emailBusy ? '…' : t.save}
               </button>
             </div>
@@ -253,10 +294,10 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
                   <>
                     <strong>{t.clientCodex}</strong> — {t.codexHelpIn} <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>~/.codex/config.toml</code>:
                     <pre style={{ margin: '7px 0', padding: '8px 10px', background: 'oklch(0.97 0.003 264)', borderRadius: '6px', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '11px', overflowX: 'auto', whiteSpace: 'pre' }}>
-{`[mcp_servers.heidrich-cv]\nurl = "${mcpUrl}"`}
+{`[mcp_servers.cv-hub]\nurl = "${mcpUrl}"`}
                     </pre>
-                    {t.codexHelpThen} <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>codex mcp login heidrich-cv</code> {t.codexHelpOpens}
-                    <button type="button" onClick={() => kopieren('codex', `[mcp_servers.heidrich-cv]\nurl = "${mcpUrl}"`)}
+                    {t.codexHelpThen} <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>codex mcp login cv-hub</code> {t.codexHelpOpens}
+                    <button type="button" onClick={() => kopieren('codex', `[mcp_servers.cv-hub]\nurl = "${mcpUrl}"`)}
                       style={{ display: 'block', marginTop: '7px', padding: '4px 9px', background: kopiert === 'codex' ? '#2e7d32' : '#fff', color: kopiert === 'codex' ? '#fff' : 'oklch(0.42 0.017 264)', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: UI }}>
                       {kopiert === 'codex' ? t.copied : t.copySection}
                     </button>

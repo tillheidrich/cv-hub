@@ -1,5 +1,7 @@
 // Client for the cv-api backend (auth, invites, admin, résumé storage).
 import type { AppProfile } from './types';
+import { PDF_SERVICE_I18N } from '../ui/i18n/local';
+import { detectInitialUiLang } from '../ui/i18n';
 
 const BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined) || '/pdfapi';
@@ -91,11 +93,55 @@ export interface OauthConnection {
  */
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Maschinenlesbarer Grund, wenn der Server einen mitschickt
+   *  (z. B. `password_required`, `password_wrong`). */
+  code?: string;
+  /** Sekunden aus `Retry-After` (429/503), falls gesetzt. */
+  retryAfter?: number;
+  constructor(message: string, status: number, code?: string, retryAfter?: number) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    if (code) this.code = code;
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
   }
+}
+
+/** `Retry-After` lesen: Sekunden oder ein HTTP-Datum. */
+export function parseRetryAfter(h: string | null): number | undefined {
+  if (!h) return undefined;
+  const n = Number(h.trim());
+  if (Number.isFinite(n) && n >= 0) return Math.ceil(n);
+  const t = Date.parse(h);
+  if (Number.isFinite(t)) return Math.max(0, Math.ceil((t - Date.now()) / 1000));
+  return undefined;
+}
+
+/** Fehlerantwort in einen ApiError übersetzen — Klartext des Servers
+ *  bleibt erhalten, ebenso Code und Wartezeit. */
+export async function apiErrorFrom(r: Response): Promise<ApiError> {
+  const data = await r.json().catch(() => ({})) as { error?: unknown; code?: unknown };
+  const msg = typeof data.error === 'string' && data.error ? data.error : `Fehler ${r.status}`;
+  return new ApiError(msg, r.status, typeof data.code === 'string' ? data.code : undefined, parseRetryAfter(r.headers.get('Retry-After')));
+}
+
+/**
+ * Fehlerantwort des PDF-Dienstes (POST /api/pdf) als ApiError.
+ *
+ * Seit 08.10.2026 nimmt der Dienst höchstens 3.000.000 Zeichen HTML an (413)
+ * und antwortet bei voller Warteschlange oder Zeitüberschreitung mit 503,
+ * Klartext und `Retry-After`. Der Klartext wird durchgereicht — „Fehler" allein
+ * hilft niemandem —, die Wartezeit hinten angehängt. 429 (Kontingent) kommt
+ * vom allgemeinen Begrenzer mit einer Meldung über „Versuche"; dafür steht
+ * hier ein eigener Satz in der Oberflächensprache.
+ */
+export async function pdfErrorFrom(r: Response): Promise<ApiError> {
+  const err = await apiErrorFrom(r);
+  const T = PDF_SERVICE_I18N[detectInitialUiLang()];
+  if (r.status === 429) err.message = T.tooMany(err.retryAfter);
+  else if (r.status === 503 && err.retryAfter) err.message = `${err.message} ${T.retryIn(err.retryAfter)}`;
+  else if (/^Fehler \d+$/.test(err.message)) err.message = `PDF-Dienst antwortete mit ${r.status}`;
+  return err;
 }
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -104,9 +150,23 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
   });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError((data as { error?: string }).error || `Fehler ${r.status}`, r.status);
-  return data as T;
+  if (!r.ok) throw await apiErrorFrom(r);
+  return await r.json().catch(() => ({})) as T;
+}
+
+/** Foto-ID aus einer eigenen Foto-Adresse (…/api/photos/<24 hex>), sonst null.
+ *  data:-URLs (Lokalmodus) und fremde Adressen haben keine. */
+export function photoIdOf(url: string | null | undefined): string | null {
+  const m = /\/api\/photos\/([0-9a-f]{24})(?:[?#]|$)/.exec(String(url || ''));
+  return m ? m[1] : null;
+}
+
+/** Antwort von POST /api/auth/change-password (seit 08.10.2026). */
+export interface ChangePasswordResult {
+  ok: boolean;
+  /** Wie viele API-Schlüssel und KI-Verbindungen dabei getrennt wurden. */
+  revoked?: { apiKeys: number; connections: number };
+  message?: string;
 }
 
 export const api = {
@@ -118,8 +178,10 @@ export const api = {
   twofaStatus: () => req<TwoFaStatus>('/api/auth/2fa'),
   setTwofa: (enabled: boolean) =>
     req<{ ok: boolean; enabled: boolean }>('/api/auth/2fa', { method: 'POST', body: JSON.stringify({ enabled }) }),
-  setEmail: (email: string) =>
-    req<{ user: AuthUser }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email }) }),
+  /** E-Mail setzen/ändern/entfernen — seit 08.10.2026 nur mit dem aktuellen
+   *  Passwort (N6). Ohne: 400 `password_required`, falsch: 403 `password_wrong`. */
+  setEmail: (email: string, currentPassword: string) =>
+    req<{ user: AuthUser }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email, currentPassword }) }),
   register: (username: string, password: string, inviteCode: string, email?: string) =>
     req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email }) }),
   /** Public: request access without an account. Admin decides via e-mail link or panel. */
@@ -130,8 +192,10 @@ export const api = {
     req<{ ok: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ identifier }) }),
   resetPassword: (token: string, newPassword: string) =>
     req<{ ok: boolean }>('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) }),
+  /** Trennt seit 08.10.2026 zugleich alle anderen Anmeldungen, API-Schlüssel
+   *  und KI-Verbindungen; die Antwort nennt die Zahlen. */
   changePassword: (currentPassword: string, newPassword: string) =>
-    req<{ ok: boolean }>('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+    req<ChangePasswordResult>('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
   /** Returns the download URL for the user's full data dump (JSON). Caller
    *  navigates the browser there — server sends Content-Disposition: attachment. */
   exportMeUrl: () => `${BASE}/api/me/export`,
@@ -184,6 +248,14 @@ export const api = {
   // Photos (stored server-side, no payload bloat)
   uploadPhoto: (mime: string, dataBase64: string) =>
     req<{ id: string; url: string }>('/api/photos', { method: 'POST', body: JSON.stringify({ mime, dataBase64 }) }),
+  /** Foto endgültig löschen (nur eigene; sonst 404). Nimmt die ID oder die
+   *  Foto-Adresse; ohne erkennbare eigene ID passiert nichts. Fotos sieht seit
+   *  08.10.2026 nur noch der Eigentümer (mit Cookie, same-origin `<img>`). */
+  deletePhoto: async (idOrUrl: string): Promise<{ ok: boolean }> => {
+    const id = /^[0-9a-f]{24}$/.test(idOrUrl) ? idOrUrl : photoIdOf(idOrUrl);
+    if (!id) return { ok: false };
+    return req<{ ok: boolean }>(`/api/photos/${id}`, { method: 'DELETE' });
+  },
 
   // Public share links
   listShares: (resumeId: string) =>
@@ -198,6 +270,10 @@ export const api = {
       { method: 'PATCH', body: JSON.stringify(patch) }),
   revokeShare: (token: string) =>
     req<{ ok: boolean }>(`/api/shares/${encodeURIComponent(token)}/revoke`, { method: 'POST' }),
+  /** Ein Link zeigt den Stand beim Anlegen. Das hier bringt ihn auf den
+   *  aktuellen Stand des Profils — derselbe Link, neuer Inhalt. */
+  refreshShare: (token: string) =>
+    req<{ ok: boolean }>(`/api/shares/${encodeURIComponent(token)}/refresh`, { method: 'POST' }),
   fetchShare: (token: string) =>
     req<{ resume: AppProfile; include_cover_letter: boolean }>(`/api/share/${encodeURIComponent(token)}`),
 

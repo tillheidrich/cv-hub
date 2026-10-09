@@ -4,7 +4,7 @@ import { getPageFormat } from '../data/pageFormats';
 import type { ResumeTheme, ThemeColors, FontPairing, BulletStyle } from './theme';
 import { TRACK_CAPS, TRACK_NAME, FS, LH, MIN_X_HEIGHT_PX, fs, fsn, sp, spn, pd, pdn, lh, type Metrics } from './metrics';
 import type { InlinePath } from '../data/inlineEdit';
-import { Ed, InlineEditCtx, type InlineEditApi } from './InlineEdit';
+import { Ed, EntryTools, InlineEditCtx, type InlineEditApi } from './InlineEdit';
 import { textWidthPx } from './textWidth';
 import { shortUrl } from '../data/urls';
 export type { InlineEditApi };
@@ -1054,7 +1054,13 @@ export default function ResumeRenderer({
           id: `experience:${e.id}:head`, section: 'experience',
           gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           keepWithNext: e.bullets.length > 0,
-          node: <ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} />,
+          node: (
+            <>
+              <ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} />
+              {/* Nur mit Bearbeitungskontext, ohne Höhe, außerhalb des Flusses. */}
+              <EntryTools kind="experience" id={e.id} index={data.experience.indexOf(e)} count={data.experience.length} />
+            </>
+          ),
         });
         e.bullets.forEach((b, bi) => {
           push({
@@ -1081,7 +1087,12 @@ export default function ResumeRenderer({
       data.education.forEach((e, i) => {
         push({
           id: `education:${e.id}`, section: 'education', gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
-          node: <EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} />,
+          node: (
+            <>
+              <EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} />
+              <EntryTools kind="education" id={e.id} index={i} count={data.education.length} />
+            </>
+          ),
         });
       });
       continue;

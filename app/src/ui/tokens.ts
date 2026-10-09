@@ -13,42 +13,60 @@
  * Hex fallbacks kept for browsers that don't yet resolve OKLCH at runtime
  * (Vite/React inline-styles need both).
  */
-export const COLORS = {
-  // Paper canvas — cool tinted off-white (matches the modern landing design)
+/** Literale Werte — für Stellen, an denen CSS-Variablen nicht greifen
+ *  (SVG-Präsentationsattribute wie `fill=`, Farbrechnungen in JS). */
+export const RAW = {
   paper:     'oklch(0.985 0.003 264)',
   paperDeep: 'oklch(0.968 0.004 264)',
   white:     'oklch(1 0 0)',
-
-  // Ink — near-black with a faint cool tint, never pure black
   ink:    'oklch(0.21 0.021 264)',
-  // Beide Werte sind am 18.09.2026 abgesenkt worden (pencil 0.44 → 0.42,
-  // fade 0.60 → 0.52). Am alten `fade` stand „~4.5:1 on paper (WCAG AA)" —
-  // die Rechnung stimmte gegen reines Papier, benutzt wird die Farbe aber auf
-  // den leicht getönten Flächen der Oberfläche. Dort waren es gemessene
-  // 3,58:1. Eine Zusage im Kommentar ersetzt keine Messung: `axecheck.mjs`
-  // misst jetzt gegen den echten Hintergrund.
-  pencil: 'oklch(0.42 0.017 264)',
-  fade:   'oklch(0.52 0.012 264)',
-
-  // Rules — cool hairlines
+  pencil: 'oklch(0.40 0.017 264)',
+  fade:   'oklch(0.48 0.014 264)',
   rule:       'oklch(0.85 0.008 264)',
   ruleSoft:   'oklch(0.91 0.005 264)',
-  ruleStrong: 'oklch(0.21 0.021 264)',   // = ink
-
-  // Accent — electric indigo (single accent, matches landing/auth)
+  ruleStrong: 'oklch(0.21 0.021 264)',
   gold:    'oklch(0.55 0.216 264)',
   goldInk: 'oklch(0.48 0.224 264)',
-
-  // States — kept off-family for legibility
-  error:   'oklch(0.470 0.150 28)',      // warm red
-  success: 'oklch(0.510 0.110 145)',     // moss green
-
-  // Inverse panel — same ink, paper inversion
+  error:   'oklch(0.470 0.150 28)',
+  success: 'oklch(0.510 0.110 145)',
   inkPanel:    'oklch(0.21 0.021 264)',
   inkPanelInk: 'oklch(0.985 0.003 264)',
 } as const;
 
+/**
+ * Farbwerte der Oberfläche — seit dem 08.10.2026 als CSS-Variablen aus
+ * `ui/surface.css`. Damit sprechen Startseite, Anmeldung, ATS-Prüfung und
+ * Editor dieselbe Sprache, und eine Änderung an einer Stelle gilt überall.
+ *
+ * `pencil` und `fade` liegen jetzt auf `--ink-2` (0,40) und `--ink-3` (0,48)
+ * statt 0,42 und 0,52: beide etwas dunkler, also mehr Kontrast — gerechnet auf
+ * der getönten Leinwand, nicht auf reinem Weiß (Gestaltungsbericht, Befund 5).
+ *
+ * Nie im gesetzten Dokument verwenden: `.cv-page` und das Export-HTML kennen
+ * diese Variablen nicht. Wo ein literaler Wert gebraucht wird, `RAW` nehmen.
+ */
+export const COLORS = {
+  paper:     'var(--paper)',
+  paperDeep: 'var(--paper-deep)',
+  white:     'var(--white)',
+  ink:    'var(--ink)',
+  pencil: 'var(--ink-2)',
+  fade:   'var(--ink-3)',
+  rule:       'var(--rule)',
+  ruleSoft:   'var(--rule-soft)',
+  ruleStrong: 'var(--ink)',
+  gold:    'var(--accent)',
+  goldInk: 'var(--accent-ink)',
+  error:   'var(--danger)',
+  success: 'var(--success)',
+  inkPanel:    'var(--ink)',
+  inkPanelInk: 'var(--paper)',
+} as const;
+
 export const FONTS = {
+  /** Oberflächenschrift des Editors (Geist, selbst ausgeliefert). */
+  surface: "'Geist Variable', system-ui, sans-serif",
+  surfaceMono: "'Geist Mono Variable', ui-monospace, monospace",
   /** Modern display sans — matches the landing (Space Grotesk) */
   display: "'Space Grotesk', 'Inter', system-ui, sans-serif",
   /** Functional sans for all UI chrome, labels, body, buttons */

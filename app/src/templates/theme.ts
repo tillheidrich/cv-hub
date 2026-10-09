@@ -187,7 +187,17 @@ export interface ResumeTheme {
    *  rechts läuft ausschließlich der Werdegang. Ohne diese Umstellung sähe
    *  eine solche Vorlage aus wie jede andere zweispaltige auch. */
   profileInSidebar?: boolean;
+
+  /** Aufbau der Vorlage in einem Satz, für die Vorlagenkarten und das
+   *  Karussell („Seitenleiste links · 32/68", „Kopfband, darunter zwei
+   *  Spalten"). Fehlt das Feld, wird der Satz aus `layout`, `sidebarMm` und
+   *  `profileInSidebar` gebildet (`templateStructure`) — gesetzt wird es nur
+   *  dort, wo die Vorlage mehr ist als ihr Archetyp. Vier Sprachen, weil der
+   *  Satz in der Oberfläche steht, nicht im Dokument. */
+  structure?: Record<StructureLang, string>;
 }
+
+export type StructureLang = 'de' | 'en' | 'fr' | 'es';
 
 // Kontrast: alle Werte hier sind gemessen, nicht geschätzt — scripts/
 // contrastcheck.mjs rechnet jede Vorlage gegen jede Akzentfarbe durch (162
@@ -569,6 +579,7 @@ export const THEMES: ResumeTheme[] = [
   },
   {
     id: 'aarhus', name: 'Aarhus', description: 'Editorial: Name und Profil links, Werdegang rechts', category: 'kreativ',
+    structure: { de: 'Name und Profil links, Werdegang rechts', en: 'Name and profile left, career right', fr: 'Nom et profil à gauche, parcours à droite', es: 'Nombre y perfil a la izquierda, trayectoria a la derecha' },
     layout: 'sidebar-left', defaultPairing: 'lora-source', photo: 'none', bullet: 'dash', heading: 'caps-plain',
     sidebarMm: 74, panelFill: false, nameInSidebar: true, profileInSidebar: true, signature: true,
     colors: {
@@ -592,6 +603,7 @@ export const THEMES: ResumeTheme[] = [
   // sind hier alle geregelt.
   {
     id: 'lille', name: 'Lille', description: 'Überschriften so groß wie der Name', category: 'kreativ',
+    structure: { de: 'Seitenleiste links · Überschriften groß wie der Name', en: 'Sidebar left · headings as large as the name', fr: 'Colonne à gauche · titres aussi grands que le nom', es: 'Barra izquierda · títulos tan grandes como el nombre' },
     layout: 'sidebar-left', defaultPairing: 'space-inter', photo: 'rect', bullet: 'dash', heading: 'display',
     sidebarMm: 54, panelFill: false, nameInSidebar: true, signature: true,
     colors: {
@@ -602,6 +614,7 @@ export const THEMES: ResumeTheme[] = [
   },
   {
     id: 'antwerpen', name: 'Antwerpen', description: 'Nachname über die volle Breite, Creme, editorial', category: 'kreativ',
+    structure: { de: 'Nachname über die volle Breite, dann einspaltig', en: 'Surname across the full width, then one column', fr: 'Nom sur toute la largeur, puis une colonne', es: 'Apellido a todo lo ancho y una columna' },
     layout: 'top-centered', defaultPairing: 'space-inter', photo: 'rect', bullet: 'dash', heading: 'rule-over',
     stackedName: true, bracketLabels: true, signature: true,
     colors: {
@@ -612,6 +625,7 @@ export const THEMES: ResumeTheme[] = [
   },
   {
     id: 'rotterdam', name: 'Rotterdam', description: 'Register statt Absätze, gesperrter Name, Raster', category: 'kreativ',
+    structure: { de: 'Register mit Spalte rechts · Raster', en: 'Registers with right column · grid', fr: 'Registres avec colonne à droite · grille', es: 'Registros con columna derecha · retícula' },
     layout: 'sidebar-right', defaultPairing: 'space-inter', photo: 'rect', bullet: 'square', heading: 'rule-over',
     sidebarMm: 60, panelFill: false, trackedName: true, signature: true,
     colors: {
@@ -764,4 +778,39 @@ export function getTheme(id: string, accent?: AccentId, paper?: PaperId): Resume
 export function resolvePairing(theme: ResumeTheme, pairing: FontPairingId): FontPairing {
   if (pairing === 'auto') return FONT_PAIRINGS[theme.defaultPairing];
   return FONT_PAIRINGS[pairing];
+}
+
+
+// ── Aufbau in einem Satz ─────────────────────────────────────────────────────
+//
+// Die Vorlagenwahl zeigte bis zum 08.10.2026 Name, Farbfleck und eine
+// Beschreibung nach Farbe („Warm, editorial, klassisch"). Wer wählt, will aber
+// zuerst wissen, wie die Seite gebaut ist — davon hängt ab, wie ein Portal sie
+// liest (atsScore.ts). Personas-Bericht, Hürde 9.
+
+const STRUCTURE_TEXT: Record<StructureLang, {
+  left: string; right: string; band: string; centered: string; single: string; timeline: string;
+  photo: string; noPhoto: string;
+}> = {
+  de: { left: 'Seitenleiste links', right: 'Seitenleiste rechts', band: 'Kopfband, darunter zwei Spalten', centered: 'Zentrierter Kopf, dann einspaltig', single: 'Einspaltig mit Datumsspalte', timeline: 'Zeitstrahl, einspaltig', photo: 'mit Foto', noPhoto: 'ohne Foto' },
+  en: { left: 'Sidebar left', right: 'Sidebar right', band: 'Header band, two columns below', centered: 'Centred header, then one column', single: 'One column with date column', timeline: 'Timeline, one column', photo: 'with photo', noPhoto: 'no photo' },
+  fr: { left: 'Colonne à gauche', right: 'Colonne à droite', band: 'Bandeau, puis deux colonnes', centered: 'En-tête centré, puis une colonne', single: 'Une colonne avec dates à gauche', timeline: 'Frise, une colonne', photo: 'avec photo', noPhoto: 'sans photo' },
+  es: { left: 'Barra lateral izquierda', right: 'Barra lateral derecha', band: 'Banda superior y dos columnas', centered: 'Cabecera centrada y una columna', single: 'Una columna con fechas', timeline: 'Línea de tiempo, una columna', photo: 'con foto', noPhoto: 'sin foto' },
+};
+
+/** Aufbau einer Vorlage als kurzer Satz in der Oberflächensprache. */
+export function templateStructure(theme: ResumeTheme, lang: StructureLang = 'de'): string {
+  if (theme.structure?.[lang]) return theme.structure[lang];
+  const tx = STRUCTURE_TEXT[lang] ?? STRUCTURE_TEXT.de;
+  const side = theme.sidebarMm ?? (theme.layout === 'header-band' ? 58 : 62);
+  const pct = Math.round((side / 210) * 100);
+  const photo = theme.photo === 'none' ? tx.noPhoto : tx.photo;
+  switch (theme.layout) {
+    case 'sidebar-left': return `${tx.left} · ${pct}/${100 - pct}`;
+    case 'sidebar-right': return `${tx.right} · ${100 - pct}/${pct}`;
+    case 'header-band': return `${tx.band} · ${photo}`;
+    case 'top-centered': return `${tx.centered} · ${photo}`;
+    case 'timeline': return `${tx.timeline} · ${photo}`;
+    default: return `${tx.single} · ${photo}`;
+  }
 }

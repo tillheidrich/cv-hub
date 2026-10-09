@@ -3,6 +3,8 @@ import { api } from '../data/api';
 import type { AppProfile } from '../data/types';
 import { useUiLang } from '../ui/useUiLang';
 import { VERSIONS_I18N, type VersionsStrings } from '../ui/i18n/klein';
+import { LOCAL_VERSIONS_I18N } from '../ui/i18n/local';
+import { isLocalProfile, listLocalVersions, getLocalVersion, restoreLocalVersion } from '../data/storage';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -17,6 +19,9 @@ interface Props {
   resumeId: string;
   onClose: () => void;
   onRestored: (profile: AppProfile) => void;
+  /** Lokalmodus: Verlauf aus dem Browser statt vom Server. Ohne Angabe
+   *  entscheidet, ob das Profil im lokalen Speicher liegt. */
+  local?: boolean;
 }
 
 function relativeTime(iso: string, T: VersionsStrings): string {
@@ -31,26 +36,41 @@ function relativeTime(iso: string, T: VersionsStrings): string {
   return new Date(iso).toLocaleDateString(T.locale);
 }
 
-export default function VersionsPanel({ resumeId, onClose, onRestored }: Props) {
-  const T = VERSIONS_I18N[useUiLang()];
+/* Zwei Quellen, eine Anzeige.
+ *
+ * Mit Konto kommen die Versionen vom Server (Sicherungen vor Importen und
+ * KI-Bearbeitungen, die letzten 25). Im Lokalmodus führt der Browser selbst
+ * einen kleinen Verlauf (data/storage.ts): höchstens alle 10 Minuten ein
+ * Stand, vor großen Änderungen sofort, die letzten 20 je Profil. Beide liefern
+ * dieselbe Form ({ id, source, created_at }), darum bleibt die Liste gleich.
+ * Das Wiederherstellen speichert im Lokalmodus selbst — `onRestored` meldet
+ * der App nur noch den neuen Stand. */
+export default function VersionsPanel({ resumeId, onClose, onRestored, local: localProp }: Props) {
+  const uiLang = useUiLang();
+  const local = localProp ?? isLocalProfile(resumeId);
+  const L = LOCAL_VERSIONS_I18N[uiLang];
+  const base = VERSIONS_I18N[uiLang];
+  const T: VersionsStrings = local
+    ? { ...base, subtitle: L.subtitle, empty: L.empty, confirmRestore: L.confirmRestore, sources: { ...base.sources, ...L.sources } }
+    : base;
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [previewing, setPreviewing] = useState<{ id: number; preview: AppProfile; createdAt: string } | null>(null);
 
   useEffect(() => {
-    api.listVersions(resumeId)
+    (local ? listLocalVersions(resumeId).then(versions => ({ versions })) : api.listVersions(resumeId))
       .then(d => setVersions(d.versions))
       .catch(e => setErr(e instanceof Error ? e.message : T.loadFailed));
     /* T bewusst nicht in den Abhängigkeiten: die Liste soll bei einem
      * Sprachwechsel nicht neu geladen werden. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId]);
+  }, [resumeId, local]);
 
   async function preview(v: Version) {
     setBusy(v.id);
     try {
-      const d = await api.getVersion(resumeId, v.id);
+      const d = local ? { version: await getLocalVersion(resumeId, v.id) } : await api.getVersion(resumeId, v.id);
       setPreviewing({ id: v.id, preview: d.version.payload, createdAt: d.version.created_at });
     } catch (e) {
       setErr(e instanceof Error ? e.message : T.previewFailed);
@@ -63,8 +83,8 @@ export default function VersionsPanel({ resumeId, onClose, onRestored }: Props) 
     if (!window.confirm(T.confirmRestore)) return;
     setBusy(v.id);
     try {
-      const r = await api.restoreVersion(resumeId, v.id);
-      onRestored(r.payload);
+      const payload = local ? await restoreLocalVersion(resumeId, v.id) : (await api.restoreVersion(resumeId, v.id)).payload;
+      onRestored(payload);
       onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : T.restoreFailed);

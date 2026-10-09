@@ -195,3 +195,53 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .cv-edit { transition: none; }
 }
+
+/* ── Block-Werkzeug an Stationen (templates/InlineEdit.tsx, EntryTools) ─────
+   Der Anker hat keine Höhe, das Werkzeug liegt absolut darin: nichts davon
+   ändert eine gemessene Höhe. Sichtbar nur, solange der Zeiger auf der
+   Station liegt oder der Fokus in ihr ist — `display: none` sonst, damit es
+   auch in keinem Textauszug der Vorschau auftaucht. Im Messlauf und im Export
+   gibt es den Knoten gar nicht. */
+.cv-page .cv-entry-anchor {
+  position: relative;
+  height: 0;
+}
+.cv-page .cv-entry-tools {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateY(-100%);
+  z-index: 5;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 1px rgba(30, 40, 70, 0.10), 0 6px 16px -6px rgba(30, 40, 70, 0.35);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1;
+}
+.cv-page [data-cv-section]:hover > .cv-entry-anchor > .cv-entry-tools,
+.cv-page [data-cv-section]:focus-within > .cv-entry-anchor > .cv-entry-tools {
+  display: flex;
+}
+.cv-page .cv-entry-tools button {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: transparent;
+  color: #2b3347;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 26px;
+  text-align: center;
+}
+.cv-page .cv-entry-tools button:hover { background: rgba(58, 126, 216, 0.12); }
+.cv-page .cv-entry-tools button:focus-visible { outline: 2px solid #3f5bd8; outline-offset: 1px; }
+.cv-page .cv-entry-tools button:disabled { opacity: 0.35; cursor: default; background: transparent; }
+@media (hover: none) {
+  /* Ohne Zeiger nur bei Fokus in der Station — sonst stünde es dauerhaft da. */
+  .cv-page [data-cv-section]:hover > .cv-entry-anchor > .cv-entry-tools { display: none; }
+  .cv-page [data-cv-section]:focus-within > .cv-entry-anchor > .cv-entry-tools { display: flex; }
+}

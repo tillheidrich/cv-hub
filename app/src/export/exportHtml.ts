@@ -10,6 +10,7 @@ import { getPageFormat } from '../data/pageFormats';
 import { exportFilename } from './filename';
 import { stripPlaceholderPhoto, withEmbeddedPhoto } from './photoEmbed';
 import { embedFonts, type EmbeddedFonts } from './fontEmbed';
+import { pdfErrorFrom } from '../data/api';
 
 /** Headless-Chrome PDF service — path-routed on the app domain. Override via VITE_PDF_SERVICE. */
 const PDF_SERVICE: string =
@@ -591,10 +592,10 @@ export async function exportPdf({ data: raw, cfg, isCover, coverLetter }: PdfExp
   });
   if (!resp.ok) {
     // Der Dienst schickt bei Fehlern JSON mit Klartext — den zeigen wir dem
-    // Nutzer, statt ihn mit einer nackten Statusnummer stehen zu lassen.
-    const detail = await resp.json().then(j => (j && typeof j.error === 'string' ? j.error : '')).catch(() => '');
-    if (resp.status === 429) throw new Error('Zu viele PDF-Exporte in kurzer Zeit. In ein paar Minuten nochmal.');
-    throw new Error(detail || `PDF-Dienst antwortete mit ${resp.status}`);
+    // Nutzer, statt ihn mit einer nackten Statusnummer stehen zu lassen. Bei
+    // 503 (ausgelastet) kommt die Wartezeit aus `Retry-After` dazu; der
+    // Fehler ist ein ApiError mit `status`/`retryAfter` (data/api.ts).
+    throw await pdfErrorFrom(resp);
   }
   const blob = await resp.blob();
   if (blob.type.indexOf('pdf') === -1 && blob.size < 1000) {

@@ -6,6 +6,8 @@ import AtsCheckModal from '../screens/AtsCheckModal';
 import { useUiLang } from '../ui/useUiLang';
 import { EXP_I18N, type ExportStrings } from '../ui/i18n/export';
 import { useIsMobile } from '../ui/useIsMobile';
+import { DESIGN_I18N } from '../ui/i18n/design';
+import type { AtsLevel } from '../templates/atsScore';
 
 // ── Lightweight structural diff for MD-import previews ─────────────────────
 interface DiffRow {
@@ -92,6 +94,11 @@ interface ExportPanelProps {
   onReplaceData?: (cv: CVData) => void;
   /** Anschreiben der aktiven Sprache ersetzen (Markdown-Import im Lokalmodus). */
   onReplaceCoverLetter?: (cl: CoverLetterData) => void;
+  /** ATS-Einstufung der gewählten Vorlage — bei „riskant" und „okay" wird die
+   *  Word-ATS-Fassung als „empfohlen" markiert. */
+  atsLevel?: AtsLevel;
+  /** Im schwebenden Paneel der App: volle Breite, ohne eigenen Kopf. */
+  embedded?: boolean;
 }
 
 // Prompt builders. Embedded variant ships the Markdown content inline so the
@@ -117,31 +124,31 @@ const s = {
   },
   header: {
     padding: '20px 20px 14px',
-    borderBottom: '1px solid oklch(0.91 0.005 264)',
+    borderBottom: '1px solid var(--hair)',
   },
   title: {
     fontSize: '13px',
     fontWeight: 600,
-    color: 'oklch(0.21 0.021 264)',
-    fontFamily: "'Inter', sans-serif",
+    color: 'var(--ink)',
+    fontFamily: 'inherit',
     marginBottom: '4px',
   },
   subtitle: {
     fontSize: '11px',
-    color: '#767676',
-    fontFamily: "'Inter', sans-serif",
+    color: 'var(--ink-2)',
+    fontFamily: 'inherit',
   },
   section: {
     padding: '16px 20px 8px',
   },
+  /* Normale Schreibweise statt gesperrter Versalien (Gestaltungsbericht,
+     Typografie der Oberfläche): Hierarchie über Gewicht und Farbe. */
   sectionLabel: {
-    fontSize: '9.5px',
-    fontWeight: 700,
-    letterSpacing: '1.2px',
-    textTransform: 'uppercase' as const,
-    color: '#767676',
+    fontSize: '12px',
+    fontWeight: 650,
+    color: 'var(--ink-2)',
     marginBottom: '8px',
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: 'inherit',
   },
   exportBtn: (hover: boolean): React.CSSProperties => ({
     display: 'flex',
@@ -171,30 +178,28 @@ const s = {
   btnLabel: {
     fontSize: '12.5px',
     fontWeight: 600,
-    color: 'oklch(0.21 0.021 264)',
-    fontFamily: "'Inter', sans-serif",
+    color: 'var(--ink)',
+    fontFamily: 'inherit',
     marginBottom: '1px',
   },
   btnSub: {
     fontSize: '10.5px',
-    color: '#767676',
-    fontFamily: "'Inter', sans-serif",
+    color: 'var(--ink-2)',
+    fontFamily: 'inherit',
   },
   statusBox: {
     margin: '16px 20px',
     padding: '12px 14px',
     background: 'oklch(0.985 0.003 264)',
     borderRadius: '8px',
-    border: '1px solid oklch(0.91 0.005 264)',
+    border: '1px solid var(--hair)',
   },
   statusLabel: {
-    fontSize: '9.5px',
-    fontWeight: 700,
-    letterSpacing: '1px',
-    textTransform: 'uppercase' as const,
-    color: 'oklch(0.55 0.216 264)',
+    fontSize: '12px',
+    fontWeight: 650,
+    color: 'var(--accent-ink)',
     marginBottom: '6px',
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: 'inherit',
   },
   statusRow: {
     display: 'flex',
@@ -202,7 +207,7 @@ const s = {
     fontSize: '11px',
     color: '#666',
     padding: '2px 0',
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: 'inherit',
   },
   statusValue: {
     color: '#333',
@@ -212,14 +217,14 @@ const s = {
     margin: '8px 20px 20px',
     width: 'calc(100% - 40px)',
     padding: '11px',
-    background: 'oklch(0.21 0.021 264)',
+    background: 'var(--ink)',
     color: 'white',
     border: 'none',
     borderRadius: '8px',
     fontSize: '13px',
     fontWeight: 600,
     cursor: 'pointer',
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: 'inherit',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -229,8 +234,8 @@ const s = {
   hint: {
     textAlign: 'center' as const,
     fontSize: '10px',
-    color: '#ccc',
-    fontFamily: "'Inter', sans-serif",
+    color: 'var(--ink-3)',
+    fontFamily: 'inherit',
     marginTop: '4px',
     paddingBottom: '20px',
   },
@@ -279,8 +284,10 @@ function asShares(d: unknown): ShareLink[] {
   return Array.isArray(list) ? list as ShareLink[] : [];
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter }: ExportPanelProps) {
-  const t = EXP_I18N[useUiLang()];
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter, atsLevel, embedded = false }: ExportPanelProps) {
+  const uiLang = useUiLang();
+  const t = EXP_I18N[uiLang];
+  const d = DESIGN_I18N[uiLang];
   const schmal = useIsMobile();
   const [pdfHover, setPdfHover] = useState(false);
   const [pdfState, setPdfState] = useState<'idle' | 'busy' | 'error'>('idle');
@@ -647,13 +654,16 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       /* Am Schreibtisch eine 340-px-Spalte mit Trennlinie zur Vorschau,
          auf dem Telefon die volle Breite ohne Linie — dort gibt es nichts,
          wovon zu trennen wäre. */
-      width: schmal ? '100%' : '340px',
-      borderRight: schmal ? 'none' : '1px solid oklch(0.91 0.005 264)',
+      width: schmal || embedded ? '100%' : '340px',
+      borderRight: schmal || embedded ? 'none' : '1px solid var(--hair)',
+      ...(embedded ? { background: 'transparent', overflowY: 'visible' as const } : null),
     }}>
-      <div style={s.header}>
-        <div style={s.title}>{t.exportTitle(docWord)}</div>
-        <div style={s.subtitle}>{t.exportSubtitle}</div>
-      </div>
+      {!embedded && (
+        <div style={s.header}>
+          <div style={s.title}>{t.exportTitle(docWord)}</div>
+          <div style={s.subtitle}>{t.exportSubtitle}</div>
+        </div>
+      )}
 
       {/* Status: what's being exported */}
       <div style={s.statusBox}>
@@ -685,13 +695,13 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           disabled={pdfState === 'busy'}
           onMouseEnter={() => setPdfHover(true)}
           onMouseLeave={() => setPdfHover(false)}
-          style={{ ...s.pdfBtn, margin: 0, width: '100%', background: pdfState === 'busy' ? '#555' : (pdfHover ? '#333' : 'oklch(0.21 0.021 264)'), cursor: pdfState === 'busy' ? 'default' : 'pointer' }}
+          style={{ ...s.pdfBtn, margin: 0, width: '100%', background: pdfState === 'busy' ? '#555' : (pdfHover ? '#333' : 'var(--ink)'), cursor: pdfState === 'busy' ? 'default' : 'pointer' }}
         >
           {pdfState === 'busy'
             ? <><span className="cv-spin" aria-hidden /> {t.pdfBuilding}</>
             : <><span>↓</span> {t.pdfDownload(docWord)}</>}
         </button>
-        <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'oklch(0.50 0.014 264)', lineHeight: 1.55, marginTop: '8px', fontFamily: "'Inter', sans-serif" }}>
+        <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'var(--ink-3)', lineHeight: 1.55, marginTop: '8px', fontFamily: 'inherit' }}>
           {pdfState === 'error'
             ? t.pdfFailed(pdfErrMsg || t.pdfUnknownError)
             : pdfDone
@@ -707,7 +717,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             background: 'oklch(0.985 0.003 264)', border: '1px solid #e8d9b8', color: '#7a5a1a',
             borderRadius: '7px', fontSize: '12px', fontWeight: 600,
             letterSpacing: '0.04em', cursor: 'pointer',
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: 'inherit',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
         >
@@ -716,53 +726,74 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         </button>
       </div>
 
-      <div style={s.divider} />
-      <div style={s.section}>
-        <div style={s.sectionLabel}>{t.moreFormats}</div>
-        {mdNote && (
-          <div style={{ background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', color: '#8a6500', marginBottom: '8px', lineHeight: 1.5, fontFamily: "'Inter', sans-serif" }}>
+      {/* Ausgaben nach Zweck gegliedert (Personas-Bericht, Hürde 10):
+          PDF · Für Bewerbungsportale · Weitere Formate · Für KI und
+          Entwickler. Die beiden letzten sind zugeklappt — jede Funktion
+          bleibt, nur nicht alle auf einmal. Fachwörter („Server-Bridge-
+          Format") stehen nicht mehr am Knopf. */}
+      {mdNote && (
+        <div style={{ ...s.section, paddingBottom: 0 }}>
+          <div style={{ background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', color: '#8a6500', lineHeight: 1.5, fontFamily: 'inherit' }}>
             {mdNote}
           </div>
-        )}
+        </div>
+      )}
+      {!isCover && (
+        <>
+          <div style={s.divider} />
+          <div style={s.section}>
+            <div style={s.sectionLabel}>{d.secPortals}</div>
+            <ExportButton
+              icon="file-text"
+              label={atsLevel && atsLevel !== 'high' ? `${d.wordAts} · ${d.recommended}` : d.wordAts}
+              sub={d.wordAtsSub}
+              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig, 'ats'); }}
+            />
+          </div>
+        </>
+      )}
+      <div style={s.divider} />
+      <details style={s.section} className="cv-export-group">
+        <summary style={{ ...s.sectionLabel, cursor: 'pointer', minHeight: '32px', display: 'flex', alignItems: 'center' }}>{d.secMore}</summary>
         {isCover ? (
           <>
             <ExportButton
-              icon="globe" label="HTML"
+              icon="globe" label={d.clHtml}
               sub={t.clHtmlSub}
               onClick={() => coverLetter && exportCoverLetterHtml(data, coverLetter, exportConfig)}
             />
             <ExportButton
-              icon="markdown" label="Markdown"
-              sub={t.clMdSub}
+              icon="markdown" label={d.clMd}
+              sub={d.mdSub}
               onClick={downloadCoverLetterMd}
             />
           </>
         ) : (
           <>
             <ExportButton
-              icon="file-text" label="Word (.docx)"
+              icon="file-text" label={d.wordDesign}
               sub={t.docxSub}
               onClick={() => { track('export_docx'); exportDocx(data, exportConfig, 'design'); }}
             />
-            <ExportButton
-              icon="file-text" label={t.docxAtsLabel}
-              sub={t.docxAtsSub}
-              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig, 'ats'); }}
-            />
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
                 Was der Browserdruck aus einer HTML-Datei macht, entscheidet
-                sein Druckdialog, nicht die Datei: eigene Ränder, Kopf- und
-                Fußzeilen, in Safari auch dann, wenn die Datei das Gegenteil
-                verlangt. Wer danach ein schiefes Blatt in der Hand hält, hat
-                nichts falsch gemacht — ihm wurde etwas versprochen. */}
-            <ExportButton icon="globe" label="HTML" sub={t.htmlSub} onClick={() => exportHtml(data, exportConfig)} />
-            <ExportButton icon="markdown" label="Markdown" sub={t.mdSub} onClick={resumeId && !demoMode ? downloadResumeMd : () => exportMarkdown(data)} />
-            <ExportButton icon="braces" label="JSON" sub={t.jsonSub} onClick={() => exportJson(data)} />
-            <ExportButton icon="puzzle" label="JSON Resume" sub={t.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
+                sein Druckdialog, nicht die Datei. */}
+            <ExportButton icon="globe" label={d.html} sub={t.htmlSub} onClick={() => exportHtml(data, exportConfig)} />
+          </>
+        )}
+      </details>
+      {!isCover && (
+        <>
+          <div style={s.divider} />
+          <details style={s.section} className="cv-export-group">
+            <summary style={{ ...s.sectionLabel, cursor: 'pointer', minHeight: '32px', display: 'flex', alignItems: 'center' }}>{d.secDev}</summary>
+            <ExportButton icon="markdown" label={d.mdLabel} sub={d.mdSub} onClick={resumeId && !demoMode ? downloadResumeMd : () => exportMarkdown(data)} />
+            <ExportButton icon="braces" label={d.jsonLabel} sub={d.jsonSub} onClick={() => exportJson(data)} />
+            <ExportButton icon="puzzle" label={d.jsonResumeLabel} sub={d.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
             {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus
                 alles, was ein Mensch oder eine KI braucht, um es zu füllen. */}
             <ExportButton
-              icon="package" label={t.kitLabel}
+              icon="package" label={d.kitLabel}
               sub={t.kitSub}
               busy={kitBusy}
               onClick={async () => {
@@ -772,9 +803,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                 finally { setKitBusy(false); }
               }}
             />
-          </>
-        )}
-      </div>
+          </details>
+        </>
+      )}
 
       {/* ── Lebenslauf mitbringen ───────────────────────────────────────
           Steht bewusst VOR dem Konto-Bereich und außerhalb davon: Der
@@ -787,7 +818,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.bringCv}</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {t.bringCvHint}
             </div>
             <label style={{ ...s.exportBtn(false), cursor: liBusy ? 'wait' : 'pointer' }}>
@@ -803,11 +834,11 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               /* Mindestens 32 px hoch: Auf dem Telefon ist eine 16-px-Zeile
                  kein Tippziel, sondern ein Glücksspiel. Der Prüflauf hat
                  genau das gemeldet, als dieser Link neu war. */
-              style={{ display: 'flex', alignItems: 'center', minHeight: '32px', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', fontFamily: "'Inter', sans-serif", textDecoration: 'none' }}>
+              style={{ display: 'flex', alignItems: 'center', minHeight: '32px', fontSize: '10.5px', color: 'var(--accent-ink)', fontFamily: 'inherit', textDecoration: 'none' }}>
               {t.liRequest}
             </a>
             {liErr && (
-              <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '11.5px', color: '#c0392b', marginTop: '8px', fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }}>{liErr}</div>
+              <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '11.5px', color: '#c0392b', marginTop: '8px', fontFamily: 'inherit', lineHeight: 1.5 }}>{liErr}</div>
             )}
           </div>
         </>
@@ -819,7 +850,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.importSection}</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {isCover ? t.importHintCl : t.importHintCv}
             </div>
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
@@ -855,13 +886,13 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.demoSection}</div>
-            <div style={{ fontSize: '11.5px', color: 'oklch(0.42 0.017 264)', lineHeight: 1.55, marginBottom: '12px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '11.5px', color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: '12px', fontFamily: 'inherit' }}>
               {t.demoBefore}<strong>{t.demoStrong}</strong>{t.demoAfter}
             </div>
             <button
               type="button"
               onClick={() => onDemoBlock?.('Sharelinks')}
-              style={{ width: '100%', padding: '11px', background: 'oklch(0.21 0.021 264)', color: 'oklch(0.985 0.003 264)', border: 'none', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+              style={{ width: '100%', padding: '11px', background: 'var(--ink)', color: 'oklch(0.985 0.003 264)', border: 'none', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit' }}>
               {t.demoCta}
             </button>
           </div>
@@ -873,46 +904,46 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.shareSection}</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {t.shareHint}
             </div>
             {shareErr && (
-              <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '7px 10px', fontSize: '11.5px', color: '#c0392b', marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+              <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '7px 10px', fontSize: '11.5px', color: '#c0392b', marginBottom: '10px', fontFamily: 'inherit' }}>
                 {shareErr}
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", marginBottom: '8px', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'var(--ink-2)', fontFamily: 'inherit', marginBottom: '8px', cursor: 'pointer' }}>
               <input type="checkbox" checked={newShareIncludeCl} onChange={e => setNewShareIncludeCl(e.target.checked)} />
               {t.shareIncludeCl}
             </label>
             <button type="button" onClick={createShare} disabled={shareBusy}
-              style={{ width: '100%', padding: '9px', background: shareBusy ? '#666' : 'oklch(0.55 0.216 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: shareBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif", marginBottom: '10px' }}>
+              style={{ width: '100%', padding: '9px', background: shareBusy ? '#666' : 'var(--accent-ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: shareBusy ? 'default' : 'pointer', fontFamily: 'inherit', marginBottom: '10px' }}>
               {shareBusy ? '…' : t.shareCreate}
             </button>
             {shares.length === 0 && (
-              <div style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>{t.shareNone}</div>
+              <div style={{ fontSize: '11.5px', color: 'var(--ink-3)', fontFamily: 'inherit', fontStyle: 'italic' }}>{t.shareNone}</div>
             )}
             {shares.map(sh => (
-              <div key={sh.token} style={{ background: 'oklch(0.985 0.003 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', opacity: sh.revoked ? 0.5 : 1 }}>
+              <div key={sh.token} style={{ background: 'oklch(0.985 0.003 264)', border: '1px solid var(--hair)', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', opacity: sh.revoked ? 0.5 : 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <code style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', color: 'oklch(0.21 0.021 264)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <code style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     /share/{sh.token.slice(0, 12)}…
                   </code>
                   {!sh.revoked && (
                     <button type="button" onClick={() => copyLink(sh.token)}
-                      style={{ background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', color: '#666', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                      style={{ background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', color: '#666', cursor: 'pointer', fontFamily: 'inherit' }}>
                       {justCopied === sh.token ? t.shareCopied : t.shareCopy}
                     </button>
                   )}
                   {!sh.revoked && (
                     <button type="button" onClick={() => revokeShare(sh.token)}
-                      style={{ background: 'transparent', border: 'none', color: '#c0392b', fontSize: '10.5px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                      style={{ background: 'transparent', border: 'none', color: '#c0392b', fontSize: '10.5px', cursor: 'pointer', fontFamily: 'inherit' }}>
                       {t.shareRevoke}
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
-                  <span><b style={{ color: 'oklch(0.42 0.017 264)', fontWeight: 600 }}>{sh.view_count}</b> {t.shareViewsSuffix}</span>
+                <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', fontFamily: 'inherit', marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                  <span><b style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{sh.view_count}</b> {t.shareViewsSuffix}</span>
                   <span>{t.shareLastAccess(relativeTime(sh.last_viewed_at))}</span>
                   {sh.expires_at && <span>{t.shareExpires(new Date(sh.expires_at).toLocaleDateString(t.locale))}</span>}
                 </div>
@@ -920,14 +951,14 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                   <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     {sh.recent_views.slice(0, 5).map((v, i) => (
                       <span key={i} title={`${v.variant} · ${new Date(v.viewed_at).toLocaleString(t.locale)}`}
-                        style={{ background: '#fff', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '4px', padding: '1px 6px', fontSize: '9.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif" }}>
+                        style={{ background: '#fff', border: '1px solid var(--hair)', borderRadius: '4px', padding: '1px 6px', fontSize: '9.5px', color: 'var(--ink-2)', fontFamily: 'inherit' }}>
                         {v.ua_summary || t.shareUnknownUa}{v.variant === 'md' ? ' · md' : ''}
                       </span>
                     ))}
                   </div>
                 )}
                 {!sh.revoked && (
-                  <label style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", cursor: 'pointer' }}>
+                  <label style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--ink-2)', fontFamily: 'inherit', cursor: 'pointer' }}>
                     <input type="checkbox" checked={sh.include_cover_letter} onChange={e => toggleShareCl(sh.token, e.target.checked)} />
                     {t.shareClVisible}
                   </label>
@@ -940,42 +971,42 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.aiSection}</div>
-            <div style={{ fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', lineHeight: 1.55, marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {isCover
                 ? t.aiHintCl
                 : t.aiHintCv}
             </div>
             {!isCover && !activeShare ? (
-              <div style={{ fontSize: '11.5px', color: 'oklch(0.52 0.012 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic', marginBottom: '10px' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--ink-3)', fontFamily: 'inherit', fontStyle: 'italic', marginBottom: '10px' }}>
                 {t.aiNeedLink}
               </div>
             ) : !isCover && activeShare ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
                 <button type="button" onClick={copyPrompt}
-                  style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif", textAlign: 'left' }}>
+                  style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'var(--ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                   {justCopied === 'prompt'
                 ? <><Icon name="check" size={13} /> {t.aiPromptCopied}</>
                 : <><Icon name="clipboard" size={13} /> {t.aiCopyPrompt}</>}
                 </button>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button type="button" onClick={() => openInAi('chatgpt')}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
                     {t.aiOpenChatgpt}
                   </button>
                   <button type="button" onClick={() => openInAi('claude')}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
                     {t.aiOpenClaude}
                   </button>
                   <button type="button" onClick={() => openInAi('gemini')}
                     title={t.aiGeminiTitle}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
                     {t.aiOpenGemini}
                   </button>
                 </div>
               </div>
             ) : null}
             <button type="button" onClick={() => { setImportOpen(true); setImportErr(null); setImportDiff(null); }}
-              style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'oklch(0.42 0.017 264)', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+              style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit' }}>
               {t.aiImportBack}
             </button>
           </div>
@@ -988,30 +1019,30 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       {liBefund && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => setLiBefund(null)}>
           <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '620px', maxHeight: '88vh', overflowY: 'auto', padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', marginBottom: '4px' }}>
+            <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
               {t.liModalTitle}
             </div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '12px', color: 'var(--ink-3)', marginBottom: '14px', lineHeight: 1.55, fontFamily: 'inherit' }}>
               {t.liModalBody}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '14px' }}>
               {([[t.countStations, liBefund.gefunden.stationen], [t.countEducation, liBefund.gefunden.ausbildung], [t.countSkills, liBefund.gefunden.skills], [t.countLanguages, liBefund.gefunden.sprachen]] as [string, number][]).map(([l, n]) => (
-                <div key={l} style={{ background: n > 0 ? '#f0f7f0' : 'oklch(0.97 0.003 264)', borderRadius: '8px', padding: '10px 12px', fontFamily: "'Inter', sans-serif" }}>
+                <div key={l} style={{ background: n > 0 ? '#f0f7f0' : 'oklch(0.97 0.003 264)', borderRadius: '8px', padding: '10px 12px', fontFamily: 'inherit' }}>
                   <div style={{ fontSize: '20px', fontWeight: 700, color: n > 0 ? '#2c5e2c' : 'oklch(0.62 0.012 264)', lineHeight: 1.1 }}>{n}</div>
-                  <div style={{ fontSize: '10.5px', color: 'oklch(0.50 0.014 264)', marginTop: '2px' }}>{l}</div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', marginTop: '2px' }}>{l}</div>
                 </div>
               ))}
             </div>
 
-            <div style={{ border: '1px solid oklch(0.91 0.005 264)', borderRadius: '9px', overflow: 'hidden', marginBottom: '14px' }}>
+            <div style={{ border: '1px solid var(--hair)', borderRadius: '9px', overflow: 'hidden', marginBottom: '14px' }}>
               {diffMaps(summariseCv(data, t), summariseCv(liBefund.cv, t)).filter(r => r.changed).length === 0 ? (
-                <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>
+                <div style={{ padding: '14px', fontSize: '12.5px', color: 'var(--ink-2)', fontFamily: 'inherit', fontStyle: 'italic' }}>
                   {t.liNoDiff}
                 </div>
               ) : diffMaps(summariseCv(data, t), summariseCv(liBefund.cv, t)).filter(r => r.changed).map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '8px', padding: '9px 12px', borderTop: i ? '1px solid oklch(0.96 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: "'Inter', sans-serif" }}>
-                  <div style={{ fontWeight: 700, color: 'oklch(0.42 0.017 264)' }}>{row.label}</div>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '8px', padding: '9px 12px', borderTop: i ? '1px solid oklch(0.96 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: 'inherit' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--ink-2)' }}>{row.label}</div>
                   <div style={{ background: '#fff0f0', padding: '5px 7px', borderRadius: '5px', color: '#7a2c2c', wordBreak: 'break-word' }}>{row.before || <em style={{ color: '#c0a0a0' }}>{t.valueEmpty}</em>}</div>
                   <div style={{ background: '#f0f7f0', padding: '5px 7px', borderRadius: '5px', color: '#2c5e2c', wordBreak: 'break-word' }}>{row.after || <em style={{ color: '#a0c0a0' }}>{t.valueEmpty}</em>}</div>
                 </div>
@@ -1019,16 +1050,16 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             </div>
 
             {liBefund.hinweise.length > 0 && (
-              <ul style={{ margin: '0 0 16px', padding: '10px 12px 10px 28px', background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '8px', fontSize: '11.5px', color: '#8a6500', lineHeight: 1.6, fontFamily: "'Inter', sans-serif" }}>
+              <ul style={{ margin: '0 0 16px', padding: '10px 12px 10px 28px', background: '#fff7e8', border: '1px solid #e8d4a8', borderRadius: '8px', fontSize: '11.5px', color: '#8a6500', lineHeight: 1.6, fontFamily: 'inherit' }}>
                 {liBefund.hinweise.map((h, i) => <li key={i}>{h}</li>)}
               </ul>
             )}
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setLiBefund(null)}
-                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>{t.cancel}</button>
+                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: 'inherit' }}>{t.cancel}</button>
               <button type="button" onClick={linkedinUebernehmen}
-                style={{ padding: '8px 16px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>{t.apply}</button>
+                style={{ padding: '8px 16px', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>{t.apply}</button>
             </div>
           </div>
         </div>
@@ -1037,12 +1068,12 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       {importOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => !importBusy && setImportOpen(false)}>
           <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '720px', maxHeight: '88vh', overflowY: 'auto', padding: '22px 26px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'oklch(0.21 0.021 264)', marginBottom: '4px' }}>
+            <div style={{ fontFamily: "'Space Grotesk', serif", fontSize: '18px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
               {importDiff
                 ? t.modalReviewTitle
                 : isCover ? t.modalImportClTitle : t.modalImportCvTitle}
             </div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', marginBottom: '14px', lineHeight: 1.55, fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ fontSize: '12px', color: 'var(--ink-3)', marginBottom: '14px', lineHeight: 1.55, fontFamily: 'inherit' }}>
               {importDiff
                 ? t.modalReviewBody
                 : isCover
@@ -1052,17 +1083,17 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
 
             {!importDiff && (
               <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder={t.mdPlaceholder} rows={14}
-                style={{ width: '100%', padding: '10px 12px', fontSize: '12px', fontFamily: 'monospace', color: 'oklch(0.21 0.021 264)', background: '#ffffff', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, marginBottom: '10px' }} />
+                style={{ width: '100%', padding: '10px 12px', fontSize: '12px', fontFamily: 'monospace', color: 'var(--ink)', background: '#ffffff', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, marginBottom: '10px' }} />
             )}
 
             {importDiff && (
-              <div style={{ marginBottom: '14px', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ marginBottom: '14px', border: '1px solid var(--hair)', borderRadius: '8px', overflow: 'hidden' }}>
                 {importDiff.filter(r => r.changed).length === 0 && (
-                  <div style={{ padding: '14px', fontSize: '12.5px', color: 'oklch(0.42 0.017 264)', fontFamily: "'Inter', sans-serif", fontStyle: 'italic' }}>{t.noChanges}</div>
+                  <div style={{ padding: '14px', fontSize: '12.5px', color: 'var(--ink-2)', fontFamily: 'inherit', fontStyle: 'italic' }}>{t.noChanges}</div>
                 )}
                 {importDiff.filter(r => r.changed).map((row, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr', gap: '8px', padding: '10px 12px', borderBottom: i < importDiff.filter(r => r.changed).length - 1 ? '1px solid oklch(0.985 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: "'Inter', sans-serif", background: 'oklch(0.985 0.003 264)' }}>
-                    <div style={{ fontWeight: 700, color: 'oklch(0.42 0.017 264)', alignSelf: 'start' }}>{row.label}</div>
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 1fr', gap: '8px', padding: '10px 12px', borderBottom: i < importDiff.filter(r => r.changed).length - 1 ? '1px solid oklch(0.985 0.003 264)' : 'none', fontSize: '11.5px', fontFamily: 'inherit', background: 'oklch(0.985 0.003 264)' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--ink-2)', alignSelf: 'start' }}>{row.label}</div>
                     <div style={{ background: '#fff0f0', padding: '6px 8px', borderRadius: '5px', color: '#7a2c2c', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       <div style={{ fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a86060', marginBottom: '2px' }}>{t.valueBefore}</div>
                       {row.before || <em style={{ color: '#c0a0a0' }}>{t.valueEmpty}</em>}
@@ -1076,26 +1107,26 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               </div>
             )}
 
-            {importErr && <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '12px', color: '#c0392b', marginBottom: '10px', fontFamily: "'Inter', sans-serif" }}>{importErr}</div>}
+            {importErr && <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '12px', color: '#c0392b', marginBottom: '10px', fontFamily: 'inherit' }}>{importErr}</div>}
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
               {importDiff ? (
                 <button type="button" onClick={() => setImportDiff(null)} disabled={importBusy}
-                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>
+                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: 'inherit' }}>
                   {t.back}
                 </button>
               ) : <div />}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" onClick={() => { setImportOpen(false); setImportDiff(null); setImportText(''); }} disabled={importBusy}
-                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: "'Inter', sans-serif" }}>{t.cancel}</button>
+                  style={{ padding: '8px 14px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', color: '#666', fontFamily: 'inherit' }}>{t.cancel}</button>
                 {!importDiff ? (
                   <button type="button" onClick={previewImport} disabled={importBusy || importText.trim().length < 10}
-                    style={{ padding: '8px 16px', background: importBusy ? '#666' : 'oklch(0.21 0.021 264)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    style={{ padding: '8px 16px', background: importBusy ? '#666' : 'var(--ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                     {importBusy ? t.checking : t.showPreview}
                   </button>
                 ) : (
                   <button type="button" onClick={confirmImport} disabled={importBusy}
-                    style={{ padding: '8px 16px', background: importBusy ? '#666' : '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    style={{ padding: '8px 16px', background: importBusy ? '#666' : '#2e7d32', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: importBusy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                     {importBusy ? t.applying : t.applyChanges}
                   </button>
                 )}

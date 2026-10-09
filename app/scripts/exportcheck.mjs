@@ -32,12 +32,12 @@ mkdirSync(out, { recursive: true });
 
 /** Merkmal je Format: was muss in der Datei stehen, damit sie echt ist? */
 const PRUEFUNGEN = {
-  'Word (.docx)': (f) => {
+  'Word mit Design': (f) => {
     const liste = execFileSync('unzip', ['-Z1', f], { encoding: 'utf8' });
     if (!liste.includes('word/document.xml')) return 'kein word/document.xml im ZIP';
     return null;
   },
-  'Word — ATS-Fassung': (f) => {
+  'Word – ATS-Fassung': (f) => {
     const liste = execFileSync('unzip', ['-Z1', f], { encoding: 'utf8' });
     if (!liste.includes('word/document.xml')) return 'kein word/document.xml im ZIP';
     const xml = execFileSync('unzip', ['-p', f, 'word/document.xml'], { encoding: 'utf8' });
@@ -45,7 +45,7 @@ const PRUEFUNGEN = {
     if (xml.includes('<w:tbl>')) return 'enthält eine Tabelle — die ATS-Fassung soll einspaltig sein';
     return null;
   },
-  HTML: (f) => {
+  Webseite: (f) => {
     const t = readFileSync(f, 'utf8');
     if (!t.includes('class="cv-page"')) return 'keine .cv-page im Dokument';
     if (!t.includes('@page')) return 'keine Seitenregel — dann druckt es nicht auf A4';
@@ -101,6 +101,10 @@ async function oeffneExport() {
   await page.waitForTimeout(2300);
   const tab = page.locator('button', { hasText: /^Export$/ }).first();
   if (await tab.count()) { await tab.click(); await page.waitForTimeout(700); }
+  /* Seit dem 08.10.2026 sind „Weitere Formate" und „Für KI und Entwickler"
+     zugeklappt — aufklappen, sonst sind die Knöpfe nicht anklickbar. */
+  await page.$$eval('details', ds => ds.forEach(d => { d.open = true; }));
+  await page.waitForTimeout(200);
 }
 
 const zeilen = [];

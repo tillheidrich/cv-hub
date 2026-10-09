@@ -644,7 +644,7 @@ export default function KnowledgePanel() {
                 background: 'transparent',
                 border: 'none',
                 borderBottom: activeTab === cat.id ? `2px solid ${GOLD}` : '2px solid transparent',
-                color: activeTab === cat.id ? GOLD : '#888',
+                color: activeTab === cat.id ? GOLD : 'oklch(0.45 0.014 264)',
                 fontSize: '11.5px',
                 fontWeight: activeTab === cat.id ? 700 : 500,
                 cursor: 'pointer',

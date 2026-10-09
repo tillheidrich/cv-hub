@@ -32,10 +32,19 @@ export interface KeysStrings {
   newPassword: string; newPasswordHint: string; newPasswordRepeat: string;
   changePassword: string; changingPassword: string;
   pwTooShort: string; pwMismatch: string; pwChanged: string;
+  /** Seit 08.10.2026 trennt ein Passwortwechsel alles andere — mit Zahlen. */
+  pwChangedRevoked: string;
+  pwRevokedCounts: (apiKeys: number, connections: number) => string;
+  pwWrong: string;
+  /** 429 mit Wartezeit (Sekunden), falls bekannt. */
+  tooManyAttempts: (seconds?: number) => string;
   // Sicherheit
   sectionSecurity: string;
   emailLabel: string; emailHint: string;
   save: string; emailSaved: string; emailRemoved: string;
+  /** E-Mail-Wechsel braucht seit 08.10.2026 das aktuelle Passwort (N6). */
+  emailPasswordLabel: string; emailPasswordRequired: string; emailPasswordWrong: string;
+  emailOldNotified: string;
   tfaTitle: string; tfaHint: string; tfaNoMailer: string; tfaNeedsEmail: string;
   // Verbundene Apps
   sectionApps: string; appsIntro: string;
@@ -74,11 +83,19 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     pwTooShort: 'Neues Passwort: mind. 8 Zeichen.',
     pwMismatch: 'Die neuen Passwörter stimmen nicht überein.',
     pwChanged: 'Passwort geändert.',
+    pwChangedRevoked: 'Passwort geändert. Alle anderen Anmeldungen, API-Schlüssel und KI-Verbindungen wurden getrennt.',
+    pwRevokedCounts: (k, c) => `API-Schlüssel: ${k} · KI-Verbindungen: ${c}`,
+    pwWrong: 'Das aktuelle Passwort stimmt nicht.',
+    tooManyAttempts: s => (s ? `Zu viele Versuche. Bitte in ${s} s erneut.` : 'Zu viele Versuche. Bitte gleich erneut.'),
 
     sectionSecurity: 'Sicherheit',
     emailLabel: 'E-Mail-Adresse',
     emailHint: 'Für Passwort-Reset, Benachrichtigungen und den Zwei-Faktor-Login. Leer lassen entfernt die Adresse (und schaltet 2FA ab).',
     save: 'Speichern', emailSaved: 'E-Mail gespeichert.', emailRemoved: 'E-Mail entfernt.',
+    emailPasswordLabel: 'Aktuelles Passwort (zur Bestätigung)',
+    emailPasswordRequired: 'Bitte gib zur Bestätigung dein aktuelles Passwort ein.',
+    emailPasswordWrong: 'Das aktuelle Passwort stimmt nicht. Die E-Mail-Adresse bleibt unverändert.',
+    emailOldNotified: 'Die bisherige Adresse bekommt eine Nachricht über die Änderung.',
     tfaTitle: 'Zwei-Faktor-Login (E-Mail-Code)',
     tfaHint: 'Bei jeder Anmeldung schicken wir dir einen 6-stelligen Code per E-Mail.',
     tfaNoMailer: 'E-Mail-Versand ist derzeit nicht konfiguriert.',
@@ -133,11 +150,19 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     pwTooShort: 'New password: at least 8 characters.',
     pwMismatch: 'The new passwords do not match.',
     pwChanged: 'Password changed.',
+    pwChangedRevoked: 'Password changed. All other sign-ins, API keys and AI connections have been disconnected.',
+    pwRevokedCounts: (k, c) => `API keys: ${k} · AI connections: ${c}`,
+    pwWrong: 'The current password is not correct.',
+    tooManyAttempts: s => (s ? `Too many attempts. Please try again in ${s} s.` : 'Too many attempts. Please try again shortly.'),
 
     sectionSecurity: 'Security',
     emailLabel: 'Email address',
     emailHint: 'For password reset, notifications and two-factor login. Leaving it empty removes the address (and turns 2FA off).',
     save: 'Save', emailSaved: 'Email saved.', emailRemoved: 'Email removed.',
+    emailPasswordLabel: 'Current password (to confirm)',
+    emailPasswordRequired: 'Please enter your current password to confirm.',
+    emailPasswordWrong: 'The current password is not correct. Your email address has not changed.',
+    emailOldNotified: 'Your previous address gets a message about the change.',
     tfaTitle: 'Two-factor login (email code)',
     tfaHint: 'We send you a 6-digit code by email every time you sign in.',
     tfaNoMailer: 'Sending email is not configured at the moment.',
@@ -192,11 +217,19 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     pwTooShort: 'Nouveau mot de passe : 8 caractères minimum.',
     pwMismatch: 'Les nouveaux mots de passe ne correspondent pas.',
     pwChanged: 'Mot de passe modifié.',
+    pwChangedRevoked: 'Mot de passe modifié. Toutes les autres sessions, clés API et connexions IA ont été coupées.',
+    pwRevokedCounts: (k, c) => `Clés API : ${k} · connexions IA : ${c}`,
+    pwWrong: 'Le mot de passe actuel est incorrect.',
+    tooManyAttempts: s => (s ? `Trop de tentatives. Réessayez dans ${s} s.` : 'Trop de tentatives. Réessayez dans un instant.'),
 
     sectionSecurity: 'Sécurité',
     emailLabel: 'Adresse e-mail',
     emailHint: "Pour la réinitialisation du mot de passe, les notifications et la connexion à deux facteurs. Laisser vide supprime l'adresse (et désactive la 2FA).",
     save: 'Enregistrer', emailSaved: 'E-mail enregistré.', emailRemoved: 'E-mail supprimé.',
+    emailPasswordLabel: 'Mot de passe actuel (pour confirmer)',
+    emailPasswordRequired: 'Saisissez votre mot de passe actuel pour confirmer.',
+    emailPasswordWrong: "Le mot de passe actuel est incorrect. L'adresse e-mail n'a pas changé.",
+    emailOldNotified: "L'ancienne adresse reçoit un message signalant le changement.",
     tfaTitle: 'Connexion à deux facteurs (code par e-mail)',
     tfaHint: 'À chaque connexion, nous vous envoyons un code à 6 chiffres par e-mail.',
     tfaNoMailer: "L'envoi d'e-mails n'est pas configuré pour le moment.",
@@ -251,11 +284,19 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     pwTooShort: 'Nueva contraseña: mín. 8 caracteres.',
     pwMismatch: 'Las nuevas contraseñas no coinciden.',
     pwChanged: 'Contraseña cambiada.',
+    pwChangedRevoked: 'Contraseña cambiada. Se han desconectado todos los demás inicios de sesión, claves API y conexiones de IA.',
+    pwRevokedCounts: (k, c) => `Claves API: ${k} · conexiones de IA: ${c}`,
+    pwWrong: 'La contraseña actual no es correcta.',
+    tooManyAttempts: s => (s ? `Demasiados intentos. Vuelve a intentarlo en ${s} s.` : 'Demasiados intentos. Vuelve a intentarlo en un momento.'),
 
     sectionSecurity: 'Seguridad',
     emailLabel: 'Dirección de correo',
     emailHint: 'Para restablecer la contraseña, las notificaciones y el inicio de sesión en dos pasos. Dejarlo vacío elimina la dirección (y desactiva la 2FA).',
     save: 'Guardar', emailSaved: 'Correo guardado.', emailRemoved: 'Correo eliminado.',
+    emailPasswordLabel: 'Contraseña actual (para confirmar)',
+    emailPasswordRequired: 'Introduce tu contraseña actual para confirmar.',
+    emailPasswordWrong: 'La contraseña actual no es correcta. Tu dirección de correo no ha cambiado.',
+    emailOldNotified: 'Tu dirección anterior recibe un aviso del cambio.',
     tfaTitle: 'Inicio de sesión en dos pasos (código por correo)',
     tfaHint: 'En cada inicio de sesión te enviamos un código de 6 dígitos por correo.',
     tfaNoMailer: 'El envío de correo no está configurado en este momento.',

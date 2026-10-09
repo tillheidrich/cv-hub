@@ -6,6 +6,7 @@ import type { UiLang } from '../ui/i18n';
 import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
 import type { PanelStrings } from '../ui/editorI18n';
 import { LABELS } from '../data/labels';
+import ChipInput from '../ui/ChipInput';
 
 // ── Social platforms ────────────────────────────────────────────────────────
 // Keep prefix logic in one place. Renderer reads this same map to display links.
@@ -27,7 +28,7 @@ export const SOCIAL_PLATFORMS: Record<SocialPlatform, { label: string; prefix: s
 
 // ── Shared styles ────────────────────────────────────────────────────────────
 
-const editorFont = "'Inter', sans-serif";
+const editorFont = 'inherit';
 
 /* Width is responsive: 404px is the desktop sidebar slot. On mobile the
  * parent uses `flex: 1` and we need to fill it instead of clipping to 404px
@@ -35,38 +36,44 @@ const editorFont = "'Inter', sans-serif";
  * cut off + horizontal scroll). `minWidth: 0` lets the flex item actually
  * shrink. `maxWidth: 100%` caps it on narrow viewports. */
 const panelStyle: React.CSSProperties = {
-  width: '404px',
+  /* Seit dem 08.10.2026 sitzt das Formular in einem schwebenden Paneel der
+   * App; Breite, Fläche und Schatten setzt dort der Rahmen. */
+  width: '100%',
   maxWidth: '100%',
   minWidth: 0,
-  flexShrink: 1,
-  background: '#fff',
-  borderRight: '1px solid oklch(0.91 0.005 264)',
+  flex: 1,
+  minHeight: 0,
+  background: 'transparent',
   display: 'flex',
   flexDirection: 'column',
   overflowY: 'hidden',
 };
 
+/* Reiter umbrechen statt abschneiden: bei 404 px stand „Sprachen" nur als „S"
+ * da (Personas-Bericht, Hürde 5). */
 const tabBarStyle: React.CSSProperties = {
   display: 'flex',
-  borderBottom: '1px solid oklch(0.91 0.005 264)',
-  background: 'oklch(0.985 0.003 264)',
-  overflowX: 'auto',
+  flexWrap: 'wrap',
+  gap: '4px',
+  padding: '2px 16px 10px',
+  borderBottom: '1px solid var(--hair)',
   flexShrink: 0,
-  scrollbarWidth: 'none',
 };
 
 const tabStyle = (active: boolean): React.CSSProperties => ({
-  padding: '11px 15px',
-  fontSize: '12.5px',
-  fontWeight: active ? 700 : 500,
-  color: active ? 'oklch(0.21 0.021 264)' : '#6b6458',
-  background: active ? '#fff' : 'none',
+  minHeight: '32px',
+  padding: '0 12px',
+  fontSize: '13px',
+  fontWeight: active ? 620 : 500,
+  color: active ? 'var(--ink)' : 'var(--ink-2)',
+  background: active ? 'oklch(1 0 0)' : 'transparent',
+  boxShadow: active ? '0 0 0 1px oklch(0.30 0.02 250 / 0.08), 0 1px 3px oklch(0.30 0.02 250 / 0.12)' : 'none',
   border: 'none',
-  borderBottom: active ? '2px solid oklch(0.55 0.216 264)' : '2px solid transparent',
+  borderRadius: '999px',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-  fontFamily: editorFont,
-  transition: 'color 0.12s',
+  fontFamily: 'inherit',
+  transition: 'color 0.12s, background-color 0.12s',
   flexShrink: 0,
 });
 
@@ -89,7 +96,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.4px',
   textTransform: 'none',
-  color: 'oklch(0.42 0.017 264)',
+  color: 'var(--ink-2)',
   marginBottom: '5px',
   fontFamily: editorFont,
 };
@@ -98,7 +105,7 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 11px',
   fontSize: '13.5px',
-  color: 'oklch(0.21 0.021 264)',
+  color: 'var(--ink)',
   background: '#ffffff',
   border: '1px solid oklch(0.87 0.006 264)',
   borderRadius: '7px',
@@ -126,11 +133,11 @@ const addBtn: React.CSSProperties = {
   gap: '6px',
   padding: '6px 12px',
   background: 'oklch(0.96 0.03 264)',
-  border: '1px solid oklch(0.91 0.005 264)',
+  border: '1px solid var(--hair)',
   borderRadius: '6px',
   fontSize: '11.5px',
   fontWeight: 600,
-  color: 'oklch(0.55 0.216 264)',
+  color: 'var(--accent-ink)',
   cursor: 'pointer',
   fontFamily: editorFont,
 };
@@ -146,7 +153,7 @@ const iconBtn = (color = '#767676'): React.CSSProperties => ({
 });
 
 const cardStyle: React.CSSProperties = {
-  border: '1px solid oklch(0.91 0.005 264)',
+  border: '1px solid var(--hair)',
   borderRadius: '8px',
   marginBottom: '12px',
   overflow: 'hidden',
@@ -163,7 +170,7 @@ const cardHeader: React.CSSProperties = {
 
 const cardBody: React.CSSProperties = {
   padding: '12px',
-  borderTop: '1px solid oklch(0.91 0.005 264)',
+  borderTop: '1px solid var(--hair)',
 };
 
 // ── Helper: useField ─────────────────────────────────────────────────────────
@@ -287,7 +294,7 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
               type="button"
               onClick={() => remove(i)}
               title={t.remove}
-              style={{ padding: '6px 8px', background: 'transparent', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '6px', fontSize: '14px', color: '#767676', cursor: 'pointer' }}
+              style={{ padding: '6px 8px', background: 'transparent', border: '1px solid var(--hair)', borderRadius: '6px', fontSize: '14px', color: '#767676', cursor: 'pointer' }}
             >
               ×
             </button>
@@ -450,7 +457,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
             aria-label={p.photo ? t.photoRecropTitle : t.photoChooseTitle}
             style={{
               width: '52px', height: '52px', borderRadius: '8px', overflow: 'hidden',
-              background: 'oklch(0.96 0.03 264)', flexShrink: 0, border: '1px solid oklch(0.91 0.005 264)',
+              background: 'oklch(0.96 0.03 264)', flexShrink: 0, border: '1px solid var(--hair)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: 0, position: 'relative',
               cursor: 'pointer',
@@ -501,7 +508,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           />
         )}
         {demoMode ? (
-          <div style={{ fontSize: '11px', color: 'oklch(0.55 0.216 264)', marginTop: '8px', fontFamily: editorFont, lineHeight: 1.5 }}>
+          <div style={{ fontSize: '11px', color: 'var(--accent-ink)', marginTop: '8px', fontFamily: editorFont, lineHeight: 1.5 }}>
             {t.photoDemoHint}
           </div>
         ) : (
@@ -537,7 +544,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
 
       <div style={sectionDivider} />
 
-      <div style={{ fontSize: '11px', color: 'oklch(0.52 0.012 264)', marginBottom: '12px', lineHeight: 1.5, fontFamily: editorFont, background: 'oklch(0.968 0.004 264)', border: '1px solid oklch(0.91 0.005 264)', borderRadius: '8px', padding: '9px 11px' }}>
+      <div style={{ fontSize: '11px', color: 'var(--ink-3)', marginBottom: '12px', lineHeight: 1.5, fontFamily: editorFont, background: 'oklch(0.968 0.004 264)', border: '1px solid var(--hair)', borderRadius: '8px', padding: '9px 11px' }}>
         {t.personalNote}
       </div>
 
@@ -550,8 +557,8 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
       {/* Unterschrift: nur die Vorlagen im Bewerbungsset-Stil zeigen sie, aber
           die Felder stehen immer hier — sonst wären sie nach einem
           Vorlagenwechsel unauffindbar. */}
-      <div style={{ borderTop: '1px solid oklch(0.91 0.005 264)', margin: '18px 0 14px' }} />
-      <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.50 0.014 264)', marginBottom: '8px', fontFamily: editorFont }}>{t.signatureHead}</div>
+      <div style={{ borderTop: '1px solid var(--hair)', margin: '18px 0 14px' }} />
+      <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', marginBottom: '8px', fontFamily: editorFont }}>{t.signatureHead}</div>
       <div style={{ fontSize: '11px', color: '#767676', marginBottom: '12px', lineHeight: 1.6, fontFamily: editorFont }}>{t.signatureHint}</div>
       <Field label={t.signatureCity} value={p.signatureCity ?? ''} onChange={v => updatePersonal('signatureCity', v)} />
       <Field label={t.signatureDate} value={p.signatureDate ?? ''} onChange={v => updatePersonal('signatureDate', v)} />
@@ -608,10 +615,10 @@ function LabelsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData) 
 
   const head = (title: string, group: 'sections' | 'fields' | 'misc') => (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 8px' }}>
-      <span style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.50 0.014 264)', fontFamily: editorFont }}>{title}</span>
+      <span style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', fontFamily: editorFont }}>{title}</span>
       {groupChanged(group) && (
         <button type="button" onClick={() => resetGroup(group)}
-          style={{ background: 'none', border: 'none', fontSize: '10.5px', color: 'oklch(0.55 0.216 264)', cursor: 'pointer', fontFamily: editorFont, padding: '4px 0' }}>
+          style={{ background: 'none', border: 'none', fontSize: '10.5px', color: 'var(--accent-ink)', cursor: 'pointer', fontFamily: editorFont, padding: '4px 0' }}>
           {t.labelsReset}
         </button>
       )}
@@ -737,7 +744,7 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
             >
             <span style={{ fontSize: '13px' }} aria-hidden>{openIdx === idx ? '▾' : '▸'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {exp.role || <span style={{ color: '#8a8a8a' }}>{t.newPosition}</span>}
               </div>
               <div style={{ fontSize: '10.5px', color: 'oklch(0.45 0.16 264)', fontFamily: editorFont }}>
@@ -761,7 +768,7 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
                   id={`hidden-${exp.id}`}
                   checked={!!exp.hidden}
                   onChange={e => updateExp(idx, { ...exp, hidden: e.target.checked })}
-                  style={{ accentColor: 'oklch(0.55 0.216 264)' }}
+                  style={{ accentColor: 'var(--accent-ink)' }}
                 />
                 <label htmlFor={`hidden-${exp.id}`} style={{ fontSize: '11.5px', color: '#666', fontFamily: editorFont, cursor: 'pointer' }}>
                   {t.hideInResume}
@@ -844,7 +851,7 @@ function EducationEditor({ data, onChange }: { data: CVData; onChange: (d: CVDat
             >
             <span style={{ fontSize: '13px' }} aria-hidden>{openIdx === idx ? '▾' : '▸'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(0.21 0.021 264)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', fontFamily: editorFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {edu.degree || <span style={{ color: '#8a8a8a' }}>{t.newEntry}</span>}
               </div>
               <div style={{ fontSize: '10.5px', color: 'oklch(0.45 0.16 264)', fontFamily: editorFont }}>{edu.institution}</div>
@@ -954,50 +961,12 @@ function SkillsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData) 
  *  Wechsel der Eingabesemantik (Komma vs. Zeilenumbruch) committed, so dass
  *  die Live-Vorschau trotzdem regelmäßig aktualisiert. */
 function SkillsItemsEditor({ group, onChangeItems }: { group: SkillGroup; onChangeItems: (items: string[]) => void }) {
+  /* Seit dem 08.10.2026 als Chips (ui/ChipInput.tsx). Die frühere Textarea
+   * mit Rohtext-Zustand löste Magnus' Befund („kein Leerzeichen, kein Komma
+   * — nur eine Sache eintragen"); die Chips lösen ihn ebenfalls, weil der
+   * Eingabetext erst beim Abschließen geteilt wird und nie zurückspringt. */
   const t = usePanelT();
-  const initial = group.items.join(group.items.some(s => s.includes(',')) ? '\n' : ', ');
-  const [raw, setRaw] = useState(initial);
-  const lastCommittedRef = useRef(initial);
-
-  /* Sync wenn von außen ein neuer group.items kommt (Profil-Wechsel, Undo,
-   * MD-Import) — aber nicht clobbern was der User gerade tippt. */
-  useEffect(() => {
-    const incoming = group.items.join(group.items.some(s => s.includes(',')) ? '\n' : ', ');
-    if (incoming !== lastCommittedRef.current) {
-      setRaw(incoming);
-      lastCommittedRef.current = incoming;
-    }
-  }, [group.items]);
-
-  function parse(text: string): string[] {
-    return text.includes('\n')
-      ? text.split('\n').map(s => s.trim()).filter(Boolean)
-      : text.split(',').map(s => s.trim()).filter(Boolean);
-  }
-
-  function commit(text: string) {
-    const items = parse(text);
-    lastCommittedRef.current = text;
-    onChangeItems(items);
-  }
-
-  return (
-    <textarea
-      value={raw}
-      onChange={e => {
-        const text = e.target.value;
-        setRaw(text);
-        // Live-Commit damit die Preview während des Tippens mitläuft.
-        // Wichtig: lastCommittedRef wird mit dem RAW-Text aktualisiert,
-        // damit die Sync-Effect oben den User-State nicht überschreibt.
-        commit(text);
-      }}
-      onBlur={() => commit(raw)}
-      rows={4}
-      style={textareaStyle}
-      placeholder={t.skillsItemsPlaceholder}
-    />
-  );
+  return <ChipInput items={group.items} onChange={onChangeItems} label={`${t.skillsItemsLabel}: ${group.label}`} placeholder={t.skillsItemsPlaceholder} />;
 }
 
 /** Bullets-Editor mit RAW-Text-State — gleiches Pattern wie SkillsItemsEditor.
@@ -1198,8 +1167,8 @@ function DotRatingInput({ value, onChange }: { value?: number; onChange: (v: num
               title={`${n} ${t.ofFive}`}
               style={{
                 width: '20px', height: '20px', borderRadius: '50%',
-                border: '1px solid ' + (active ? 'oklch(0.55 0.216 264)' : '#d0c8b8'),
-                background: active ? 'oklch(0.55 0.216 264)' : '#fff',
+                border: '1px solid ' + (active ? 'var(--accent-ink)' : '#d0c8b8'),
+                background: active ? 'var(--accent-ink)' : '#fff',
                 cursor: 'pointer', padding: 0, lineHeight: 0,
               }}
             />
@@ -1208,7 +1177,7 @@ function DotRatingInput({ value, onChange }: { value?: number; onChange: (v: num
         <button
           type="button"
           onClick={() => onChange(undefined)}
-          style={{ marginLeft: '6px', padding: '2px 8px', background: 'transparent', border: 'none', fontSize: '10.5px', color: 'oklch(0.52 0.012 264)', cursor: 'pointer', fontFamily: editorFont }}
+          style={{ marginLeft: '6px', padding: '2px 8px', background: 'transparent', border: 'none', fontSize: '10.5px', color: 'var(--ink-3)', cursor: 'pointer', fontFamily: editorFont }}
           title={t.scaleClearTitle}
         >
           {t.auto}
@@ -1276,6 +1245,7 @@ export default function EditorPanel({ data, uiLang, onUpdate, demoMode = false, 
               key={id}
               type="button"
               onClick={() => setActiveTab(id)}
+              aria-pressed={activeTab === id}
               style={tabStyle(activeTab === id)}
             >
               {t[tabLabelKeys[id]]}

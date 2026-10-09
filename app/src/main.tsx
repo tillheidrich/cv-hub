@@ -2,6 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './fonts'
 import './index.css'
+// Oberflächenschrift: Geist (OFL-1.1), selbst ausgeliefert wie alle Schriften
+// hier — kein Aufruf an ein fremdes CDN. Nur die Oberfläche benutzt sie; die
+// Vorlagen behalten ihre eigenen Schriften (fonts.ts).
+import '@fontsource-variable/geist/wght.css'
+import '@fontsource-variable/geist-mono/wght.css'
+import './ui/surface.css'
 import App from './App.tsx'
 import ShareView from './screens/ShareView.tsx'
 import ResetPassword from './screens/ResetPassword.tsx'

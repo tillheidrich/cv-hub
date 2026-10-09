@@ -1,5 +1,7 @@
 import React from 'react';
 import { isMultiline, type InlinePath } from '../data/inlineEdit';
+import { useUiLang } from '../ui/useUiLang';
+import { DESIGN_I18N } from '../ui/i18n/design';
 
 // ── Direktes Bearbeiten in der Vorschau ─────────────────────────────────────
 //
@@ -17,6 +19,19 @@ export interface InlineEditApi {
   split: (path: InlinePath) => void;
   /** Rücktaste im leeren Punkt — Punkt entfernen. */
   remove: (path: InlinePath) => void;
+  /** Ganze Stationen umstellen, verdoppeln, löschen, einen Punkt anhängen —
+   *  das Block-Werkzeug an der Station (`EntryTools`). Fehlt es, erscheint
+   *  das Werkzeug nicht. */
+  entry?: EntryOps;
+}
+
+export type EntryKind = 'experience' | 'education';
+export interface EntryOps {
+  move: (kind: EntryKind, id: string, delta: -1 | 1) => void;
+  duplicate: (kind: EntryKind, id: string) => void;
+  remove: (kind: EntryKind, id: string) => void;
+  /** Neuen, leeren Stichpunkt am Ende der Station anlegen und hineinspringen. */
+  addBullet: (id: string) => void;
 }
 
 export const InlineEditCtx = React.createContext<InlineEditApi | null>(null);
@@ -141,3 +156,39 @@ export function Ed({ path, children, block }: { path?: InlinePath; children: Rea
   );
 }
 
+
+/**
+ * Block-Werkzeug an einer Station: ↑ ↓ Duplizieren Löschen, bei Stationen der
+ * Berufserfahrung dazu „+ Punkt" (Gestaltungsbericht, Bau-Liste 9).
+ *
+ * Es darf die gemessenen Höhen nicht ändern — derselbe Grundsatz wie beim
+ * Rahmen von `.cv-edit`. Deshalb:
+ *  - es gibt das Werkzeug nur mit Bearbeitungskontext; im Messlauf, im Export
+ *    und in der geteilten Ansicht fehlt der Kontext, dort entsteht kein Knoten;
+ *  - der Anker ist ein Block ohne Höhe, das Werkzeug liegt absolut darin —
+ *    außerhalb des Textflusses;
+ *  - es trägt `data-noprint` und ist ohne Zeiger oder Fokus in der Station
+ *    `display: none` (index.css), steht also auch in keinem Textauszug.
+ */
+export function EntryTools({ kind, id, index, count }: { kind: EntryKind; id: string; index: number; count: number }) {
+  const api = React.useContext(InlineEditCtx);
+  const d = DESIGN_I18N[useUiLang()];
+  if (!api?.entry) return null;
+  const ops = api.entry;
+  const btn = (label: string, glyph: string, onClick: () => void, disabled?: boolean) => (
+    <button type="button" aria-label={label} title={label} disabled={disabled}
+      onMouseDown={e => e.preventDefault()}
+      onClick={e => { e.stopPropagation(); onClick(); }}>{glyph}</button>
+  );
+  return (
+    <div className="cv-entry-anchor" data-noprint>
+      <div className="cv-entry-tools" role="toolbar" aria-label={d.entryTools}>
+        {btn(d.entryUp, '↑', () => ops.move(kind, id, -1), index === 0)}
+        {btn(d.entryDown, '↓', () => ops.move(kind, id, 1), index === count - 1)}
+        {btn(d.entryDuplicate, '⧉', () => ops.duplicate(kind, id))}
+        {kind === 'experience' && btn(d.entryAddBullet, '+', () => ops.addBullet(id))}
+        {btn(d.entryDelete, '×', () => ops.remove(kind, id))}
+      </div>
+    </div>
+  );
+}

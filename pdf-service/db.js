@@ -234,6 +234,21 @@ CREATE TABLE IF NOT EXISTS session_revocations (
   user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
   expires_at  TIMESTAMPTZ NOT NULL
 );
+
+-- Pilot mit Laufzeit je Platz (08.10.2026, Gegenprüfung H2).
+-- invite_codes.expires_at begrenzt nur das Einlösen. access_days am Code legt
+-- fest, wie lange ein damit angelegtes Konto schreiben darf; beim Einlösen
+-- wird daraus users.access_until. NULL heißt unbegrenzt, so bleiben alle
+-- Bestandskonten, wie sie sind. Nach Ablauf: lesen und exportieren ja,
+-- ändern nein, gelöscht wird nichts.
+ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS access_days INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_until TIMESTAMPTZ;
+-- Wann der Hinweis 14 bzw. 3 Tage vor Ablauf verschickt wurde. Verlängern
+-- setzt beide zurück, damit die Hinweise zum neuen Datum wieder kommen.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_notice14_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_notice3_at TIMESTAMPTZ;
+-- Die Auswertung je Code zählt Ereignisse je Nutzer und Art.
+CREATE INDEX IF NOT EXISTS events_user_kind_idx ON events(user_id, kind);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

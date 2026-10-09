@@ -224,3 +224,36 @@ export function tplOffboarding({ username, deleted }) {
     ),
   };
 }
+
+/* Hinweis vor Ablauf der Laufzeit (Pilot, 08.10.2026). Geht 14 und 3 Tage
+ * vorher hinaus (access.js). Zweisprachig in einer Mail: Das Konto kennt
+ * keine Sprache, und eine falsch geratene ist schlechter als zwei. */
+export function tplAccessEnding({ username, until, daysLeft, base }) {
+  const d = new Date(until);
+  const de = (() => { try { return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' }); } catch { return d.toISOString().slice(0, 10); } })();
+  const en = (() => { try { return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' }); } catch { return d.toISOString().slice(0, 10); } })();
+  const n = Math.max(1, Math.round(Number(daysLeft) || 1));
+  const link = base ? String(base).replace(/\/+$/, '') : null;
+  const sep = `<div style="border-top:1px solid ${LINE};margin:22px 0 18px;"></div>`;
+  return {
+    subject: `Dein Zugang zu CV-Hub endet am ${de} · Your access ends on ${en}`,
+    html: layout(
+      h(`Noch ${n === 1 ? 'ein Tag' : `${n} Tage`}`) +
+      p(`Hallo ${escapeHtml(username)}, dein Zugang endet am <strong>${de}</strong>. Danach kannst du deine Lebensläufe weiter öffnen und exportieren, aber nicht mehr ändern. Gelöscht wird nichts, ohne dass du vorher davon erfährst.`) +
+      p('Wenn du deine Unterlagen unabhängig von diesem Werkzeug behalten willst, lade sie jetzt herunter, im Export-Bereich des Editors:') +
+      `<ul style="font-size:14px;line-height:1.6;color:${SOFT};margin:0 0 16px;padding-left:20px;">` +
+      '<li><strong>DOCX</strong>: zum Weiterbearbeiten in Word oder LibreOffice</li>' +
+      '<li><strong>JSON</strong>: alle Inhalte maschinenlesbar, wieder importierbar; in den Kontoeinstellungen gibt es zusätzlich den vollständigen Datenexport</li>' +
+      '<li><strong>ZIP „Vorlage ohne Daten“</strong>: das Layout als Datei, ohne deine Angaben</li>' +
+      '<li><strong>PDF</strong>: die fertige Fassung zum Versenden</li>' +
+      '</ul>' +
+      p('Brauchst du länger, wende dich an die Person, von der du den Zugang hast.') +
+      (link ? `<div style="margin:4px 0 8px;">${btn(link, 'Zum Editor →')}</div>` : '') +
+      sep +
+      h(`${n === 1 ? 'One day' : `${n} days`} left`) +
+      p(`Hi ${escapeHtml(username)}, your access ends on <strong>${en}</strong>. After that you can still open and export your résumés, but no longer edit them. Nothing is deleted without telling you first.`) +
+      p('To keep your documents independent of this tool, download them now (in the editor’s export panel): <strong>DOCX</strong> to keep editing in Word or LibreOffice, <strong>JSON</strong> with all content (re-importable; the full data export is in your account settings), the <strong>ZIP</strong> “template without data”, and the finished <strong>PDF</strong>.') +
+      p('If you need more time, contact the person who gave you access.'),
+    ),
+  };
+}

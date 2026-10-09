@@ -1,0 +1,423 @@
+/* ── Flächen- und Farbsystem der Oberfläche ─────────────────────────────────
+ *
+ * Gilt NUR für die Bedienoberfläche des Editors: Kopfleiste, Schiene,
+ * Paneele, Leinwand, Menüs. Das gesetzte Dokument (`.cv-page`) und das
+ * Export-HTML (`export/exportHtml.ts`) bekommen davon nichts — sonst wanderten
+ * Umbrüche zwischen Vorschau und PDF (siehe Isolationsblock in index.css).
+ *
+ * Deshalb steht hier auch keine Regel auf `body`: Die Seite erbt Schriftart,
+ * Größe und Zeilenhöhe von ihren Vorfahren. Die Oberflächenschrift sitzt auf
+ * `.ui`, und die Leinwand stellt mit `.cv-doc-context` exakt die Umgebung
+ * wieder her, in der die Vorschau bisher gemessen wurde.
+ *
+ * Werte aus dem Gestaltungsbericht vom 08.10.2026 (Kontraste dort gerechnet
+ * auf dem ungünstigsten Untergrund). Text in Akzentfarbe immer `--accent-ink`,
+ * `--accent` nur für Flächen und Fokusring.
+ */
+:root {
+  --canvas-top: oklch(0.925 0.022 248);
+  --canvas-mid: oklch(0.948 0.012 250);
+  --canvas-bottom: oklch(0.962 0.016 62);
+  --canvas: linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-mid) 34%, var(--canvas-bottom) 100%);
+  --float: oklch(1 0 0 / 0.72);
+  --float-solid: oklch(0.995 0.002 250);
+  --float-ring: 0 0 0 1px oklch(0.30 0.02 250 / 0.07);
+  --float-shadow: 0 1px 1px oklch(0.30 0.03 250 / 0.04), 0 10px 30px -8px oklch(0.30 0.03 250 / 0.14);
+  --pill-shadow: 0 0 0 1px oklch(0.30 0.02 250 / 0.07), 0 1px 2px oklch(0.30 0.02 250 / 0.07);
+  --page-shadow: 0 1px 3px oklch(0.25 0.03 250 / 0.08), 0 28px 64px -18px oklch(0.25 0.03 250 / 0.30);
+  --ink: oklch(0.21 0.021 264);
+  --ink-2: oklch(0.40 0.017 264);
+  --ink-3: oklch(0.48 0.014 264);
+  --hair: oklch(0.30 0.02 250 / 0.10);
+  --accent: oklch(0.55 0.216 264);
+  --accent-ink: oklch(0.48 0.224 264);
+  --accent-wash: oklch(0.55 0.216 264 / 0.09);
+  --ats-high-ink: oklch(0.45 0.11 150); --ats-high-bg: oklch(0.95 0.04 150);
+  --ats-mid-ink: oklch(0.47 0.10 70);   --ats-mid-bg: oklch(0.955 0.05 85);
+  --ats-low-ink: oklch(0.47 0.15 28);   --ats-low-bg: oklch(0.955 0.03 28);
+  --r-panel: 20px; --r-control: 12px; --r-chip: 8px; --r-pill: 999px;
+  --ui: 'Geist Variable', system-ui, sans-serif;
+  --ui-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --t-xs: 12px; --t-sm: 13px; --t-md: 14px; --t-lg: 16px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1); --d1: 120ms; --d2: 220ms; --d3: 360ms;
+
+  /* Werte der älteren Oberfläche (tokens.ts), damit Startseite, Anmeldung und
+     ATS-Prüfung über dieselben Variablen laufen wie der Editor. */
+  --paper: oklch(0.985 0.003 264);
+  --paper-deep: oklch(0.968 0.004 264);
+  --white: oklch(1 0 0);
+  --rule: oklch(0.85 0.008 264);
+  --rule-soft: oklch(0.91 0.005 264);
+  --danger: oklch(0.470 0.150 28);
+  --success: oklch(0.510 0.110 145);
+}
+
+/* ── Grundlage der Oberfläche ─────────────────────────────────────────────── */
+.ui {
+  font-family: var(--ui);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  color: var(--ink);
+  font-feature-settings: normal;
+  -webkit-font-smoothing: antialiased;
+}
+.ui .num, .ui-num {
+  font-family: var(--ui-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 450;
+}
+
+/* Die Leinwand: exakt die Umgebung, in der das Dokument bisher gemessen wurde
+   (body-Schrift Inter, 16 px, Zeilenhöhe 1,5 aus dem Tailwind-Preflight).
+   Ändert sich hier etwas, ändern sich Umbrüche. */
+.cv-doc-context {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  color: CanvasText;
+  font-feature-settings: normal;
+  font-variant-numeric: normal;
+  -webkit-font-smoothing: auto;
+}
+
+/* ── Fokusring: überall gleich ────────────────────────────────────────────── */
+.ui :focus-visible:not(.cv-edit) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Schwebende Flächen ───────────────────────────────────────────────────── */
+.ui-float {
+  background: var(--float);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--float-ring), var(--float-shadow);
+  border-radius: var(--r-panel);
+}
+.ui-pill {
+  background: var(--float);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: var(--pill-shadow), 0 6px 18px -10px oklch(0.30 0.03 250 / 0.18);
+  border-radius: var(--r-pill);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ui-float, .ui-pill { background: var(--float-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ui-float, .ui-pill { background: var(--float-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ── Knöpfe ───────────────────────────────────────────────────────────────── */
+.ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 34px; padding: 0 13px;
+  font: inherit; font-size: var(--t-sm); font-weight: 520; color: var(--ink);
+  background: transparent; border: 0; border-radius: var(--r-pill);
+  cursor: pointer; white-space: nowrap;
+  transition: background-color var(--d1) var(--ease), color var(--d1) var(--ease), transform var(--d1) var(--ease);
+}
+.ui-btn:hover { background: oklch(0.30 0.02 250 / 0.06); }
+.ui-btn:active { transform: scale(0.98); }
+.ui-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.ui-btn-primary {
+  background: var(--ink); color: oklch(0.985 0.003 264);
+  box-shadow: 0 1px 2px oklch(0.21 0.021 264 / 0.25), 0 8px 20px -10px oklch(0.21 0.021 264 / 0.6);
+}
+.ui-btn-primary:hover { background: oklch(0.29 0.024 264); }
+.ui-btn-soft { background: oklch(1 0 0 / 0.7); box-shadow: var(--pill-shadow); }
+.ui-btn-soft:hover { background: oklch(1 0 0 / 0.95); }
+.ui-btn-accent { color: var(--accent-ink); background: var(--accent-wash); }
+.ui-btn-accent:hover { background: oklch(0.55 0.216 264 / 0.15); }
+.ui-icon-btn { width: 40px; min-width: 40px; padding: 0; }
+
+/* Segment (Lebenslauf | Anschreiben, Ganze Seite | 100 %) */
+.ui-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
+.ui-seg > button {
+  min-height: 32px; padding: 0 13px; border: 0; border-radius: var(--r-pill);
+  font: inherit; font-size: var(--t-sm); font-weight: 520; color: var(--ink-2);
+  background: transparent; cursor: pointer; white-space: nowrap;
+  transition: background-color var(--d1) var(--ease), color var(--d1) var(--ease);
+}
+.ui-seg > button:hover { color: var(--ink); }
+.ui-seg > button[aria-pressed="true"], .ui-seg > button[aria-checked="true"], .ui-seg > button[aria-selected="true"] {
+  background: oklch(1 0 0); color: var(--ink); font-weight: 620;
+  box-shadow: 0 0 0 1px oklch(0.30 0.02 250 / 0.08), 0 1px 3px oklch(0.30 0.02 250 / 0.12);
+}
+
+/* ── Menüs ────────────────────────────────────────────────────────────────── */
+.ui-menu {
+  position: absolute; z-index: 400; min-width: 260px; padding: 6px;
+  background: var(--float-solid); border-radius: 16px;
+  box-shadow: var(--float-ring), 0 18px 48px -12px oklch(0.25 0.03 250 / 0.32);
+  animation: ui-pop var(--d2) var(--ease);
+}
+.ui-menu-label {
+  padding: 10px 10px 4px; font-size: var(--t-xs); font-weight: 600; color: var(--ink-3);
+}
+.ui-menu-sep { height: 1px; background: var(--hair); margin: 6px 4px; }
+.ui-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 36px; padding: 6px 10px; border: 0; border-radius: 10px;
+  font: inherit; font-size: var(--t-sm); color: var(--ink); text-align: left;
+  background: transparent; cursor: pointer;
+}
+.ui-menu-item:hover, .ui-menu-item:focus-visible { background: oklch(0.30 0.02 250 / 0.06); outline: none; }
+.ui-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.ui-menu-item .ui-menu-sub { display: block; font-size: var(--t-xs); color: var(--ink-2); line-height: 1.35; }
+.ui-menu-item[aria-checked="true"] { font-weight: 620; }
+@keyframes ui-pop { from { opacity: 0; transform: translateY(-4px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+/* ── Marken ───────────────────────────────────────────────────────────────── */
+.ui-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px 2px 8px; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; line-height: 18px; white-space: nowrap;
+}
+.ui-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ui-badge[data-level="high"] { color: var(--ats-high-ink); background: var(--ats-high-bg); }
+.ui-badge[data-level="medium"] { color: var(--ats-mid-ink); background: var(--ats-mid-bg); }
+.ui-badge[data-level="low"] { color: var(--ats-low-ink); background: var(--ats-low-bg); }
+.ui-tag {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; color: var(--accent-ink); background: var(--accent-wash);
+}
+
+/* ── Kopfleiste ───────────────────────────────────────────────────────────── */
+.ui-top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px 6px; flex-shrink: 0; position: relative; z-index: 200;
+  min-width: 0;
+}
+.ui-top-group { display: flex; align-items: center; gap: 4px; padding: 4px; min-width: 0; flex-shrink: 0; }
+.ui-wordmark {
+  font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink);
+  padding: 0 8px 0 10px; white-space: nowrap;
+}
+.ui-wordmark b { color: var(--accent-ink); font-weight: 700; }
+.ui-status { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: var(--t-sm); white-space: nowrap; padding: 0 6px; }
+.ui-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px oklch(0.51 0.11 145 / 0.16); flex-shrink: 0; transition: background-color var(--d3) var(--ease); }
+.ui-status[data-state="saving"] .ui-status-dot { background: oklch(0.56 0.06 60); box-shadow: 0 0 0 3px oklch(0.56 0.06 60 / 0.18); }
+.ui-status[data-state="error"] .ui-status-dot { background: var(--danger); box-shadow: 0 0 0 3px oklch(0.47 0.15 28 / 0.18); }
+.ui-split { display: inline-flex; align-items: stretch; border-radius: var(--r-pill); }
+.ui-split > .ui-btn:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); padding-left: 16px; }
+.ui-split > .ui-btn:last-child { border-radius: 0 var(--r-pill) var(--r-pill) 0; padding: 0 12px; box-shadow: inset 1px 0 0 oklch(1 0 0 / 0.18); }
+
+/* Enge Schreibtischbreiten: Textteile weichen, Bedienelemente bleiben.
+   Geprüft mit `scripts/headercheck.mjs` bei 1440 / 1280 / 1024 / 860. */
+@media (max-width: 1439px) { .ui-hide-2xl { display: none !important; } }
+@media (max-width: 1279px) { .ui-hide-xl { display: none !important; } }
+@media (max-width: 1099px) { .ui-hide-lg { display: none !important; } }
+@media (max-width: 1023px) { .ui-hide-md { display: none !important; } }
+
+/* ── Werkzeugschiene ──────────────────────────────────────────────────────── */
+.ui-rail { display: flex; flex-direction: column; gap: 4px; padding: 6px; width: 76px; align-self: center; flex-shrink: 0; }
+.ui-rail > button {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  min-height: 58px; padding: 8px 2px; border: 0; border-radius: 14px;
+  font: inherit; font-size: var(--t-xs); font-weight: 520; color: var(--ink-2);
+  background: transparent; cursor: pointer;
+  transition: background-color var(--d1) var(--ease), color var(--d1) var(--ease);
+}
+.ui-rail > button:hover { color: var(--ink); background: oklch(0.30 0.02 250 / 0.05); }
+.ui-rail > button[aria-expanded="true"] { color: var(--accent-ink); background: var(--accent-wash); font-weight: 620; }
+
+/* ── Paneel ───────────────────────────────────────────────────────────────── */
+.ui-panel {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  animation: ui-panel-in var(--d3) var(--ease);
+}
+@keyframes ui-panel-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+.ui-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 16px 16px 10px 20px; flex-shrink: 0;
+}
+.ui-panel-title { font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; margin: 0; color: var(--ink); }
+.ui-panel-meta { font-size: var(--t-xs); color: var(--ink-2); }
+.ui-panel-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.ui-section { padding: 12px 20px; }
+.ui-section + .ui-section { border-top: 1px solid var(--hair); }
+.ui-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--t-sm); font-weight: 600; color: var(--ink); margin: 0 0 8px; }
+.ui-label small { font-size: var(--t-xs); font-weight: 450; color: var(--ink-2); }
+.ui-hint { font-size: var(--t-xs); line-height: 1.5; color: var(--ink-2); }
+.ui-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  min-height: 46px; padding: 0 20px; border: 0; border-top: 1px solid var(--hair);
+  font: inherit; font-size: var(--t-sm); font-weight: 560; color: var(--ink);
+  background: transparent; cursor: pointer; text-align: left;
+}
+.ui-row:hover { background: oklch(0.30 0.02 250 / 0.04); }
+.ui-row small { font-weight: 450; color: var(--ink-2); font-size: var(--t-xs); }
+
+/* Filter-Chips */
+.ui-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ui-chip {
+  min-height: 30px; padding: 0 12px; border: 0; border-radius: var(--r-pill);
+  font: inherit; font-size: var(--t-sm); font-weight: 520; color: var(--ink-2);
+  background: oklch(1 0 0 / 0.75); box-shadow: var(--pill-shadow); cursor: pointer;
+}
+.ui-chip[aria-pressed="true"] { background: var(--ink); color: oklch(0.985 0.003 264); box-shadow: none; }
+
+/* Vorlagen-Karten mit echter Miniatur */
+.ui-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ui-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px 6px 10px; min-width: 0;
+  border: 0; border-radius: 14px; background: oklch(1 0 0 / 0.8);
+  box-shadow: var(--pill-shadow); cursor: pointer; text-align: left; font: inherit; color: var(--ink);
+  transition: transform var(--d2) var(--ease), box-shadow var(--d2) var(--ease);
+  content-visibility: auto; contain-intrinsic-size: auto 190px;
+}
+.ui-card:hover { transform: translateY(-2px); box-shadow: var(--pill-shadow), 0 10px 24px -14px oklch(0.25 0.03 250 / 0.4); }
+.ui-card[aria-checked="true"] { box-shadow: 0 0 0 2px var(--accent), 0 10px 24px -14px oklch(0.25 0.03 250 / 0.4); }
+.ui-card-thumb { position: relative; height: 112px; overflow: hidden; border-radius: 9px; background: oklch(0.97 0.004 264); box-shadow: inset 0 0 0 1px var(--hair); }
+.ui-card-name { font-weight: 620; font-size: var(--t-sm); padding: 0 6px; }
+.ui-card-meta { font-size: var(--t-xs); color: var(--ink-2); padding: 0 6px; line-height: 1.35; }
+.ui-card .ui-badge { margin: 2px 6px 0; align-self: flex-start; }
+
+/* Farbtupfer (Akzent, Papier) */
+.ui-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.ui-swatch {
+  width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer; padding: 0;
+  box-shadow: inset 0 0 0 1px oklch(0.30 0.02 250 / 0.16);
+}
+.ui-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px oklch(1 0 0), 0 0 0 4px var(--ink); }
+
+/* Leinwand */
+.ui-canvas { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ui-canvas-scroll { flex: 1; min-height: 0; overflow: auto; scroll-padding: 24px 0 120px; }
+.ui-canvas .cv-page { box-shadow: var(--page-shadow); }
+
+/* Karussell */
+.ui-carousel-bar { display: flex; align-items: center; gap: 10px; padding: 8px; }
+.ui-carousel-nav {
+  width: 44px; height: 44px; border: 0; border-radius: 50%; flex-shrink: 0;
+  background: oklch(1 0 0); box-shadow: var(--pill-shadow); cursor: pointer; color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ui-carousel-nav:hover { background: oklch(0.985 0.003 264); }
+.ui-neighbour {
+  position: absolute; top: 0; overflow: hidden; pointer-events: auto; cursor: pointer;
+  opacity: 0.42; transition: opacity var(--d3) var(--ease), transform var(--d3) var(--ease);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+}
+.ui-neighbour:hover { opacity: 0.6; }
+
+/* Telefon: untere Leiste */
+.ui-bottom-bar {
+  position: fixed; left: 12px; right: 12px; z-index: 300;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px;
+  border-radius: 22px;
+}
+.ui-bottom-bar > button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 56px; border: 0; border-radius: 16px; background: transparent; cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 560; color: var(--ink-2);
+}
+.ui-bottom-bar > button[aria-expanded="true"] { color: var(--accent-ink); background: var(--accent-wash); }
+.ui-bottom-bar > button.ui-bottom-primary { background: var(--ink); color: oklch(0.985 0.003 264); }
+.ui-bottom-bar > button.ui-bottom-primary[aria-expanded="true"] { background: oklch(0.32 0.03 264); }
+
+/* Telefon: Paneel über dem Dokument, zwischen Kopf und unterer Leiste */
+.ui-mobile-panel {
+  position: fixed; left: 8px; right: 8px; z-index: 250;
+  top: 64px; bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--float-solid); border-radius: 20px;
+  box-shadow: var(--float-ring), 0 18px 48px -16px oklch(0.25 0.03 250 / 0.35);
+  animation: ui-sheet-in var(--d3) var(--ease);
+}
+@keyframes ui-sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* Hinweis „Vorlage gewechselt · Rückgängig" */
+.ui-toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 2100;
+  display: flex; align-items: center; gap: 12px; max-width: min(92vw, 460px);
+  padding: 8px 8px 8px 16px; border-radius: var(--r-pill);
+  background: var(--ink); color: oklch(0.985 0.003 264); font-size: var(--t-sm);
+  box-shadow: 0 10px 30px -10px oklch(0.21 0.021 264 / 0.6);
+}
+.ui-toast button { color: oklch(0.86 0.09 264); background: transparent; border: 0; font: inherit; font-weight: 650; min-height: 36px; padding: 0 10px; border-radius: var(--r-pill); cursor: pointer; }
+
+/* Skills als Chips */
+.ui-chipinput {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  min-height: 44px; padding: 6px; border-radius: 10px;
+  background: #fff; box-shadow: inset 0 0 0 1px oklch(0.87 0.006 264);
+  cursor: text;
+}
+.ui-chipinput:focus-within { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-wash); }
+.ui-chipinput input {
+  flex: 1 1 120px; min-width: 120px; min-height: 30px; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 13.5px; color: var(--ink); padding: 0 4px;
+}
+.ui-skill {
+  display: inline-flex; align-items: center; gap: 2px; min-height: 30px; padding: 0 2px 0 10px;
+  border-radius: var(--r-pill); background: oklch(0.955 0.012 264); color: var(--ink);
+  font-size: 13px; font-weight: 500; max-width: 100%;
+}
+.ui-skill[data-marked="true"] { background: var(--ats-low-bg); color: var(--ats-low-ink); box-shadow: inset 0 0 0 1px currentColor; }
+.ui-skill > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-skill > button {
+  width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+  color: var(--ink-2); font-size: 15px; line-height: 1;
+}
+.ui-skill > button:hover { background: oklch(0.30 0.02 250 / 0.08); color: var(--ink); }
+
+/* Start-Wahl beim neuen Profil */
+.ui-start { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .ui-start { grid-template-columns: 1fr; } }
+.ui-start > button, .ui-start > label {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left;
+  min-height: 92px; padding: 14px; border-radius: 14px; border: 0; cursor: pointer;
+  background: #fff; box-shadow: var(--pill-shadow); font: inherit; color: var(--ink);
+}
+.ui-start > [aria-checked="true"] { box-shadow: 0 0 0 2px var(--accent); }
+.ui-start strong { font-size: var(--t-md); font-weight: 620; }
+.ui-start span { font-size: var(--t-xs); color: var(--ink-2); line-height: 1.45; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui *, .ui *::before, .ui *::after, .ui-menu, .ui-panel, .ui-mobile-panel, .ui-neighbour, .ui-card {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .ui-card:hover { transform: none; }
+}
+
+/* Bereiche, die ihre Breite noch selbst setzen (Tipps, Anschreiben-Formular,
+   Export), füllen im Paneel die Breite und verlieren ihre eigene Fläche. */
+.ui-panel-fill { display: flex; flex-direction: column; min-height: 0; }
+.ui-panel-fill > * {
+  width: 100% !important; max-width: 100% !important;
+  border-right: 0 !important; background: transparent !important;
+  flex: 1 1 auto; min-height: 0;
+}
+.ui-wordmark-short { display: none; }
+@media (max-width: 400px) {
+  .ui-wordmark-full { display: none; }
+  .ui-wordmark-short { display: inline; }
+}
+.ui-write-hint {
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%); z-index: 20;
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 14px;
+  font-family: var(--ui); font-size: var(--t-sm); line-height: 1.45; color: var(--ink-2); white-space: nowrap;
+}
+
+/* Aufklappbare Gruppen im Export-Paneel: eigener Pfeil, weil `display: flex`
+   den Standard-Marker der summary verschluckt. */
+.cv-export-group > summary { list-style: none; gap: 8px; }
+.cv-export-group > summary::-webkit-details-marker { display: none; }
+.cv-export-group > summary::after {
+  content: ''; width: 7px; height: 7px; margin-left: 2px;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--d2) var(--ease);
+}
+.cv-export-group[open] > summary::after { transform: rotate(45deg) translate(-2px, -2px); }
+.cv-sheet .ui-menu-item { min-height: 46px; }

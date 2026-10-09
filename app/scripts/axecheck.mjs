@@ -18,7 +18,7 @@ const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/
 const AXE = readFileSync('node_modules/axe-core/axe.min.js', 'utf8');
 
 const browser = await chromium.launch({ executablePath: EXECUTABLE });
-const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+let page = await browser.newPage({ viewport: { width: 1440, height: 950 }, locale: 'de-DE' });
 
 async function pruefe(name) {
   await page.evaluate(AXE);
@@ -76,12 +76,53 @@ await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(700);
 await page.click('text=/Try the demo|Demo ausprobieren|Demo starten|Direkt ausprobieren/');
 await page.waitForTimeout(2200);
-berichte.push(await pruefe('Editor · Bearbeiten'));
+berichte.push(await pruefe('Editor · Gestaltung (Start)'));
 
-for (const [knopf, name] of [[/^Vorschau$|^Preview$/, 'Editor · Vorschau'], [/^Export$/i, 'Editor · Export']]) {
-  await page.click(`text=${knopf}`);
-  await page.waitForTimeout(1400);
+/* Seit dem 08.10.2026: Leinwand mit Schiene, Paneelen und Export-Menü statt
+   der Reiter Bearbeiten / Vorschau / Export. Geprüft wird jeder Zustand, den
+   ein Mensch auf dem Weg zum PDF sieht — auch geöffnete Menüs. */
+const rail = async (name) => {
+  await page.click(`nav[aria-label="Werkzeuge"] button:has-text("${name}")`);
+  await page.waitForTimeout(900);
+};
+for (const [knopf, name] of [['Inhalt', 'Editor · Inhalt'], ['Prüfen', 'Editor · Prüfen'], ['Tipps', 'Editor · Tipps']]) {
+  await rail(knopf);
   berichte.push(await pruefe(name));
+}
+await page.click('header button[aria-label="Weitere Formate"]');
+await page.waitForTimeout(500);
+berichte.push(await pruefe('Editor · Export-Menü offen'));
+await page.click('[role="menu"] button:has-text("Alle Wege")');
+await page.waitForTimeout(900);
+berichte.push(await pruefe('Editor · Export-Paneel'));
+await page.click('header button[aria-label="Mehr"]');
+await page.waitForTimeout(400);
+berichte.push(await pruefe('Editor · „⋯"-Menü offen'));
+await page.keyboard.press('Escape');
+await rail('Gestaltung');
+await page.click('button.ui-row:has-text("Abschnitte ordnen")');
+await page.waitForTimeout(500);
+berichte.push(await pruefe('Editor · Abschnitte ordnen'));
+
+// Telefon
+const tel = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'de-DE' });
+{
+  const p0 = page;
+  page = tel;
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(700);
+  await page.click('text=/Try the demo|Demo ausprobieren|Demo starten|Direkt ausprobieren/');
+  await page.waitForTimeout(2200);
+  berichte.push(await pruefe('Telefon · Dokument'));
+  for (const [i, name] of [[0, 'Telefon · Inhalt'], [1, 'Telefon · Gestaltung'], [2, 'Telefon · Prüfen'], [3, 'Telefon · Export']]) {
+    await page.locator('nav.ui-bottom-bar button').nth(i).click();
+    await page.waitForTimeout(900);
+    berichte.push(await pruefe(name));
+  }
+  await page.click('header button:has-text("⋯")');
+  await page.waitForTimeout(500);
+  berichte.push(await pruefe('Telefon · Menü-Blatt'));
+  page = p0;
 }
 
 await browser.close();

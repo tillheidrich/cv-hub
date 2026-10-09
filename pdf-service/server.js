@@ -16,6 +16,7 @@ import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, B
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
 import { prunePhotos, startJanitor } from './janitor.js';
+import { accessInfo, requireWritable, isAccessExpired, startAccessNotices, MAX_ACCESS_DAYS } from './access.js';
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -215,6 +216,8 @@ function publicUser(u) {
   return {
     id: u.id, username: u.username, role: u.role, email: u.email ?? null,
     twofaEnabled: !!u.twofa_enabled, createdAt: u.created_at,
+    // Laufzeit des Kontos (Pilot). null = unbegrenzt. Siehe access.js.
+    access: accessInfo(u),
   };
 }
 
@@ -546,6 +549,7 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
     const { rows: cnt } = await client.query('SELECT count(*)::int AS n FROM users');
     const firstUser = cnt[0].n === 0;
     let role = 'user';
+    let accessDays = null;   // Laufzeit des Platzes aus dem Code (Pilot)
 
     if (firstUser) {
       role = 'admin'; // bootstrap: first account is the admin, no code needed
@@ -562,6 +566,7 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
         await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Dieser Einladungscode gilt nur für die E-Mail-Adresse, an die er geschickt wurde. Bitte genau diese Adresse angeben.' });
       }
+      if (Number.isInteger(code.access_days) && code.access_days > 0) accessDays = code.access_days;
     }
 
     // Erst NACH akzeptiertem Code (bzw. Bootstrap) auf Dubletten prüfen.
@@ -575,8 +580,9 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
 
     const hash = await bcrypt.hash(password, 10);
     const { rows: created } = await client.query(
-      'INSERT INTO users (username, password_hash, role, email, password_changed_at) VALUES ($1, $2, $3, $4, now()) RETURNING *',
-      [username, hash, role, email || null],
+      `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until)
+       VALUES ($1, $2, $3, $4, now(), now() + make_interval(days => $5::int)) RETURNING *`,
+      [username, hash, role, email || null, accessDays],
     );
     const user = created[0];
 
@@ -710,6 +716,14 @@ app.post('/api/auth/logout', async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
+});
+
+/* Dasselbe unter dem kürzeren Pfad, mit der Laufzeit zusätzlich oben.
+ * access: null = unbegrenzt; sonst { until, expired, daysLeft, notice,
+ * readOnly } — notice 'soon' ab 14 Tagen, 'final' ab 3 Tagen, 'expired'. */
+app.get('/api/me', requireAuth, (req, res) => {
+  const user = publicUser(req.user);
+  res.json({ user, access: user.access });
 });
 
 /* Passwortwechsel, Reset und Admin-Reset trennen ALLE Zugänge (Befund 2).
@@ -941,7 +955,7 @@ function imageMagicMatches(buf, mime) {
   return false;
 }
 
-app.post('/api/photos', requireAuth, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+app.post('/api/photos', requireAuth, requireWritable, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   const mime = String(req.body?.mime || '');
   const b64 = String(req.body?.dataBase64 || '');
   if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return res.status(400).json({ error: 'Nur JPEG, PNG, WebP oder GIF.' });
@@ -1037,7 +1051,7 @@ function recordShareView(token, variant, ua) {
   ).catch(() => {});
 }
 
-app.post('/api/resumes/:id/share', requireAuth, async (req, res) => {
+app.post('/api/resumes/:id/share', requireAuth, requireWritable, async (req, res) => {
   const id = req.params.id;
   const { rows } = await pool.query('SELECT 1 FROM resumes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
@@ -1052,6 +1066,7 @@ app.post('/api/resumes/:id/share', requireAuth, async (req, res) => {
     'INSERT INTO share_links (token, resume_id, created_by, expires_at, include_cover_letter, snapshot) VALUES ($1, $2, $3, $4, $5, $6)',
     [token, id, req.user.id, expiresAt, includeCl, snapshot],
   );
+  logEvent(req.user.id, 'share_create');
   /* Dieselbe Quelle wie für die E-Mail-Links (siehe publicBaseUrl): aus einem
    * gefälschten X-Forwarded-Host entstand sonst ein Teilen-Link, der den
    * Empfänger auf einen fremden Server schickt. Ist keine Basis-URL bekannt,
@@ -1086,7 +1101,7 @@ app.post('/api/shares/:token/revoke', requireAuth, async (req, res) => {
 /* Den festen Stand eines Links auf den aktuellen Stand des Profils bringen —
  * für den Fall, dass der Inhaber nach dem Verschicken noch etwas korrigiert
  * hat und denselben Link behalten will. */
-app.post('/api/shares/:token/refresh', requireAuth, async (req, res) => {
+app.post('/api/shares/:token/refresh', requireAuth, requireWritable, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT r.payload FROM share_links s JOIN resumes r ON r.id = s.resume_id
       WHERE s.token = $1 AND s.created_by = $2`,
@@ -1103,6 +1118,8 @@ app.post('/api/shares/:token/refresh', requireAuth, async (req, res) => {
 app.patch('/api/shares/:token', requireAuth, async (req, res) => {
   const includeCl = req.body?.includeCoverLetter;
   if (typeof includeCl !== 'boolean') return res.status(400).json({ error: 'includeCoverLetter (bool) erwartet.' });
+  // Nach Ablauf darf ein Link nur weniger zeigen, nicht mehr.
+  if (includeCl && isAccessExpired(req.user)) return requireWritable(req, res, () => {});
   const r = await pool.query(
     'UPDATE share_links SET include_cover_letter = $1 WHERE token = $2 AND created_by = $3',
     [includeCl, req.params.token, req.user.id],
@@ -1246,7 +1263,7 @@ app.get(/^\/api\/resumes\/([^/]+)\.md$/, requireAuth, async (req, res) => {
 // Import a corrected Markdown back into the user's profile (auth)
 // Pass dryRun:true to receive the parsed payload without persisting — used by
 // the Diff-Preview modal in the client.
-app.post('/api/resumes/:id/import-md', requireAuth, async (req, res) => {
+app.post('/api/resumes/:id/import-md', requireAuth, requireWritable, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 20) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
@@ -1273,7 +1290,7 @@ app.get(/^\/api\/resumes\/([^/]+)\/cover-letter\.md$/, requireAuth, async (req, 
   res.type('text/markdown; charset=utf-8').send(clToMarkdown(rows[0].payload, wantedLang(req.query.lang)));
 });
 
-app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, async (req, res) => {
+app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 10) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
@@ -1315,7 +1332,7 @@ app.get('/api/resumes/:id/versions/:vid', requireAuth, async (req, res) => {
   res.json({ version: rows[0] });
 });
 
-app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, async (req, res) => {
+app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, requireWritable, async (req, res) => {
   if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
   const { rows } = await pool.query(
     `SELECT v.payload FROM resume_versions v
@@ -1359,7 +1376,7 @@ app.get('/api/resumes/:id', requireAuth, async (req, res) => {
  *  resumes long before they make a dent. */
 const MAX_RESUMES_PER_USER = 50;
 
-app.post('/api/resumes', requireAuth, async (req, res) => {
+app.post('/api/resumes', requireAuth, requireWritable, async (req, res) => {
   const id = String(req.body?.id || crypto.randomUUID());
   // Profil-IDs sind kurz und schlicht (App: Base36, MCP: UUID). Alles andere
   // ist kein Profil, sondern ein Versuch.
@@ -1404,7 +1421,7 @@ app.post('/api/resumes', requireAuth, async (req, res) => {
   res.json({ id });
 });
 
-app.put('/api/resumes/:id', requireAuth, async (req, res) => {
+app.put('/api/resumes/:id', requireAuth, requireWritable, async (req, res) => {
   const displayName = String(req.body?.displayName || 'Profil').slice(0, 120);
   const payload = req.body?.payload;
   if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
@@ -1422,7 +1439,7 @@ app.put('/api/resumes/:id', requireAuth, async (req, res) => {
  *
  * PUT verlangt den vollständigen Payload — wer bloß den Namen ändern will,
  * müsste das ganze Profil durchreichen und könnte es dabei beschädigen. */
-app.patch('/api/resumes/:id', requireAuth, async (req, res) => {
+app.patch('/api/resumes/:id', requireAuth, requireWritable, async (req, res) => {
   const displayName = String(req.body?.displayName || '').trim().slice(0, 120);
   if (!displayName) return res.status(400).json({ error: 'displayName fehlt.' });
   const { rowCount } = await pool.query(
@@ -1519,9 +1536,13 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
         await client.query('DELETE FROM access_requests WHERE lower(email) = $1', [email]);
         await client.query('UPDATE invite_codes SET email = NULL, note = NULL WHERE lower(email) = $1', [email]);
       }
+      /* Nur Codes für genau eine Person tragen deren Namen in der Notiz. Ein
+       * Code mit mehreren Plätzen (Pilot) trägt den Namen des Pakets — der
+       * gehört nicht zur löschenden Person und bleibt stehen. */
       await client.query(
         `UPDATE invite_codes SET email = NULL, note = NULL
-          WHERE code IN (SELECT code FROM invite_redemptions WHERE user_id = $1)`,
+          WHERE code IN (SELECT code FROM invite_redemptions WHERE user_id = $1)
+            AND (max_uses <= 1 OR email IS NOT NULL)`,
         [req.user.id],
       );
       await client.query('DELETE FROM events WHERE user_id = $1', [req.user.id]);
@@ -1542,6 +1563,20 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
   }
 });
 
+// ── Ereignisse aus dem Browser ──────────────────────────────────────────────
+/* DOCX und das Druck-PDF entstehen ganz im Browser; der Server erfährt davon
+ * nichts. Für die Auswertung je Einladungscode meldet das Frontend sie hier.
+ * Nur angemeldet, nur die Arten aus der Liste, gespeichert wird Art und
+ * Zeitpunkt am Konto, sonst nichts. Für die Demo ohne Konto gibt es diesen
+ * Weg nicht. Auch nach Ablauf der Laufzeit erlaubt: Exportieren bleibt. */
+const CLIENT_EVENTS = new Set(['docx', 'pdf_local', 'share_create']);
+app.post('/api/events', rateLimit({ route: 'events', max: 120, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+  const kind = String(req.body?.kind || '');
+  if (!CLIENT_EVENTS.has(kind)) return res.status(400).json({ error: 'Unbekannte Ereignisart.' });
+  logEvent(req.user.id, kind);
+  res.status(204).end();
+});
+
 // ── Admin ───────────────────────────────────────────────────────────────────
 
 app.post('/api/admin/invites', requireAuth, requireAdmin, async (req, res) => {
@@ -1553,6 +1588,15 @@ app.post('/api/admin/invites', requireAuth, requireAdmin, async (req, res) => {
   const expiresAt = Number.isFinite(days) && days > 0
     ? new Date(Date.now() + days * 86400 * 1000)
     : null;
+  /* Laufzeit je Platz (Pilot). Leer = unbegrenzt. Nicht zu verwechseln mit
+   * expiresInDays: das begrenzt nur, bis wann der Code eingelöst werden kann. */
+  let accessDays = null;
+  if (req.body?.accessDays !== undefined && req.body?.accessDays !== null && req.body?.accessDays !== '') {
+    accessDays = parseInt(req.body.accessDays, 10);
+    if (!Number.isInteger(accessDays) || accessDays < 1 || accessDays > MAX_ACCESS_DAYS) {
+      return res.status(400).json({ error: `Laufzeit je Platz: 1 bis ${MAX_ACCESS_DAYS} Tage oder leer für unbegrenzt.` });
+    }
+  }
   let code;
   for (let i = 0; i < 6; i++) {
     code = generateCode();
@@ -1560,18 +1604,18 @@ app.post('/api/admin/invites', requireAuth, requireAdmin, async (req, res) => {
     if (!rowCount) break;
   }
   await pool.query(
-    'INSERT INTO invite_codes (code, created_by, note, max_uses, expires_at, email) VALUES ($1, $2, $3, $4, $5, $6)',
-    [code, req.user.id, note, maxUses, expiresAt, email || null],
+    'INSERT INTO invite_codes (code, created_by, note, max_uses, expires_at, email, access_days) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [code, req.user.id, note, maxUses, expiresAt, email || null, accessDays],
   );
   // Onboarding-Automatik: wenn eine E-Mail angegeben ist, Einladung direkt versenden.
   let emailed = false;
   if (email) { const m = tplInvite({ code, note }); emailed = await sendMail({ to: email, ...m }); }
-  res.json({ code, maxUses, note, expiresAt, email: email || null, emailed });
+  res.json({ code, maxUses, note, expiresAt, accessDays, email: email || null, emailed });
 });
 
 app.get('/api/admin/invites', requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.code, c.note, c.max_uses, c.uses, c.expires_at, c.revoked, c.created_at,
+    `SELECT c.code, c.note, c.max_uses, c.uses, c.expires_at, c.access_days, c.revoked, c.created_at,
             u.username AS created_by
        FROM invite_codes c LEFT JOIN users u ON u.id = c.created_by
       ORDER BY c.created_at DESC`,
@@ -1614,8 +1658,9 @@ app.post('/api/admin/access-requests/:id/reject', requireAuth, requireAdmin, asy
 
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_seen_at,
-            (SELECT count(*)::int FROM resumes r WHERE r.user_id = u.id) AS resume_count
+    `SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_seen_at, u.access_until,
+            (SELECT count(*)::int FROM resumes r WHERE r.user_id = u.id) AS resume_count,
+            (SELECT ir.code FROM invite_redemptions ir WHERE ir.user_id = u.id ORDER BY ir.redeemed_at LIMIT 1) AS invite_code
        FROM users u ORDER BY u.created_at ASC`,
   );
   res.json({ users: rows });
@@ -1660,6 +1705,88 @@ app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async
   let notified = false;
   if (target.email) notified = await sendMail({ to: target.email, ...tplPasswordResetByAdmin({ username: target.username }) });
   res.json({ ok: true, revoked, notified });
+});
+
+/* Laufzeit eines Kontos ändern (Pilot).
+ *
+ *   { days: 30 }            verlängert ab dem späteren von heute und dem
+ *                           bisherigen Ende — ein abgelaufenes Konto läuft
+ *                           also ab heute 30 Tage, ein laufendes 30 Tage
+ *                           über sein Ende hinaus.
+ *   { until: "2027-03-31" } setzt das Ende auf diesen Tag; gespeichert wird
+ *                           Mitternacht UTC des Folgetags, damit der
+ *                           genannte Tag ganz zählt.
+ *   { until: null }         unbegrenzt.
+ *
+ * Die Hinweis-Mails werden zurückgesetzt, damit sie zum neuen Ende wieder
+ * kommen. Ein unbegrenztes Konto lässt sich nicht „um 30 Tage verlängern" —
+ * das wäre in Wahrheit eine Begrenzung und braucht ein Datum. */
+app.post('/api/admin/users/:id/access', requireAuth, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Ungültige Nutzer-ID.' });
+  const { rows: cur } = await pool.query('SELECT id, role, access_until FROM users WHERE id = $1', [id]);
+  if (!cur[0]) return res.status(404).json({ error: 'Nutzer nicht gefunden.' });
+  if (cur[0].role === 'admin') return res.status(400).json({ error: 'Admin-Konten haben keine Laufzeit.' });
+  const body = req.body || {};
+  let rows;
+  if (body.days !== undefined) {
+    const days = parseInt(body.days, 10);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_ACCESS_DAYS) {
+      return res.status(400).json({ error: `Verlängerung: 1 bis ${MAX_ACCESS_DAYS} Tage.` });
+    }
+    if (!cur[0].access_until) return res.status(409).json({ error: 'Dieses Konto ist unbegrenzt. Für eine Begrenzung ein Enddatum setzen.' });
+    ({ rows } = await pool.query(
+      `UPDATE users SET access_until = greatest(access_until, now()) + make_interval(days => $2::int),
+                        access_notice14_at = NULL, access_notice3_at = NULL
+        WHERE id = $1 RETURNING access_until`,
+      [id, days],
+    ));
+  } else if (Object.prototype.hasOwnProperty.call(body, 'until')) {
+    let until = null;
+    if (body.until !== null && body.until !== '') {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(body.until));
+      const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + 1)) : null;
+      if (!d || Number.isNaN(d.getTime())) return res.status(400).json({ error: 'Enddatum im Format JJJJ-MM-TT.' });
+      until = d;
+    }
+    ({ rows } = await pool.query(
+      'UPDATE users SET access_until = $2, access_notice14_at = NULL, access_notice3_at = NULL WHERE id = $1 RETURNING access_until',
+      [id, until],
+    ));
+  } else {
+    return res.status(400).json({ error: 'Erwartet: { days } oder { until }.' });
+  }
+  logEvent(req.user.id, 'admin_access_change');
+  res.json({ ok: true, accessUntil: rows[0].access_until });
+});
+
+/* Auswertung je Einladungscode — der Messpunkt des Pilots (Startup-Bericht,
+ * Empfehlung): eingelöste Plätze, aktive Nutzer, Nutzer mit Export.
+ *
+ * Nur Zählungen. Keine Namen, keine Inhalte, keine Ereignis-Zeitpunkte je
+ * Person. „Aktiv" heißt: in den letzten 14 Tagen irgendeine angemeldete
+ * Anfrage (last_seen_at, auch über MCP). „Eingelöst" ist der Zähler am Code
+ * und enthält auch Konten, die inzwischen gelöscht sind; „Konten" sind die,
+ * die es noch gibt. Exporte, die ganz im Browser entstehen (DOCX, Druck-PDF),
+ * kennt der Server nur, wenn das Frontend sie über POST /api/events meldet. */
+app.get('/api/admin/invite-stats', requireAuth, requireAdmin, async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.code, c.note, c.max_uses, c.uses AS redeemed, c.access_days, c.expires_at, c.revoked, c.created_at,
+            count(u.id)::int AS accounts,
+            count(u.id) FILTER (WHERE u.last_seen_at > now() - interval '14 days')::int AS active14d,
+            count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM events e WHERE e.user_id = u.id AND e.kind IN ('pdf', 'pdf_local')))::int AS with_pdf,
+            count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM events e WHERE e.user_id = u.id AND e.kind = 'docx'))::int AS with_docx,
+            count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM events e WHERE e.user_id = u.id AND e.kind IN ('pdf', 'pdf_local', 'docx')))::int AS with_export,
+            count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM events e WHERE e.user_id = u.id AND e.kind = 'share_create')
+                                  OR EXISTS (SELECT 1 FROM share_links s WHERE s.created_by = u.id))::int AS with_share,
+            count(u.id) FILTER (WHERE u.access_until IS NOT NULL AND u.access_until <= now())::int AS expired
+       FROM invite_codes c
+       LEFT JOIN invite_redemptions r ON r.code = c.code
+       LEFT JOIN users u ON u.id = r.user_id
+      GROUP BY c.code
+      ORDER BY c.created_at DESC`,
+  );
+  res.json({ codes: rows });
 });
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
@@ -1868,6 +1995,11 @@ initDb()
   .then(() => {
     // Aufräumen beim Start und danach täglich (janitor.js).
     if (process.env.JANITOR !== '0') startJanitor(pool);
+    // Hinweis-Mails vor Ablauf der Laufzeit (access.js), alle 6 Stunden.
+    if (process.env.ACCESS_NOTICES !== '0') {
+      const base = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null;
+      startAccessNotices(pool, { base });
+    }
     console.log(`pdf: Renderer löst nur diese Hosts auf: ${RENDER_HOSTS.join(', ') || '(keine)'}`);
     app.listen(port, () => console.log(`cv-api listening on :${port}`));
   })

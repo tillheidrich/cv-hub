@@ -67,6 +67,7 @@ async function underflow(label) {
     document.querySelectorAll('main *, [role="main"] *').forEach(el => {
       const b = el.getBoundingClientRect();
       if (b.height < 200 || b.width < W * 0.4) return;        // nur tragende Flächen
+      if (b.right <= 0) return;                                // Messexemplar weit links außerhalb
       if (b.left > 4) return;                                  // beginnt nicht links: eingerückt, kein Befund
       /* Schwelle: 10 % der Fensterbreite.
          Nicht gegriffen, sondern gemessen. Der behobene Fehler war ein Streifen
@@ -84,12 +85,17 @@ async function underflow(label) {
   r.forEach(x => problems.push(`${label}: füllt die Breite nicht — ${x}`));
 }
 
-const tab = async (i) => { await page.locator('nav button').nth(i).click(); await page.waitForTimeout(2200); };
+/* Seit dem 08.10.2026 startet das Telefon im Dokument („Ganze Seite").
+ * Die untere Leiste öffnet Inhalt · Gestaltung · Prüfen · Export als Paneel
+ * über dem Dokument; derselbe Knopf noch einmal schließt es wieder. */
+const tab = async (i) => { await page.locator('nav.ui-bottom-bar button').nth(i).click(); await page.waitForTimeout(1600); };
+const zumDokument = async () => {
+  const offen = page.locator('.ui-mobile-panel:visible button[aria-label="Paneel schließen"]');
+  if (await offen.count()) { await offen.first().click(); await page.waitForTimeout(700); }
+};
 
-await overflow('Bearbeiten');
-await underflow('Bearbeiten');
-await tab(1);
-await overflow('Vorschau');
+await overflow('Dokument');
+await underflow('Dokument');
 
 // Wird das Dokument auf die Bildschirmbreite skaliert?
 const fit = await page.evaluate(() => {
@@ -99,8 +105,8 @@ const fit = await page.evaluate(() => {
   const r = pg.getBoundingClientRect();
   return { breite: Math.round(r.width), fenster: window.innerWidth, transform: getComputedStyle(w).transform };
 });
-if (!fit) problems.push('Vorschau: keine Seite gerendert');
-else if (fit.breite > fit.fenster) problems.push(`Vorschau: Seite ${fit.breite} px breit bei ${fit.fenster} px Bildschirm — nicht skaliert`);
+if (!fit) problems.push('Dokument: keine Seite gerendert');
+else if (fit.breite > fit.fenster) problems.push(`Dokument: Seite ${fit.breite} px breit bei ${fit.fenster} px Bildschirm — nicht skaliert`);
 
 // Passt der Inhalt in die Seite, oder wird er unten abgeschnitten?
 const clip = await page.evaluate(() => {
@@ -113,11 +119,14 @@ const clip = await page.evaluate(() => {
   });
   return Math.round(worst);
 });
-if (clip > 1) problems.push(`Vorschau: Inhalt ragt ${clip} px unter die Seitenkante — wird abgeschnitten`);
+if (clip > 1) problems.push(`Dokument: Inhalt ragt ${clip} px unter die Seitenkante — wird abgeschnitten`);
 
 // Leerlauf im Bildlauf: `transform: scale()` verkleinert die Darstellung, nicht
 // die Layout-Maße. Wird das nicht abgefangen, lässt sich die Vorschau über
-// hunderte Pixel Nichts nach unten ziehen.
+// hunderte Pixel Nichts nach unten ziehen. Umgekehrt (Befund vom 08.10.2026,
+// beim Umbau gefunden): streckt ein Flex-Kasten die Vorschau auf seine eigene
+// skalierte Höhe, schaukelt sich die Messung auf null herunter — dann ist der
+// Kasten viel KLEINER als die Seiten. Beide Richtungen.
 const leerlauf = await page.evaluate(() => {
   const w = document.querySelector('.cv-scale-wrapper');
   if (!w) return null;
@@ -128,57 +137,16 @@ const leerlauf = await page.evaluate(() => {
   const unten = Math.max(...seiten.map(p => p.getBoundingClientRect().bottom));
   const oben = el.getBoundingClientRect().top - el.scrollTop;
   const gebraucht = (unten - oben) + parseFloat(getComputedStyle(el).paddingBottom || '0');
-  // Ein Kasten ist nie kleiner als sein Sichtfenster — das ist kein Leerlauf.
-  return Math.round(el.scrollHeight - Math.max(el.clientHeight, gebraucht));
+  const seitenH = seiten.reduce((a, p) => a + p.getBoundingClientRect().height, 0);
+  return { leer: Math.round(el.scrollHeight - Math.max(el.clientHeight, gebraucht)), kasten: Math.round(w.parentElement.getBoundingClientRect().height), seitenH: Math.round(seitenH) };
 });
-if (leerlauf !== null && leerlauf > 120)
-  problems.push(`Vorschau: ${leerlauf} px leerer Bildlauf unter dem Dokument`);
-
-// Ist die Bereichsleiste vollständig sichtbar, und kommt man an das letzte
-// Formularfeld heran? Das war der Befund vom 12.09.: `100vh` ist in iOS Safari
-// die große Ansichtshöhe, die untersten rund 50 px lagen hinter der
-// Browserleiste — und damit genau die Bereichsleiste.
-await tab(0);
-const chrome = await page.evaluate(async () => {
-  const nav = document.querySelector('nav');
-  if (!nav) return { fehler: 'keine Bereichsleiste' };
-  const nr = nav.getBoundingClientRect();
-  const shell = document.querySelector('.cv-app-shell');
-  const sr = shell ? shell.getBoundingClientRect() : null;
-  // Letztes Feld im Bearbeiten-Bereich ansteuern
-  const area = [...document.querySelectorAll('div')].find(d => {
-    const cs = getComputedStyle(d);
-    return cs.overflowY === 'auto' && d.querySelector('input, textarea');
-  });
-  let feldUnten = null;
-  if (area) {
-    area.scrollTop = area.scrollHeight;
-    await new Promise(r => setTimeout(r, 250));
-    const felder = [...area.querySelectorAll('input, textarea')];
-    const last = felder[felder.length - 1];
-    if (last) feldUnten = Math.round(last.getBoundingClientRect().bottom);
-  }
-  return {
-    navUnten: Math.round(nr.bottom), navOben: Math.round(nr.top),
-    fenster: window.innerHeight,
-    shellUnten: sr ? Math.round(sr.bottom) : null,
-    feldUnten,
-  };
-});
-if (process.env.VERBOSE) console.log('   · Rahmen:', JSON.stringify(chrome));
-if (chrome.fehler) problems.push(`Bereichsleiste: ${chrome.fehler}`);
-else {
-  if (chrome.navUnten > chrome.fenster + 1)
-    problems.push(`Bereichsleiste endet bei ${chrome.navUnten} px, Fenster ist ${chrome.fenster} px hoch — sie liegt unter dem sichtbaren Bereich`);
-  if (chrome.shellUnten !== null && chrome.shellUnten > chrome.fenster + 1)
-    problems.push(`App-Rahmen ist ${chrome.shellUnten - chrome.fenster} px höher als das Fenster`);
-  if (chrome.feldUnten !== null && chrome.feldUnten > chrome.navOben + 1)
-    problems.push(`letztes Formularfeld endet bei ${chrome.feldUnten} px, die Bereichsleiste beginnt bei ${chrome.navOben} px — es liegt darunter`);
-}
+if (leerlauf !== null && leerlauf.leer > 120)
+  problems.push(`Dokument: ${leerlauf.leer} px leerer Bildlauf unter dem Dokument`);
+if (leerlauf !== null && leerlauf.kasten < leerlauf.seitenH * 0.9)
+  problems.push(`Dokument: der Kasten ist ${leerlauf.kasten} px hoch, die Seiten ${leerlauf.seitenH} px — sie werden abgeschnitten`);
 
 // Schreiben im Dokument: hineintippen, zoomen, tippen, verlassen — und
 // nachsehen, ob der Text im Dokument steht.
-await tab(1);
 const fitScaleErwartet = Math.min(1, (width - 24 - 24) / 793.7);
 const feld = page.locator('.cv-scale-wrapper [data-cv-edit]').first();
 if (await feld.count()) {
@@ -193,8 +161,6 @@ if (await feld.count()) {
   });
   if (process.env.VERBOSE) console.log('   · Schreiben:', pfad, JSON.stringify(zoom));
   if (zoom.fokus !== pfad) problems.push(`Schreiben: Tipp auf „${pfad}" setzt den Schreibzeiger nicht ins Feld (fokussiert: ${zoom.fokus})`);
-  // Nicht „kein Transform" ist die Anforderung, sondern ein lesbarer Maßstab:
-  // auf einem Tablet passt die Seite ohnehin fast in voller Größe hinein.
   const m = zoom.transform === 'none' ? 1 : Number((zoom.transform.match(/matrix\(([-\d.]+)/) || [])[1] || 1);
   if (m < 0.85) problems.push(`Schreiben: Dokument steht beim Hineintippen auf ${Math.round(m * 100)} % — darunter ist eine Textzeile keine sieben Pixel hoch`);
   await page.keyboard.type(' Prüftext');
@@ -213,16 +179,84 @@ if (await feld.count()) {
   if (m >= 0.85 && mz < m - 0.01) { /* war nie gezoomt — nichts zu prüfen */ }
   else if (mz > 0.99 && fitScaleErwartet < 0.85) problems.push('Schreiben: nach dem Verlassen bleibt das Dokument in voller Größe — die Übersicht kommt nicht zurück');
 } else {
-  problems.push('Schreiben: kein beschreibbares Feld in der Vorschau gefunden');
+  problems.push('Schreiben: kein beschreibbares Feld im Dokument gefunden');
 }
 
-// Kopfleiste: Passt alles hinein, und lassen sich die drei Auswahlblätter
-// öffnen, ohne verdeckt zu werden? Befund vom 12.09.: Das Blatt „Vorlage
-// wählen" lag im `<header>`, und der war ein waagerecht scrollbarer Kasten —
-// WebKit begrenzt `position: fixed` darin, das Blatt war auf die Leiste
-// beschnitten. Chromium tut das nicht, deshalb prüfen wir hier die Ursache
-// (Scrollbreite, Portal) statt des Symptoms.
+// Wischen wechselt die Vorlage — nur waagerecht, mit „Rückgängig".
+{
+  const vorher = await page.evaluate(() => document.querySelector('[data-carousel]')?.textContent || '');
+  await page.evaluate(() => {
+    const el = document.querySelector('.cv-scale-wrapper');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const y = r.top + 200;
+    const t0 = new Touch({ identifier: 1, target: el, clientX: 300, clientY: y });
+    const t1 = new Touch({ identifier: 1, target: el, clientX: 120, clientY: y + 10 });
+    el.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [t0], changedTouches: [t0] }));
+    el.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [t1] }));
+  });
+  await page.waitForTimeout(900);
+  const nachher = await page.evaluate(() => document.querySelector('[data-carousel]')?.textContent || '');
+  const undo = page.locator('.ui-toast button', { hasText: /Rückgängig|Undo|Annuler|Deshacer/ });
+  if (vorher === nachher) problems.push('Wischen: die Vorlage wechselt nicht');
+  else if (!(await undo.count())) problems.push('Wischen: kein „Rückgängig" nach dem Vorlagenwechsel');
+  else {
+    await undo.first().click();
+    await page.waitForTimeout(700);
+    const zurueck = await page.evaluate(() => document.querySelector('[data-carousel]')?.textContent || '');
+    if (zurueck !== vorher) problems.push('Wischen: „Rückgängig" stellt die vorige Vorlage nicht wieder her');
+  }
+}
+
+// Inhalt: Formular erreichbar, letzte Zeile über der Leiste. Befund vom 12.09.:
+// `100vh` ist in iOS Safari die große Ansichtshöhe, die untersten rund 50 px
+// lagen hinter der Browserleiste — und damit genau die Bereichsleiste.
 await tab(0);
+await overflow('Inhalt');
+const chrome = await page.evaluate(async () => {
+  const nav = document.querySelector('nav.ui-bottom-bar');
+  if (!nav) return { fehler: 'keine Bereichsleiste' };
+  const nr = nav.getBoundingClientRect();
+  const shell = document.querySelector('.cv-app-shell');
+  const sr = shell ? shell.getBoundingClientRect() : null;
+  const panel = [...document.querySelectorAll('.ui-mobile-panel')].find(p => getComputedStyle(p).display !== 'none');
+  const area = panel && [...panel.querySelectorAll('div')].find(d => {
+    const cs = getComputedStyle(d);
+    return cs.overflowY === 'auto' && d.querySelector('input, textarea');
+  });
+  let feldUnten = null;
+  if (area) {
+    area.scrollTop = area.scrollHeight;
+    await new Promise(r => setTimeout(r, 250));
+    const felder = [...area.querySelectorAll('input, textarea')].filter(f => f.getBoundingClientRect().height > 0);
+    const last = felder[felder.length - 1];
+    if (last) feldUnten = Math.round(last.getBoundingClientRect().bottom);
+  }
+  return {
+    navUnten: Math.round(nr.bottom), navOben: Math.round(nr.top),
+    fenster: window.innerHeight,
+    shellUnten: sr ? Math.round(sr.bottom) : null,
+    feldUnten, panel: !!panel,
+  };
+});
+if (process.env.VERBOSE) console.log('   · Rahmen:', JSON.stringify(chrome));
+if (chrome.fehler) problems.push(`Bereichsleiste: ${chrome.fehler}`);
+else {
+  if (!chrome.panel) problems.push('Inhalt: Paneel öffnet nicht');
+  if (chrome.navUnten > chrome.fenster + 1)
+    problems.push(`Bereichsleiste endet bei ${chrome.navUnten} px, Fenster ist ${chrome.fenster} px hoch — sie liegt unter dem sichtbaren Bereich`);
+  if (chrome.shellUnten !== null && chrome.shellUnten > chrome.fenster + 1)
+    problems.push(`App-Rahmen ist ${chrome.shellUnten - chrome.fenster} px höher als das Fenster`);
+  if (chrome.feldUnten !== null && chrome.feldUnten > chrome.navOben + 1)
+    problems.push(`letztes Formularfeld endet bei ${chrome.feldUnten} px, die Bereichsleiste beginnt bei ${chrome.navOben} px — es liegt darunter`);
+}
+await zumDokument();
+
+// Kopfleiste: Passt alles hinein, und öffnet das Menü-Blatt im Portal? Befund
+// vom 12.09.: Ein Blatt lag im `<header>`, und der war ein waagerecht
+// scrollbarer Kasten — WebKit begrenzt `position: fixed` darin, das Blatt war
+// auf die Leiste beschnitten. Chromium tut das nicht, deshalb prüfen wir hier
+// die Ursache (Scrollbreite, Portal) statt des Symptoms.
 const kopf = await page.evaluate(() => {
   const h = document.querySelector('header');
   return h ? { ueberhang: h.scrollWidth - h.clientWidth, rechts: Math.round(h.getBoundingClientRect().right) } : null;
@@ -230,61 +264,52 @@ const kopf = await page.evaluate(() => {
 if (!kopf) problems.push('Kopfleiste: nicht gefunden');
 else if (kopf.ueberhang > 2) problems.push(`Kopfleiste scrollt waagerecht (${kopf.ueberhang} px zu breit) — Einträge liegen außerhalb des Sichtfelds`);
 
-for (const [name, sel] of [['Vorlage', 'header button:has(span)'], ['Schrift', 'Aa'], ['Menü', '⋯']]) {
-  const btn = name === 'Vorlage'
-    /* Der Knopf trägt den Namen der aktiven Vorlage. Die Demo startet seit
-     * dem 08.10.2026 mit Espoo statt Hamburg — die Liste kommt deshalb aus
-     * der Vorlagenregistrierung, nicht aus einer Aufzählung hier. */
-    ? page.locator('header button').filter({ hasText: new RegExp((await page.evaluate(async () => (await import('/src/templates/theme.ts')).PICKABLE_THEMES.map(t => t.name))).join('|')) }).first()
-    : page.locator('header button', { hasText: sel }).first();
-  if (!(await btn.count())) { problems.push(`${name}: Schaltfläche fehlt in der Kopfleiste`); continue; }
-  await btn.click();
-  await page.waitForTimeout(500);
-  const res = await page.evaluate(() => {
-    const sh = document.querySelector('.cv-sheet');
-    if (!sh) return { fehlt: true };
-    const r = sh.getBoundingClientRect();
-    // Unterste Zeile antippbar? Wäre das Blatt beschnitten oder überdeckt,
-    // träfe der Test etwas anderes.
-    const probe = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.bottom - 24));
-    return {
-      imHeader: !!sh.closest('header'),
-      obenAb: Math.round(r.top), untenAb: Math.round(r.bottom), fenster: window.innerHeight,
-      erreichbar: sh.contains(probe),
-    };
-  });
-  if (res.fehlt) problems.push(`${name}: Blatt öffnet nicht`);
+{
+  const btn = page.locator('header button', { hasText: '⋯' }).first();
+  if (!(await btn.count())) problems.push('Menü: Schaltfläche fehlt in der Kopfleiste');
   else {
-    if (res.imHeader) problems.push(`${name}: Blatt hängt in der Kopfleiste statt im Portal — WebKit beschneidet es dort`);
-    if (!res.erreichbar) problems.push(`${name}: die unterste Zeile des Blatts ist verdeckt`);
-    if (res.untenAb > res.fenster + 1 || res.obenAb < -1) problems.push(`${name}: Blatt liegt außerhalb des Fensters (${res.obenAb}…${res.untenAb} bei ${res.fenster} px)`);
+    await btn.click();
+    await page.waitForTimeout(500);
+    const res = await page.evaluate(() => {
+      const sh = document.querySelector('.cv-sheet');
+      if (!sh) return { fehlt: true };
+      const r = sh.getBoundingClientRect();
+      const probe = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.bottom - 24));
+      return {
+        imHeader: !!sh.closest('header'),
+        obenAb: Math.round(r.top), untenAb: Math.round(r.bottom), fenster: window.innerHeight,
+        erreichbar: sh.contains(probe),
+      };
+    });
+    if (res.fehlt) problems.push('Menü: Blatt öffnet nicht');
+    else {
+      if (res.imHeader) problems.push('Menü: Blatt hängt in der Kopfleiste statt im Portal — WebKit beschneidet es dort');
+      if (!res.erreichbar) problems.push('Menü: die unterste Zeile des Blatts ist verdeckt');
+      if (res.untenAb > res.fenster + 1 || res.obenAb < -1) problems.push(`Menü: Blatt liegt außerhalb des Fensters (${res.obenAb}…${res.untenAb} bei ${res.fenster} px)`);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(350);
   }
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(350);
 }
 
-// Dokumenttyp: Auf dem Telefon war zwischen Lebenslauf und Anschreiben gar
-// nicht umzuschalten — die Umschaltung stand nur im Schreibtisch-Zweig.
-const menue = page.locator('header button', { hasText: '⋯' }).first();
-if (await menue.count()) {
-  await menue.click();
-  await page.waitForTimeout(500);
-  const typen = await page.locator('.cv-sheet button').filter({ hasText: /Anschreiben|Cover Letter|Lettre|Carta/ }).count();
-  if (!typen) problems.push('Menü: Anschreiben ist auf dem Telefon nicht erreichbar');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(350);
+// Dokumenttyp: Lebenslauf/Anschreiben steht direkt in der Kopfleiste.
+const typen = await page.locator('header button').filter({ hasText: /Anschreiben|Cover Letter|Lettre|Carta/ }).count();
+if (!typen) problems.push('Kopfleiste: Anschreiben ist auf dem Telefon nicht erreichbar');
+
+// Gestaltung, Prüfen (mit Tipps), Export: jedes Paneel einmal öffnen.
+for (const [i, name] of [[1, 'Gestaltung'], [2, 'Prüfen'], [3, 'Export']]) {
+  await tab(i);
+  const lage = await page.evaluate(() => {
+    const p = [...document.querySelectorAll('.ui-mobile-panel')].find(x => getComputedStyle(x).display !== 'none');
+    if (!p) return null;
+    const r = p.getBoundingClientRect();
+    return { oben: Math.round(r.top), unten: Math.round(r.bottom), fenster: window.innerHeight };
+  });
+  if (!lage) problems.push(`${name}: Paneel öffnet nicht`);
+  else if (lage.unten > lage.fenster + 1 || lage.oben < -1) problems.push(`${name}: Paneel liegt außerhalb des Fensters`);
+  await overflow(name);
+  if (i < 3) await zumDokument();
 }
-
-await tab(2);
-await overflow('Export');
-await underflow('Export');
-
-/* Tipps war bis heute gar nicht Teil des Prüflaufs — derselbe blinde Fleck:
-   geprüft wurde, was man beim Bauen vor Augen hatte. */
-await tab(3);
-await overflow('Tipps');
-await underflow('Tipps');
-await tab(2);
 
 // Tippziele
 const small = await page.evaluate(() => {

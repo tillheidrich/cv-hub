@@ -30,7 +30,31 @@ page.on('pageerror', e => errors.push(String(e).slice(0, 200)));
 
 const results = [];
 const check = (ok, label, detail = '') => { results.push(ok); console.log(`${ok ? '✓' : '✗'} ${label}${detail ? '  ' + detail : ''}`); };
-const profiles = () => page.evaluate(() => JSON.parse(localStorage.getItem('appstudio-profiles-v2') || '[]'));
+/* Seit 08.10.2026 liegen die Profile des Lokalmodus in IndexedDB
+ * (data/localDb.ts), Fotos als Verweis `idbphoto:<schlüssel>` daneben. Gelesen
+ * wird direkt aus der Datenbank — also das, was wirklich gespeichert ist, nicht
+ * der Zwischenspeicher der App. Vorher kurz warten, bis das Schreiben im
+ * Hintergrund durch ist. */
+const profiles = async () => {
+  await page.waitForTimeout(300);
+  return page.evaluate(async () => {
+    const db = await new Promise((res, rej) => { const r = indexedDB.open('cv-hub-local'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const all = store => new Promise((res, rej) => { const q = db.transaction(store).objectStore(store).getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    const order = await new Promise(res => { const q = db.transaction('meta').objectStore('meta').get('order'); q.onsuccess = () => res(q.result || []); q.onerror = () => res([]); });
+    const [recs, photos] = [await all('profiles'), await all('photos')];
+    db.close();
+    const url = {};
+    for (const p of photos) {
+      if (typeof p.text === 'string') { url[p.key] = p.text; continue; }
+      const u8 = new Uint8Array(p.bytes); let bin = '';
+      for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      url[p.key] = `data:${p.mime};base64,${btoa(bin)}`;
+    }
+    const pos = new Map(order.map((id, i) => [id, i]));
+    return recs.sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9))
+      .map(r => JSON.parse(r.json, (_k, v) => (typeof v === 'string' && v.startsWith('idbphoto:') ? (url[v.slice(9)] ?? '') : v)));
+  });
+};
 
 let pdfBody = null;
 await page.route('**/api/pdf', async route => {
@@ -39,7 +63,10 @@ await page.route('**/api/pdf', async route => {
 });
 
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-await page.evaluate(() => localStorage.clear());
+await page.evaluate(async () => {
+  localStorage.clear();
+  await new Promise(res => { const r = indexedDB.deleteDatabase('cv-hub-local'); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+});
 await page.reload({ waitUntil: 'networkidle' });
 await page.getByRole('button', { name: 'Direkt ausprobieren' }).first().click();
 await page.waitForTimeout(1500);
@@ -67,6 +94,8 @@ const jpeg = await page.evaluate(() => {
   return btoa(bin);
 });
 check(Buffer.from(jpeg, 'base64').includes('GPSLatitude'), 'Testfoto trägt eine GPS-Markierung (Gegenprobe)');
+// Seit der neuen Oberfläche (08.10.2026) liegt das Formular hinter der Schiene „Inhalt".
+if (await page.getByRole('button', { name: 'Inhalt', exact: true }).count()) await page.getByRole('button', { name: 'Inhalt', exact: true }).first().click().catch(() => {});
 await page.getByRole('button', { name: 'Persönlich' }).first().click().catch(() => {});
 await page.locator('input[type=file][accept="image/jpeg,image/png,image/webp"]').setInputFiles({ name: 'handy.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
 await page.getByRole('button', { name: 'Übernehmen' }).click();
