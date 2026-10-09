@@ -4,9 +4,10 @@ import type { UiLang } from '../ui/i18n';
 import { api } from '../data/api';
 import { track } from '../data/track';
 import './landing.css';
-import { BILLING_I18N } from '../ui/i18n/billing';
 import { PricingCards } from '../billing/PricingPage';
-import { priceOf } from '../billing/format';
+import { billingFor, priceOf } from '../billing/format';
+import { freeTierLimited } from '../billing/freeTier';
+import { FREETIER_I18N } from '../ui/i18n/freetier';
 import { useOffer, salesOpen } from '../billing/hooks';
 import { PATHS, linkClick } from '../billing/route';
 import { cancelUi } from '../billing/legalTexts';
@@ -34,6 +35,9 @@ interface Props {
  * Landing spricht editorial-blue, der Editor spricht weiter Terracotta.
  * Der Bruch ist beabsichtigt: Marketing-Seite ≠ App-Chrome.
  */
+/** Position der Frage „Wie komme ich rein?" in COPY[*].faq.items. */
+const FAQ_ACCESS_INDEX = 1;
+
 export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChange, onLegal }: Props) {
   /* Smooth-Scroll für die internen #vorlagen/#funktion/#faq-Anchor */
   useEffect(() => {
@@ -44,8 +48,11 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
   }, []);
 
   const t = COPY[lang] ?? DE;
-  const bt = BILLING_I18N[lang];
   const { offer } = useOffer();
+  /* Gratis-Grenze: Preisabschnitt und die FAQ „Wie komme ich rein?" folgen
+   * dem Schalter am Server; ohne ihn bleiben die bisherigen Texte. */
+  const bt = billingFor(lang, offer);
+  const limited = freeTierLimited(offer);
   const [requestOpen, setRequestOpen] = useState(false);
   const openRequest = () => { track('request_open'); setRequestOpen(true); };
   const goSignIn = () => { track('signin_click'); onSignIn(); };
@@ -291,12 +298,16 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <h2>{t.faq.h}</h2>
             </div>
             <div className="lp-faq-grid">
-              {t.faq.items.map((q, i) => (
-                <details key={i} className="lp-qa" open={i === 0}>
+              {t.faq.items.map((q0, i) => {
+                // Index 1 ist in allen vier Sprachen „Wie komme ich rein?".
+                const q = limited && i === FAQ_ACCESS_INDEX ? FREETIER_I18N[lang].landingFaqAccess : q0;
+                return (
+                <details key={i} className="lp-qa" open={i === 0} data-faq={i === FAQ_ACCESS_INDEX ? 'access' : undefined}>
                   <summary>{q.q} <span className="lp-sign" aria-hidden></span></summary>
                   <div className="lp-ans">{q.a}</div>
                 </details>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>

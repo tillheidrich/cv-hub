@@ -3,6 +3,24 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-09, free-tier limits)
+
+Mirrored diff-based (`git merge-file`, base = the private tool's previous
+revision). The JSON-LD FAQ count (32) was already in place here.
+
+- **Off by default.** `FREE_TIER_LIMITS` is not passed by `docker-compose.yml`;
+  `.env.example` documents it as optional and commented out. Without it, or
+  without a paid mode that is ready to sell, `freeTier.limited` is `false` and
+  nothing is locked.
+- **Source link in one place.** `SOURCE_REPO_URL` (`app/src/data/urls.ts`)
+  points to this public repository and now drives the imprint (DE/EN, which
+  used to name a `git.example.com` placeholder) and the "self-host" note on
+  the pricing page. Operators of a modified version set their own repository
+  there. The landing-page footer keeps no source link, as before.
+- **Neutralized:** comments no longer attribute the decision to a person;
+  `freetiercheck.mjs` uses `CV-Hub` as product name and the `cv-hub-local`
+  IndexedDB. `legal-texts.json` regenerated with `sync-legal.mjs`.
+
 ## Done (2026-10-09, six new templates)
 
 Mirrored diff-based (`git merge-file`, base = the private tool's previous

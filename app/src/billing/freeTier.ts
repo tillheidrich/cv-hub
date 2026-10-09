@@ -1,0 +1,202 @@
+/**
+ * Gratis-Grenze (09.10.2026, optional, standardmäßig aus).
+ *
+ * „Ein PDF bleibt gratis, Word, Anschreiben, weitere Fassungen und Sprachen
+ * kommen in den Pass." Die Grenze greift NUR, wenn der Server sie meldet
+ * (`GET /api/billing/offer` → `freeTier.limited`, Env `FREE_TIER_LIMITS=1`
+ * bei verkaufsbereitem Dienst). Fehlt das Angebot (offline, Fehler, selbst
+ * gehostet ohne Bezahlwege), ist nichts gesperrt.
+ *
+ * Wer hat alles frei: jeder mit aktivem Zugang (Pass, Gutschein-Zeitzugang,
+ * dauerhafter Gratiszugang, Pilot, Bestandskonto „unlimited", Admin).
+ * Abgelaufener Zugang: Bearbeiten ist ohnehin gesperrt (Nur-Lesen), Export
+ * bleibt vollständig, auch Word — so steht es in AGB und Ablauf-Mail. Konto
+ * ohne je einen Zugang (`none` ohne Datum): Grenzen wie ohne Konto.
+ *
+ * Bestand: Was schon da ist, bleibt nutzbar — bestehende Fassungen und
+ * Sprachen mit eigenem Inhalt lassen sich weiter öffnen, bearbeiten und als
+ * PDF exportieren, ein schon geschriebenes Anschreiben ebenso. Gesperrt ist
+ * nur das Anlegen von Neuem. Beispielinhalte (Demo „Lena Brandt", das
+ * vorbelegte Musteranschreiben, leere Fassungen) zählen nicht als Bestand.
+ *
+ * Durchsetzen lässt sich das im Browser nicht (Word entsteht dort, der Code
+ * ist offen). Das ist bewusst so: eine Angebotsgrenze, keine Sicherheitsgrenze.
+ * Die Oberfläche sperrt aber an allen Wegen gleich.
+ */
+import { createContext, useContext } from 'react';
+import type { AuthUser } from '../data/api';
+import type { AppProfile, CVData, CoverLetterData, Lang } from '../data/types';
+import { ALL_LANGS } from '../data/labels';
+import { createBlankProfile, createDemoProfile, DEFAULT_COVER_LETTERS } from '../data/storage';
+import type { FreeTierKey } from '../ui/i18n/freetier';
+import type { Offer } from './api';
+
+export type { FreeTierKey } from '../ui/i18n/freetier';
+
+/** Meldet der Server die Grenze? Nur bei offenem Verkauf. */
+export function freeTierLimited(offer: Offer | null | undefined): boolean {
+  return !!offer && offer.enabled === true && offer.freeTier?.limited === true;
+}
+
+/** Zugangsstufe eines Nutzers: `full` = alles, `export` = abgelaufen (lesen
+ *  und alles exportieren), `none` = ohne Konto oder nie einen Zugang gehabt. */
+export type AccessLevel = 'full' | 'export' | 'none';
+
+export function accessLevel(user: AuthUser | null | undefined, localMode: boolean): AccessLevel {
+  if (localMode || !user) return 'none';
+  if (user.role === 'admin') return 'full';
+  const p = user.plan;
+  // Dienst ohne Plan-Modell: der alte Pilot-Weg entscheidet.
+  if (!p) return user.access?.expired || user.access?.readOnly ? 'export' : 'full';
+  if (p.kind === 'unlimited' || p.kind === 'lifetime') return 'full';
+  if ((p.kind === 'pass' || p.kind === 'pilot') && p.notice !== 'expired') return 'full';
+  // Abgelaufen (Pass, Gutschein-Zeit, Pilot): kind 'none' MIT Datum oder notice 'expired'.
+  if (p.until) return 'export';
+  return 'none';
+}
+
+/* ── Bestand erkennen ────────────────────────────────────────────────────── */
+
+/** Der Teil eines Lebenslaufs, den man schreibt. Kontakt und Name gehören
+ *  nicht dazu: sie werden beim Anlegen und beim Sprachwechsel bewusst in alle
+ *  Sprachen übernommen (storage.ts, `carryContactToLang`). */
+function bodySig(cv: CVData | undefined): string {
+  if (!cv) return '';
+  return JSON.stringify([
+    cv.profile?.text ?? '', cv.experience ?? [], cv.education ?? [], cv.skillGroups ?? [], cv.languages ?? [],
+    cv.additionalExperience ?? [], cv.projects ?? [], cv.certificates ?? [], cv.volunteering ?? [],
+    cv.publications ?? [], cv.customSections ?? [],
+  ]);
+}
+const EMPTY_BODY = bodySig({ profile: { text: '' }, experience: [], education: [], skillGroups: [], languages: [] } as unknown as CVData);
+
+let samples: { body: Set<string>; demo: Record<Lang, string> } | null = null;
+/** Inhalte, die nicht als eigener Bestand zählen: leere Fassung und Demo. */
+function sampleSigs() {
+  if (samples) return samples;
+  const blank = createBlankProfile('');
+  const demo = createDemoProfile('');
+  const body = new Set<string>([EMPTY_BODY]);
+  const demoFull = {} as Record<Lang, string>;
+  for (const l of ALL_LANGS) {
+    body.add(bodySig(blank.data[l]));
+    body.add(bodySig(demo.data[l]));
+    demoFull[l] = fullSig(demo.data[l]);
+  }
+  samples = { body, demo: demoFull };
+  return samples;
+}
+function fullSig(cv: CVData | undefined): string {
+  if (!cv) return '';
+  const { labels: _l, ...rest } = cv;
+  void _l;
+  return JSON.stringify(rest);
+}
+
+/** Sprachen eines Profils mit eigenem, geschriebenem Inhalt. */
+export function ownLangs(p: AppProfile | null | undefined): Lang[] {
+  if (!p) return [];
+  const s = sampleSigs();
+  return ALL_LANGS.filter(l => {
+    const sig = bodySig(p.data?.[l]);
+    return !!sig && !s.body.has(sig);
+  });
+}
+
+/**
+ * Darf die Dokumentsprache auf `target` wechseln (Grenze aktiv, kein Zugang)?
+ *
+ * - Noch nichts Eigenes geschrieben: jede Sprache, die Wahl ist frei.
+ * - Eigener Inhalt in genau einer Sprache (auch wenn er in andere Sprachen
+ *   kopiert wurde): diese Sprache; ein Wechsel woanders hin legt eine zweite
+ *   Sprache an und ist Teil des Passes.
+ * - Eigener, verschiedener Inhalt in mehreren Sprachen (Bestand): zwischen
+ *   diesen frei hin und her.
+ */
+export function langAllowedFor(p: AppProfile | null | undefined, target: Lang): boolean {
+  if (!p) return true;
+  const cur = p.settings.lang;
+  if (target === cur) return true;
+  const own = ownLangs(p);
+  if (!own.length) return true;
+  if (!own.includes(target)) return false;
+  const distinct = new Set(own.map(l => bodySig(p.data[l])));
+  if (distinct.size >= 2) return true;
+  // Eine eigene Sprache: zurück dorthin geht immer, ein Wechsel auf eine Kopie nicht.
+  return !own.includes(cur);
+}
+
+/** Ist das Profil unverändert die Demo (zählt nicht als eigene Fassung)? */
+export function isPristineDemo(p: AppProfile): boolean {
+  const s = sampleSigs();
+  return ALL_LANGS.every(l => fullSig(p.data?.[l]) === s.demo[l]);
+}
+
+/** Eigene Fassungen: alles außer der unveränderten Demo. */
+export function ownProfileCount(profiles: AppProfile[]): number {
+  return profiles.filter(p => !isPristineDemo(p)).length;
+}
+
+/** Ein schon geschriebenes Anschreiben in dieser Sprache (nicht das
+ *  vorbelegte Muster, nicht leer)? Das Datum zählt nicht mit — es steht beim
+ *  Anlegen auf dem Tag des Anlegens. */
+export function hasOwnCoverLetter(p: AppProfile | null | undefined, lang: Lang): boolean {
+  const cl = p?.coverLetters?.[lang];
+  if (!cl) return false;
+  const strip = (c: CoverLetterData) => { const { date: _d, ...rest } = c; void _d; return rest; };
+  const mine = strip(cl);
+  if (!Object.values(mine).some(v => typeof v === 'string' && v.trim())) return false;
+  const def = DEFAULT_COVER_LETTERS[lang];
+  return JSON.stringify(mine) !== JSON.stringify(strip(def));
+}
+
+/* ── Zustand für die Oberfläche ──────────────────────────────────────────── */
+
+export interface FreeTier {
+  /** Server meldet die Grenze. */
+  limited: boolean;
+  /** Alles frei (keine Grenze oder aktiver Zugang). */
+  full: boolean;
+  /** Word-Export erlaubt. */
+  docx: boolean;
+  /** Anschreiben für die aktive Fassung und Sprache (bearbeiten und exportieren). */
+  coverLetter: boolean;
+  /** Neue Fassung anlegen, duplizieren, als neues Profil importieren. */
+  addProfile: boolean;
+  /** Dokumentsprache wechseln. */
+  langAllowed: (l: Lang) => boolean;
+  /** Preiszeile für die Hinweise; leer ohne Angebot. */
+  priceLine: string;
+  /** Freischalt-Paneel für eine Funktion öffnen. */
+  open: (k: FreeTierKey) => void;
+}
+
+export const FREE_TIER_OPEN: FreeTier = {
+  limited: false, full: true, docx: true, coverLetter: true, addProfile: true,
+  langAllowed: () => true, priceLine: '', open: () => {},
+};
+
+export function computeFreeTier(o: {
+  offer: Offer | null; user: AuthUser | null; localMode: boolean;
+  profiles: AppProfile[]; active: AppProfile | null; lang: Lang;
+  priceLine: string; open: (k: FreeTierKey) => void;
+}): FreeTier {
+  const limited = freeTierLimited(o.offer);
+  if (!limited) return { ...FREE_TIER_OPEN, open: o.open };
+  const level = accessLevel(o.user, o.localMode);
+  if (level === 'full') return { ...FREE_TIER_OPEN, limited, open: o.open };
+  const exportAll = level === 'export';
+  return {
+    limited,
+    full: false,
+    docx: exportAll,
+    coverLetter: exportAll || hasOwnCoverLetter(o.active, o.lang),
+    addProfile: ownProfileCount(o.profiles) === 0,
+    langAllowed: l => exportAll || langAllowedFor(o.active, l),
+    priceLine: o.priceLine,
+    open: o.open,
+  };
+}
+
+export const FreeTierContext = createContext<FreeTier>(FREE_TIER_OPEN);
+export function useFreeTier(): FreeTier { return useContext(FreeTierContext); }

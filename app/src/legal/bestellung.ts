@@ -114,7 +114,7 @@ export interface OrderTexts {
 }
 
 export const BESTELLUNG: Bilingual<OrderTexts> = {
-  version: '2026-10-09',
+  version: '2026-10-09.2',
   de: {
     start: {
       restriction: 'Den Pass können Privatpersonen aus Deutschland und den anderen Ländern der Europäischen Union kaufen, Unternehmen nur mit Sitz in Deutschland.',
@@ -135,13 +135,16 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
       featuresTitle: 'Das schaltet der Pass frei:',
       features: [
+        'Word-Export (DOCX), gestaltet und als ATS-Fassung',
+        'Anschreiben erstellen, bearbeiten und exportieren',
+        'Mehrere Fassungen und alle vier Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch)',
         'Lebensläufe, Anschreiben und Fotos auf unserem Server in Deutschland speichern und von mehreren Geräten aus bearbeiten',
         'Sharelinks zum Teilen eines Lebenslaufs, jederzeit widerrufbar',
         'Frühere Versionen am Server wiederherstellen',
         'KI-Programme per MCP verbinden',
         'API-Schlüssel für eigene Programme',
       ],
-      freeStays: 'Alle Vorlagen, PDF-, Word- und ATS-Export bleiben auch ohne Pass kostenlos.',
+      freeStays: 'Alle Vorlagen und das PDF Ihres Lebenslaufs (auch als ATS-Fassung) bleiben ohne Pass kostenlos. Nach dem Ende des Passes können Sie weiter alles exportieren, auch als Word-Datei.',
       priceLabel: 'Preis',
       priceValue: '{{PRICE}} einmalig',
       priceNote: 'Endpreis. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. Keine weiteren Kosten.',
@@ -221,13 +224,16 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – application pass, {{DAYS}} days',
       featuresTitle: 'The pass unlocks:',
       features: [
+        'Word export (DOCX), designed and as the ATS version',
+        'Create, edit and export cover letters',
+        'Several versions and all four document languages (German, English, French, Spanish)',
         'Save CVs, cover letters and photos on our server in Germany and edit them from several devices',
         'Share links to share a CV, revocable at any time',
         'Restore earlier versions from the server',
         'Connect AI programs via MCP',
         'API keys for your own programs',
       ],
-      freeStays: 'All templates, PDF, Word and ATS exports stay free without a pass.',
+      freeStays: 'All templates and the PDF of your CV (also as the ATS version) stay free without a pass. After the pass ends you can still export everything, including as a Word file.',
       priceLabel: 'Price',
       priceValue: '{{PRICE}} once',
       priceNote: 'Final price. No VAT is charged under § 19 of the German VAT Act (small business scheme). No further costs.',

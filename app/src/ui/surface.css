@@ -437,3 +437,36 @@
 .ui-access-banner[data-notice="final"], .ui-access-banner[data-notice="expired"] { background: oklch(0.96 0.025 30); box-shadow: inset 0 0 0 1px oklch(0.84 0.06 30); color: oklch(0.36 0.09 30); }
 .ui-access-banner > span { flex: 1 1 260px; min-width: 0; }
 .ui-readonly-note { margin: 0 16px 10px 20px; padding: 9px 12px; border-radius: 10px; background: oklch(0.96 0.01 264); color: var(--ink-2); font-size: var(--t-xs); line-height: 1.5; }
+
+/* ── Gratis-Grenze (billing/PassLock.tsx) ─────────────────────────────────
+   Ruhig und vorher sichtbar: Schloss, Preiszeile, ein Link. Keine Warnfarbe. */
+.ft-note {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0;
+  font-family: var(--ui); font-size: var(--t-xs); line-height: 1.45; color: var(--ink-2);
+}
+.ft-note > svg { color: var(--ink-2); }
+.ft-note-text { flex: 1 1 180px; min-width: 0; }
+.ft-note-text strong { font-weight: 620; color: var(--ink); }
+.ft-more {
+  border: 0; background: transparent; padding: 0 2px; min-height: 32px; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px;
+}
+.ft-more:hover { text-decoration-thickness: 2px; }
+.ft-card {
+  margin: 4px 16px 12px 20px; padding: 16px; border-radius: 14px;
+  background: oklch(1 0 0 / 0.75); box-shadow: inset 0 0 0 1px var(--hair);
+  font-family: var(--ui); color: var(--ink-2);
+}
+.ft-card-title { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--t-md); font-weight: 640; color: var(--ink); }
+.ft-card-body { margin: 0; font-size: var(--t-sm); line-height: 1.55; }
+.ft-card-price { margin: 10px 0 0; font-size: var(--t-xs); font-weight: 600; color: var(--ink); }
+.ui-menu-item [data-lock], .ui-btn [data-lock] { color: currentColor; opacity: 0.8; }
+.ft-pill {
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%); z-index: 21;
+  width: max-content; max-width: calc(100% - 24px); padding: 0 6px 0 14px;
+}
+.ft-pill .ft-note { flex-wrap: nowrap; }
+.ft-pill .ft-note-text { flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ft-pill .ft-more { white-space: nowrap; }
+.ui-seg > button[data-locked] { display: inline-flex; align-items: center; }
+.ft-mobile-bar { padding: 2px 14px 6px; }

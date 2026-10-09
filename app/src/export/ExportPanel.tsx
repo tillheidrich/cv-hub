@@ -79,6 +79,8 @@ import { getTheme } from '../templates/theme';
 import { track } from '../data/track';
 import { DEFAULT_TEMPLATE } from '../data/storage';
 import { markdownToCvData, markdownToCoverLetter, clToMarkdown, isCvMarkdown, isClMarkdown } from '../import/markdownBridge';
+import { useFreeTier } from '../billing/freeTier';
+import { LockGlyph, PassNote } from '../billing/PassLock';
 
 interface ExportPanelProps {
   data: CVData;
@@ -260,8 +262,8 @@ const s = {
 };
 
 function ExportButton({
-  icon, label, sub, onClick, busy,
-}: { icon: IconName; label: string; sub: string; onClick: () => void; busy?: boolean }) {
+  icon, label, sub, onClick, busy, locked,
+}: { icon: IconName; label: string; sub: string; onClick: () => void; busy?: boolean; locked?: boolean }) {
   const [hover, setHover] = useState(false);
   const t = EXP_I18N[useUiLang()];
   return (
@@ -272,8 +274,9 @@ function ExportButton({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={s.exportBtn(hover)}
+      data-locked={locked || undefined}
     >
-      <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : <Icon name={icon} />}</div>
+      <div style={s.btnIcon}>{busy ? <span className="cv-spin" /> : locked ? <LockGlyph size={15} /> : <Icon name={icon} />}</div>
       <div>
         <div style={s.btnLabel}>{label}</div>
         <div style={s.btnSub}>{busy ? t.buttonBusy : sub}</div>
@@ -306,6 +309,16 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const snap = SHARE_SNAPSHOT_I18N[uiLang];
   /** Word entsteht im Browser — gezählt wird es nur über dieses Ereignis. */
   const docxEvent = () => { if (!demoMode) void api.event('docx'); };
+  /* Gratis-Grenze (billing/freeTier.ts): Word und das Anschreiben zeigen ohne
+   * Pass vorher das Schloss und die Preiszeile; ein Klick öffnet das
+   * Freischalt-Paneel. PDF des Lebenslaufs und Datenexporte bleiben frei. */
+  const ft = useFreeTier();
+  const wordLocked = !ft.docx;
+  const coverLocked = docType === 'cover-letter' && !ft.coverLetter;
+  const word = (variant: 'ats' | 'design') => {
+    if (wordLocked) { ft.open('docx'); return; }
+    track(variant === 'ats' ? 'export_docx_ats' : 'export_docx'); docxEvent(); void exportDocx(data, exportConfig, variant);
+  };
   const [atsPdfState, setAtsPdfState] = useState<{ busy?: boolean; text?: string; error?: boolean }>({});
   async function handleAtsPdf() {
     if (!onAtsPdf || atsPdfState.busy) return;
@@ -672,6 +685,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const [pdfErrMsg, setPdfErrMsg] = useState<string | null>(null);
   const [pdfDone, setPdfDone] = useState<string | null>(null);
   async function handlePdf() {
+    if (coverLocked) { ft.open('coverLetter'); return; }
     setPdfErrMsg(null);
     setPdfDone(null);
     // Ein Klick, ein Download — kein Druckdialog. Der PDF-Endpunkt bedient auch
@@ -751,8 +765,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         >
           {pdfState === 'busy'
             ? <><span className="cv-spin" aria-hidden /> {t.pdfBuilding}</>
-            : <><span>↓</span> {t.pdfDownload(docWord)}</>}
+            : <>{coverLocked ? <LockGlyph size={14} /> : <span>↓</span>} {t.pdfDownload(docWord)}</>}
         </button>
+        {coverLocked && <PassNote feature="coverLetter" style={{ marginTop: '8px' }} />}
         <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'var(--ink-3)', lineHeight: 1.55, marginTop: '8px', fontFamily: 'inherit' }}>
           {pdfState === 'error'
             ? t.pdfFailed(pdfErrMsg || t.pdfUnknownError)
@@ -797,9 +812,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <div style={s.sectionLabel}>{d.secPortals}</div>
             <ExportButton
               icon="file-text"
-              label={atsLevel && atsLevel !== 'high' ? `${d.wordAts} · ${d.recommended}` : d.wordAts}
-              sub={d.wordAtsSub}
-              onClick={() => { track('export_docx_ats'); docxEvent(); exportDocx(data, exportConfig, 'ats'); }}
+              label={atsLevel && atsLevel !== 'high' && !wordLocked ? `${d.wordAts} · ${d.recommended}` : d.wordAts}
+              sub={wordLocked ? ft.priceLine : d.wordAtsSub}
+              locked={wordLocked}
+              onClick={() => word('ats')}
             />
             {onAtsPdf && (
               <>
@@ -825,21 +841,22 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <>
             <ExportButton
               icon="globe" label={d.clHtml}
-              sub={t.clHtmlSub}
-              onClick={() => coverLetter && exportCoverLetterHtml(data, coverLetter, exportConfig)}
+              sub={coverLocked ? ft.priceLine : t.clHtmlSub} locked={coverLocked}
+              onClick={() => { if (coverLocked) { ft.open('coverLetter'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); }}
             />
             <ExportButton
               icon="markdown" label={d.clMd}
-              sub={d.mdSub}
-              onClick={downloadCoverLetterMd}
+              sub={coverLocked ? ft.priceLine : d.mdSub} locked={coverLocked}
+              onClick={() => { if (coverLocked) { ft.open('coverLetter'); return; } downloadCoverLetterMd(); }}
             />
           </>
         ) : (
           <>
             <ExportButton
               icon="file-text" label={d.wordDesign}
-              sub={t.docxSub}
-              onClick={() => { track('export_docx'); docxEvent(); exportDocx(data, exportConfig, 'design'); }}
+              sub={wordLocked ? ft.priceLine : t.docxSub}
+              locked={wordLocked}
+              onClick={() => word('design')}
             />
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
                 Was der Browserdruck aus einer HTML-Datei macht, entscheidet
@@ -911,7 +928,8 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       )}
 
       {/* ── Import ──────────────────────────────────────────────────────── */}
-      {resumeId && (
+      {/* Anschreiben ohne Pass: auch kein Import hinein (das wäre Bearbeiten). */}
+      {resumeId && !coverLocked && (
         <>
           <div style={s.divider} />
           <div style={s.section}>

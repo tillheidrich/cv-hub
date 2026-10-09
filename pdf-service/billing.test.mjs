@@ -219,6 +219,7 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
       SELLER_EMAIL: 'verkauf@example.org',
       SELLER_PHONE: '+49 000 000000',
       OPEN_REGISTRATION: '1',
+      FREE_TIER_LIMITS: '1',
       ALTCHA_HMAC_KEY: 'altcha-test-key-0123456789abcdef',
       ALTCHA_COST: '10',
       ALTCHA_COUNTER_MIN: '5',
@@ -322,6 +323,28 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
       { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, openRegistration: true },
     );
     assert.match(o.vatNote, /§ 19 UStG/);
+    assert.deepEqual(o.freeTier, { limited: true }, 'FREE_TIER_LIMITS=1 bei verkaufsbereitem Dienst');
+  });
+
+  test('Gratis-Grenze nur mit FREE_TIER_LIMITS und verkaufsbereitem Dienst', () => {
+    const full = {
+      BILLING_ENABLED: '1', MOLLIE_API_KEY: 'test_x', SELLER_NAME: 'S', SELLER_ADDRESS: 'A 1 | 12345 B',
+      SELLER_EMAIL: 's@example.org', SELLER_PHONE: '0', PUBLIC_BASE_URL: 'https://cv.example.org',
+      TERMS_VERSION: 'x', ALTCHA_HMAC_KEY: 'k',
+    };
+    const offerOf = env => createBilling({ pool: null, config: billingConfig(env), renderPdf: async () => Buffer.alloc(0) }).offer();
+    // Heutiger Produktionsstand (Verkauf aus) und selbst gehostet: alles frei.
+    assert.deepEqual(offerOf({}).freeTier, { limited: false });
+    assert.deepEqual(offerOf({ FREE_TIER_LIMITS: '1' }).freeTier, { limited: false }, 'ohne Verkauf keine Grenze');
+    assert.deepEqual(offerOf({ ...full, BILLING_ENABLED: '0', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
+    // Verkauf an, aber Pflichtangabe fehlt: nicht bereit, also keine Grenze.
+    assert.deepEqual(offerOf({ ...full, TERMS_VERSION: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
+    // Verkauf bereit, Schalter aus: frei wie bisher.
+    assert.deepEqual(offerOf(full).freeTier, { limited: false });
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '0' }).freeTier, { limited: false });
+    // Beides: Grenze an.
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '1' }).freeTier, { limited: true });
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: 'true' }).freeTier, { limited: true });
   });
 
   test('Bestandskonten bleiben unbegrenzt, Pilot bleibt Pilot; Unbegrenzte können keinen Pass kaufen', async () => {

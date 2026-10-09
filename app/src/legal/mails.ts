@@ -40,7 +40,7 @@ export interface MailTexts {
 }
 
 export const MAILS: Bilingual<MailTexts> = {
-  version: '2026-10-09',
+  version: '2026-10-09.2',
   de: {
     orderConfirmation: {
       subject: 'Bestellbestätigung {{ORDER_NO}} – Ihr Bewerbungs-Pass für {{PRODUCT_NAME}}',
@@ -52,7 +52,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Bestellnummer: {{ORDER_NO}}',
         'Vertragsschluss: {{ORDER_DATE}}',
         'Produkt: {{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
-        'Leistungen: Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
+        'Leistungen: Word-Export (gestaltet und als ATS-Fassung), Anschreiben, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
         'Preis: {{PRICE}} einmalig (Endpreis; gemäß § 19 UStG wird keine Umsatzsteuer berechnet)',
         'Pass gültig bis: {{PASS_UNTIL}}',
         'Ende: automatisch, kein Abo, keine Verlängerung, keine weitere Abbuchung',
@@ -166,7 +166,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Order number: {{ORDER_NO}}',
         'Contract concluded: {{ORDER_DATE}}',
         'Product: {{PRODUCT_NAME}} – application pass, {{DAYS}} days',
-        'Features: storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
+        'Features: Word export (designed and as the ATS version), cover letters, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
         'Price: {{PRICE}} once (final price; no VAT charged under § 19 UStG)',
         'Pass valid until: {{PASS_UNTIL}}',
         'End: automatic, no subscription, no renewal, no further charge',

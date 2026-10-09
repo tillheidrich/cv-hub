@@ -32,6 +32,10 @@ export interface Offer {
   openRegistration?: boolean;
   /** Optional: Zahlungsarten, die im Mollie-Konto freigeschaltet sind. */
   paymentMethods?: string[];
+  /** Gratis-Grenze (09.10.2026, Env FREE_TIER_LIMITS): `limited: true` =
+   *  ohne aktiven Zugang nur das PDF, eine Fassung, eine Sprache. Fehlt das
+   *  Feld (älterer Dienst, selbst gehostet), ist nichts begrenzt. */
+  freeTier?: { limited: boolean };
 }
 
 export type OrderStatus =

@@ -13,6 +13,9 @@ import { APP_NAME } from '../brand';
 import { FASSUNG_I18N } from '../ui/i18n/fassung';
 import { BILLING_I18N } from '../ui/i18n/billing';
 import { SiteFooter } from '../billing/BillingShell';
+import { useFreeTier } from '../billing/freeTier';
+import { LockGlyph, PassNote } from '../billing/PassLock';
+import { FREETIER_I18N } from '../ui/i18n/freetier';
 
 function useViewport() {
   const [w, setW] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -337,6 +340,10 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
   const uiLang = useUiLang();
   const t = HOME_I18N[uiLang];
   const Fs = FASSUNG_I18N[uiLang];
+  /* Gratis-Grenze: Duplizieren legt eine zweite Fassung an — ohne Pass mit
+   * Schloss, der Klick öffnet das Freischalt-Paneel (App.tsx). */
+  const ft = useFreeTier();
+  const dupLocked = !ft.addProfile;
   const created = new Date(profile.createdAt).toLocaleDateString(t.dateLocale, { day: '2-digit', month: 'short', year: 'numeric' });
   const num = String(index + 1).padStart(2, '0');
   // Exponential ease-out (cubic-bezier ≈ ease-out-expo). No layout properties get animated.
@@ -393,10 +400,11 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
           <button type="button"
             onClick={e => { e.stopPropagation(); onDuplicate(); }}
             onKeyDown={e => e.stopPropagation()}
-            title={Fs.duplicateSub}
-            aria-label={`${Fs.duplicate}: ${profile.displayName}`}
-            style={{ padding: '8px 10px', minHeight: '32px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {Fs.duplicate}
+            title={dupLocked ? ft.priceLine : Fs.duplicateSub}
+            data-locked={dupLocked || undefined}
+            aria-label={`${Fs.duplicate}: ${profile.displayName}${dupLocked ? ` (${FREETIER_I18N[uiLang].inPass})` : ''}`}
+            style={{ padding: '8px 10px', minHeight: '32px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            {dupLocked && <LockGlyph size={11} />}{Fs.duplicate}
           </button>
         )}
         {confirmDelete ? (
@@ -433,6 +441,11 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
   const { isMobile } = useViewport();
   const uiLangHome = useUiLang();
   const t = HOME_I18N[uiLangHome];
+  /* Gratis-Grenze: eine Fassung ist frei. Ist sie angelegt, trägt „Neuer
+   * Lebenslauf" das Schloss und die Preiszeile steht darunter — bevor jemand
+   * ein Formular ausfüllt. Die unveränderte Demo zählt nicht mit. */
+  const ft = useFreeTier();
+  const createLocked = !readOnlyNote && !ft.addProfile;
 
   function handleCreate(profile: AppProfile) {
     setShowCreate(false);
@@ -535,7 +548,9 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 ? t.profilesEmpty
                 : t.profilesCount(profiles.length)}
             </div>
-            <button type="button" onClick={() => setShowCreate(true)} disabled={!!readOnlyNote}
+            <button type="button" onClick={() => (createLocked ? ft.open('profiles') : setShowCreate(true))} disabled={!!readOnlyNote}
+              data-locked={createLocked || undefined}
+              aria-label={createLocked ? `${t.newResume} (${FREETIER_I18N[uiLangHome].inPass})` : undefined}
               style={{
                 opacity: readOnlyNote ? 0.45 : 1, cursor: readOnlyNote ? 'not-allowed' : 'pointer',
                 marginTop: '24px',
@@ -544,9 +559,12 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 border: 'none', fontFamily: F.ui,
                 fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
-              <span style={{ fontFamily: F.mono, fontSize: '14px', fontWeight: 400 }}>＋</span>
+              {createLocked ? <LockGlyph size={14} /> : <span style={{ fontFamily: F.mono, fontSize: '14px', fontWeight: 400 }}>＋</span>}
               {t.newResume}
             </button>
+            {createLocked && (
+              <PassNote feature="profiles" label={FREETIER_I18N[uiLangHome].profilesLabel} style={{ marginTop: '12px', maxWidth: '46ch' }} />
+            )}
             <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.pencil, lineHeight: 1.6, marginTop: '14px', maxWidth: '46ch' }}>
               {readOnlyNote ?? t.profilesHint}
             </div>

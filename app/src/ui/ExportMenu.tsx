@@ -19,6 +19,8 @@ import { Menu, MenuItem } from './Overlay';
 import type { UiLang } from './i18n';
 import { DESIGN_I18N } from './i18n/design';
 import { FASSUNG_I18N } from './i18n/fassung';
+import { useFreeTier } from '../billing/freeTier';
+import { LockGlyph } from '../billing/PassLock';
 
 /**
  * „PDF herunterladen | ▾" — der einzige Primärknopf der Oberfläche.
@@ -53,6 +55,12 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   const [msg, setMsg] = useState<{ text: string; error?: boolean; ttl?: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const isCover = docType === 'cover-letter';
+  /* Gratis-Grenze (billing/freeTier.ts): Word und das Anschreiben tragen
+   * ohne Pass das Schloss und die Preiszeile — schon im Menü, nicht erst nach
+   * dem Klick. Ein Klick öffnet das Freischalt-Paneel statt der Datei. */
+  const ft = useFreeTier();
+  const wordLocked = !ft.docx;
+  const coverLocked = isCover && !ft.coverLetter;
   const close = useCallback(() => setOpen(false), []);
   /* Die Meldung räumt sich selbst ab, gebunden an genau diese Meldung: Ein
    * älterer Zeitgeber löschte sonst eine neue vorzeitig (zweites ATS-PDF kurz
@@ -65,6 +73,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   }, [msg]);
 
   async function pdf() {
+    if (coverLocked) { ft.open('coverLetter'); return; }
     if (busy) return;
     setBusy(true);
     setMsg(null);
@@ -108,8 +117,9 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
     <div style={{ position: 'relative' }}>
       <div className="ui-split">
         <button type="button" className="ui-btn ui-btn-primary" onClick={pdf} disabled={busy} aria-busy={busy}
+          data-locked={coverLocked || undefined} title={coverLocked ? ft.priceLine : undefined}
           style={{ minHeight: compact ? '44px' : '40px' }}>
-          {busy ? <span className="cv-spin" aria-hidden style={{ marginRight: 0 }} /> : <Icon name="download" size={15} />}
+          {busy ? <span className="cv-spin" aria-hidden style={{ marginRight: 0 }} /> : coverLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
           <span className={compact ? undefined : 'ui-hide-md'}>{busy ? d.pdfBusy : d.pdfDownload}</span>
           {!compact && <span className="cv-sr-only">{d.pdfDownload}</span>}
         </button>
@@ -120,13 +130,14 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
       </div>
       <Menu open={open} onClose={close} label={d.pdfMore} triggerRef={trigger} width={340}>
         <div className="ui-menu-label">{d.secPdf}</div>
-        <MenuItem onSelect={run(pdf)} icon={<Icon name="download" size={15} />}>{d.pdfDownload}</MenuItem>
+        <MenuItem onSelect={run(pdf)} icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
+          sub={coverLocked ? ft.priceLine : undefined}>{d.pdfDownload}</MenuItem>
         {!isCover && (
           <>
             <div className="ui-menu-label">{d.secPortals}</div>
-            <MenuItem onSelect={run(() => { track('export_docx_ats'); docxEvent(); return exportDocx(data, exportConfig, 'ats'); })}
-              icon={<Icon name="file-text" size={15} />} sub={d.wordAtsSub}
-              tag={recommend ? <span className="ui-tag">{d.recommended}</span> : undefined}>
+            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx_ats'); docxEvent(); return exportDocx(data, exportConfig, 'ats'); })}
+              icon={wordLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={wordLocked ? ft.priceLine : d.wordAtsSub}
+              tag={wordLocked ? undefined : recommend ? <span className="ui-tag">{d.recommended}</span> : undefined}>
               {d.wordAts}
             </MenuItem>
             {onAtsPdf && (
@@ -141,16 +152,20 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
         <div className="ui-menu-label">{d.secMore}</div>
         {isCover ? (
           <>
-            <MenuItem onSelect={run(() => { if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); })} icon={<Icon name="globe" size={15} />}>{d.clHtml}</MenuItem>
-            <MenuItem onSelect={run(() => {
+            <MenuItem onSelect={run(() => { if (coverLocked) { ft.open('coverLetter'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); })}
+              icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="globe" size={15} />} sub={coverLocked ? ft.priceLine : undefined}>{d.clHtml}</MenuItem>
+            <MenuItem sub={coverLocked ? ft.priceLine : undefined} onSelect={run(() => {
+              if (coverLocked) { ft.open('coverLetter'); return; }
               if (!coverLetter) return;
               saveText(exportFilename('anschreiben', data.personal.name, 'md'),
                 clToMarkdown(coverLetter, data.labels?.lang ?? 'de', exportConfig.themeId || 'espoo'), 'text/markdown');
-            })} icon={<Icon name="markdown" size={15} />}>{d.clMd}</MenuItem>
+            })} icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="markdown" size={15} />}>{d.clMd}</MenuItem>
           </>
         ) : (
           <>
-            <MenuItem onSelect={run(() => { track('export_docx'); docxEvent(); return exportDocx(data, exportConfig, 'design'); })} icon={<Icon name="file-text" size={15} />} sub={d.wordDesignSub}>{d.wordDesign}</MenuItem>
+            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx'); docxEvent(); return exportDocx(data, exportConfig, 'design'); })}
+              icon={wordLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={wordLocked ? ft.priceLine : d.wordDesignSub}
+              >{d.wordDesign}</MenuItem>
             <MenuItem onSelect={run(() => exportHtml(data, exportConfig))} icon={<Icon name="globe" size={15} />} sub={d.htmlSub}>{d.html}</MenuItem>
           </>
         )}

@@ -8,6 +8,9 @@ import { ApiError } from '../data/api';
 import type { AuthUser, Plan } from '../data/api';
 import { GUTSCHEIN_I18N } from '../ui/i18n/gutschein';
 import { formatPrice, VOUCHER_REASONS, type Offer, type VoucherReason } from './api';
+import { FREETIER_I18N } from '../ui/i18n/freetier';
+import type { BillingStrings } from '../ui/i18n/billing';
+import { freeTierLimited } from './freeTier';
 
 /** Fehlermeldung für die Oberfläche: 429 in der Oberflächensprache, sonst
  *  der Klartext des Servers, notfalls ein allgemeiner Satz. */
@@ -26,6 +29,37 @@ const FEATURE_ORDER: FeatureKey[] = ['sync', 'share', 'versions', 'mcp', 'apiKey
 export function passFeatures(offer: Offer | null): FeatureKey[] {
   const fromServer = (offer?.features ?? []).filter((f): f is FeatureKey => (FEATURE_ORDER as string[]).includes(f));
   return fromServer.length ? FEATURE_ORDER.filter(f => fromServer.includes(f)) : FEATURE_ORDER;
+}
+
+/**
+ * Texte der Angebotsseiten passend zum Schalter: Meldet der Server die
+ * Gratis-Grenze, gelten Überschrift, Kartenliste, Vergleichstabelle und zwei
+ * Antworten aus ui/i18n/freetier.ts; sonst bleibt alles wie in billing.ts.
+ * Die Reihenfolge der Fragen ist in allen vier Sprachen gleich (Index 4 =
+ * „PDF oder Word?", Index 7 = „Warum kostet das?").
+ */
+export function billingFor(lang: UiLang, offer: Offer | null | undefined): BillingStrings {
+  const t = BILLING_I18N[lang];
+  if (!freeTierLimited(offer)) return t;
+  const f = FREETIER_I18N[lang];
+  return {
+    ...t,
+    pH1a: f.pH1a,
+    pLede: f.pLede,
+    freeList: f.freeList,
+    tableRows: f.tableRows,
+    faq: (price, d) => t.faq(price, d).map((q, i) => (i === 4 ? f.faqFree : i === 7 ? f.faqWhy : q)),
+    landingH: f.landingH,
+    landingLede: f.landingLede,
+    unlockFreeNote: f.unlockFreeNote,
+    unlock: { ...t.unlock, account: { ...t.unlock.account, body: f.accountBody } },
+  };
+}
+
+/** „Im Bewerbungs-Pass · 9 € einmalig · 90 Tage · kein Abo" — leer ohne Angebot. */
+export function freeTierPriceLine(offer: Offer | null | undefined, lang: UiLang): string {
+  if (!offer) return '';
+  return FREETIER_I18N[lang].priceLine(priceOf(offer, lang), offer.days);
 }
 
 /** Preis des Angebots in der Oberflächensprache („9 €", mit decimals „9,00 €"). */

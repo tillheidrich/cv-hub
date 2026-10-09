@@ -2,6 +2,9 @@ import { atsLabel, atsNote, type AtsLevel } from '../templates/atsScore';
 import type { UiLang } from './i18n';
 import { DESIGN_I18N } from './i18n/design';
 import { FASSUNG_I18N } from './i18n/fassung';
+import { FREETIER_I18N } from './i18n/freetier';
+import { useFreeTier } from '../billing/freeTier';
+import { LockGlyph } from '../billing/PassLock';
 
 /**
  * Der ATS-Hinweis im Moment der Wahl — an der gewählten Vorlage, im Karussell
@@ -20,6 +23,10 @@ export default function AtsLine({ level, uiLang, onLoadAts, onLoadAtsPdf, compac
 }) {
   const d = DESIGN_I18N[uiLang];
   const F = FASSUNG_I18N[uiLang];
+  /* Gratis-Grenze: der Word-Knopf trägt ohne Pass das Schloss (der Klick
+   * öffnet in App.tsx `loadAts` das Freischalt-Paneel); PDF bleibt frei. */
+  const ft = useFreeTier();
+  const wordLocked = !ft.docx;
   const btn: React.CSSProperties = { minHeight: '32px', padding: '0 12px', fontSize: 'var(--t-xs)' };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', rowGap: '6px', fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.4 }}>
@@ -29,11 +36,17 @@ export default function AtsLine({ level, uiLang, onLoadAts, onLoadAtsPdf, compac
         onLoadAtsPdf ? (
           <span role="group" aria-label={d.loadAts} style={{ display: 'inline-flex', gap: '4px', flexShrink: 0 }}>
             <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAtsPdf} title={F.atsPdfAria} style={btn}>{F.atsPdfShort}</button>
-            <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} title={F.atsWordAria} style={btn}>{F.atsWordShort}</button>
+            <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} data-locked={wordLocked || undefined}
+              title={wordLocked ? `${F.atsWordAria} · ${ft.priceLine}` : F.atsWordAria} style={wordLocked ? { ...btn, gap: '4px' } : btn}>
+              {wordLocked && <LockGlyph size={11} />}{F.atsWordShort}
+              {wordLocked && <span className="cv-sr-only"> ({FREETIER_I18N[uiLang].inPass})</span>}
+            </button>
           </span>
         ) : (
-          <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} style={btn}>
-            {d.loadAts}
+          <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} data-locked={wordLocked || undefined}
+            title={wordLocked ? ft.priceLine : undefined} style={wordLocked ? { ...btn, gap: '4px' } : btn}>
+            {wordLocked && <LockGlyph size={11} />}{d.loadAts}
+            {wordLocked && <span className="cv-sr-only"> ({FREETIER_I18N[uiLang].inPass})</span>}
           </button>
         )
       )}

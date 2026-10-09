@@ -1,7 +1,7 @@
 {
   "source": "app/src/legal (erzeugt mit pdf-service/scripts/sync-legal.mjs — nicht von Hand ändern)",
   "mails": {
-    "version": "2026-10-09",
+    "version": "2026-10-09.2",
     "de": {
       "orderConfirmation": {
         "subject": "Bestellbestätigung {{ORDER_NO}} – Ihr Bewerbungs-Pass für {{PRODUCT_NAME}}",
@@ -13,7 +13,7 @@
           "Bestellnummer: {{ORDER_NO}}",
           "Vertragsschluss: {{ORDER_DATE}}",
           "Produkt: {{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage",
-          "Leistungen: Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel",
+          "Leistungen: Word-Export (gestaltet und als ATS-Fassung), Anschreiben, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel",
           "Preis: {{PRICE}} einmalig (Endpreis; gemäß § 19 UStG wird keine Umsatzsteuer berechnet)",
           "Pass gültig bis: {{PASS_UNTIL}}",
           "Ende: automatisch, kein Abo, keine Verlängerung, keine weitere Abbuchung",
@@ -127,7 +127,7 @@
           "Order number: {{ORDER_NO}}",
           "Contract concluded: {{ORDER_DATE}}",
           "Product: {{PRODUCT_NAME}} – application pass, {{DAYS}} days",
-          "Features: storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys",
+          "Features: Word export (designed and as the ATS version), cover letters, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys",
           "Price: {{PRICE}} once (final price; no VAT charged under § 19 UStG)",
           "Pass valid until: {{PASS_UNTIL}}",
           "End: automatic, no subscription, no renewal, no further charge",
@@ -359,7 +359,7 @@
     }
   },
   "terms": {
-    "version": "2026-10-09",
+    "version": "2026-10-09.2",
     "de": {
       "title": "Allgemeine Geschäftsbedingungen",
       "subtitle": "für den Bewerbungs-Pass von {{PRODUCT_NAME}} · Fassung {{TERMS_VERSION}}",
@@ -378,9 +378,9 @@
           "id": "kostenlos",
           "title": "§ 2 Kostenlose Nutzung",
           "paragraphs": [
-            "(1) Das Werkzeug lässt sich ohne Konto und ohne Pass kostenlos nutzen („lokaler Modus\"): alle Vorlagen, PDF, Word, ATS-Fassungen, Speicherung der Daten in Ihrem Browser. Der lokale Modus ist nicht Gegenstand des Vertrags über den Pass. Für ihn gelten die gesetzlichen Regeln für unentgeltliche Leistungen.",
+            "(1) Das Werkzeug lässt sich ohne Konto und ohne Pass kostenlos nutzen („lokaler Modus\"), mindestens mit allen Vorlagen, dem PDF Ihres Lebenslaufs (auch als ATS-Fassung), dem Import und dem Datenexport sowie der Speicherung der Daten in Ihrem Browser. Welche Funktionen darüber hinaus kostenlos sind, steht auf der Preisseite. Der lokale Modus ist nicht Gegenstand des Vertrags über den Pass. Für ihn gelten die gesetzlichen Regeln für unentgeltliche Leistungen.",
             "(2) Ein Konto können Sie kostenlos anlegen. Ohne aktiven Pass können Sie darin gespeicherte Inhalte lesen, exportieren und löschen, aber nicht ändern oder neu anlegen. Für das Konto gelten §§ 3, 9, 10, 11 und 14 dieser AGB entsprechend.",
-            "(3) Der Pass ändert nichts an den kostenlosen Funktionen. Wir machen den Download Ihrer Lebensläufe nie vom Kauf abhängig."
+            "(3) Der Kauf eines Passes schränkt die kostenlosen Funktionen nicht ein. Das PDF Ihres Lebenslaufs machen wir nie vom Kauf abhängig, und was zum Pass gehört, steht vor jeder Arbeit sichtbar am jeweiligen Knopf, nicht erst beim Herunterladen."
           ]
         },
         {
@@ -425,6 +425,9 @@
             "(1) Während der Laufzeit schaltet der Pass in Ihrem Konto frei:"
           ],
           "list": [
+            "Export Ihrer Lebensläufe als Word-Datei (DOCX), gestaltet nach der gewählten Vorlage und als einspaltige ATS-Fassung,",
+            "Anschreiben: erstellen, bearbeiten und exportieren,",
+            "mehrere Fassungen Ihres Lebenslaufs (weitere anlegen, duplizieren, als neue Fassung importieren) und weitere Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch),",
             "Speichern Ihrer Lebensläufe, Anschreiben und Fotos auf unserem Server in Deutschland und Zugriff darauf von mehreren Geräten,",
             "Sharelinks: Links, über die Sie einen Lebenslauf mit anderen teilen und die Sie jederzeit widerrufen können,",
             "gespeicherte Versionen am Server (frühere Stände wiederherstellen),",
@@ -456,7 +459,7 @@
             "(2) Sie können jederzeit einen weiteren Pass kaufen. Jeder Kauf ist ein eigener Vertrag. Die Laufzeit des neuen Passes schließt an das Ende eines noch laufenden Passes an; läuft keiner, beginnt sie mit dem Kauf.",
             "(3) Sie können den Pass jederzeit über die Schaltfläche „Verträge hier kündigen\" (in der Fußzeile jeder Seite, ohne Anmeldung), per E-Mail oder per Post kündigen. Eine ordentliche Kündigung wirkt zu dem Zeitpunkt, den Sie angeben; ohne Angabe sofort. Den bereits gezahlten Preis erstatten wir bei einer ordentlichen Kündigung nicht anteilig. Innerhalb der Widerrufsfrist ist der Widerruf für Sie günstiger (§ 8).",
             "(4) Das Recht beider Seiten zur außerordentlichen Kündigung aus wichtigem Grund bleibt unberührt. Kündigen Sie berechtigt aus wichtigem Grund, den wir zu vertreten haben, erstatten wir den Preis für die restliche Laufzeit anteilig. Ihre gesetzlichen Rechte bei Mängeln bleiben unberührt.",
-            "(5) Nach dem Ende des Passes bleibt Ihr Konto bestehen. Sie können Ihre Inhalte weiter lesen, als Datei exportieren (auch als vollständigen Datenexport) und löschen, aber nicht mehr ändern oder neu anlegen; neue Sharelinks lassen sich nicht anlegen, bestehende können Sie jederzeit widerrufen. Wir löschen Ihre Inhalte nach dem Ende des Passes nicht von uns aus, sondern wenn Sie das Konto oder einzelne Inhalte löschen oder uns darum bitten."
+            "(5) Nach dem Ende des Passes bleibt Ihr Konto bestehen. Sie können Ihre Inhalte weiter lesen, als Datei exportieren (in allen Formaten einschließlich Word und auch als vollständigen Datenexport) und löschen, aber nicht mehr ändern oder neu anlegen; neue Sharelinks lassen sich nicht anlegen, bestehende können Sie jederzeit widerrufen. Wir löschen Ihre Inhalte nach dem Ende des Passes nicht von uns aus, sondern wenn Sie das Konto oder einzelne Inhalte löschen oder uns darum bitten."
           ]
         },
         {
@@ -540,9 +543,9 @@
           "id": "kostenlos",
           "title": "§ 2 Free use",
           "paragraphs": [
-            "(1) The tool can be used free of charge without an account and without a pass (\"local mode\"): all templates, PDF, Word, ATS versions, data stored in your browser. Local mode is not part of the contract for the pass. The statutory rules for services provided free of charge apply to it.",
+            "(1) The tool can be used free of charge without an account and without a pass (\"local mode\"), at least with all templates, the PDF of your CV (also as the ATS version), import and data export, and data stored in your browser. Which further features are free is shown on the pricing page. Local mode is not part of the contract for the pass. The statutory rules for services provided free of charge apply to it.",
             "(2) You can create an account free of charge. Without an active pass you can read, export and delete content stored in it, but not change it or create new content. §§ 3, 9, 10, 11 and 14 of these Terms apply to the account accordingly.",
-            "(3) The pass does not change the free features. We never make downloading your CVs depend on a purchase."
+            "(3) Buying a pass does not restrict the free features. We never make the PDF of your CV depend on a purchase, and what belongs to the pass is shown on the respective button before any work, not only at download."
           ]
         },
         {
@@ -587,6 +590,9 @@
             "(1) During its term, the pass unlocks in your account:"
           ],
           "list": [
+            "exporting your CVs as Word files (DOCX), designed after the chosen template and as a single-column ATS version,",
+            "cover letters: create, edit and export,",
+            "several versions of your CV (create more, duplicate, import as a new version) and further document languages (German, English, French, Spanish),",
             "saving your CVs, cover letters and photos on our server in Germany and accessing them from several devices,",
             "share links: links you can use to share a CV with others and revoke at any time,",
             "stored versions on the server (restore earlier states),",
@@ -618,7 +624,7 @@
             "(2) You can buy another pass at any time. Each purchase is a separate contract. The term of the new pass follows on from the end of a pass that is still running; if none is running, it starts with the purchase.",
             "(3) You can cancel the pass at any time via the \"Cancel contracts here\" button (in the footer of every page, no sign-in needed), by e-mail or by post. An ordinary cancellation takes effect at the time you specify; without a date, immediately. We do not refund the price already paid pro rata on ordinary cancellation. During the withdrawal period, withdrawal is the better option for you (§ 8).",
             "(4) Both parties' right to extraordinary termination for good cause remains unaffected. If you justifiably terminate for good cause for which we are responsible, we refund the price for the remaining term pro rata. Your statutory rights in case of defects remain unaffected.",
-            "(5) After the pass ends, your account remains. You can still read your content, export it as files (including a full data export) and delete it, but you can no longer change it or create new content; new share links cannot be created, existing ones can be revoked at any time. We do not delete your content on our own initiative after the pass ends, but when you delete the account or individual content or ask us to."
+            "(5) After the pass ends, your account remains. You can still read your content, export it as files (in all formats including Word, and also as a full data export) and delete it, but you can no longer change it or create new content; new share links cannot be created, existing ones can be revoked at any time. We do not delete your content on our own initiative after the pass ends, but when you delete the account or individual content or ask us to."
           ]
         },
         {

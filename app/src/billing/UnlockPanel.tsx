@@ -6,20 +6,27 @@
  *
  * Ohne Verkauf (Angebot aus, selbst gehostete Fassung) zeigt es den alten
  * Hinweis auf ein Konto mit Einladung.
+ *
+ * Seit der Gratis-Grenze (09.10.2026, billing/freeTier.ts) öffnet es auch an
+ * Word, Anschreiben, „Neue Fassung" und „Sprache hinzufügen" — dort aber nur
+ * VOR der Arbeit, aus einem sichtbar markierten Knopf heraus.
  */
 import { useEffect, useRef } from 'react';
 import type { UiLang } from '../ui/i18n';
-import { BILLING_I18N, type UnlockKey } from '../ui/i18n/billing';
+import { type UnlockKey } from '../ui/i18n/billing';
+import { FREETIER_I18N, type FreeTierKey } from '../ui/i18n/freetier';
 import { ET } from '../ui/editorI18n';
 import { track } from '../data/track';
 import type { Offer } from './api';
-import { priceOf } from './format';
+import { billingFor, priceOf } from './format';
 import { salesOpen } from './hooks';
 import { PATHS, navigate } from './route';
 import './billing.css';
 
 export default function UnlockPanel({ feature, lang, offer, onClose, onSignIn, onInviteAccount, signedIn = false }: {
-  feature: UnlockKey;
+  /** Server-Funktion (Sharelink, MCP …) oder seit 09.10.2026 eine Funktion
+   *  hinter der Gratis-Grenze (Word, Anschreiben, Fassungen, Sprachen). */
+  feature: UnlockKey | FreeTierKey;
   lang: UiLang;
   offer: Offer | null;
   onClose: () => void;
@@ -30,7 +37,7 @@ export default function UnlockPanel({ feature, lang, offer, onClose, onSignIn, o
   /** Schon angemeldet (Konto ohne aktiven Pass): kein „Anmelden"-Link. */
   signedIn?: boolean;
 }) {
-  const t = BILLING_I18N[lang];
+  const t = billingFor(lang, offer);
   const et = ET[lang];
   const open = salesOpen(offer);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -53,7 +60,7 @@ export default function UnlockPanel({ feature, lang, offer, onClose, onSignIn, o
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 
-  const item = t.unlock[feature];
+  const item = feature in t.unlock ? t.unlock[feature as UnlockKey] : FREETIER_I18N[lang].unlock[feature as FreeTierKey];
   return (
     <div className="bl-scrim ui" onClick={onClose}>
       <div ref={boxRef} className="bl-dialog" role="dialog" aria-modal="true" aria-labelledby="bl-unlock-h" aria-describedby="bl-unlock-b"

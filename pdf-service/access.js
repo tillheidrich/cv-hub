@@ -112,7 +112,7 @@ export function planInfo(user, now = Date.now()) {
 /** Klartext für die 403 bei plan.kind 'none'. */
 export function passRequiredMessage() {
   return 'Für Speichern im Konto, Sharelinks, Versionen und die KI-Verbindung brauchst du einen aktiven Bewerbungs-Pass. '
-    + 'Ohne Konto bleibt alles kostenlos: alle Vorlagen, PDF und Word, die Daten bleiben in deinem Browser. '
+    + 'Ohne Konto kostenlos: alle Vorlagen und das PDF deines Lebenslaufs, die Daten bleiben in deinem Browser. '
     + 'Was schon im Konto liegt, bleibt erhalten: Lesen, Exportieren und Löschen gehen weiter.';
 }
 

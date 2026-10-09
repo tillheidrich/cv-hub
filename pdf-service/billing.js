@@ -95,6 +95,11 @@ export function billingConfig(env = process.env) {
   const cfg = {
     enabled: truthy(env.BILLING_ENABLED),
     openRegistration: truthy(env.OPEN_REGISTRATION),
+    // Gratis-Grenze (09.10.2026): ohne Pass ein PDF, eine Fassung, eine
+    // Sprache; Word, Anschreiben, weitere Fassungen und Sprachen im Pass.
+    // Greift nur zusammen mit einem verkaufsbereiten Dienst (cfg.ready), sonst
+    // bleibt alles frei — so auch jede selbst gehostete Instanz.
+    freeTierLimits: truthy(env.FREE_TIER_LIMITS),
     priceCents: envInt(env, 'PASS_PRICE_CENTS', 900, 100, 100_000),
     currency: 'EUR',
     days,
@@ -184,6 +189,10 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return {
       enabled: cfg.ready,
       openRegistration: cfg.openRegistration,
+      // Die Oberfläche sperrt nur, wenn hier limited: true steht. Durchsetzen
+      // lässt sich das nicht (Word entsteht im Browser, der Code ist offen),
+      // es ist eine Angebotsgrenze, keine Sicherheitsgrenze.
+      freeTier: { limited: cfg.ready && cfg.freeTierLimits === true },
       sku: cfg.sku,
       priceCents: cfg.priceCents,
       currency: cfg.currency,

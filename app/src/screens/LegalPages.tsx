@@ -1,5 +1,6 @@
 import type { UiLang } from '../ui/i18n';
 import { OPERATOR } from '../data/operator';
+import { SOURCE_REPO_URL, shortUrl } from '../data/urls';
 import { privacyBilling } from '../billing/legalTexts';
 import { LegalSections } from '../billing/LegalText';
 import { SiteFooter } from '../billing/BillingShell';
@@ -157,7 +158,7 @@ function ImpressumDE() {
         Anwendung steht als <strong>CV-Hub</strong> unter der{' '}
         <a style={a} href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">AGPL-3.0</a>{' '}
         auf{' '}
-        <a style={a} href="https://git.example.com/your-org/cv-hub" target="_blank" rel="noopener noreferrer">git.example.com</a>.
+        <a style={a} href={SOURCE_REPO_URL} target="_blank" rel="noopener noreferrer">{shortUrl(SOURCE_REPO_URL)}</a>.
       </p>
     </>
   );
@@ -203,7 +204,7 @@ function ImpressumEN() {
         published as <strong>CV-Hub</strong> under the{' '}
         <a style={a} href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">AGPL-3.0</a>{' '}
         on{' '}
-        <a style={a} href="https://git.example.com/your-org/cv-hub" target="_blank" rel="noopener noreferrer">git.example.com</a>.
+        <a style={a} href={SOURCE_REPO_URL} target="_blank" rel="noopener noreferrer">{shortUrl(SOURCE_REPO_URL)}</a>.
       </p>
 
       <p style={note}>

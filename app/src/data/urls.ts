@@ -5,3 +5,9 @@
 export function shortUrl(v: string): string {
   return (v || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
 }
+
+/** Öffentliches Repository der quelloffenen Fassung (AGPL-3.0). Eine Stelle
+ *  für Impressum und den Hinweis „selbst hosten" auf der Preisseite.
+ *  Wer eine geänderte Fassung betreibt, trägt hier das eigene Repository ein
+ *  (AGPL-3.0 § 13: Nutzer müssen den Quelltext der laufenden Fassung bekommen). */
+export const SOURCE_REPO_URL = 'https://github.com/tillheidrich/cv-hub';

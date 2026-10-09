@@ -44,7 +44,10 @@ import { PassDialog } from './billing/PassSection';
 import { ConfirmEmailBanner } from './billing/ConfirmEmail';
 import { useOffer, salesOpen } from './billing/hooks';
 import { PATHS, navigate } from './billing/route';
-import { freeOnly, priceOf } from './billing/format';
+import { freeOnly, priceOf, freeTierPriceLine } from './billing/format';
+import { computeFreeTier, FreeTierContext, type FreeTierKey } from './billing/freeTier';
+import { LockGlyph, PassNote, CoverLetterPassCard } from './billing/PassLock';
+import { FREETIER_I18N } from './ui/i18n/freetier';
 import { hasPendingCode } from './billing/pendingCode';
 import { PLAN_EVENT } from './billing/planEvents';
 import { GUTSCHEIN_I18N } from './ui/i18n/gutschein';
@@ -173,7 +176,7 @@ export default function App() {
   });
   /** Freischalt-Moment (billing/UnlockPanel.tsx): welche Funktion gerade
    *  einen Pass bräuchte. Ersetzt die frühere „Demo-Limit"-Wand. */
-  const [unlock, setUnlock] = useState<UnlockKey | null>(null);
+  const [unlock, setUnlock] = useState<UnlockKey | FreeTierKey | null>(null);
   const [passOpen, setPassOpen] = useState(false);
   const { offer } = useOffer();
   /** Direktlink in die Demo (/?demo=1, /demo) und auf „Mein Pass" (/?pass=1). */
@@ -517,6 +520,16 @@ export default function App() {
     [activeProfile, lang],
   );
 
+  /* Gratis-Grenze (billing/freeTier.ts, optional seit 09.10.2026): Ein
+   * PDF bleibt gratis; Word, Anschreiben, weitere Fassungen und Sprachen
+   * gehören zum Pass. Greift nur, wenn der Server `freeTier.limited` meldet —
+   * ohne Angebot (offline, selbst gehostet) ist nichts gesperrt. */
+  const openFreeTier = useCallback((k: FreeTierKey) => setUnlock(k), []);
+  const ft = useMemo(() => computeFreeTier({
+    offer, user: authUser, localMode: demoMode, profiles, active: activeProfile, lang,
+    priceLine: freeTierPriceLine(offer, uiLang), open: openFreeTier,
+  }), [offer, authUser, demoMode, profiles, activeProfile, lang, uiLang, openFreeTier]);
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dirtyRef = useRef<AppProfile | null>(null);
   const skipSave = useRef(true); // skip the initial server-load population
@@ -588,6 +601,9 @@ export default function App() {
    * übersetzt werden wollen. */
   const [langNotice, setLangNotice] = useState<string | null>(null);
   function switchDocLang(l: Lang) {
+    // Zweite Sprache ohne Pass: Freischalt-Paneel statt Wechsel (die Knöpfe
+    // tragen das Schloss schon vorher).
+    if (!ft.langAllowed(l)) { setUnlock('langs'); return; }
     const from = activeProfile?.settings.lang;
     if (activeProfile && from && from !== l && carryContactToLang(activeProfile, from, l)) {
       setLangNotice(et.contactCarried(from.toUpperCase()));
@@ -633,6 +649,7 @@ export default function App() {
   function handleSelectProfile(id: string) { setActiveId(id); setActiveProfileId(id); setScreen('editor'); openEditorPanels('existing'); }
   function handleCreateProfile(profile: AppProfile) {
     if (readOnly) return;
+    if (!ft.addProfile) { setUnlock('profiles'); return; }
     setProfiles(prev => [...prev, profile]);
     if (demoMode) {
       saveProfilesLocalAsync([...loadProfilesLocal(), profile]).then(ok => { if (!ok) setSaveStatus('error'); });
@@ -666,6 +683,7 @@ export default function App() {
    * angelegt haben —, mit Rückgängig. */
   function handleDuplicateProfile(id: string, open = false) {
     if (readOnly) return;
+    if (!ft.addProfile) { setUnlock('profiles'); return; }
     const src = profiles.find(p => p.id === id);
     if (!src) return;
     const F = FASSUNG_I18N[uiLang];
@@ -847,6 +865,8 @@ export default function App() {
    * `MobilePreview`, indem es beim Hineintippen auf volle Größe zoomt. */
   // Nach Ablauf des Zugangs: kein Schreiben in der Vorschau.
   const inlineEdit = readOnly ? undefined : inlineEditApi;
+  /** Anschreiben hinter der Gratis-Grenze: kein Schreiben in der Vorschau. */
+  const clInlineEdit = ft.coverLetter ? inlineEdit : undefined;
 
   /** Alles, was den Satz beeinflusst — ändert sich davon etwas, rechnet die
    *  Vorschau den Umbruch neu. */
@@ -858,9 +878,9 @@ export default function App() {
 
   const renderDoc = useCallback((M: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) => (
     docType === 'cover-letter'
-      ? <CoverLetterRenderer cvData={currentData} clData={currentCoverLetter} theme={theme} pairing={pairing} metrics={M} measure={measure} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} />
+      ? <CoverLetterRenderer cvData={currentData} clData={currentCoverLetter} theme={theme} pairing={pairing} metrics={M} measure={measure} pageFormat={pageFormat} inlineEdit={measure ? undefined : clInlineEdit} />
       : <ResumeRenderer data={currentData} theme={theme} pairing={pairing} metrics={M} measure={measure} pageBlocks={pageBlocks} hiddenSections={hiddenSections} sectionOrder={sectionOrder} pageFormat={pageFormat} forcedBreaks={forcedBreaks} asideSkillCap={asideCap} inlineEdit={measure ? undefined : inlineEdit} />
-  ), [docType, currentData, currentCoverLetter, theme, pairing, hiddenSections, sectionOrder, pageFormat, forcedBreaks, inlineEdit]);
+  ), [docType, currentData, currentCoverLetter, theme, pairing, hiddenSections, sectionOrder, pageFormat, forcedBreaks, inlineEdit, clInlineEdit]);
 
   // ── Abgeleitete Werte für Oberfläche und Export ──────────────────────────
   /* Genau die Zusammensetzung, die bisher an beiden ExportPanel-Stellen
@@ -881,6 +901,7 @@ export default function App() {
   }, [activeId]);
 
   function loadAts() {
+    if (!ft.docx) { setUnlock('docx'); return; }
     track('export_docx_ats');
     if (!demoMode) void api.event('docx');
     void exportDocx(currentData, exportConfig, 'ats');
@@ -1006,6 +1027,10 @@ export default function App() {
   const Z = ZUGANG_I18N[uiLang];
   const F = FASSUNG_I18N[uiLang];
   const B = BILLING_I18N[uiLang];
+  const FT = FREETIER_I18N[uiLang];
+  /** Alles, was die Gratis-Grenze lesen muss (ExportMenu, ExportPanel,
+   *  AtsLine, HomeScreen), bekommt sie über diesen Rahmen. */
+  const provide = (node: React.ReactNode) => <FreeTierContext.Provider value={ft}>{node}</FreeTierContext.Provider>;
 
   /** Laufzeit-Band: 14 und 3 Tage vor Ablauf, danach dauerhaft (je Stufe in
    *  dieser Sitzung ausblendbar). */
@@ -1031,7 +1056,7 @@ export default function App() {
     <div className="ui-access-banner ui" role="status" data-noprint data-notice={passBand ? `${passBand.kind}-${passBand.notice ?? 'none'}` : access?.notice ?? 'expired'}>
       <span>
         {passBand ? (
-          neverHadPass ? Z.planNone
+          neverHadPass ? (ft.limited ? FT.planNone : Z.planNone)
             : freeBand ? (passExpired ? G.freeExpired(passUntil) : G.freeSoon(passUntil))
             : passExpired ? Z.passExpired(passUntil)
             : passBand.notice === 'soon' ? Z.passSoon(passUntil, passBand.daysLeft ?? 0)
@@ -1087,7 +1112,7 @@ export default function App() {
 
   // ── Home ──────────────────────────────────────────────────────────────────
   if (screen === 'home') {
-    return (
+    return provide(
       <>
         <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile}
           onDuplicate={readOnly ? undefined : (id => handleDuplicateProfile(id))}
@@ -1100,6 +1125,10 @@ export default function App() {
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
         {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
+        {unlock && (
+          <UnlockPanel feature={unlock} lang={uiLang} offer={offer} onClose={() => setUnlock(null)}
+            onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} />
+        )}
         {logoutDialog}
         {noticeEl}
       </>
@@ -1149,12 +1178,19 @@ export default function App() {
 
   const docSegment = (
     <div className="ui-seg ui-pill" role="group" aria-label={dsT.docGroup}>
-      {(['resume', 'cover-letter'] as DocType[]).map(dt => (
-        <button key={dt} type="button" aria-pressed={docType === dt} onClick={() => setDocType(dt)}
-          style={isMobile ? { minHeight: '40px', padding: '0 12px' } : undefined}>
-          {{ resume: et.resume, 'cover-letter': et.coverLetter }[dt]}
-        </button>
-      ))}
+      {(['resume', 'cover-letter'] as DocType[]).map(dt => {
+        /* Das Anschreiben-Tab bleibt bedienbar; ohne Pass trägt es das
+           Schloss, und dahinter steht statt des Formulars der Hinweis. */
+        const locked = dt === 'cover-letter' && !ft.coverLetter;
+        return (
+          <button key={dt} type="button" aria-pressed={docType === dt} onClick={() => setDocType(dt)}
+            data-locked={locked || undefined} title={locked ? ft.priceLine : undefined}
+            style={isMobile ? { minHeight: '40px', padding: '0 12px', gap: '5px' } : { gap: '5px' }}>
+            {{ resume: et.resume, 'cover-letter': et.coverLetter }[dt]}
+            {locked && <><LockGlyph size={12} /><span className="cv-sr-only"> ({FT.inPass})</span></>}
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -1164,16 +1200,27 @@ export default function App() {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '0 16px 10px 20px' }}>
       <span style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', fontWeight: 560 }}>{dsT.docLang}</span>
       <div className="ui-seg" role="group" aria-label={et.langLabel} style={{ background: 'oklch(0.30 0.02 250 / 0.06)' }}>
-        {ALL_LANGS.map(l => (
-          <button key={l} type="button" onClick={() => switchDocLang(l)} aria-pressed={lang === l}
-            title={`${et.langLabel}: ${LANG_NAMES[l]}`}
-            style={{ minHeight: isMobile ? '40px' : '28px', padding: isMobile ? '0 12px' : '0 9px', fontSize: 'var(--t-xs)' }}>
-            {l.toUpperCase()}
-          </button>
-        ))}
+        {ALL_LANGS.map(l => {
+          const locked = !ft.langAllowed(l);
+          return (
+            <button key={l} type="button" onClick={() => switchDocLang(l)} aria-pressed={lang === l}
+              data-locked={locked || undefined}
+              title={`${et.langLabel}: ${LANG_NAMES[l]}${locked ? ` · ${ft.priceLine}` : ''}`}
+              style={{ minHeight: isMobile ? '40px' : '28px', padding: isMobile ? '0 10px' : '0 8px', fontSize: 'var(--t-xs)', gap: '3px' }}>
+              {l.toUpperCase()}
+              {locked && <><LockGlyph size={10} /><span className="cv-sr-only"> ({FT.inPass})</span></>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
+  /** Ohne Pass: eine Sprache frei wählbar, weitere im Pass — sichtbar, bevor
+   *  jemand auf eine gesperrte Sprache tippt. */
+  const langLockNote = ALL_LANGS.some(l => !ft.langAllowed(l))
+    ? <PassNote feature="langs" label={FT.langsLabel} style={{ padding: '0 16px 10px 20px', marginTop: '-4px' }} />
+    : null;
+  const clLocked = docType === 'cover-letter' && !ft.coverLetter;
 
   const editors = docType === 'resume'
     ? <EditorPanel data={currentData} lang={lang} uiLang={uiLang} onUpdate={updateData} demoMode={demoMode} jumpTab={editJumpTab} jumpTick={editJumpTick} onPhotoRemoved={handlePhotoRemoved} readOnly={readOnly} />
@@ -1181,12 +1228,14 @@ export default function App() {
   const contentBody = (
     <>
       {docLangRow}
+      {langLockNote}
       {readOnly && <div className="ui-readonly-note" role="note">{passExpired ? Z.passReadOnlyContent : plan?.kind === 'none' ? Z.noneReadOnlyContent : Z.readOnlyContent}</div>}
       <div className="ui-panel-fill" style={{ flex: 1, minHeight: 0 }}>
         {/* Nach Ablauf: Felder gesperrt (disabled), Lesen und Blättern bleibt.
             Der Lebenslauf sperrt selbst (Reiter bleiben bedienbar), das
             Anschreiben hier im Ganzen. */}
-        {readOnly && docType !== 'resume' ? <fieldset disabled style={{ display: 'contents' }}>{editors}</fieldset> : editors}
+        {clLocked ? <CoverLetterPassCard onBack={() => setDocType('resume')} />
+          : readOnly && docType !== 'resume' ? <fieldset disabled style={{ display: 'contents' }}>{editors}</fieldset> : editors}
       </div>
     </>
   );
@@ -1235,7 +1284,13 @@ export default function App() {
         </MenuItem>
       ))}
       <div className="ui-menu-sep" />
-      {activeId && !readOnly && <MenuItem onSelect={() => { close(); handleDuplicateProfile(activeId, true); }} sub={F.duplicateSub}>{F.duplicateTitle}</MenuItem>}
+      {activeId && !readOnly && (
+        <MenuItem onSelect={() => { close(); handleDuplicateProfile(activeId, true); }}
+          sub={ft.addProfile ? F.duplicateSub : ft.priceLine}
+          tag={ft.addProfile ? undefined : <><LockGlyph size={12} /><span className="cv-sr-only">{FT.inPass}</span></>}>
+          {F.duplicateTitle}
+        </MenuItem>
+      )}
       {/* Versionen gibt es seit 08.10.2026 auch ohne Konto (lokaler Verlauf). */}
       {activeId && <MenuItem onSelect={() => { close(); setVersionsOpen(true); }} sub={et.ttVersions}>{et.versions}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); setBackupOpen(true); }}>{LOCAL_I18N[uiLang].more}</MenuItem>}
@@ -1325,7 +1380,7 @@ export default function App() {
       { id: 'check', label: dsT.check, icon: <PanelGlyph kind="check" /> },
       { id: 'export', label: dsT.exportAll, icon: <Icon name="download" size={19} />, primary: true },
     ];
-    return (
+    return provide(
       <div className="cv-app-shell ui" style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
         <header data-noprint className="ui-top" style={{ padding: '10px 10px 6px', gap: '6px' }}>
           <h1 className="cv-sr-only">{activeProfile?.displayName ?? APP_NAME}</h1>
@@ -1341,6 +1396,9 @@ export default function App() {
         </header>
         {accessBanner}
         <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
+        {clLocked && mPanel === null && (
+          <div className="ft-mobile-bar" data-noprint><PassNote feature="coverLetter" label={et.coverLetter} /></div>
+        )}
 
         <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
           <MobilePreview doneLabel={et.zoomDone} hintLabel={et.tapToWrite} pageFormat={pageFormat} bottomInset={168}
@@ -1420,7 +1478,7 @@ export default function App() {
   ];
   const panelWidth = panel === 'content' ? 420 : panel === 'tips' ? 380 : 372;
 
-  return (
+  return provide(
     <div className="cv-app-shell ui" style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
       <header data-noprint className="ui-top">
         <div className="ui-top-group ui-pill">
@@ -1491,9 +1549,11 @@ export default function App() {
           </section>
         )}
         <div className="ui-canvas">
-          <Canvas zoom={zoom} onZoomFit={onZoomFit} pageFormat={pageFormat} topInset={hintGone ? 0 : 30} bottomInset={124}
+          <Canvas zoom={zoom} onZoomFit={onZoomFit} pageFormat={pageFormat} topInset={hintGone && !clLocked ? 0 : 30} bottomInset={124}
             swapKey={swap.key} swapDir={swap.dir} escHint={dsT.escBack}
-            topHint={!hintGone && docType === 'resume' ? (
+            topHint={clLocked ? (
+            <div className="ui-pill ft-pill" data-noprint><PassNote feature="coverLetter" label={et.coverLetter} /></div>
+            ) : !hintGone && docType === 'resume' ? (
             <div className="ui-write-hint ui-pill" data-noprint>
               <Icon name="pencil" size={13} />
               <span>{dsT.writeHint}</span>

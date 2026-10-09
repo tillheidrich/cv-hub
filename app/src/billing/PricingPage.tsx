@@ -13,7 +13,10 @@ import { BILLING_I18N } from '../ui/i18n/billing';
 import { PICKABLE_THEMES } from '../templates/theme';
 import { track } from '../data/track';
 import type { Offer } from './api';
-import { passFeatures, priceOf } from './format';
+import { billingFor, passFeatures, priceOf } from './format';
+import { freeTierLimited } from './freeTier';
+import { FREETIER_I18N, type FreeTierKey } from '../ui/i18n/freetier';
+import { SOURCE_REPO_URL } from '../data/urls';
 import BillingShell, { CheckGlyph } from './BillingShell';
 import { useOffer, useTitle, salesOpen } from './hooks';
 import { PATHS, navigate, linkClick } from './route';
@@ -23,8 +26,14 @@ import { GUTSCHEIN_I18N } from '../ui/i18n/gutschein';
 
 /** Die beiden Karten „Ohne Konto" und „Bewerbungs-Pass" — auf /preise und
  *  als Abschnitt der Startseite. */
+/** Mit Gratis-Grenze stehen Word, Anschreiben, Fassungen und Sprachen als
+ *  Erstes in der Pass-Karte — sie sind dann der Hauptinhalt des Passes. */
+const FREE_TIER_FEATURES: FreeTierKey[] = ['docx', 'coverLetter', 'profiles', 'langs'];
+
 export function PricingCards({ lang, offer, onFree, headingLevel = 2 }: { lang: UiLang; offer: Offer | null; onFree: () => void; headingLevel?: 2 | 3 }) {
-  const t = BILLING_I18N[lang];
+  const t = billingFor(lang, offer);
+  const limited = freeTierLimited(offer);
+  const ftt = FREETIER_I18N[lang];
   const H = `h${headingLevel}` as 'h2';
   const price = priceOf(offer, lang);
   const open = salesOpen(offer);
@@ -66,7 +75,10 @@ export function PricingCards({ lang, offer, onFree, headingLevel = 2 }: { lang: 
             )}
           </>
         ) : <p className="bl-hint">{t.pricingSoon}</p>}
-        <ul className="bl-list">
+        <ul className="bl-list" data-pass-features>
+          {limited && FREE_TIER_FEATURES.map(f => (
+            <li key={f} data-ft={f}><CheckGlyph /><div><strong>{ftt.features[f].title}</strong><span>{ftt.features[f].body}</span></div></li>
+          ))}
           {passFeatures(offer).map(f => (
             <li key={f}><CheckGlyph /><div><strong>{t.features[f].title}</strong><span>{t.features[f].body}</span></div></li>
           ))}
@@ -94,7 +106,8 @@ export default function PricingPage() {
 }
 
 function PricingBody({ lang, offer }: { lang: UiLang; offer: Offer | null }) {
-  const t = BILLING_I18N[lang];
+  const t = billingFor(lang, offer);
+  const limited = freeTierLimited(offer);
   const price = priceOf(offer, lang);
   useTitle(`${t.pricing} · ${APP_NAME}`);
   const goFree = () => { track('pricing_free_click'); navigate('/?demo=1'); };
@@ -113,6 +126,13 @@ function PricingBody({ lang, offer }: { lang: UiLang; offer: Offer | null }) {
         <p style={{ margin: '10px 2px 0' }}>
           <a className="bl-quiet-link" href={PATHS.code} onClick={linkClick(PATHS.code)} data-code-link>{GUTSCHEIN_I18N[lang].haveCode}</a>
         </p>
+        {/* Wer nicht zahlen will, hostet selbst — dezent, kein zweiter Weg zur Kasse. */}
+        {limited && (
+          <p className="bl-hint" style={{ margin: '6px 2px 0' }} data-selfhost>
+            {FREETIER_I18N[lang].selfHost}{' '}
+            <a className="bl-quiet-link" href={SOURCE_REPO_URL} target="_blank" rel="noopener noreferrer">{FREETIER_I18N[lang].selfHostLink}</a>
+          </p>
+        )}
       </div>
 
       <section className="bl-section" aria-labelledby="bl-table-h">
