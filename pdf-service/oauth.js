@@ -27,6 +27,7 @@
 // auch. Wer die Datenbank liest, hält keine benutzbaren Zugänge in der Hand.
 
 import crypto from 'crypto';
+import { consentCsp } from './guards.js';
 
 const ACCESS_TTL_S = 60 * 60 * 24 * 30;    // 30 Tage
 const REFRESH_TTL_S = 60 * 60 * 24 * 365;  // 1 Jahr
@@ -174,9 +175,11 @@ export function consentPage({ appName, username, clientName, redirectUri, params
  * @param baseUrlOf  (req) => string|null — geprüfte öffentliche Basis-Adresse
  * @param appName    Anzeigename für die Zustimmungsseite
  * @param urlencoded Express-Body-Parser für Formulare
+ * @param registerLimit Middleware, die die offene Client-Registrierung begrenzt
  */
-export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appName, urlencoded }) {
+export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appName, urlencoded, registerLimit }) {
   const form = urlencoded;
+  const limitRegister = registerLimit || ((_req, _res, next) => next());
 
   /** Ohne bekannte öffentliche Adresse ist jede Metadaten-Antwort geraten. */
   function requireBase(req, res) {
@@ -206,7 +209,12 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
   // Offen, absichtlich: der Client bekommt hier nur eine Kennung, keinen
   // Zugriff. Zugriff entsteht erst, wenn ein angemeldeter Mensch auf der
   // Zustimmungsseite „Erlauben" klickt.
-  app.post('/api/oauth/register', form, async (req, res) => {
+  //
+  // N9 (08.10.2026): Offen hieß bisher auch unbegrenzt — jeder konnte ohne
+  // Anmeldung beliebig viele Zeilen anlegen. Jetzt mit Rate-Limit, und der
+  // Aufräumjob (janitor.js) entfernt Clients, die nie zu einem Token geführt
+  // haben, nach 24 Stunden.
+  app.post('/api/oauth/register', limitRegister, form, async (req, res) => {
     const b = req.body || {};
     const uris = Array.isArray(b.redirect_uris) ? b.redirect_uris : [];
     if (uris.length === 0 || uris.length > 10 || !uris.every(redirectUriAllowed)) {
@@ -280,6 +288,9 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
       const path = endpointsBase(base).replace(base, '') || '/oauth';
       return res.redirect(302, `${base}/?next=${encodeURIComponent(`${path}/authorize?${qs}`)}`);
     }
+    // Die Weiterleitung nach dem Absenden geht an den Client; ohne seinen
+    // Ursprung in form-action blockiert Chrome sie (CSP aus guards.js).
+    res.setHeader('Content-Security-Policy', consentCsp(chk.redirectUri));
     res.type('html').send(consentPage({
       appName,
       username: user.username,

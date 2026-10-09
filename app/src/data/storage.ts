@@ -85,6 +85,20 @@ export const DEFAULT_COVER_LETTERS: Record<Lang, CoverLetterData> = {
   es: DEFAULT_COVER_LETTER_ES,
 };
 
+// ── Standardvorlage ───────────────────────────────────────────────────────────
+
+/** Vorlage für neue Profile und die Demo.
+ *
+ *  Bis zum 08.10.2026 war das „Hamburg" — eine Seitenspalten-Vorlage, die das
+ *  Werkzeug selbst als „ATS-riskant" kennzeichnet, während die Startseite
+ *  Portaltauglichkeit verspricht. Espoo ist einspaltig (ATS-stark nach
+ *  `templates/atsScore.ts`), hat einen Fotoplatz und eine tabellarische
+ *  Datumsspalte. Zürich ist ebenso einspaltig, hat aber keinen Fotoplatz;
+ *  Karlsruhe (Zeitstrahl) steht wegen seiner Herkunft unter Vorbehalt.
+ *  Bestehende Profile behalten ihre Vorlage — dieser Wert gilt nur, wo keine
+ *  gesetzt ist. */
+export const DEFAULT_TEMPLATE = 'espoo';
+
 // ── Profile helpers ───────────────────────────────────────────────────────────
 
 function uid(): string {
@@ -146,15 +160,24 @@ export function createDemoProfile(displayName = 'Lena Brandt (Demo)'): AppProfil
     createdAt: new Date().toISOString(),
     data: { de: tillDE, en: tillEN, fr: cloneCVForLang(tillDE, 'fr'), es: cloneCVForLang(tillDE, 'es') },
     coverLetters: { ...DEFAULT_COVER_LETTERS },
-    settings: { template: 'hamburg', fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
+    settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
   };
 }
 
+/** Neues, leeres Profil.
+ *
+ *  `displayName` ist der Titel des Profils in der Übersicht („Bewerbung
+ *  Stadtwerke"), NICHT der Name der Person. Bis zum 08.10.2026 landete er
+ *  auch im Namensfeld des Lebenslaufs — wer das nicht bemerkte, verschickte
+ *  ein PDF mit „Bewerbung Stadtwerke" als Überschrift. Das Namensfeld bleibt
+ *  jetzt leer: Das Formular zeigt dort einen Beispielnamen als Platzhalter,
+ *  die Vorschau ein anklickbares „…" (`.cv-edit:empty`) — beides landet in
+ *  keinem Export. */
 export function createBlankProfile(displayName: string): AppProfile {
   const blankCV = (base: CVData): CVData => ({
     ...base,
     personal: {
-      name: displayName,
+      name: '',
       title: '',
       location: '',
       email: '',
@@ -179,8 +202,45 @@ export function createBlankProfile(displayName: string): AppProfile {
       es: { ...blankCV(tillDE), labels: LABELS.es },
     },
     coverLetters: { ...DEFAULT_COVER_LETTERS },
-    settings: { template: 'hamburg', fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
+    settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
   };
+}
+
+// ── Kontaktdaten in eine neue Sprachfassung übernehmen ───────────────────────
+
+/** Was in jeder Sprache gleich ist: Name, Kontakt, Adressen, Foto. Texte
+ *  (Profil, Stationen, Überschriften) werden nicht übernommen — die gehören
+ *  übersetzt, nicht kopiert. */
+const CONTACT_FIELDS = ['name', 'email', 'phone', 'location', 'website', 'linkedin', 'instagram', 'photo', 'photoOriginal'] as const;
+
+function hasContact(cv: CVData | undefined): boolean {
+  const p = cv?.personal;
+  if (!p) return false;
+  return CONTACT_FIELDS.some(k => !!(p[k] || '').trim()) || !!p.socials?.some(s => s.value.trim());
+}
+
+/**
+ * Beim ersten Öffnen einer Sprachfassung die Kontaktdaten aus der bisherigen
+ * übernehmen.
+ *
+ * Persona-Test vom 08.10.2026: Wer von Deutsch auf Englisch umschaltet, fand
+ * ein leeres Dokument — auch E-Mail und Telefon mussten neu getippt werden.
+ * „Erstes Öffnen" heißt hier: Die Zielfassung hat noch gar keine
+ * Kontaktangabe. Hat der Mensch dort schon etwas eingetragen, bleibt alles,
+ * wie es ist. Gibt `null` zurück, wenn nichts übernommen wurde.
+ */
+export function carryContactToLang(p: AppProfile, from: Lang, to: Lang): AppProfile | null {
+  if (from === to) return null;
+  const src = p.data[from];
+  const dst = p.data[to];
+  if (!src || !dst || !hasContact(src) || hasContact(dst)) return null;
+  const personal = { ...dst.personal };
+  for (const k of CONTACT_FIELDS) {
+    const v = src.personal[k];
+    if (v) personal[k] = v;
+  }
+  if (src.personal.socials?.length) personal.socials = deepClone(src.personal.socials);
+  return { ...p, data: { ...p.data, [to]: { ...dst, personal } } };
 }
 
 // ── Profile CRUD ──────────────────────────────────────────────────────────────
@@ -218,7 +278,7 @@ export function loadProfiles(): AppProfile[] {
           de: { ...DEFAULT_COVER_LETTER_DE, ...(parsedCl.de ?? {}) },
           en: { ...DEFAULT_COVER_LETTER_EN, ...(parsedCl.en ?? {}) },
         } as Record<Lang, CoverLetterData>,
-        settings: { template: 'hamburg', fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
+        settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
       };
       const profiles = [withAllLangs(profile)];
       saveProfiles(profiles);
@@ -232,11 +292,16 @@ export function loadProfiles(): AppProfile[] {
   return [];
 }
 
-export function saveProfiles(profiles: AppProfile[]): void {
+/** Speichert die Profile im Browser. `false`, wenn das nicht ging — voller
+ *  Speicher (ein Foto im Lokalmodus braucht ein paar hundert KB), privates
+ *  Fenster, gesperrter Speicher. Bisher wurde der Fehler verschluckt und die
+ *  Oberfläche meldete trotzdem „Gespeichert". */
+export function saveProfiles(profiles: AppProfile[]): boolean {
   try {
     localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+    return true;
   } catch {
-    // localStorage unavailable
+    return false;
   }
 }
 

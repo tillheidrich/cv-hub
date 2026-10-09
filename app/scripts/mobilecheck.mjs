@@ -232,7 +232,10 @@ else if (kopf.ueberhang > 2) problems.push(`Kopfleiste scrollt waagerecht (${kop
 
 for (const [name, sel] of [['Vorlage', 'header button:has(span)'], ['Schrift', 'Aa'], ['Menü', '⋯']]) {
   const btn = name === 'Vorlage'
-    ? page.locator('header button').filter({ hasText: /Hamburg|Wien|Genf|Lyon/ }).first()
+    /* Der Knopf trägt den Namen der aktiven Vorlage. Die Demo startet seit
+     * dem 08.10.2026 mit Espoo statt Hamburg — die Liste kommt deshalb aus
+     * der Vorlagenregistrierung, nicht aus einer Aufzählung hier. */
+    ? page.locator('header button').filter({ hasText: new RegExp((await page.evaluate(async () => (await import('/src/templates/theme.ts')).PICKABLE_THEMES.map(t => t.name))).join('|')) }).first()
     : page.locator('header button', { hasText: sel }).first();
   if (!(await btn.count())) { problems.push(`${name}: Schaltfläche fehlt in der Kopfleiste`); continue; }
   await btn.click();

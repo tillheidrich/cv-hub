@@ -11,8 +11,8 @@
 // Was hier NICHT geprüft werden kann und woanders geprüft wird:
 //   — PDF        → scripts/pdfcheck.mjs (braucht den PDF-Dienst)
 //   — Word-Optik → scripts/docxcheck.mjs (rendert mit LibreOffice)
-//   — Import     → nur mit Anmeldung sichtbar; der Demo-Modus hat keine
-//                  gespeicherten Lebensläufe, also auch keinen Import.
+//   — Import     → scripts/localmodecheck.mjs (Markdown hin und zurück,
+//                  seit 08.10.2026 auch ohne Konto im Browser).
 //
 //   node scripts/exportcheck.mjs
 import { chromium } from 'playwright';
@@ -84,7 +84,10 @@ const PRUEFUNGEN = {
 };
 
 const browser = await chromium.launch({ executablePath: EXECUTABLE });
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+/* Die Knöpfe werden über ihre deutschen Beschriftungen gesucht. Ohne feste
+ * Sprache startete der Browser englisch, und drei Ausgänge galten als
+ * „nicht gefunden", obwohl sie da waren (08.10.2026). */
+const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, locale: 'de-DE' });
 const fehler = [];
 page.on('pageerror', e => fehler.push(`Ausnahme: ${String(e).slice(0, 140)}`));
 
@@ -93,7 +96,7 @@ async function oeffneExport() {
   await page.waitForTimeout(700);
   // Nach dem ersten Mal ist der Demo-Modus schon gespeichert; dann gibt es
   // den Knopf auf der Startseite nicht mehr.
-  const start = page.locator('text=/Try the demo|Demo ausprobieren|Demo starten/').first();
+  const start = page.locator('text=/Direkt ausprobieren|Try the demo|Demo ausprobieren|Demo starten/').first();
   if (await start.count()) { await start.click(); }
   await page.waitForTimeout(2300);
   const tab = page.locator('button', { hasText: /^Export$/ }).first();

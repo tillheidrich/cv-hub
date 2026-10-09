@@ -145,8 +145,9 @@ solltest — sie sind gemessen, nicht geraten:
   gesperrte Versalzeilen in Einzelbuchstaben („B E R U F S E R F A H R U N G"),
   und genau an diesen Zeilen teilt ein Bewerbungssystem den Lebenslauf in
   Abschnitte. Gilt unabhängig von der Schriftgröße.
-* **Schrift nicht unter 8,4 pt.** Kleinere Größen sind als Parsing-Ursache
-  dokumentiert (Personio) — und niemand liest sie gern.
+* **Schrift nicht unter 8,2 pt.** Größen bis 8 pt sind als Parsing-Ursache
+  dokumentiert (Personio) — und niemand liest sie gern. 8,2 pt ist die
+  Untergrenze, die das Werkzeug selbst nie unterschreitet (\`MIN_FONT_PX\`).
 * **Die Reihenfolge im Textstrom ist nicht die Reihenfolge auf dem Papier.**
   In dieser Vorlage steht der Name im HTML VOR der Seitenspalte, auch wenn er
   optisch daneben liegt. Ein Parser ohne Layoutanalyse liest die HTML-Folge.

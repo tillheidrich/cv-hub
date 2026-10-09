@@ -8,6 +8,8 @@ import type { AccentId, PaperId, CVData, CoverLetterData, FontPairingId, Lang, P
 import { metricsFor, type Metrics } from '../templates/metrics';
 import { getPageFormat } from '../data/pageFormats';
 import { exportFilename } from './filename';
+import { stripPlaceholderPhoto, withEmbeddedPhoto } from './photoEmbed';
+import { embedFonts, type EmbeddedFonts } from './fontEmbed';
 
 /** Headless-Chrome PDF service — path-routed on the app domain. Override via VITE_PDF_SERVICE. */
 const PDF_SERVICE: string =
@@ -113,7 +115,13 @@ const TIP: Record<Lang, TipCopy> = {
   },
 };
 
-function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', jsonLd?: string, lang: Lang = 'de'): string {
+/** Schriften im Dokumentkopf: `link` verweist auf `/fonts.css` der eigenen
+ *  Herkunft (für den PDF-Dienst, der sie vom eigenen Host lädt), ein
+ *  `EmbeddedFonts` bettet sie ein (HTML-Datei zum Weitergeben), `null` lässt
+ *  sie weg (Systemschriften). */
+type FontMode = 'link' | EmbeddedFonts | null;
+
+function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4', jsonLd?: string, lang: Lang = 'de', fonts: FontMode = 'link'): string {
   const fmt = getPageFormat(pageFormat);
   const t = TIP[lang] ?? TIP.de;
   const w = `${fmt.widthMm}mm`;
@@ -133,7 +141,7 @@ function wrapDocument(title: string, body: string, pageFormat: PageFormat = 'a4'
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
-<link href="${FONT_LINK}" rel="stylesheet">
+${fonts === 'link' ? `<link href="${FONT_LINK}" rel="stylesheet">` : fonts ? `${fonts.licenseComment}\n<style>\n${fonts.css}\n</style>` : ''}
 ${jsonLd || ''}
 <style>
   *, *::before, *::after {
@@ -344,10 +352,10 @@ window.addEventListener('load', function () {
 
 // ── HTML builders ───────────────────────────────────────────────────────────
 
-function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
+function resumeBody(data: CVData, cfg: ExportRenderConfig): string {
   const theme = getTheme(cfg.themeId, cfg.accentId, cfg.paperId);
   const pairing = resolvePairing(theme, cfg.pairingId);
-  const body = renderToStaticMarkup(
+  return renderToStaticMarkup(
     createElement(ResumeRenderer, {
       data, theme, pairing,
       metrics: cfg.metrics ?? metricsFor(0, cfg.density ?? 1),
@@ -359,23 +367,40 @@ function buildResumeHtml(data: CVData, cfg: ExportRenderConfig): string {
       asideSkillCap: cfg.asideSkillCap,
     }),
   );
+}
+
+function buildResumeHtml(data: CVData, cfg: ExportRenderConfig, fonts: FontMode = 'link'): string {
+  const body = resumeBody(data, cfg);
   // The <title> becomes the default filename when the user prints the HTML
   // via Ctrl/Cmd+P → "Save as PDF". Using the same canonical export filename
   // (without extension) means the printed PDF inherits the good
   // 'Lebenslauf_Lena-Brandt_2026-06-01_0930' format instead of the prosey
   // 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
   const title = exportFilename('lebenslauf', data.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data), (data.labels?.lang ?? 'de') as Lang);
+  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data), (data.labels?.lang ?? 'de') as Lang, fonts);
 }
 
-function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
+function coverLetterBody(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
   const theme = getTheme(cfg.themeId, cfg.accentId, cfg.paperId);
   const pairing = resolvePairing(theme, cfg.pairingId);
-  const body = renderToStaticMarkup(
+  return renderToStaticMarkup(
     createElement(CoverLetterRenderer, { cvData, clData, theme, pairing, metrics: cfg.metrics ?? metricsFor(0, cfg.density ?? 1), pageFormat: cfg.pageFormat }),
   );
+}
+
+function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig, fonts: FontMode = 'link'): string {
+  const body = coverLetterBody(cvData, clData, cfg);
   const title = exportFilename('anschreiben', cvData.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, undefined, (cvData.labels?.lang ?? 'de') as Lang);
+  return wrapDocument(title, body, cfg.pageFormat, undefined, (cvData.labels?.lang ?? 'de') as Lang, fonts);
+}
+
+/** Sichtbarer Text eines Markups, grob — reicht für die Wahl des Zeichensatzes. */
+function roughText(markup: string): string {
+  return markup.replace(/<[^>]+>/g, ' ');
+}
+
+function origin(): string {
+  return typeof window !== 'undefined' ? window.location.origin : '';
 }
 
 /**
@@ -439,58 +464,99 @@ function personJsonLd(cv: CVData): string {
  * wird die Reihenfolge und die Vollständigkeit, nicht das Parse-Ergebnis.
  */
 export function extractExportText(data: CVData, cfg: ExportRenderConfig): string {
-  const html = buildResumeHtml(data, cfg);
+  const html = buildResumeHtml(stripPlaceholderPhoto(data), cfg);
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.querySelectorAll('style, script, .print-tip').forEach(el => el.remove());
+  return textLikePdf(doc);
+}
 
+/* Zeichen, die im Satz unsichtbar sind und in der Textebene des PDF nicht
+ * auftauchen: weiche Trennung, Null-Breite-Leerzeichen und -Verbinder,
+ * Wortverbinder, BOM. */
+const INVISIBLE = /[\u00AD\u200B-\u200D\u2060\uFEFF]/g;
+const BLOCK_TAGS = new Set(['DIV', 'P', 'LI', 'UL', 'OL', 'SECTION', 'H1', 'H2', 'H3', 'H4', 'ARTICLE', 'HEADER', 'FOOTER', 'TABLE', 'TR']);
+const BLOCK_DISPLAY = new Set(['block', 'flex', 'grid', 'list-item', 'table', 'table-row']);
+
+/**
+ * Text eines Export-Dokuments in der Form, in der ihn die Textebene des PDF
+ * liefert.
+ *
+ * Befund vom 08.10.2026: Die Prüfung meldete beim Standard-Beispiel in
+ * „Hamburg" eine kritische Lücke — die E-Mail stehe nicht im Dokument. Im PDF
+ * stand sie vollständig. Die Ursache lag hier: Jeder Textknoten wurde mit
+ * einem Leerzeichen angehängt, und die Vorlage zerlegte Adressen damals für
+ * den Umbruch in einzelne Spannen. Heraus kam „lena. brandt@example. com".
+ *
+ * Jetzt gilt dieselbe Regel wie im Satz: Innerhalb eines Blocks werden
+ * Textknoten so aneinandergehängt, wie sie im Dokument stehen — Leerraum
+ * entsteht nur dort, wo er im Text steht, und wird wie im Browser zu einem
+ * Leerzeichen zusammengefasst. Blöcke ergeben Zeilen. Die Reihenfolge ist die
+ * des DOM; sie ist seit dem 08.10.2026 auch die Malreihenfolge (kein
+ * positionierter Text mehr in den Vorlagen, siehe `Marker` im Renderer) und
+ * damit die Reihenfolge der PDF-Textebene. Geprüft gegen `pdftotext` in
+ * scripts/contactwrapcheck.mjs.
+ */
+export function textLikePdf(doc: Document): string {
   const lines: string[] = [];
-  const BLOCK = new Set(['DIV', 'P', 'LI', 'UL', 'SECTION', 'H1', 'H2', 'H3', 'H4', 'ARTICLE']);
+  let cur = '';
+  const flush = () => {
+    const t = cur.replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+    if (t) lines.push(t);
+    cur = '';
+  };
   const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const t = (node.textContent || '').replace(/\s+/g, ' ').trim();
-      if (t) {
-        // An Blockgrenzen neue Zeile, innerhalb eines Blocks anhängen.
-        if (lines.length && !lines[lines.length - 1].endsWith('\u0000')) lines[lines.length - 1] += (lines[lines.length - 1] ? ' ' : '') + t;
-        else lines.push(t);
-      }
-      return;
-    }
+    if (node.nodeType === Node.TEXT_NODE) { cur += node.textContent || ''; return; }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as HTMLElement;
-    const block = BLOCK.has(el.tagName);
-    if (block) lines.push('');
+    if (el.tagName === 'BR') { flush(); return; }
+    if (el.tagName === 'IMG' || el.tagName === 'SVG') return;
+    const block = BLOCK_TAGS.has(el.tagName) || BLOCK_DISPLAY.has(el.style?.display || '');
+    if (block) flush();
+    if (el.tagName === 'H2' && lines.length) lines.push('');
     el.childNodes.forEach(walk);
-    if (block) lines.push('');
+    if (block) flush();
   };
   doc.querySelectorAll('.cv-page').forEach((pageEl, i) => {
     if (i > 0) lines.push('', `--- Seite ${i + 1} ---`, '');
     pageEl.childNodes.forEach(walk);
+    flush();
   });
-
-  return lines
-    .map(l => l.trim())
-    .filter((l, i, arr) => l || (arr[i - 1] && arr[i - 1].trim()))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Nur für den Umbruch-Prüfstand: gibt das Export-HTML zurück, statt es
  *  herunterzuladen. So lässt sich das echte PDF im Test erzeugen. */
 export function buildResumeHtmlForTest(data: CVData, cfg: ExportRenderConfig): string {
-  return buildResumeHtml(data, cfg);
+  return buildResumeHtml(stripPlaceholderPhoto(data), cfg);
+}
+
+/** Prüfstand: genau die HTML-Datei, die „HTML" im Export herunterlädt —
+ *  mit eingebetteten Schriften und eingebettetem Foto. */
+export async function buildStandaloneResumeHtmlForTest(data: CVData, cfg: ExportRenderConfig): Promise<string> {
+  return standaloneResumeHtml(data, cfg);
 }
 
 // ── HTML export (standalone file) ───────────────────────────────────────────
 
-export function exportHtml(data: CVData, cfg: ExportRenderConfig): void {
-  download(exportFilename('lebenslauf', data.personal.name, 'html'),
-    new Blob([buildResumeHtml(data, cfg)], { type: 'text/html;charset=utf-8' }));
+async function standaloneResumeHtml(data: CVData, cfg: ExportRenderConfig): Promise<string> {
+  const cv = await withEmbeddedPhoto(data);
+  const fonts = await embedFonts(resumeBody(cv, cfg), roughText(resumeBody(cv, cfg)), origin());
+  return buildResumeHtml(cv, cfg, fonts);
 }
 
-export function exportCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): void {
+/** Die HTML-Datei steht für sich: Foto und Schriften sind eingebettet, beim
+ *  Öffnen wird kein fremder (und auch nicht unser) Server angefragt. */
+export async function exportHtml(data: CVData, cfg: ExportRenderConfig): Promise<void> {
+  download(exportFilename('lebenslauf', data.personal.name, 'html'),
+    new Blob([await standaloneResumeHtml(data, cfg)], { type: 'text/html;charset=utf-8' }));
+}
+
+export async function exportCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): Promise<void> {
+  const cv = await withEmbeddedPhoto(cvData);
+  const body = coverLetterBody(cv, clData, cfg);
+  const fonts = await embedFonts(body, roughText(body), origin());
   download(exportFilename('anschreiben', cvData.personal.name, 'html'),
-    new Blob([buildCoverLetterHtml(cvData, clData, cfg)], { type: 'text/html;charset=utf-8' }));
+    new Blob([buildCoverLetterHtml(cv, clData, cfg, fonts)], { type: 'text/html;charset=utf-8' }));
 }
 
 // ── Direct PDF export (no print dialog) ─────────────────────────────────────
@@ -507,7 +573,10 @@ export interface PdfExportArgs {
  * directly — no browser print dialog. Throws on failure so the caller can
  * fall back to window.print().
  */
-export async function exportPdf({ data, cfg, isCover, coverLetter }: PdfExportArgs): Promise<{ pages: number; bytes: number }> {
+export async function exportPdf({ data: raw, cfg, isCover, coverLetter }: PdfExportArgs): Promise<{ pages: number; bytes: number }> {
+  /* Das Foto geht eingebettet mit (siehe photoEmbed.ts) — der PDF-Dienst holt
+   * nichts mehr über HTTP nach. */
+  const data = await withEmbeddedPhoto(raw);
   const html = isCover && coverLetter
     ? buildCoverLetterHtml(data, coverLetter, cfg)
     : buildResumeHtml(data, cfg);

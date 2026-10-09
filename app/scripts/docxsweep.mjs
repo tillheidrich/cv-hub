@@ -26,7 +26,7 @@ const out = join(process.cwd(), 'tmp-docx'); mkdirSync(out, { recursive: true })
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const p = await b.newPage({ viewport: { width: 900, height: 1400 } });
 for (const t of ids) {
-  await p.goto(`http://localhost:5199/dev-preview.html?tpl=${t}&mode=one&len=normal&p=marketing`, { waitUntil: 'networkidle' });
+  await p.goto(`${process.env.HARNESS_BASE || "http://localhost:5199"}/dev-preview.html?tpl=${t}&mode=one&len=normal&p=marketing`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(700);
   for (const v of ['design', 'ats']) {
     const b64 = await p.evaluate(x => window.__docx(x), v);

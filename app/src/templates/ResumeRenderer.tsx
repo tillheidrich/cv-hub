@@ -2,9 +2,11 @@ import React from 'react';
 import type { CVData, SocialLink, SectionKey, PageFormat } from '../data/types';
 import { getPageFormat } from '../data/pageFormats';
 import type { ResumeTheme, ThemeColors, FontPairing, BulletStyle } from './theme';
-import { TRACK_CAPS, TRACK_NAME, FS, LH, MIN_X_HEIGHT_PX, fs, fsn, sp, spn, pd, lh, type Metrics } from './metrics';
-import { isMultiline, type InlinePath } from '../data/inlineEdit';
+import { TRACK_CAPS, TRACK_NAME, FS, LH, MIN_X_HEIGHT_PX, fs, fsn, sp, spn, pd, pdn, lh, type Metrics } from './metrics';
+import type { InlinePath } from '../data/inlineEdit';
 import { Ed, InlineEditCtx, type InlineEditApi } from './InlineEdit';
+import { textWidthPx } from './textWidth';
+import { shortUrl } from '../data/urls';
 export type { InlineEditApi };
 
 // ── Social rendering helpers ────────────────────────────────────────────────
@@ -33,12 +35,19 @@ export function listSocials(personal: CVData['personal']): SocialLink[] {
   return legacy;
 }
 
+export { shortUrl };
+
+/** Verweisziel einer Adresse, die der Mensch mit oder ohne Protokoll getippt hat. */
+export function webHref(v: string): string {
+  const t = (v || '').trim();
+  return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, '')}`;
+}
+
 /** Pretty value for a social — uses platform prefix if user only wrote a handle. */
 export function socialDisplay(s: SocialLink): string {
   const v = (s.value || '').trim();
   if (!v) return '';
-  if (/^https?:\/\//i.test(v)) return v.replace(/^https?:\/\//i, '');
-  if (v.includes('/')) return v;
+  if (/^https?:\/\//i.test(v) || v.includes('/')) return shortUrl(v);
   return SOCIAL_META[s.platform]?.prefix + v;
 }
 
@@ -56,7 +65,7 @@ export function socialLabel(s: SocialLink): string {
 /** Kontaktzeile für Kopfbalken (E-Mail · Telefon · Ort · Web · Profile).
  *  Jeder Eintrag trägt seinen Bearbeitungspfad mit — auch im Kopfbalken soll
  *  man hineintippen können, nicht nur in der Seitenspalte. */
-export function inlineContact(personal: CVData['personal']): { v: string; path?: string }[] {
+export function inlineContact(personal: CVData['personal'], editing = false): { v: string; path?: string }[] {
   const out: { v: string; path?: string }[] = [];
   if (personal.email) out.push({ v: personal.email, path: 'personal.email' });
   if (personal.phone) out.push({ v: personal.phone, path: 'personal.phone' });
@@ -72,12 +81,73 @@ export function inlineContact(personal: CVData['personal']): { v: string; path?:
       ? { v: personal.location, path: 'personal.location' }
       : { v: einzeilig });
   }
-  if (personal.website) out.push({ v: personal.website, path: 'personal.website' });
+  /* Auch beim Bearbeiten die kurze Form: Vorschau und PDF zeigen dasselbe.
+   * Dass ein Klick hinein und wieder hinaus die getippte Langform nicht
+   * überschreibt, regelt `applyInlineEdit` (gleiche Adresse = keine Änderung). */
+  void editing;
+  if (personal.website) out.push({ v: shortUrl(personal.website), path: 'personal.website' });
   for (const s of listSocials(personal)) {
     if (!s.value.trim()) continue;
     out.push({ v: socialDisplay(s), path: `socials.${s.id}` });
   }
   return out;
+}
+
+// ── Kontaktangaben ohne Umbruch ─────────────────────────────────────────────
+//
+// E-Mail, Telefon und Adressen brechen nie mitten um. Bis zum 08.10.2026 tat
+// genau das die Seitenspalte mit Absicht (Umbruchstellen nach Punkt und
+// Schrägstrich). Ein deutscher Parser-Test mit drei kommerziellen Engines
+// (r/InformatikKarriere, 08/2026) zeigte, was daraus wird: dieselbe
+// umgebrochene E-Mail kam bei drei Engines auf drei Arten kaputt an —
+// Bindestrich verschluckt, abgeschnitten, Feld leer. Und unsere eigene
+// ATS-Prüfung las „lena. brandt@example. com".
+//
+// Jetzt gilt eine feste Reihenfolge:
+//   1. kurze Anzeigeform (ohne https://, www.) in normaler Größe,
+//   2. passt das nicht: eine Stufe kleiner (Label-Größe, nie unter der
+//      Untergrenze aus metrics.ts),
+//   3. passt auch das nicht: die Angabe verlässt die Spalte und steht unter
+//      dem Namen in voller Breite.
+// Geprüft wird mit Laufweiten aus `textWidth.ts`, nicht im DOM — damit
+// Vorschau, Messlauf und PDF dieselbe Entscheidung treffen.
+
+export type ContactKind = 'email' | 'phone' | 'address' | 'web' | 'social';
+
+export interface ContactRow {
+  kind: ContactKind;
+  l: string; v: string; href?: string; lp?: string; vp?: string;
+}
+
+export function contactRows(data: CVData, editing = false): ContactRow[] {
+  const { personal, labels } = data;
+  const rows: ContactRow[] = [];
+  if (personal.email) rows.push({ kind: 'email', l: labels.fields.email, v: personal.email.trim(), href: `mailto:${personal.email.trim()}`, lp: 'labels.fields.email', vp: 'personal.email' });
+  if (personal.phone) rows.push({ kind: 'phone', l: labels.fields.phone, v: personal.phone.trim(), href: `tel:${personal.phone.replace(/[^+\d]/g, '')}`, lp: 'labels.fields.phone', vp: 'personal.phone' });
+  if (personal.location) rows.push({ kind: 'address', l: labels.fields.address, v: personal.location, lp: 'labels.fields.address', vp: 'personal.location' });
+  void editing;
+  if (personal.website) rows.push({ kind: 'web', l: labels.fields.web, v: shortUrl(personal.website), href: webHref(personal.website), lp: 'labels.fields.web', vp: 'personal.website' });
+  for (const s of listSocials(personal)) {
+    if (!s.value.trim()) continue;
+    rows.push({ kind: 'social', l: socialLabel(s), v: socialDisplay(s), href: socialHref(s), vp: `socials.${s.id}` });
+  }
+  return rows;
+}
+
+/** Sicherheitszuschlag auf die geschätzte Breite (Rundung, Subpixel).
+ *  Nachgemessen am 08.10.2026: Die Tabelle liegt im Mittel 0,3 % über der
+ *  Breite, die Chromium setzt („linkedin.com/in/katharina-vogt": 164,9 px
+ *  geschätzt, 164,4 px gesetzt) — Unterschneidung macht Zeilen nur kürzer.
+ *  2 % reichen; mehr schickte Adressen, die passen, unnötig in die kleine
+ *  Stufe. */
+const FIT_SAFETY = 1.02;
+
+export type ContactFit = 'normal' | 'small' | 'wide';
+
+export function contactFit(v: string, availPx: number, P: FontPairing, M: Metrics): ContactFit {
+  if (textWidthPx(v, fsn(FS.meta, M), P.body) * FIT_SAFETY <= availPx) return 'normal';
+  if (textWidthPx(v, fsn(FS.label, M), P.body) * FIT_SAFETY <= availPx) return 'small';
+  return 'wide';
 }
 
 // ── Flow-Blöcke ─────────────────────────────────────────────────────────────
@@ -105,27 +175,31 @@ export interface FlowBlock {
 /** Welcher Teil der Seitenspalte gerendert wird — siehe `renderAside`. */
 type AsidePart = 'all' | 'head' | 'rest';
 
-/** Für Screenreader und Textextraktion sichtbar, für das Auge nicht. */
-const SR_ONLY: React.CSSProperties = {
-  position: 'absolute', width: '1px', height: '1px',
-  padding: 0, margin: '-1px', overflow: 'hidden',
-  clip: 'rect(0 0 0 0)', clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap', border: 0,
-};
 
 // ── Bullet marker ───────────────────────────────────────────────────────────
 
-function Marker({ style, color, M }: { style: BulletStyle; color: string; M: Metrics }) {
+function Marker({ style, color, M, widthPx }: { style: BulletStyle; color: string; M: Metrics; widthPx: number }) {
   const base = fsn(FS.body, M);
+  /* Der Marker steht im Fluss, nicht absolut positioniert.
+   *
+   * Befund vom 08.10.2026: Chromium malt positionierte Elemente in einem
+   * eigenen, späteren Durchgang — und die Textebene des PDF folgt der
+   * Malreihenfolge. Solange die Stichpunktzeile `position: relative` trug,
+   * standen im PDF erst ALLE Stationsköpfe einer Seite und danach ALLE
+   * Stichpunkte (`pdftotext -raw`, Espoo und Zürich). Ein Parser ohne
+   * Layoutanalyse ordnete so jeden Stichpunkt der letzten Station zu. Jetzt
+   * sitzt der Marker in einer eigenen schmalen Flex-Spalte; optisch dieselbe
+   * Stelle, im Textstrom die richtige Reihenfolge. */
+  const box: React.CSSProperties = { display: 'block', width: `${widthPx}px`, flexShrink: 0 };
   if (style === 'dot' || style === 'chevron')
     // 'chevron' war ein Guillemet (›) und saß je nach Schrift auf einer anderen
     // Grundlinie. Ersetzt durch denselben soliden Punkt wie 'dot'.
-    return <span style={{ position: 'absolute', left: 0, top: `${base * 0.52}px`, width: `${base * 0.26}px`, height: `${base * 0.26}px`, borderRadius: '50%', background: color }} />;
+    return <span aria-hidden style={box}><span style={{ display: 'block', marginTop: `${base * 0.52}px`, width: `${base * 0.26}px`, height: `${base * 0.26}px`, borderRadius: '50%', background: color }} /></span>;
   if (style === 'square')
-    return <span style={{ position: 'absolute', left: 0, top: `${base * 0.52}px`, width: `${base * 0.26}px`, height: `${base * 0.26}px`, background: color }} />;
+    return <span aria-hidden style={box}><span style={{ display: 'block', marginTop: `${base * 0.52}px`, width: `${base * 0.26}px`, height: `${base * 0.26}px`, background: color }} /></span>;
   if (style === 'dash')
-    return <span style={{ position: 'absolute', left: 0, top: `${base * 0.62}px`, width: `${base * 0.5}px`, height: `${Math.max(1, base * 0.1)}px`, background: color }} />;
-  return <span style={{ position: 'absolute', left: 0, top: `${base * 0.1}px`, fontSize: `${base * 0.72}px`, color, lineHeight: 1 }}>→</span>;
+    return <span aria-hidden style={box}><span style={{ display: 'block', marginTop: `${base * 0.62}px`, width: `${base * 0.5}px`, height: `${Math.max(1, base * 0.1)}px`, background: color }} /></span>;
+  return <span aria-hidden style={box}><span style={{ display: 'block', marginTop: `${base * 0.1}px`, fontSize: `${base * 0.72}px`, color, lineHeight: 1 }}>→</span></span>;
 }
 
 // ── Section title ───────────────────────────────────────────────────────────
@@ -277,51 +351,15 @@ function BulletLine({ text, C, T, M, onPanel, path }: {
   return (
     <div style={{
       fontSize: fs(FS.body, M), color: onPanel ? C.panelInkSoft : C.inkMid, lineHeight: lh(LH.body, M),
-      paddingLeft: `${16 * M.t}px`, position: 'relative', maxWidth: '122mm',
+      display: 'flex', alignItems: 'flex-start', maxWidth: '122mm',
     }}>
-      <Marker style={T.bullet} color={onPanel ? C.panelAccent : C.accent} M={M} />
-      <Ed path={path} block>{text}</Ed>
+      <Marker style={T.bullet} color={onPanel ? C.panelAccent : C.accent} M={M} widthPx={16 * M.t} />
+      <span style={{ flex: '1 1 auto', minWidth: 0 }}><Ed path={path} block>{text}</Ed></span>
     </div>
   );
 }
 
 // ── Section content blocks ──────────────────────────────────────────────────
-
-/**
- * Lange Kennungen (URLs, Profilpfade) mit sinnvollen Umbruchstellen.
- *
- * Ohne diese Hilfe brach „xing.com/profile/Katharina_Vogt" in einer 55-mm-
- * Spalte mitten im Namen um („…Katharina_Vo | gt"). `<wbr>` bietet dem Satz
- * Stellen an, an denen ein Umbruch nicht weh tut — nach Punkt, Schrägstrich,
- * Bindestrich und Unterstrich. Im PDF-Text hinterlässt `<wbr>` kein Zeichen,
- * die Adresse bleibt also am Stück kopierbar.
- */
-function Breakable({ text }: { text: string }) {
-  // Nur nach Punkt und Schrägstrich getrennt. Ein Umbruch nach Unterstrich
-  // oder Bindestrich mitten im Namen („…Katharina_ | Vogt") liest sich wie ein
-  // Fehler und lässt beim Abtippen eine falsche Adresse entstehen; nach einem
-  // Pfadtrenner ist der Umbruch dagegen als solcher erkennbar.
-  //
-  // Gewollte Umbrüche (Anschrift: Straße / PLZ und Ort) kommen zuerst dran.
-  // Sonst läge das „\n" in einem `white-space: nowrap`-Abschnitt und würde
-  // als Leerzeichen dargestellt — der Umbruch wäre in den Daten, aber nicht
-  // auf dem Papier.
-  const lines = text.split('\n');
-  return (
-    <>
-      {lines.map((line, li) => (
-        <React.Fragment key={li}>
-          {li > 0 && <br />}
-          {line.split(/(?<=[./])/).map((part, i, arr) => (
-            <span key={i} style={{ whiteSpace: 'nowrap' }}>
-              {part}{i < arr.length - 1 && <wbr />}
-            </span>
-          ))}
-        </React.Fragment>
-      ))}
-    </>
-  );
-}
 
 /**
  * Kleines Versal-Label über einem Wert (E-MAIL, STAATSANGEHÖRIGKEIT, …).
@@ -370,42 +408,37 @@ function FieldLabel({ label, path, color, P, M, bracket }: {
   return <div style={labelStyle(label, color, P, M)}>{bracket ? <>{'['}{inner}{']'}</> : inner}</div>;
 }
 
-function ContactBlock({ data, C, P, M, onPanel, bracket }: { data: CVData; C: ThemeColors; P: FontPairing; M: Metrics; onPanel?: boolean; bracket?: boolean }) {
-  const { personal, labels } = data;
+function ContactBlock({ data, C, P, M, onPanel, bracket, availPx, wide }: {
+  data: CVData; C: ThemeColors; P: FontPairing; M: Metrics; onPanel?: boolean; bracket?: boolean;
+  /** Satzbreite der Spalte in px — Grundlage für die Entscheidung normal/klein. */
+  availPx: number;
+  /** Angaben, die nicht in die Spalte passen und deshalb unter dem Namen
+   *  in voller Breite stehen (siehe `contactFit`). */
+  wide: Set<string>;
+}) {
   const ink = onPanel ? C.panelInk : C.inkMid;
   const lab = onPanel ? C.panelAccent : C.accent;
   /* Im Bearbeitungsmodus keine Verweise: ein beschreibbares Feld in einem
    * Anker führt beim Hineintippen zum Mailprogramm statt zum Schreibzeiger.
    * Im Export ist der Kontext leer, dort bleiben die Verweise klickbar. */
   const editing = !!React.useContext(InlineEditCtx);
-  const rows: { l: string; v: string; href?: string; lp?: string; vp?: string }[] = [
-    { l: labels.fields.email, v: personal.email, href: `mailto:${personal.email}`, lp: 'labels.fields.email', vp: 'personal.email' },
-    { l: labels.fields.phone, v: personal.phone, href: `tel:${personal.phone.replace(/\s/g, '')}`, lp: 'labels.fields.phone', vp: 'personal.phone' },
-    { l: labels.fields.address, v: personal.location, lp: 'labels.fields.address', vp: 'personal.location' },
-  ];
-  if (personal.website) rows.push({ l: labels.fields.web, v: personal.website, href: `https://${personal.website}`, lp: 'labels.fields.web', vp: 'personal.website' });
-  for (const s of listSocials(personal)) {
-    if (!s.value.trim()) continue;
-    rows.push({ l: socialLabel(s), v: socialDisplay(s), href: socialHref(s), vp: `socials.${s.id}` });
-  }
+  const rows = contactRows(data, editing).filter(r => !wide.has(r.vp ?? r.v));
+  /* Eine Stufe kleiner gilt für den ganzen Block, nicht für eine einzelne
+   * Zeile: drei Schriftgrößen untereinander sähen nach Versehen aus. */
+  const small = rows.some(r => r.kind !== 'address' && contactFit(r.v, availPx, P, M) === 'small');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: sp(10, M) }}>
       {rows.map((r, i) => {
         const inner = (
           <>
             <FieldLabel label={r.l} path={r.lp} color={lab} P={P} M={M} bracket={bracket} />
-            <div style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), color: ink, lineHeight: lh(LH.tight, M), whiteSpace: 'pre-line' }}>
-              {editing && r.vp
-                /* Felder mit Umbruchbedeutung (Anschrift) bekommen beim
-                 * Bearbeiten den nackten Text: die `nowrap`-Abschnitte von
-                 * `Breakable` schlucken ein eingetipptes Zeilenende. Für die
-                 * Darstellung braucht eine Anschrift ohnehin keine
-                 * Umbruchhilfen — die haben lange Kennungen nötig, nicht
-                 * „29525 Uelzen". */
-                ? (isMultiline(r.vp)
-                    ? <Ed path={r.vp} block>{r.v}</Ed>
-                    : <Ed path={r.vp} block><Breakable text={r.v} /></Ed>)
-                : <Breakable text={r.v} />}
+            <div style={{
+              fontFamily: P.body, fontSize: fs(small && r.kind !== 'address' ? FS.label : FS.meta, M), color: ink, lineHeight: lh(LH.tight, M),
+              /* Anschrift: Zeilenenden aus den Daten gelten. Alles andere ist
+               * eine Kennung und steht am Stück. */
+              whiteSpace: r.kind === 'address' ? 'pre-line' : 'nowrap',
+            }}>
+              {editing && r.vp ? <Ed path={r.vp} block>{r.v}</Ed> : r.v}
             </div>
           </>
         );
@@ -517,14 +550,13 @@ function DotScale({ value, max, M, on, off }: { value: number; max: number; M: M
   const size = fsn(FS.body, M) * 0.49;
   const gap = size * 0.5;
   return (
-    <span style={{ display: 'inline-flex', gap: `${gap}px`, alignItems: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
-      {/* Der Wert steht als Text im Dokument, auch wenn er visuell nur als
-          Punktskala erscheint. Das ist die Stelle, an der ein Screenreader und
-          ein PDF-Textextraktor das Sprachniveau überhaupt finden können.
-          Bewusst inline gesetzt und nicht per Klasse: der Export ist ein
-          eigenständiges HTML-Dokument und darf sich auf kein Stylesheet der
-          App verlassen. */}
-      <span style={SR_ONLY}>{` (${value} von ${max})`}</span>
+    /* Bis zum 08.10.2026 stand hier ein unsichtbarer Text „(4 von 5)" in
+     * einem absolut positionierten Kasten. Positionierte Elemente malt
+     * Chromium zuletzt — der Text landete im PDF am Ende der Seite, losgelöst
+     * von der Sprache, und auf Englisch stand dort „von". Das Sprachniveau
+     * steht ohnehin immer als Text daneben (C1, Muttersprache); für
+     * Screenreader trägt die Skala jetzt eine Beschriftung. */
+    <span role="img" aria-label={`${value}/${max}`} style={{ display: 'inline-flex', gap: `${gap}px`, alignItems: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
       {Array.from({ length: max }, (_, i) => (
         <span key={i} aria-hidden style={{
           display: 'inline-block', width: `${size}px`, height: `${size}px`,
@@ -585,10 +617,10 @@ function SkillGroupBlock({ group, T, C, P, M, onPanel, pathBase }: {
           // Liste bisher im gedämpften Ton und war im Graustufendruck das
           // blasseste Element der Seite.
           fontSize: fs(FS.meta, M), color: onPanel ? C.panelInk : C.inkMid, lineHeight: lh(LH.tight, M),
-          paddingLeft: `${13 * M.t}px`, position: 'relative',
+          display: 'flex', alignItems: 'flex-start',
         }}>
-          <Marker style={T.bullet === 'dash' ? 'dot' : T.bullet} color={onPanel ? C.panelAccent : C.accent} M={M} />
-          <Ed path={pathBase ? `${pathBase}.${i}` : undefined} block>{it}</Ed>
+          <Marker style={T.bullet === 'dash' ? 'dot' : T.bullet} color={onPanel ? C.panelAccent : C.accent} M={M} widthPx={13 * M.t} />
+          <span style={{ flex: '1 1 auto', minWidth: 0 }}><Ed path={pathBase ? `${pathBase}.${i}` : undefined} block>{it}</Ed></span>
         </li>
       ))}
     </ul>
@@ -678,12 +710,17 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast }: {
     );
   }
   return (
-    <div style={{ position: 'relative', paddingLeft: timeline ? `${16 * M.t}px` : undefined }}>
+    /* Zeitstrahl ohne `position`: Punkt und Linie stehen in einer eigenen
+     * schmalen Rasterspalte im Fluss. Mit `position: relative` am Kopf malte
+     * Chromium den ganzen Kopf in den späten Durchgang für positionierte
+     * Elemente, und die Textebene des PDF geriet aus der Reihenfolge (siehe
+     * `Marker`). Die Linie reicht wie vorher 14 px über den Kopf hinaus. */
+    <div style={{ display: 'grid', gridTemplateColumns: timeline ? `${16 * M.t}px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}>
       {timeline && (
-        <>
-          <span style={{ position: 'absolute', left: 0, top: `${4 * M.t}px`, width: `${8 * M.t}px`, height: `${8 * M.t}px`, borderRadius: '50%', background: C.pageBg, border: `${2 * M.t}px solid ${C.accent}` }} />
-          {!isLast && <span style={{ position: 'absolute', left: `${3.5 * M.t}px`, top: `${14 * M.t}px`, bottom: `${-14 * M.t}px`, width: `${1.2 * M.t}px`, background: C.accent, opacity: 0.35 }} />}
-        </>
+        <span aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <span style={{ display: 'block', flexShrink: 0, marginTop: `${4 * M.t}px`, width: `${8 * M.t}px`, height: `${8 * M.t}px`, borderRadius: '50%', background: C.pageBg, border: `${2 * M.t}px solid ${C.accent}` }} />
+          {!isLast && <span style={{ display: 'block', flex: '1 1 auto', marginTop: `${2 * M.t}px`, marginLeft: `${3.5 * M.t}px`, marginBottom: `${-14 * M.t}px`, width: `${1.2 * M.t}px`, background: C.accent, opacity: 0.35 }} />}
+        </span>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: sp(10, M) }}>
         <div style={{ flex: 1, minWidth: 0 }}>{body}</div>
@@ -734,6 +771,17 @@ function EducationEntryBlock({ e, C, P, M, tabular }: {
 
 // ── Name block ──────────────────────────────────────────────────────────────
 
+/** Name, der nur an Wortzwischenräumen umbricht, nie am Bindestrich.
+ *  „Vogt-Müller" in einer schmalen Spalte brach sonst zu „Vogt-" | „Müller",
+ *  und im Textstrom des PDF stand der Nachname zerrissen auf zwei Zeilen
+ *  (scripts/contactwrapcheck.mjs, Aarhus, 08.10.2026). */
+function NameText({ name }: { name: string }) {
+  if (!/-/.test(name)) return <>{name}</>;
+  return <>{name.split(/(\s+)/).map((part, i) => (/^\s+$/.test(part) || !part
+    ? part
+    : <span key={i} style={{ whiteSpace: 'nowrap' }}>{part}</span>))}</>;
+}
+
 function NameBlock({ data, T, C, P, M, big, onPanel }: {
   data: CVData; T: ResumeTheme; C: ThemeColors; P: FontPairing; M: Metrics; big?: boolean; onPanel?: boolean;
 }) {
@@ -757,7 +805,7 @@ function NameBlock({ data, T, C, P, M, big, onPanel }: {
            * geprüft in pdfcheck.mjs (Lesereihenfolge, Wortgrenzen). */
           wordSpacing: '20em',
         }}>
-          <Ed path="personal.name">{data.personal.name}</Ed>
+          <Ed path="personal.name"><NameText name={data.personal.name} /></Ed>
         </h1>
       ) : (
       <h1 style={{
@@ -773,7 +821,7 @@ function NameBlock({ data, T, C, P, M, big, onPanel }: {
         // Schriftgrad (scripts/measure-tracking.mjs).
         letterSpacing: T.trackedName ? TRACK_CAPS : (T.uppercaseName ? '0.02em' : TRACK_NAME),
         textTransform: (T.uppercaseName || T.trackedName) ? 'uppercase' : 'none',
-      }}><Ed path="personal.name">{data.personal.name}</Ed></h1>
+      }}><Ed path="personal.name"><NameText name={data.personal.name} /></Ed></h1>
       )}
       <div style={{
         fontFamily: P.body, fontSize: fs(FS.meta * 0.9, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
@@ -1274,6 +1322,28 @@ export default function ResumeRenderer({
   };
 
   const sidebarMm = T.sidebarMm ?? (T.layout === 'header-band' ? 58 : 62);
+  /** Satzbreite der Seitenspalte in px (Spaltenbreite minus Innenabstand). */
+  const asideAvailPx = sidebarMm * 96 / 25.4 - 2 * pdn(30, M);
+  /* Kontaktangaben, die selbst eine Stufe kleiner nicht in die Spalte passen,
+   * stehen unter dem Namen in voller Breite (siehe `contactFit`). Nur bei
+   * Seitenspalten — Kopfband und einspaltige Vorlagen setzen den Kontakt
+   * ohnehin in einer Zeile über die Breite. */
+  const wideRows = isSidebar
+    ? contactRows(data, !!inlineEdit).filter(r => r.kind !== 'address' && contactFit(r.v, asideAvailPx, P, M) === 'wide')
+    : [];
+  const wideKeys = new Set(wideRows.map(r => r.vp ?? r.v));
+  const wideLine = wideRows.length > 0 ? (
+    <div style={{
+      marginTop: sp(8, M), display: 'flex', flexWrap: 'wrap', gap: `${spn(3, M)}px ${spn(10, M)}px`,
+      fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.inkMid,
+    }}>
+      {wideRows.map((r, i) => (
+        <span key={i} style={{ whiteSpace: 'nowrap' }}>
+          {i > 0 && <span style={{ color: `color-mix(in srgb, ${C.accent} 55%, transparent)` }}>{'·\u00A0'}</span>}<Ed path={r.vp as InlinePath | undefined}>{r.v}</Ed>
+        </span>
+      ))}
+    </div>
+  ) : null;
   /* Seitenspalte ohne Farbfläche: dann gelten für ihren Text die Farben der
    * Seite, nicht die des Panels — sonst stünde heller Panel-Ton auf weißem
    * Papier. Getrennt wird stattdessen mit einer Haarlinie. */
@@ -1282,7 +1352,7 @@ export default function ResumeRenderer({
   const AsideContent = ({ onPanel, skipContact, part = 'all' }: { onPanel: boolean; skipContact?: boolean; part?: AsidePart }) => (
     <>
       {part !== 'rest' && !skipContact && (
-        <div><SectionTitle label={sec.personal} path="labels.sections.personal" T={T} C={C} P={P} M={M} onPanel={onPanel} aside /><ContactBlock data={data} C={C} P={P} M={M} onPanel={onPanel} bracket={T.bracketLabels} /></div>
+        <div><SectionTitle label={sec.personal} path="labels.sections.personal" T={T} C={C} P={P} M={M} onPanel={onPanel} aside /><ContactBlock data={data} C={C} P={P} M={M} onPanel={onPanel} bracket={T.bracketLabels} availPx={asideAvailPx} wide={wideKeys} /></div>
       )}
       {part === 'head' ? null : <>
       {profileAside && !hidden.has('profile') && profile.text.trim() && (
@@ -1371,10 +1441,16 @@ export default function ResumeRenderer({
             fontFamily: P.body, fontSize: fs(FS.micro, M), letterSpacing: TRACK_CAPS, textTransform: 'uppercase',
             fontWeight: 600, color: C.panelInk,
           }}>{data.personal.name}</div>
-          {[data.personal.email, data.personal.phone].filter(Boolean).map((v, i) => (
+          {/* Nur, was am Stück in die Spalte passt: eine E-Mail, die hier
+              umbräche, wäre für einen Parser kaputt — und sie steht auf
+              Seite 1 ohnehin vollständig. */}
+          {[data.personal.email, data.personal.phone].map(v => (v || '').trim())
+            .filter(v => v && textWidthPx(v, fsn(FS.label, M), P.body) * FIT_SAFETY <= asideAvailPx)
+            .map((v, i) => (
             <div key={i} style={{
               fontFamily: P.body, fontSize: fs(FS.label, M), color: C.panelInkSoft, lineHeight: lh(LH.tight, M),
-            }}><Breakable text={v} /></div>
+              whiteSpace: 'nowrap',
+            }}>{v}</div>
           ))}
         </div>
       ) : null /* Bandlayouts tragen den Namen auf Folgeseiten schon im
@@ -1387,6 +1463,7 @@ export default function ResumeRenderer({
   const mainHead = (
     <div>
       <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+      {wideLine}
       <div style={{ height: `${0.9 * M.t}px`, background: C.rule, margin: `${sp(16, M)} 0` }} />
       {!hidden.has('profile') && profile?.text && profilePara()}
     </div>
@@ -1400,7 +1477,11 @@ export default function ResumeRenderer({
       {pageIndex === 0 ? (
         isSidebar && !T.nameInSidebar
           ? <div data-cv-chrome={measure ? '1' : undefined}>{mainHead}</div>
-          : null
+          /* Name in der Seitenspalte: Was dort nicht hineinpasst, steht oben in
+           * der Hauptspalte — im Textstrom direkt nach Name und Kontakt. */
+          : isSidebar && wideLine
+            ? <div data-cv-chrome={measure ? '1' : undefined} style={{ marginBottom: sp(12, M) }}>{wideLine}</div>
+            : null
       ) : (
         <ContinuationHead data={data} C={C} P={P} M={M} pageIndex={pageIndex} pageCount={pageCount} />
       )}
@@ -1470,8 +1551,8 @@ export default function ResumeRenderer({
                 <NameBlock data={data} T={T} C={C} P={P} M={M} big onPanel />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: sp(3, M), textAlign: 'right' }}>
-                {inlineContact(data.personal).map((r, i) => (
-                  <div key={i} style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.panelInkSoft }}><Ed path={r.path}>{r.v}</Ed></div>
+                {inlineContact(data.personal, !!inlineEdit).map((r, i) => (
+                  <div key={i} style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.panelInkSoft, whiteSpace: 'nowrap' }}><Ed path={r.path}>{r.v}</Ed></div>
                 ))}
               </div>
             </div>
@@ -1527,9 +1608,9 @@ export default function ResumeRenderer({
                 {/* Der Trenner leitet den FOLGENDEN Eintrag ein und klebt an
                     ihm. Andersherum endete eine Zeile mit „Hamburg ·" und der
                     Punkt hing am Zeilenausgang in der Luft. */}
-                {inlineContact(data.personal).map((r, i) => (
+                {inlineContact(data.personal, !!inlineEdit).map((r, i) => (
                   <span key={i} style={{ whiteSpace: 'nowrap' }}>
-                    {i > 0 && <span style={{ color: C.accent, opacity: 0.55 }}>{'·\u00A0'}</span>}<Ed path={r.path}>{r.v}</Ed>
+                    {i > 0 && <span style={{ color: `color-mix(in srgb, ${C.accent} 55%, transparent)` }}>{'·\u00A0'}</span>}<Ed path={r.path}>{r.v}</Ed>
                   </span>
                 ))}
               </div>

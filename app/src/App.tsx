@@ -30,7 +30,7 @@ import {
   getActiveProfileId, setActiveProfileId,
   updateProfileInList, deleteProfileFromList,
   saveProfiles as saveProfilesLocal, loadProfiles as loadProfilesLocal,
-  createDemoProfile, withAllLangs,
+  createDemoProfile, withAllLangs, carryContactToLang,
 } from './data/storage';
 import { useIsMobile } from './ui/useIsMobile';
 import { ALL_LANGS, LANG_NAMES } from './data/labels';
@@ -581,7 +581,7 @@ function SettingsPanel({ fontScale, onFontScale, fontPairing, onFontPairing, acc
           </label>
 
           <div style={{ fontSize: '10.5px', color: 'oklch(0.42 0.017 264)', marginBottom: '8px', fontFamily: UI_FONT, lineHeight: 1.45 }}>
-            Reihenfolge ändern: ⋮⋮ ziehen oder ↑/↓ benutzen. Bei Sidebar-Vorlagen (Oslo, Patterson, Azurill…) leben Skills/Sprachen/Eckdaten in der Seitenleiste — Reorder gilt dort für die Haupt-Spalte.
+            Reihenfolge ändern: ⋮⋮ ziehen oder ↑/↓ benutzen. Bei Sidebar-Vorlagen (Oslo, Patterson, Azur…) leben Skills/Sprachen/Eckdaten in der Seitenleiste — Reorder gilt dort für die Haupt-Spalte.
           </div>
           {sectionOrder.map((key, idx) => {
             const hidden = hiddenSections.includes(key);
@@ -932,8 +932,7 @@ export default function App() {
         try {
           const all = loadProfilesLocal();
           const next = all.find(x => x.id === p.id) ? all.map(x => x.id === p.id ? p : x) : [...all, p];
-          saveProfilesLocal(next);
-          setSaveStatus('saved');
+          setSaveStatus(saveProfilesLocal(next) ? 'saved' : 'error');
         } catch { setSaveStatus('error'); }
         return;
       }
@@ -959,6 +958,22 @@ export default function App() {
       return { ...p, coverLetters: { ...p.coverLetters, [p.settings.lang]: updater(p.coverLetters[p.settings.lang]) } };
     }));
   }, [activeId]);
+  /* Sprachfassung wechseln. Ist die neue Fassung noch ohne Kontaktdaten,
+   * werden Name, Kontakt, Adressen und Foto aus der bisherigen übernommen
+   * (storage.ts, `carryContactToLang`) — mit einem Hinweis, dass die Texte
+   * übersetzt werden wollen. */
+  const [langNotice, setLangNotice] = useState<string | null>(null);
+  function switchDocLang(l: Lang) {
+    const from = activeProfile?.settings.lang;
+    if (activeProfile && from && from !== l && carryContactToLang(activeProfile, from, l)) {
+      setLangNotice(et.contactCarried(from.toUpperCase()));
+      window.setTimeout(() => setLangNotice(null), 7000);
+    }
+    patchProfile(p => {
+      const carried = carryContactToLang(p, p.settings.lang, l) ?? p;
+      return { ...carried, settings: { ...carried.settings, lang: l } };
+    });
+  }
   function updateSettings(patch: Partial<AppProfile['settings']>) {
     patchProfile(p => {
       const merged: AppProfile['settings'] = { ...p.settings, ...patch };
@@ -1361,7 +1376,7 @@ export default function App() {
              die Knöpfe den Zweck im title, die Gruppe ihn als aria-label. */
           <div role="group" aria-label={et.langLabel} style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
             {ALL_LANGS.map(l => (
-              <button key={l} type="button" onClick={() => updateSettings({ lang: l })} style={langBtnStyle(lang === l)}
+              <button key={l} type="button" onClick={() => switchDocLang(l)} style={langBtnStyle(lang === l)}
                 title={`${et.langLabel}: ${LANG_NAMES[l]}`} aria-pressed={lang === l}>{l.toUpperCase()}</button>
             ))}
           </div>
@@ -1497,7 +1512,7 @@ export default function App() {
               <CoverLetterEditor data={currentCoverLetter} uiLang={uiLang} onUpdate={updateCoverLetter} resumeId={activeId} />
             )}
             {mode === 'export' && (
-              <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={{ themeId: template, accentId: accent, paperId: paper, pairingId: fontPairing, metrics: fit?.metrics ?? metricsFor(0, fontScale), pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, hiddenSections, sectionOrder, pageFormat, forcedBreaks }} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} demoMode={demoMode} onDemoBlock={setSoftWall} />
+              <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={{ themeId: template, accentId: accent, paperId: paper, pairingId: fontPairing, metrics: fit?.metrics ?? metricsFor(0, fontScale), pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, hiddenSections, sectionOrder, pageFormat, forcedBreaks }} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={setSoftWall} />
             )}
             {mode === 'knowledge' && <KnowledgePanel />}
             {previewArea(1)}
@@ -1532,7 +1547,7 @@ export default function App() {
               <MobilePreview doneLabel={et.zoomDone} hintLabel={et.tapToWrite}>{previewArea}</MobilePreview>
             </div>
             <div style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)', display: mode === 'export' ? 'block' : 'none' }}>
-              <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={{ themeId: template, accentId: accent, paperId: paper, pairingId: fontPairing, metrics: fit?.metrics ?? metricsFor(0, fontScale), pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, hiddenSections, sectionOrder, pageFormat, forcedBreaks }} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} demoMode={demoMode} onDemoBlock={setSoftWall} />
+              <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={{ themeId: template, accentId: accent, paperId: paper, pairingId: fontPairing, metrics: fit?.metrics ?? metricsFor(0, fontScale), pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, hiddenSections, sectionOrder, pageFormat, forcedBreaks }} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={setSoftWall} />
             </div>
             <div style={{ flex: 1, overflow: 'auto', paddingBottom: 'env(safe-area-inset-bottom, 0px)', display: mode === 'knowledge' ? 'block' : 'none' }}>
               <KnowledgePanel />
@@ -1571,7 +1586,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 {ALL_LANGS.map(l => (
                   <button key={l} type="button" title={`${et.langLabel}: ${LANG_NAMES[l]}`} aria-pressed={lang === l}
-                    onClick={() => updateSettings({ lang: l })}
+                    onClick={() => switchDocLang(l)}
                     style={{ ...sheetChoice(lang === l), flex: 1 }}>{l.toUpperCase()}</button>
                 ))}
               </div>
@@ -1645,6 +1660,14 @@ export default function App() {
           onClose={() => setVersionsOpen(false)}
           onRestored={handleProfileUpdated}
         />
+      )}
+      {langNotice && (
+        <div role="status" aria-live="polite" style={{
+          position: 'fixed', left: '50%', bottom: isMobile ? '84px' : '24px', transform: 'translateX(-50%)',
+          zIndex: 2100, maxWidth: 'min(92vw, 460px)', padding: '11px 16px',
+          background: 'oklch(0.21 0.021 264)', color: 'oklch(0.985 0.003 264)',
+          fontFamily: UI_FONT, fontSize: '12.5px', lineHeight: 1.5, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        }}>{langNotice}</div>
       )}
       {softWall && (
         <div onClick={() => setSoftWall(null)} style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'rgba(28,25,23,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: UI_FONT }}>

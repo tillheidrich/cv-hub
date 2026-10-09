@@ -106,15 +106,21 @@ export function tplWelcome({ username }) {
   return {
     subject: 'Willkommen bei CV-Hub',
     html: layout(
-      h('Willkommen, ' + username + '.') +
+      h('Willkommen, ' + escapeHtml(username) + '.') +
       p('Dein Konto ist aktiv. Du kannst jetzt Lebensläufe und Anschreiben in vier Sprachen erstellen, als PDF exportieren, Sharelinks anlegen und die Markdown-Brücke fürs KI-Lektorat nutzen.') +
       `<div style="margin:4px 0 8px;">${btn(APP_BASE_URL, 'Zum Editor →')}</div>`,
     ),
   };
 }
 
-export function tplPasswordReset({ token }) {
-  const url = `${APP_BASE_URL}/reset/${token}`;
+/* Die Basis kommt vom Aufrufer (publicBaseUrl der Anfrage bzw. PUBLIC_BASE_URL),
+ * nicht aus einem festen Wert in dieser Datei. Vorher fiel der Link ohne
+ * Konfiguration auf eine fest eingetragene Domain zurück — eine selbst gehostete Kopie
+ * verschickte damit Reset-Links auf einen fremden Server. Ohne Basis schickt
+ * server.js gar keine Mail. */
+export function tplPasswordReset({ token, base }) {
+  if (!base) throw new Error('tplPasswordReset: base fehlt');
+  const url = `${String(base).replace(/\/+$/, '')}/reset/${encodeURIComponent(token)}`;
   return {
     subject: 'Passwort zurücksetzen — CV-Hub',
     html: layout(
@@ -131,14 +137,45 @@ export function tplPasswordChanged({ username }) {
     subject: 'Dein Passwort wurde geändert — CV-Hub',
     html: layout(
       h('Passwort geändert') +
-      p(`Das Passwort für dein Konto <strong>${username}</strong> wurde soeben geändert. Warst du das nicht, melde dich umgehend.`),
+      p(`Das Passwort für dein Konto <strong>${escapeHtml(username)}</strong> wurde soeben geändert. Warst du das nicht, melde dich umgehend.`) +
+      p('Aus Sicherheitsgründen wurden dabei alle anderen Anmeldungen beendet und alle API-Schlüssel und KI-Verbindungen getrennt. Verbinde deinen KI-Client bei Bedarf neu.'),
+    ),
+  };
+}
+
+/* Der Admin hat das Passwort gesetzt. Vorher geschah das ohne jede Nachricht
+ * an den Betroffenen — er merkte es erst, wenn er nicht mehr hineinkam. */
+export function tplPasswordResetByAdmin({ username }) {
+  return {
+    subject: 'Dein Passwort wurde vom Administrator zurückgesetzt — CV-Hub',
+    html: layout(
+      h('Passwort zurückgesetzt') +
+      p(`Ein Administrator hat das Passwort für dein Konto <strong>${escapeHtml(username)}</strong> neu gesetzt. Das neue Passwort erhältst du von ihm direkt, nicht per E-Mail.`) +
+      p('Alle Anmeldungen wurden beendet und alle API-Schlüssel und KI-Verbindungen getrennt. Ändere das Passwort nach der nächsten Anmeldung. Hast du das nicht veranlasst, melde dich umgehend.'),
+    ),
+  };
+}
+
+/* Geht an die ALTE Adresse, wenn die E-Mail des Kontos geändert wurde. */
+export function tplEmailChanged({ username, newEmail }) {
+  return {
+    subject: 'Die E-Mail-Adresse deines Kontos wurde geändert — CV-Hub',
+    html: layout(
+      h('E-Mail-Adresse geändert') +
+      p(newEmail
+        ? `Für dein Konto <strong>${escapeHtml(username)}</strong> ist jetzt die Adresse <strong>${escapeHtml(newEmail)}</strong> hinterlegt. Nachrichten und Passwort-Links gehen ab sofort dorthin.`
+        : `Für dein Konto <strong>${escapeHtml(username)}</strong> ist keine E-Mail-Adresse mehr hinterlegt. Die Zwei-Faktor-Anmeldung wurde damit abgeschaltet.`) +
+      p('Warst du das nicht, melde dich umgehend.'),
     ),
   };
 }
 
 export function tplLoginCode({ code }) {
   return {
-    subject: `${code} — dein Login-Code für CV-Hub`,
+    /* Der Code steht nicht mehr im Betreff. Betreffzeilen erscheinen in
+     * Sperrbildschirm-Benachrichtigungen, Postfachlisten und Logs von
+     * Mailservern — der Code gehört nur in den Text. */
+    subject: 'Dein Login-Code für CV-Hub',
     html: layout(
       h('Dein Login-Code') +
       p('Gib diesen Code im Anmeldefenster ein, um dich anzumelden. Er ist 10 Minuten gültig.') +

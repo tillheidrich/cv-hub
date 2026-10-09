@@ -120,11 +120,17 @@ async function getPayload(id) {
   if (!r?.resume?.payload) throw new Error('Profil nicht gefunden.');
   return r.resume.payload;
 }
-/** Profil-Payload speichern — legt vorher eine Version an (Wiederherstellung). */
-async function savePayload(p, source) {
+/** Profil-Payload speichern — legt vorher eine Version an (Wiederherstellung).
+ *
+ *  Die id kommt ausdrücklich vom Aufrufer. Ein über create_resume angelegtes
+ *  Profil trägt keine id im Payload; mit `p.id` allein legte jedes Speichern
+ *  (Foto, Einstellungen) stillschweigend ein NEUES Profil an, statt das
+ *  bestehende zu ändern. */
+async function savePayload(p, source, id) {
+  const rid = id || p.id;
   await apiFetch('/api/resumes', {
     method: 'POST',
-    body: JSON.stringify({ id: p.id, displayName: p.displayName, payload: p, snapshotBefore: true, snapshotSource: source }),
+    body: JSON.stringify({ id: rid, displayName: p.displayName, payload: { ...p, id: rid }, snapshotBefore: true, snapshotSource: source }),
   });
 }
 /** Bildtyp anhand der Magic-Bytes bestimmen (das Backend prüft MIME↔Bytes). */
@@ -139,12 +145,49 @@ function sniffImageMime(buf) {
 
 /** Baut einen frischen MCP-Server mit allen Tools. Im HTTP-Modus wird pro
  *  Anfrage einer erzeugt (zustandslos), im stdio-Modus genau einer. */
+/* Titel und Hinweise je Werkzeug (MCP-Spezifikation, ToolAnnotations).
+ *
+ * Clients zeigen den Titel statt des technischen Namens und entscheiden an
+ * den Hinweisen, ob sie vor einem Aufruf nachfragen: Lesen geht ohne,
+ * Überschreiben nicht. Alle Werkzeuge sprechen nur mit dem eigenen Konto —
+ * openWorldHint ist deshalb überall false. */
+const RO = { readOnlyHint: true, openWorldHint: false };
+const META = {
+  list_resumes: { title: 'Lebensläufe auflisten', annotations: RO },
+  create_resume: { title: 'Neuen Lebenslauf anlegen', annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
+  rename_resume: { title: 'Lebenslauf umbenennen', annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+  get_resume_markdown: { title: 'Lebenslauf als Markdown lesen', annotations: RO },
+  get_cover_letter_markdown: { title: 'Anschreiben als Markdown lesen', annotations: RO },
+  list_templates: { title: 'Design-Vorlagen auflisten', annotations: RO },
+  update_resume_markdown: { title: 'Lebenslauf aus Markdown speichern', annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } },
+  update_cover_letter_markdown: { title: 'Anschreiben aus Markdown speichern', annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } },
+  get_resume_settings: { title: 'Design-Einstellungen lesen', annotations: RO },
+  update_resume_settings: { title: 'Design-Einstellungen ändern', annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+  set_resume_photo: { title: 'Bewerbungsfoto setzen', annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } },
+  remove_resume_photo: { title: 'Bewerbungsfoto entfernen', annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } },
+};
+
+/** Erlaubte Schriftpaare: vom Server (aus theme.ts erzeugt), sonst die
+ *  eingebaute Liste — ein älterer Server liefert das Feld noch nicht. */
+async function fontPairingIds() {
+  try {
+    const r = await apiFetch('/api/templates');
+    if (Array.isArray(r?.fontPairings) && r.fontPairings.length) return r.fontPairings;
+  } catch { /* Fallback */ }
+  return FONT_PAIRINGS;
+}
+
 function buildServer() {
-  const server = new McpServer({ name: 'cv-hub', version: '1.1.0' });
+  const server = new McpServer({ name: 'cv-hub', version: '1.2.0' });
+  /* registerTool statt des veralteten server.tool — nur so tragen die
+   * Werkzeuge Titel und Hinweise. Reihenfolge der Argumente wie vorher,
+   * damit jede Definition unten lesbar bleibt. */
+  const tool = (name, meta, description, inputSchema, cb) =>
+    server.registerTool(name, { title: meta.title, description, inputSchema, annotations: meta.annotations }, cb);
 
   // ── Lesen ──────────────────────────────────────────────────────────────
-  server.tool(
-    'list_resumes',
+  tool(
+    'list_resumes', META.list_resumes,
     'Listet alle Lebensläufe des angemeldeten Kontos (id, Anzeigename, zuletzt geändert). Mit der id arbeiten die anderen Tools.',
     {},
     async () => {
@@ -168,8 +211,8 @@ function buildServer() {
    * Standard-Anschreiben ergänzt die Oberfläche beim ersten Öffnen selbst
    * (`withAllLangs`), deshalb bleiben sie hier bewusst leer statt hier halb
    * geraten zu werden. */
-  server.tool(
-    'create_resume',
+  tool(
+    'create_resume', META.create_resume,
     'Legt einen NEUEN, leeren Lebenslauf an und gibt dessen id zurück. Danach mit update_resume_markdown befüllen. Nutze immer dieses Werkzeug für einen neuen Lebenslauf — überschreibe niemals einen bestehenden.',
     {
       display_name: z.string().describe('Anzeigename in der Liste, z. B. "Bewerbung Muster GmbH".'),
@@ -208,8 +251,8 @@ function buildServer() {
     },
   );
 
-  server.tool(
-    'rename_resume',
+  tool(
+    'rename_resume', META.rename_resume,
     'Ändert nur den Anzeigenamen eines Lebenslaufs. Inhalte bleiben unberührt.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -225,8 +268,8 @@ function buildServer() {
     },
   );
 
-  server.tool(
-    'get_resume_markdown',
+  tool(
+    'get_resume_markdown', META.get_resume_markdown,
     'Gibt einen Lebenslauf als Markdown zurück. Dieses Markdown ist das Bearbeitungsformat: überarbeite es und schreibe es mit update_resume_markdown zurück. Struktur (Überschriften, Feld-Reihenfolge) beibehalten. Mit lang eine andere Sprachfassung lesen.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -238,8 +281,8 @@ function buildServer() {
     },
   );
 
-  server.tool(
-    'get_cover_letter_markdown',
+  tool(
+    'get_cover_letter_markdown', META.get_cover_letter_markdown,
     'Gibt das Anschreiben eines Lebenslaufs als Markdown zurück (pro Sprache). Überarbeiten und mit update_cover_letter_markdown zurückschreiben.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -251,22 +294,22 @@ function buildServer() {
     },
   );
 
-  server.tool(
-    'list_templates',
+  tool(
+    'list_templates', META.list_templates,
     'Listet die verfügbaren Design-Vorlagen (id, Name, Kategorie).',
     {},
     async () => {
       try {
         const { templates } = await apiFetch('/api/templates');
-        const lines = (templates || []).map(t => `- ${t.name}  ·  id: ${t.id}  ·  ${t.category}`);
+        const lines = (templates || []).map(t => `- ${t.name}  ·  id: ${t.id}  ·  ${t.category}${t.description ? `  ·  ${t.description}` : ''}`);
         return ok(`Vorlagen (${templates?.length || 0}):\n${lines.join('\n')}`);
       } catch (e) { return fail(e); }
     },
   );
 
   // ── Schreiben ──────────────────────────────────────────────────────────
-  server.tool(
-    'update_resume_markdown',
+  tool(
+    'update_resume_markdown', META.update_resume_markdown,
     'Schreibt einen überarbeiteten Lebenslauf aus Markdown zurück. Nutze zuerst get_resume_markdown, überarbeite den Text und übergib das VOLLSTÄNDIGE Markdown. Vor dem Speichern legt der Server automatisch eine Version zur Wiederherstellung an. Mit dry_run=true nur validieren (nichts speichern).',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -286,8 +329,8 @@ function buildServer() {
     },
   );
 
-  server.tool(
-    'update_cover_letter_markdown',
+  tool(
+    'update_cover_letter_markdown', META.update_cover_letter_markdown,
     'Schreibt ein überarbeitetes Anschreiben aus Markdown zurück. Zuerst get_cover_letter_markdown lesen, überarbeiten, vollständiges Markdown übergeben. Version wird vor dem Speichern automatisch gesichert. dry_run=true validiert nur.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -308,8 +351,8 @@ function buildServer() {
   );
 
   // ── Design & Struktur ──────────────────────────────────────────────────
-  server.tool(
-    'get_resume_settings',
+  tool(
+    'get_resume_settings', META.get_resume_settings,
     'Liest Design- und Struktur-Einstellungen eines Lebenslaufs als JSON: template (Design), pageMode, pageFormat, fontPairing, fontScale, lang, sectionOrder (Abschnitts-Reihenfolge), hiddenSections (ausgeblendet), sowie ob ein Foto hängt. Enthält auch die erlaubten Werte. Gültige Template-IDs liefert list_templates.',
     { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
     async ({ id }) => {
@@ -331,14 +374,14 @@ function buildServer() {
           photoAttached: !!photo,
           photoUrl: photo,
           languagesPresent: langs,
-          allowed: { sectionKeys: SECTION_KEYS, pageModes: PAGE_MODES, pageFormats: PAGE_FORMATS, fontPairings: FONT_PAIRINGS, langs: ['de', 'en', 'fr', 'es'] },
+          allowed: { sectionKeys: SECTION_KEYS, pageModes: PAGE_MODES, pageFormats: PAGE_FORMATS, fontPairings: await fontPairingIds(), langs: ['de', 'en', 'fr', 'es'] },
         }, null, 2));
       } catch (e) { return fail(e); }
     },
   );
 
-  server.tool(
-    'update_resume_settings',
+  tool(
+    'update_resume_settings', META.update_resume_settings,
     'Ändert Design/Struktur eines Lebenslaufs (nur die übergebenen Felder). template = Design-Wechsel (gültige IDs via list_templates). pageMode: one|two|three|auto. pageFormat: a4|letter|legal|a5. sectionOrder ordnet die Abschnitte um, hiddenSections blendet welche aus (Keys: profile, details, experience, education, skills, languages, additional). Inhalte werden separat mit update_resume_markdown bearbeitet. Version wird vorher gesichert.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
@@ -366,7 +409,8 @@ function buildServer() {
         if (a.pageMode !== undefined) { p.settings.pageMode = a.pageMode; changed.push(`pageMode=${a.pageMode}`); }
         if (a.pageFormat !== undefined) { p.settings.pageFormat = a.pageFormat; changed.push(`pageFormat=${a.pageFormat}`); }
         if (a.fontPairing !== undefined) {
-          if (!FONT_PAIRINGS.includes(a.fontPairing)) return fail(new Error(`Unbekanntes fontPairing. Erlaubt: ${FONT_PAIRINGS.join(', ')}`));
+          const erlaubt = await fontPairingIds();
+          if (!erlaubt.includes(a.fontPairing)) return fail(new Error(`Unbekanntes fontPairing. Erlaubt: ${erlaubt.join(', ')}`));
           p.settings.fontPairing = a.fontPairing; changed.push(`fontPairing=${a.fontPairing}`);
         }
         if (a.fontScale !== undefined) { p.settings.fontScale = Math.max(0.6, Math.min(1.4, a.fontScale)); changed.push(`fontScale=${p.settings.fontScale}`); }
@@ -383,38 +427,32 @@ function buildServer() {
         }
         if (a.respectTemplateStructure !== undefined) { p.settings.respectTemplateStructure = a.respectTemplateStructure; changed.push(`respectTemplateStructure=${a.respectTemplateStructure}`); }
         if (!changed.length) return ok('Keine Änderung übergeben.');
-        await savePayload(p, 'settings_update');
+        await savePayload(p, 'settings_update', a.id);
         return ok(`Gespeichert: ${changed.join(', ')}.`);
       } catch (e) { return fail(e); }
     },
   );
 
   // ── Foto ────────────────────────────────────────────────────────────────
-  server.tool(
-    'set_resume_photo',
-    'Hängt ein Bewerbungsfoto an den Lebenslauf (wird in allen Sprachfassungen gesetzt). Übergib ENTWEDER image_url (öffentliche https-URL) ODER image_base64. JPEG/PNG/WebP/GIF, max 4 MB. Sichtbar nur bei Templates mit Fotobereich — sonst per update_resume_settings ein passendes Template wählen. Version wird vorher gesichert.',
+  tool(
+    'set_resume_photo', META.set_resume_photo,
+    'Hängt ein Bewerbungsfoto an den Lebenslauf (wird in allen Sprachfassungen gesetzt). Übergib das Bild als image_base64 — lade es bei Bedarf vorher selbst herunter; dieser Server ruft keine fremden Adressen ab. JPEG/PNG/WebP/GIF, max 4 MB. Ein vorhandenes Foto wird ersetzt und gelöscht. Sichtbar nur bei Templates mit Fotobereich — sonst per update_resume_settings ein passendes Template wählen. Version wird vorher gesichert.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
-      image_url: z.string().optional().describe('Öffentliche https-URL des Fotos.'),
-      image_base64: z.string().optional().describe('Base64 der Bilddaten (data:-Präfix wird toleriert).'),
+      image_base64: z.string().describe('Base64 der Bilddaten (data:-Präfix wird toleriert).'),
     },
-    async ({ id, image_url, image_base64 }) => {
+    /* image_url ist entfallen (Befund 3, Technik-Bericht 08.10.2026). Die
+     * Sperre war eine Präfixliste auf den Hostnamen-Text: 172.16–31.x, IPv6,
+     * Docker-Namen wie cv-api und jeder Name, der auf eine private Adresse
+     * auflöst, kamen durch; Weiterleitungen wurden blind verfolgt, ohne
+     * Zeitlimit, und die Fehlermeldung taugte als Portscanner fürs interne
+     * Netz. Jeder MCP-Client kann das Bild selbst holen und übergeben. */
+    async ({ id, image_base64 }) => {
       try {
-        let buf;
-        if (image_base64) {
-          buf = Buffer.from(image_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
-        } else if (image_url) {
-          if (!/^https:\/\//i.test(image_url)) return fail(new Error('image_url muss eine https-URL sein.'));
-          const host = new URL(image_url).hostname;
-          if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/i.test(host) || host === '::1' || host.endsWith('.internal')) {
-            return fail(new Error('image_url zeigt auf eine interne/lokale Adresse.'));
-          }
-          const r = await fetch(image_url, { redirect: 'follow' });
-          if (!r.ok) return fail(new Error(`Bild konnte nicht geladen werden (HTTP ${r.status}).`));
-          buf = Buffer.from(await r.arrayBuffer());
-        } else {
-          return fail(new Error('Bitte image_url ODER image_base64 übergeben.'));
-        }
+        if (typeof image_base64 !== 'string' || !image_base64.trim()) return fail(new Error('Bitte image_base64 übergeben.'));
+        // 4 MB Bild ≈ 5,6 Mio. Base64-Zeichen; mehr gar nicht erst dekodieren.
+        if (image_base64.length > 6 * 1024 * 1024) return fail(new Error('Bild zu groß (max 4 MB).'));
+        const buf = Buffer.from(image_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
         if (buf.length < 100) return fail(new Error('Bild zu klein oder leer.'));
         if (buf.length > 4 * 1024 * 1024) return fail(new Error('Bild zu groß (max 4 MB).'));
         const mime = sniffImageMime(buf);
@@ -426,28 +464,32 @@ function buildServer() {
         for (const l of Object.keys(p.data || {})) {
           if (p.data[l] && typeof p.data[l] === 'object') {
             p.data[l].personal = p.data[l].personal || {};
-            p.data[l].personal.photo = url; n++;
+            p.data[l].personal.photo = url;
+            // Das Original zum alten Zuschnitt gehört nicht zum neuen Foto.
+            delete p.data[l].personal.photoOriginal;
+            n++;
           }
         }
-        await savePayload(p, 'photo_set');
+        await savePayload(p, 'photo_set', id);
         return ok(`Foto gesetzt (${n} Sprachfassung${n === 1 ? '' : 'en'}). Prüfe mit get_resume_settings; sichtbar nur bei Templates mit Fotobereich.`);
       } catch (e) { return fail(e); }
     },
   );
 
-  server.tool(
-    'remove_resume_photo',
-    'Entfernt das Foto aus allen Sprachfassungen des Lebenslaufs. Version wird vorher gesichert.',
+  tool(
+    'remove_resume_photo', META.remove_resume_photo,
+    'Entfernt das Foto (samt unbeschnittenem Original) aus allen Sprachfassungen des Lebenslaufs. Die Bilddatei wird danach vom Server gelöscht (spätestens beim nächsten Aufräumen), sofern kein anderer Lebenslauf und kein aktiver Sharelink sie noch zeigt. Version wird vorher gesichert.',
     { id: z.string().describe('Die Lebenslauf-id aus list_resumes.') },
     async ({ id }) => {
       try {
         const p = await getPayload(id);
         let n = 0;
         for (const l of Object.keys(p.data || {})) {
-          if (p.data[l]?.personal?.photo) { delete p.data[l].personal.photo; n++; }
+          const pers = p.data[l]?.personal;
+          if (pers?.photo || pers?.photoOriginal) { delete pers.photo; delete pers.photoOriginal; n++; }
         }
         if (!n) return ok('Es war kein Foto gesetzt.');
-        await savePayload(p, 'photo_remove');
+        await savePayload(p, 'photo_remove', id);
         return ok(`Foto entfernt (${n} Sprachfassung${n === 1 ? '' : 'en'}).`);
       } catch (e) { return fail(e); }
     },
@@ -470,7 +512,7 @@ async function runStdio() {
 async function runHttp() {
   const { default: express } = await import('express');
   const app = express();
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '7mb' }));   // 4 MB Bild als Base64 ≈ 5,4 MB (set_resume_photo)
 
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const CONFIGURED_URL = (process.env.MCP_PUBLIC_URL || '').replace(/\/$/, '');

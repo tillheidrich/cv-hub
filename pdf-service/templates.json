@@ -1,0 +1,172 @@
+{
+  "source": "app/src/templates/theme.ts (PICKABLE_THEMES, FONT_PAIRING_LIST)",
+  "templates": [
+    {
+      "id": "hamburg",
+      "name": "Hamburg",
+      "category": "klassisch",
+      "description": "Warm, editorial, klassisch"
+    },
+    {
+      "id": "kopenhagen",
+      "name": "Kopenhagen",
+      "category": "modern",
+      "description": "Kühl, ruhig, skandinavisch"
+    },
+    {
+      "id": "oslo",
+      "name": "Oslo",
+      "category": "modern",
+      "description": "Salbei-Grün, minimal, frisch"
+    },
+    {
+      "id": "berlin",
+      "name": "Berlin",
+      "category": "modern",
+      "description": "Bold, schwarz, kontrastreich"
+    },
+    {
+      "id": "wien",
+      "name": "Wien",
+      "category": "klassisch",
+      "description": "Navy, seriös, traditionell"
+    },
+    {
+      "id": "zuerich",
+      "name": "Zürich",
+      "category": "minimal",
+      "description": "Monochrom, ATS-pur, minimal"
+    },
+    {
+      "id": "terrakotta",
+      "name": "Terrakotta",
+      "category": "kreativ",
+      "description": "Warmes Terracotta, kreativ"
+    },
+    {
+      "id": "lissabon",
+      "name": "Lissabon",
+      "category": "modern",
+      "description": "Petrol, geometrisch, modern"
+    },
+    {
+      "id": "mailand",
+      "name": "Mailand",
+      "category": "kreativ",
+      "description": "Burgunder, editorial, elegant"
+    },
+    {
+      "id": "bordeaux",
+      "name": "Bordeaux",
+      "category": "kreativ",
+      "description": "Tiefes Weinrot, charaktervoll"
+    },
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "category": "kreativ",
+      "description": "Orange-Akzent, frisch, jung"
+    },
+    {
+      "id": "genf",
+      "name": "Genf",
+      "category": "klassisch",
+      "description": "Anthrazit, sachlich, business"
+    },
+    {
+      "id": "patterson",
+      "name": "Patterson",
+      "category": "modern",
+      "description": "Navy-Sidebar, business-modern mit warmem Hauptbereich"
+    },
+    {
+      "id": "karlsruhe",
+      "name": "Karlsruhe",
+      "category": "minimal",
+      "description": "Hairline-Timeline, viel Weißraum, sehr ruhig"
+    },
+    {
+      "id": "rosenheim",
+      "name": "Rosenheim",
+      "category": "kreativ",
+      "description": "Rosé-Sidebar, warm, elegant"
+    },
+    {
+      "id": "espoo",
+      "name": "Espoo",
+      "category": "minimal",
+      "description": "Helsinki-Stil mit Foto — Swiss-Minimal, Indigo"
+    },
+    {
+      "id": "seoul",
+      "name": "Seoul",
+      "category": "modern",
+      "description": "Dunkle Sidebar, elektrischer Akzent, tech-bold"
+    },
+    {
+      "id": "lyon",
+      "name": "Lyon",
+      "category": "klassisch",
+      "description": "Klassik neu gedacht, Tannengrün, zentriert"
+    },
+    {
+      "id": "lueneburg",
+      "name": "Lüneburg",
+      "category": "minimal",
+      "description": "Weißes Blatt, Haarlinie, gesperrter Name"
+    },
+    {
+      "id": "husum",
+      "name": "Husum",
+      "category": "klassisch",
+      "description": "Bewerbungsset-Klassik mit Foto und Unterschrift"
+    },
+    {
+      "id": "bregenz",
+      "name": "Bregenz",
+      "category": "minimal",
+      "description": "Spalte rechts, ohne Fläche, ruhig"
+    },
+    {
+      "id": "uppsala",
+      "name": "Uppsala",
+      "category": "minimal",
+      "description": "DIN-Einseiter, zentriert, ohne Foto"
+    },
+    {
+      "id": "aarhus",
+      "name": "Aarhus",
+      "category": "kreativ",
+      "description": "Editorial: Name und Profil links, Werdegang rechts"
+    },
+    {
+      "id": "lille",
+      "name": "Lille",
+      "category": "kreativ",
+      "description": "Überschriften so groß wie der Name"
+    },
+    {
+      "id": "antwerpen",
+      "name": "Antwerpen",
+      "category": "kreativ",
+      "description": "Nachname über die volle Breite, Creme, editorial"
+    },
+    {
+      "id": "rotterdam",
+      "name": "Rotterdam",
+      "category": "kreativ",
+      "description": "Register statt Absätze, gesperrter Name, Raster"
+    }
+  ],
+  "fontPairings": [
+    "auto",
+    "inter-playfair",
+    "pure-inter",
+    "lora-source",
+    "merri-source",
+    "space-inter",
+    "garamond-archivo",
+    "plex-corporate",
+    "libre-inter"
+  ]
+}

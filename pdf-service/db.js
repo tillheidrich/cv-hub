@@ -217,6 +217,23 @@ CREATE INDEX IF NOT EXISTS oauth_tokens_user_idx ON oauth_tokens(user_id, create
 -- Access-Token geliefert. (Backticks haben in dieser Datei nichts zu suchen:
 -- das SQL steht in einem Template-Literal.)
 ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS refresh_expires_at TIMESTAMPTZ;
+
+-- Sharelinks mit festem Stand (08.10.2026). Beim Anlegen entsteht ein Abzug
+-- der sichtbaren Fassung: eine Sprache, nichts Ausgeblendetes, kein
+-- Originalfoto. Bestehende Links haben NULL und bekommen ihren Stand beim
+-- ersten Abruf aus dem dann aktuellen Profil.
+ALTER TABLE share_links ADD COLUMN IF NOT EXISTS snapshot JSONB;
+CREATE INDEX IF NOT EXISTS share_views_viewed_idx ON share_views(viewed_at);
+
+-- Abmelden entwertet die Sitzung serverseitig (08.10.2026). Gespeichert wird
+-- der Hash des Sitzungs-Tokens bis zu dessen Ablauf; der Aufräumjob entfernt
+-- abgelaufene Zeilen. Gilt auch für Sitzungen, die vor dieser Änderung
+-- ausgestellt wurden.
+CREATE TABLE IF NOT EXISTS session_revocations (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  expires_at  TIMESTAMPTZ NOT NULL
+);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

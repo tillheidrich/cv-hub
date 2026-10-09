@@ -303,4 +303,20 @@ export const einseiter: CVData = {
   labels: labelsDE,
 };
 
-export const PERSONAS: Record<string, CVData> = { marketing, tech, handwerk, einseiter };
+/** Prüffall für scripts/contactwrapcheck.mjs: Kontaktangaben, die in keine
+ *  Seitenspalte passen. Die E-Mail hat einen Bindestrich — genau die Stelle,
+ *  an der Chromium früher umbrach und an der Parser sie verschluckten. */
+export const langkontakt: CVData = {
+  ...marketing,
+  personal: {
+    ...marketing.personal,
+    name: 'Katharina Vogt-Müller',
+    email: 'katharina.vogt-mueller@beispiel-unternehmen.de',
+    website: 'https://www.katharina-vogt-mueller.de/portfolio/arbeiten',
+    socials: [
+      { id: 's1', platform: 'linkedin', value: 'https://www.linkedin.com/in/katharina-vogt-mueller-8a7b6c5d' },
+    ],
+  },
+};
+
+export const PERSONAS: Record<string, CVData> = { marketing, tech, handwerk, einseiter, langkontakt };

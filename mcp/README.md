@@ -109,6 +109,22 @@ angemeldet und bestätigt einmal. Verbindungen lassen sich im Konto unter
 | `get_cover_letter_markdown`     | Anschreiben als Markdown lesen                     |
 | `update_cover_letter_markdown`  | Überarbeitetes Anschreiben zurückschreiben         |
 | `list_templates`                | Verfügbare Design-Vorlagen auflisten               |
+| `create_resume`                 | Neuen, leeren Lebenslauf anlegen                   |
+| `rename_resume`                 | Nur den Anzeigenamen ändern                        |
+| `get_resume_settings`           | Design- und Struktur-Einstellungen lesen           |
+| `update_resume_settings`        | Vorlage, Seitenmodus, Abschnitte usw. ändern       |
+| `set_resume_photo`              | Bewerbungsfoto setzen — **nur als `image_base64`** |
+| `remove_resume_photo`           | Foto entfernen (die Datei wird auf dem Server gelöscht) |
+
+Jedes Werkzeug trägt einen lesbaren Titel und die MCP-Hinweise
+`readOnlyHint`, `destructiveHint` und `idempotentHint`. Clients können damit
+lesende Aufrufe ohne Rückfrage erlauben und vor dem Überschreiben nachfragen.
+
+`set_resume_photo` ruft seit dem 08.10.2026 **keine Adressen mehr ab**
+(`image_url` ist entfallen): Die Prüfung, ob eine Adresse ins interne Netz
+zeigt, war lückenhaft, und ein Server, der für Fremde beliebige URLs holt, ist
+ein Werkzeug für Angriffe auf sein eigenes Netz. Der Client lädt das Bild
+selbst und übergibt es als Base64.
 
 Die `update_*`-Tools legen serverseitig **vor jedem Speichern automatisch eine
 Version** an — Fehlbearbeitungen lassen sich im Editor über die Versionshistorie

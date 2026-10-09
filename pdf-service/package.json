@@ -13,9 +13,9 @@
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.16",
+    "nodemailer": "^10.0.14",
     "pg": "^8.13.1",
     "playwright": "1.60.0"
   },

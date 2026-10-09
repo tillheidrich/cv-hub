@@ -418,10 +418,10 @@ export const THEMES: ResumeTheme[] = [
       panelInkSoft: '#4a6450', panelAccent: '#2c6631', rule: '#b0c2b0', chipBg: '#e4f1e4',
     },
   },
-  // ── Etsy-Inspo Welle 2026-06 ──────────────────────────────────────────────
+  // ── Welle 2026-06 ─────────────────────────────────────────────────────────
   {
-    /* Inspired by the "Chris Smithton" cobalt-on-cream maximalist resume —
-     * royal blue on warm paper, big sans-serif type carrying the personality. */
+    /* Kräftiges Blau auf warmem Papier, große Grotesk trägt den Charakter.
+     * Stillgelegt. */
     id: 'cobalt', name: 'Cobalt', description: 'Royal Blue auf Cream — laut, jung, design-affin', category: 'kreativ',
     layout: 'header-band', defaultPairing: 'space-inter', photo: 'rect', bullet: 'square', heading: 'block',
     sidebarMm: 62,
@@ -433,9 +433,8 @@ export const THEMES: ResumeTheme[] = [
     },
   },
   {
-    /* Inspired by the "Jonathan Patterson" marketing CV — confident navy sidebar
-     * carrying the photo, contact, skills, languages while the body is a clean
-     * 2-col main with subtle teal underlines on the section heads. */
+    /* Navy-Seitenspalte mit Foto, Kontakt, Skills und Sprachen; der Hauptteil
+     * ruhig, Sektionsköpfe mit feiner Unterstreichung. */
     id: 'patterson', name: 'Patterson', description: 'Navy-Sidebar, business-modern mit warmem Hauptbereich', category: 'modern',
     layout: 'sidebar-left', defaultPairing: 'plex-corporate', photo: 'circle', bullet: 'dot', heading: 'caps-rule',
     nameInSidebar: false,
@@ -446,9 +445,8 @@ export const THEMES: ResumeTheme[] = [
     },
   },
   {
-    /* Inspired by the "Katharina Mai" timeline minimalist — pure white, hairline
-     * vertical rule down the middle column, tiny ALL-CAPS tracked section
-     * headers, round photo top-right. Maximum air. */
+    /* Reines Weiß, Haarlinie als Zeitstrahl, kleine gesperrte Versal-
+     * Überschriften, rundes Foto oben rechts. Viel Luft. */
     id: 'karlsruhe', name: 'Karlsruhe', description: 'Hairline-Timeline, viel Weißraum, sehr ruhig', category: 'minimal',
     layout: 'timeline', defaultPairing: 'pure-inter', photo: 'circle', bullet: 'dot', heading: 'caps-tracked',
     colors: {
@@ -458,9 +456,8 @@ export const THEMES: ResumeTheme[] = [
     },
   },
   {
-    /* Inspired by the "Emilia Hartmann" rose-blush sidebar — warm peach panel
-     * carrying photo + Eckdaten + Sprachen, ivory main body with serif italic
-     * touches. The corporate sister to Rosenheim's minimal cousin. */
+    /* Warme Rosé-Seitenspalte mit Foto, Eckdaten und Sprachen; heller
+     * Hauptteil mit Serifen-Akzenten. */
     id: 'rosenheim', name: 'Rosenheim', description: 'Rosé-Sidebar, warm, elegant', category: 'kreativ',
     layout: 'sidebar-left', defaultPairing: 'garamond-archivo', photo: 'circle', bullet: 'dot', heading: 'caps-tracked',
     colors: {

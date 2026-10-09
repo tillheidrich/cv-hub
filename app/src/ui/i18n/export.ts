@@ -94,6 +94,8 @@ export interface ExportStrings {
   /** Link teilen */
   shareSection: string;
   shareHint: string;
+  /** Markdown zu kurz für einen Import (Lokalmodus). */
+  mdTooShort: string;
   shareIncludeCl: string;
   shareCreate: string;
   shareNone: string;
@@ -258,13 +260,14 @@ export const EXP_I18N: Record<UiLang, ExportStrings> = {
     uploadJsonSub: 'Vollständiger Profil-Import (überschreibt aktiv)',
 
     demoSection: 'Demo-Modus',
-    demoBefore: 'Du arbeitest gerade ohne Konto. HTML, Markdown und JSON-Export funktionieren lokal. ',
-    demoStrong: 'Sharelinks und KI-Bearbeitung',
-    demoAfter: ' brauchen eine Registrierung.',
+    demoBefore: 'Du arbeitest gerade ohne Konto, deine Daten liegen nur in diesem Browser. Word, HTML, Markdown und JSON entstehen direkt hier. Für das PDF geht der Inhalt einmalig an unseren Server in Deutschland, wird im Arbeitsspeicher gesetzt und nicht gespeichert. ',
+    demoStrong: 'Sharelinks, Versionen und die KI-Anbindung per MCP',
+    demoAfter: ' brauchen ein Konto.',
     demoCta: 'Konto anlegen →',
 
     shareSection: 'Link teilen',
-    shareHint: 'Read-only Link, kein Login nötig — auch für Anschreiben (das Anschreiben wird im Link mit angezeigt).',
+    mdTooShort: 'Das Markdown ist zu kurz für einen Import — fehlt etwas beim Einfügen?',
+    shareHint: 'Read-only Link, kein Login nötig — auch für Anschreiben (das Anschreiben wird im Link mit angezeigt). Bevor du teilst: Stehen Daten anderer Personen drin, etwa Name und Telefon einer Referenz, sollten diese damit einverstanden sein.',
     shareIncludeCl: 'Anschreiben im Link sichtbar machen',
     shareCreate: '+ Neuen Link erzeugen',
     shareNone: 'Noch keine Links.',
@@ -441,13 +444,14 @@ Bitte:
     uploadJsonSub: 'Complete profile import (overwrites the active one)',
 
     demoSection: 'Demo mode',
-    demoBefore: 'You are working without an account right now. HTML, Markdown and JSON export work locally. ',
-    demoStrong: 'Share links and AI editing',
+    demoBefore: 'You are working without an account; your data lives only in this browser. Word, HTML, Markdown and JSON are made right here. For the PDF, the content goes once to our server in Germany, is typeset in memory and is not stored. ',
+    demoStrong: 'Share links, versions and the AI connection via MCP',
     demoAfter: ' need an account.',
     demoCta: 'Create an account →',
 
     shareSection: 'Share a link',
-    shareHint: 'Read-only link, no login needed — cover letter included (it is shown inside the link).',
+    mdTooShort: 'The Markdown is too short to import — did something get lost when pasting?',
+    shareHint: 'Read-only link, no login needed — cover letter included (it is shown inside the link). Before you share: if the document contains other people’s details, such as a referee’s name and phone number, they should agree to it.',
     shareIncludeCl: 'Show the cover letter in the link',
     shareCreate: '+ Create a new link',
     shareNone: 'No links yet.',
@@ -624,13 +628,14 @@ Please:
     uploadJsonSub: 'Import complet du profil (écrase le profil actif)',
 
     demoSection: 'Mode démo',
-    demoBefore: "Vous travaillez sans compte pour l'instant. L'export HTML, Markdown et JSON fonctionne en local. ",
-    demoStrong: "Les liens de partage et l'édition par IA",
+    demoBefore: 'Vous travaillez sans compte ; vos données ne sont que dans ce navigateur. Word, HTML, Markdown et JSON sont produits ici même. Pour le PDF, le contenu part une seule fois vers notre serveur en Allemagne, y est composé en mémoire et n\'est pas conservé. ',
+    demoStrong: 'Les liens de partage, les versions et la connexion IA via MCP',
     demoAfter: ' demandent un compte.',
     demoCta: 'Créer un compte →',
 
     shareSection: 'Partager un lien',
-    shareHint: 'Lien en lecture seule, sans connexion — lettre de motivation comprise (elle est affichée dans le lien).',
+    mdTooShort: 'Le Markdown est trop court pour être importé — quelque chose a-t-il manqué au collage ?',
+    shareHint: 'Lien en lecture seule, sans connexion — lettre de motivation comprise (elle est affichée dans le lien). Avant de partager : si le document contient des données d’autres personnes, comme le nom et le téléphone d’une référence, celles-ci doivent être d’accord.',
     shareIncludeCl: 'Afficher la lettre de motivation dans le lien',
     shareCreate: '+ Créer un nouveau lien',
     shareNone: 'Aucun lien pour le moment.',
@@ -807,13 +812,14 @@ Merci de :
     uploadJsonSub: 'Importación completa del perfil (sobrescribe el activo)',
 
     demoSection: 'Modo demo',
-    demoBefore: 'Ahora mismo trabajas sin cuenta. La exportación a HTML, Markdown y JSON funciona en local. ',
-    demoStrong: 'Los enlaces compartidos y la edición con IA',
+    demoBefore: 'Trabajas sin cuenta; tus datos solo están en este navegador. Word, HTML, Markdown y JSON se generan aquí mismo. Para el PDF, el contenido viaja una sola vez a nuestro servidor en Alemania, se compone en memoria y no se guarda. ',
+    demoStrong: 'Los enlaces compartidos, las versiones y la conexión con IA por MCP',
     demoAfter: ' necesitan una cuenta.',
     demoCta: 'Crear una cuenta →',
 
     shareSection: 'Compartir un enlace',
-    shareHint: 'Enlace de solo lectura, sin necesidad de iniciar sesión, también con la carta de presentación (se muestra dentro del enlace).',
+    mdTooShort: 'El Markdown es demasiado corto para importarlo — ¿falta algo al pegarlo?',
+    shareHint: 'Enlace de solo lectura, sin necesidad de iniciar sesión, también con la carta de presentación (se muestra dentro del enlace). Antes de compartir: si el documento contiene datos de otras personas, como el nombre y el teléfono de una referencia, deberían estar de acuerdo.',
     shareIncludeCl: 'Mostrar la carta de presentación en el enlace',
     shareCreate: '+ Crear un enlace nuevo',
     shareNone: 'Todavía no hay enlaces.',

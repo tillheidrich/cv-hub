@@ -15,6 +15,8 @@ RUN npm install --omit=dev --no-audit --no-fund
 # dann gar nicht erst (ERR_MODULE_NOT_FOUND). Das Glob erwischt *.js; Tests
 # heißen *.test.mjs und bleiben draußen.
 COPY *.js ./
+# Vorlagenliste, erzeugt aus app/src/templates/theme.ts (scripts/sync-templates.mjs).
+COPY templates.json ./
 
 # Befund vom 14.09.2026: Der Dienst lief als root — und mit ihm ein Chromium
 # ohne Sandbox, das HTML von nicht angemeldeten Aufrufern rendert. Ein Fehler im

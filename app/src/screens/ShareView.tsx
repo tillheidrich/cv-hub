@@ -10,6 +10,7 @@ import { SHARE } from '../ui/editorI18n';
 import { detectInitialUiLang, type UiLang } from '../ui/i18n';
 import { withAllLangs } from '../data/storage';
 import { getPageFormat } from '../data/pageFormats';
+import { LEGAL_CONTACT_EMAIL } from './LegalPages';
 import type { AppProfile, FontPairingId, PageMode, PageFormat } from '../data/types';
 
 const UI = "'Inter', sans-serif";
@@ -148,6 +149,15 @@ export default function ShareView({ token }: { token: string }) {
             ))}
           </div>
         )}
+        {/* Melde- und Abhilfeweg nach Art. 16 DSA: Ein Sharelink macht
+            gespeicherte Inhalte für Dritte abrufbar, und dafür braucht es
+            einen Weg, Rechtswidriges zu melden — unabhängig von der Größe des
+            Anbieters (Recht-Bericht 08.10.2026). Die Meldung geht an die
+            Adresse aus dem Impressum. */}
+        <a
+          href={`mailto:${LEGAL_CONTACT_EMAIL}?subject=${encodeURIComponent(t.reportSubject)}&body=${encodeURIComponent(t.reportBody(typeof window !== 'undefined' ? window.location.href : ''))}`}
+          style={{ marginLeft: hasCoverLetter ? '8px' : 'auto', fontSize: '11px', color: '#6b6356', fontFamily: UI, textDecoration: 'underline', textUnderlineOffset: '2px', whiteSpace: 'nowrap', padding: '6px 2px' }}
+        >{t.report}</a>
       </header>
       <div ref={bereichRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', justifyContent: 'center', padding: scale < 1 ? '12px 12px 28px' : '32px' }}>
         {/* `alignItems: flex-start` ist keine Kosmetik: als Flex-Kind würde der

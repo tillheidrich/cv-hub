@@ -43,11 +43,16 @@ export function buildMarkdown(data: CVData, settings?: {
   const out: string[] = [];
 
   out.push('---');
-  out.push(`template: ${settings?.template || 'hamburg'}`);
+  /* Vorlage und Satz nur, wenn sie bekannt sind. Bis zum 08.10.2026 stand
+   * hier ohne Einstellungen „template: hamburg" — und wer die Datei über ein
+   * Konto zurückspielte, bekam stillschweigend Hamburg als Vorlage. */
+  if (settings?.template) out.push(`template: ${settings.template}`);
   out.push(`lang: ${labels?.lang || 'de'}`);
-  out.push(`fontScale: ${settings?.fontScale ?? 1.0}`);
-  out.push(`fontPairing: ${settings?.fontPairing || 'auto'}`);
-  out.push(`pageMode: ${settings?.pageMode || 'one'}`);
+  if (settings) {
+    out.push(`fontScale: ${settings.fontScale ?? 1.0}`);
+    out.push(`fontPairing: ${settings.fontPairing || 'auto'}`);
+    out.push(`pageMode: ${settings.pageMode || 'one'}`);
+  }
   out.push('---');
   out.push('');
 

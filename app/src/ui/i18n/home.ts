@@ -91,7 +91,7 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
 
     modalOverline: 'NEU · LEBENSLAUF',
     modalTitle: 'Neuen Lebenslauf', modalTitleAccent: 'anlegen.',
-    nameLabel: 'Wie soll er heißen?', namePlaceholder: 'z. B. Bewerbung Stadtwerke',
+    nameLabel: 'Titel in deiner Übersicht (steht nicht im Lebenslauf)', namePlaceholder: 'z. B. Bewerbung Stadtwerke',
     startLabel: 'Womit anfangen?',
     blankLabel: 'Leer anfangen', blankDesc: 'Alle Felder leer — du tippst deine eigenen Daten ein',
     sampleLabel: 'Mit Beispiel', sampleDesc: 'Ausgefüllter Muster-Lebenslauf zum Überschreiben',
@@ -130,7 +130,7 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
 
     modalOverline: 'NEW · RÉSUMÉ',
     modalTitle: 'Create a new', modalTitleAccent: 'résumé.',
-    nameLabel: 'What should it be called?', namePlaceholder: 'e.g. Application — City Utilities',
+    nameLabel: 'Title in your overview (not printed on the résumé)', namePlaceholder: 'e.g. Application — City Utilities',
     startLabel: 'Where to start?',
     blankLabel: 'Start empty', blankDesc: 'Every field blank — you type in your own details',
     sampleLabel: 'With sample', sampleDesc: 'A filled-in sample résumé to overwrite',
@@ -169,7 +169,7 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
 
     modalOverline: 'NOUVEAU · CV',
     modalTitle: 'Créer un nouveau', modalTitleAccent: 'CV.',
-    nameLabel: 'Quel nom lui donner ?', namePlaceholder: 'ex. Candidature Mairie',
+    nameLabel: 'Titre dans votre liste (n’apparaît pas sur le CV)', namePlaceholder: 'ex. Candidature Mairie',
     startLabel: 'Par où commencer ?',
     blankLabel: 'Partir de zéro', blankDesc: 'Tous les champs vides — vous saisissez vos propres données',
     sampleLabel: 'Avec exemple', sampleDesc: 'Un CV type déjà rempli, à écraser',
@@ -208,7 +208,7 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
 
     modalOverline: 'NUEVO · CV',
     modalTitle: 'Crea un nuevo', modalTitleAccent: 'CV.',
-    nameLabel: '¿Cómo se va a llamar?', namePlaceholder: 'p. ej. Candidatura Ayuntamiento',
+    nameLabel: 'Título en tu lista (no aparece en el CV)', namePlaceholder: 'p. ej. Candidatura Ayuntamiento',
     startLabel: '¿Por dónde empezar?',
     blankLabel: 'Empezar en blanco', blankDesc: 'Todos los campos vacíos — escribes tus propios datos',
     sampleLabel: 'Con ejemplo', sampleDesc: 'Un CV de muestra relleno para sobrescribir',

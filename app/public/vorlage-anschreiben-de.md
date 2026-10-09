@@ -1,7 +1,6 @@
 ---
 doc: cover-letter
 lang: de
-template: hamburg
 ---
 
 ## Empfänger

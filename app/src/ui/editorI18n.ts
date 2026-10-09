@@ -25,6 +25,8 @@ export interface EditorStrings {
   ttHome: string; ttFont: string; ttVersions: string; ttAccount: string;
   ttAdmin: string; ttExitDemo: string; ttSignOut: string;
   // Soft-Wall (Demo-Sperre)
+  /** Hinweis nach dem Übernehmen der Kontaktdaten in eine neue Sprachfassung. */
+  contactCarried: (from: string) => string;
   swLimit: string; swTitle: string; swTitleAccent: string; swBody: string; swStay: string;
   // Direktes Schreiben in der Vorschau (Telefon/Tablet)
   zoomDone: string; tapToWrite: string;
@@ -63,7 +65,8 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttAdmin: 'Admin-Bereich',
     ttExitDemo: 'Demo verlassen und ein Konto anlegen',
     ttSignOut: 'Abmelden',
-    swLimit: 'Demo-Limit', swTitle: 'Diese Funktion braucht ein', swTitleAccent: 'Konto.', swBody: 'Du bist gerade im Demo-Modus. Speichern, Sharelinks, Versionen und KI-Funktionen brauchen ein Konto — registrieren dauert 30 Sekunden, du bekommst einen Einladungscode von der Person, die dir das Tool gezeigt hat.', swStay: 'Weiter im Demo',
+    contactCarried: from => `Kontaktdaten aus ${from} übernommen. Die Texte bitte übersetzen.`,
+    swLimit: 'Demo-Limit', swTitle: 'Diese Funktion braucht ein', swTitleAccent: 'Konto.', swBody: 'Du arbeitest gerade ohne Konto. Sharelinks, Versionen und die KI-Anbindung per MCP brauchen eins, weil dafür etwas auf unserem Server liegen muss. Alles andere geht auch so: Editor, Foto, Markdown-Import, PDF und Word. Deine Daten bleiben dabei in diesem Browser. Ein Konto bekommst du mit dem Einladungscode der Person, die dir das Werkzeug gezeigt hat.', swStay: 'Weiter im Demo',
     zoomDone: 'Fertig', tapToWrite: 'Text antippen und schreiben',
     close: 'Schließen', menu: 'Menü', chooseTemplate: 'Vorlage wählen', typeAndPage: 'Darstellung',
     docTypeLabel: 'Dokument', langLabel: 'Sprache des Lebenslaufs',
@@ -93,7 +96,8 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttAdmin: 'Admin area',
     ttExitDemo: 'Leave the demo and create an account',
     ttSignOut: 'Sign out',
-    swLimit: 'Demo limit', swTitle: 'This feature needs an', swTitleAccent: 'account.', swBody: "You're in demo mode right now. Saving, sharelinks, versions and AI features require an account — signing up takes 30 seconds, you'll get an invite code from whoever showed you the tool.", swStay: 'Stay in the demo',
+    contactCarried: from => `Contact details copied from ${from}. Please translate the texts.`,
+    swLimit: 'Demo limit', swTitle: 'This feature needs an', swTitleAccent: 'account.', swBody: 'You are working without an account right now. Share links, versions and the AI connection via MCP need one, because something has to be stored on our server for them. Everything else works as it is: editor, photo, Markdown import, PDF and Word. Your data stays in this browser. You get an account with an invite code from whoever showed you the tool.', swStay: 'Stay in the demo',
     zoomDone: 'Done', tapToWrite: 'Tap any text to write',
     close: 'Close', menu: 'Menu', chooseTemplate: 'Choose a template', typeAndPage: 'Appearance',
     docTypeLabel: 'Document', langLabel: 'Language of the CV',
@@ -123,7 +127,8 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttAdmin: 'Espace admin',
     ttExitDemo: 'Quitter la démo et créer un compte',
     ttSignOut: 'Déconnexion',
-    swLimit: 'Limite démo', swTitle: 'Cette fonction nécessite un', swTitleAccent: 'compte.', swBody: "Vous êtes en mode démo. L'enregistrement, les liens de partage, les versions et les fonctions IA nécessitent un compte — l'inscription prend 30 secondes, avec un code d'invitation fourni par la personne qui vous a montré l'outil.", swStay: 'Rester en démo',
+    contactCarried: from => `Coordonnées reprises de la version ${from}. Les textes restent à traduire.`,
+    swLimit: 'Limite démo', swTitle: 'Cette fonction nécessite un', swTitleAccent: 'compte.', swBody: 'Vous travaillez sans compte pour le moment. Les liens de partage, les versions et la connexion IA via MCP en demandent un, car ils exigent de stocker quelque chose sur notre serveur. Tout le reste fonctionne tel quel : éditeur, photo, import Markdown, PDF et Word. Vos données restent dans ce navigateur. Vous obtenez un compte avec le code d’invitation de la personne qui vous a montré l’outil.', swStay: 'Rester en démo',
     zoomDone: 'Terminé', tapToWrite: 'Touchez un texte pour écrire',
     close: 'Fermer', menu: 'Menu', chooseTemplate: 'Choisir un modèle', typeAndPage: 'Apparence',
     docTypeLabel: 'Document', langLabel: 'Langue du CV',
@@ -153,7 +158,8 @@ export const ET: Record<UiLang, EditorStrings> = {
     ttAdmin: 'Área de administración',
     ttExitDemo: 'Salir de la demo y crear una cuenta',
     ttSignOut: 'Cerrar sesión',
-    swLimit: 'Límite de la demo', swTitle: 'Esta función requiere una', swTitleAccent: 'cuenta.', swBody: 'Estás en modo demo. Guardar, los enlaces para compartir, las versiones y las funciones de IA requieren una cuenta — registrarse lleva 30 segundos y recibes un código de invitación de quien te enseñó la herramienta.', swStay: 'Seguir en la demo',
+    contactCarried: from => `Datos de contacto copiados de la versión ${from}. Falta traducir los textos.`,
+    swLimit: 'Límite de la demo', swTitle: 'Esta función requiere una', swTitleAccent: 'cuenta.', swBody: 'Ahora mismo trabajas sin cuenta. Los enlaces compartidos, las versiones y la conexión con IA por MCP la necesitan, porque requieren guardar algo en nuestro servidor. Todo lo demás funciona igual: editor, foto, importación Markdown, PDF y Word. Tus datos se quedan en este navegador. Consigues una cuenta con el código de invitación de quien te enseñó la herramienta.', swStay: 'Seguir en la demo',
     zoomDone: 'Listo', tapToWrite: 'Toca un texto para escribir',
     close: 'Cerrar', menu: 'Menú', chooseTemplate: 'Elegir plantilla', typeAndPage: 'Apariencia',
     docTypeLabel: 'Documento', langLabel: 'Idioma del CV',
@@ -197,7 +203,6 @@ export interface PanelStrings {
   photo: string;
   photoUpload: string;
   photoRemove: string;
-  photoDisabledTitle: string;
   /** Titel des Vorschaubilds, wenn schon ein Foto liegt — es ist dann der
    *  Knopf zum Nachjustieren des Ausschnitts. */
   photoRecropTitle: string;
@@ -219,7 +224,7 @@ export interface PanelStrings {
   readerError: string;
 
   // Personal — fields
-  name: string; jobTitle: string; email: string; phone: string;
+  name: string; namePlaceholder: string; jobTitle: string; email: string; phone: string;
   locationAddress: string; website: string;
   personalNote: string;
   birthDate: string; birthDatePlaceholder: string;
@@ -330,9 +335,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropCancel: 'Abbrechen',
     photoRemove: '× Entfernen',
     photoRecropTitle: 'Zum Zuschneiden anklicken',
-    photoDisabledTitle: 'Im Demo-Modus deaktiviert — Konto anlegen, um Fotos hochzuladen',
     photoChooseTitle: 'Foto-Datei wählen',
-    photoDemoHint: 'Foto-Upload und URL-Eingabe sind im Demo-Modus deaktiviert. Lege ein Konto an, um eigene Fotos zu nutzen.',
+    photoDemoHint: 'Ohne Konto bleibt dein Foto in diesem Browser. Für das PDF geht es einmalig mit dem Lebenslauf an unseren Server in Deutschland und wird dort nicht gespeichert. Die Datei wird vorher neu gerechnet, Ortsangaben und Kameradaten fallen dabei weg.',
     photoUrlHint: 'Oder gib eine URL ein:',
     photoUrlPlaceholder: 'https://... oder leer lassen',
     alertTooLarge: 'Datei zu groß (max. 4 MB).',
@@ -340,7 +344,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     alertUnknown: 'unbekannt',
     readerError: 'FileReader-Fehler',
 
-    name: 'Name', jobTitle: 'Berufsbezeichnung', email: 'E-Mail', phone: 'Telefon',
+    name: 'Name', namePlaceholder: 'z. B. Erika Mustermann', jobTitle: 'Berufsbezeichnung', email: 'E-Mail', phone: 'Telefon',
     locationAddress: 'Ort / Adresse', website: 'Website',
     personalNote: 'Hinweis: Familienstand, Geburtsort und Staatsangehörigkeit sind im deutschen Lebenslauf 2026 nicht mehr Standard und können weggelassen werden. Leere Felder werden nicht angezeigt.',
     birthDate: 'Geburtsdatum', birthDatePlaceholder: 'z. B. 01.01.1990',
@@ -444,9 +448,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropCancel: 'Cancel',
     photoRemove: '× Remove',
     photoRecropTitle: 'Click to crop',
-    photoDisabledTitle: 'Disabled in demo mode — create an account to upload photos',
     photoChooseTitle: 'Choose photo file',
-    photoDemoHint: 'Photo upload and URL entry are disabled in demo mode. Create an account to use your own photos.',
+    photoDemoHint: 'Without an account your photo stays in this browser. For the PDF it travels once, with the résumé, to our server in Germany and is not stored there. The file is re-encoded first, so location and camera data are dropped.',
     photoUrlHint: 'Or enter a URL:',
     photoUrlPlaceholder: 'https://... or leave empty',
     alertTooLarge: 'File too large (max. 4 MB).',
@@ -454,7 +457,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     alertUnknown: 'unknown',
     readerError: 'FileReader error',
 
-    name: 'Name', jobTitle: 'Job title', email: 'Email', phone: 'Phone',
+    name: 'Name', namePlaceholder: 'e.g. Jane Doe', jobTitle: 'Job title', email: 'Email', phone: 'Phone',
     locationAddress: 'City / Address', website: 'Website',
     personalNote: 'Note: Marital status, place of birth and nationality are no longer standard on a German CV in 2026 and can be left out. Empty fields are not shown.',
     birthDate: 'Date of birth', birthDatePlaceholder: 'e.g. 01/01/1990',
@@ -558,9 +561,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropCancel: 'Annuler',
     photoRemove: '× Supprimer',
     photoRecropTitle: 'Cliquer pour recadrer',
-    photoDisabledTitle: 'Désactivé en mode démo — créez un compte pour téléverser des photos',
     photoChooseTitle: 'Choisir un fichier photo',
-    photoDemoHint: 'Le téléversement de photo et la saisie d\'URL sont désactivés en mode démo. Créez un compte pour utiliser vos propres photos.',
+    photoDemoHint: 'Sans compte, votre photo reste dans ce navigateur. Pour le PDF, elle part une seule fois avec le CV vers notre serveur en Allemagne et n\'y est pas conservée. Le fichier est d\'abord recodé : localisation et données de l\'appareil disparaissent.',
     photoUrlHint: 'Ou saisissez une URL :',
     photoUrlPlaceholder: 'https://... ou laisser vide',
     alertTooLarge: 'Fichier trop volumineux (max. 4 Mo).',
@@ -568,7 +570,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     alertUnknown: 'inconnu',
     readerError: 'Erreur FileReader',
 
-    name: 'Nom', jobTitle: 'Intitulé du poste', email: 'E-mail', phone: 'Téléphone',
+    name: 'Nom', namePlaceholder: 'p. ex. Marie Dupont', jobTitle: 'Intitulé du poste', email: 'E-mail', phone: 'Téléphone',
     locationAddress: 'Ville / Adresse', website: 'Site web',
     personalNote: 'Remarque : la situation familiale, le lieu de naissance et la nationalité ne sont plus standard sur un CV allemand en 2026 et peuvent être omis. Les champs vides ne sont pas affichés.',
     birthDate: 'Date de naissance', birthDatePlaceholder: 'p. ex. 01/01/1990',
@@ -672,9 +674,8 @@ export const EP: Record<UiLang, PanelStrings> = {
     cropCancel: 'Cancelar',
     photoRemove: '× Quitar',
     photoRecropTitle: 'Haz clic para recortar',
-    photoDisabledTitle: 'Desactivado en el modo demo — crea una cuenta para subir fotos',
     photoChooseTitle: 'Elegir archivo de foto',
-    photoDemoHint: 'La subida de fotos y la introducción de URL están desactivadas en el modo demo. Crea una cuenta para usar tus propias fotos.',
+    photoDemoHint: 'Sin cuenta, tu foto se queda en este navegador. Para el PDF viaja una sola vez, junto con el CV, a nuestro servidor en Alemania y no se guarda allí. Antes se vuelve a codificar el archivo, así que la ubicación y los datos de la cámara desaparecen.',
     photoUrlHint: 'O introduce una URL:',
     photoUrlPlaceholder: 'https://... o dejar vacío',
     alertTooLarge: 'Archivo demasiado grande (máx. 4 MB).',
@@ -682,7 +683,7 @@ export const EP: Record<UiLang, PanelStrings> = {
     alertUnknown: 'desconocido',
     readerError: 'Error de FileReader',
 
-    name: 'Nombre', jobTitle: 'Puesto / Cargo', email: 'Correo electrónico', phone: 'Teléfono',
+    name: 'Nombre', namePlaceholder: 'p. ej. Lucía García', jobTitle: 'Puesto / Cargo', email: 'Correo electrónico', phone: 'Teléfono',
     locationAddress: 'Ciudad / Dirección', website: 'Sitio web',
     personalNote: 'Nota: el estado civil, el lugar de nacimiento y la nacionalidad ya no son estándar en un currículum alemán en 2026 y pueden omitirse. Los campos vacíos no se muestran.',
     birthDate: 'Fecha de nacimiento', birthDatePlaceholder: 'p. ej. 01/01/1990',
@@ -792,6 +793,8 @@ export interface ShareStrings {
   missingTitle: string; missingBody: string;
   unavailableTitle: string; unavailableBody: string;
   buildYourOwn: string;
+  /** Link „Inhalt melden" (DSA Art. 16) und der Betreff der Meldung. */
+  report: string; reportSubject: string; reportBody: (url: string) => string;
 }
 
 export const SHARE: Record<UiLang, ShareStrings> = {
@@ -808,6 +811,8 @@ export const SHARE: Record<UiLang, ShareStrings> = {
     unavailableTitle: 'Nicht verfügbar',
     unavailableBody: 'Der Link lässt sich gerade nicht öffnen. Später noch einmal versuchen.',
     buildYourOwn: 'Selbst einen Lebenslauf bauen →',
+    report: 'Inhalt melden', reportSubject: 'Meldung zu einem geteilten Lebenslauf',
+    reportBody: url => `Link: ${url}\n\nWas ist an diesem Inhalt rechtswidrig oder falsch? Bitte kurz begründen:\n`,
   },
   en: {
     sharedPreview: 'shared preview',
@@ -822,6 +827,8 @@ export const SHARE: Record<UiLang, ShareStrings> = {
     unavailableTitle: 'Not available',
     unavailableBody: 'The link cannot be opened right now. Please try again later.',
     buildYourOwn: 'Build your own résumé →',
+    report: 'Report content', reportSubject: 'Report about a shared résumé',
+    reportBody: url => `Link: ${url}\n\nWhat is illegal or wrong about this content? Please explain briefly:\n`,
   },
   fr: {
     sharedPreview: 'aperçu partagé',
@@ -836,6 +843,8 @@ export const SHARE: Record<UiLang, ShareStrings> = {
     unavailableTitle: 'Indisponible',
     unavailableBody: "Le lien ne peut pas être ouvert pour l'instant. Réessayez plus tard.",
     buildYourOwn: 'Créer votre propre CV →',
+    report: 'Signaler un contenu', reportSubject: 'Signalement concernant un CV partagé',
+    reportBody: url => `Lien : ${url}\n\nEn quoi ce contenu est-il illicite ou erroné ? Merci de l’expliquer brièvement :\n`,
   },
   es: {
     sharedPreview: 'vista compartida',
@@ -850,5 +859,7 @@ export const SHARE: Record<UiLang, ShareStrings> = {
     unavailableTitle: 'No disponible',
     unavailableBody: 'El enlace no se puede abrir ahora mismo. Inténtalo más tarde.',
     buildYourOwn: 'Crea tu propio CV →',
+    report: 'Denunciar contenido', reportSubject: 'Aviso sobre un CV compartido',
+    reportBody: url => `Enlace: ${url}\n\n¿Qué es ilícito o incorrecto en este contenido? Explícalo brevemente:\n`,
   },
 };

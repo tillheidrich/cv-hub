@@ -29,7 +29,7 @@ function pixel(png, xPct, yPct) {
 
 const befunde = [];
 for (const t of ids) {
-  await p.goto(`http://localhost:5199/dev-preview.html?tpl=${t}&mode=one&len=long&p=marketing`, { waitUntil: 'networkidle' });
+  await p.goto(`${process.env.HARNESS_BASE || "http://localhost:5199"}/dev-preview.html?tpl=${t}&mode=one&len=long&p=marketing`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(700);
   const panel = await p.evaluate(async (id) => {
     const m = await import('/src/templates/theme.ts');

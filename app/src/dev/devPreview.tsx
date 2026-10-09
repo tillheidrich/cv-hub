@@ -17,13 +17,14 @@ import { applyInlineEdit, applyCoverLetterEdit, isCoverLetterPath, insertAfter, 
 import DocumentPreview, { type FitInfo } from '../preview/DocumentPreview';
 import { getTheme, resolvePairing, THEMES } from '../templates/theme';
 import { contentKeyOf } from '../preview/contentKey';
-import { buildResumeHtmlForTest } from '../export/exportHtml';
+import { buildResumeHtmlForTest, buildStandaloneResumeHtmlForTest, extractExportText } from '../export/exportHtml';
 import { exportTemplateKit } from '../export/exportTemplate';
 import { buildDocx, withRasterPhoto, type DocxVariant } from '../export/exportDocx';
 import { Packer } from 'docx';
 import { getMdTemplate } from '../export/markdownTemplate';
 import { demoDE } from '../data/demo-de';
-import { DEFAULT_COVER_LETTERS } from '../data/storage';
+import { DEFAULT_COVER_LETTERS, cloneCVForLang } from '../data/storage';
+import { demoEN } from '../data/demo-en';
 import { PERSONAS } from './personas';
 import type { AccentId, PaperId, CVData, CoverLetterData, PageMode } from '../data/types';
 import { FS, type Metrics } from '../templates/metrics';
@@ -55,7 +56,15 @@ const accent = (q.get('accent') || 'auto') as AccentId;
 const paper = (q.get('paper') || 'auto') as PaperId;
 /** Nutzerregler für die Schriftgröße — 1 = Normalstellung. */
 const userScale = Number(q.get('scale') || '1');
-const source: CVData = PERSONAS[persona] ?? demoDE;
+/* Demo-Profil in allen vier Sprachen: `p=demo-en`, `demo-fr`, `demo-es`.
+ * FR und ES sind wie in der App Klone der deutschen Fassung mit den
+ * Beschriftungen der Zielsprache. */
+const DEMOS: Record<string, CVData> = {
+  'demo-en': demoEN,
+  'demo-fr': cloneCVForLang(demoDE, 'fr'),
+  'demo-es': cloneCVForLang(demoDE, 'es'),
+};
+const source: CVData = PERSONAS[persona] ?? DEMOS[persona] ?? demoDE;
 
 function stretch(d: CVData): CVData {
   if (len === 'normal') return d;
@@ -79,6 +88,19 @@ function Harness() {
   // geht — inklusive der Seitenaufteilung, die die Vorschau berechnet hat.
   (window as unknown as { __exportHtml?: () => string }).__exportHtml = () =>
     buildResumeHtmlForTest(stretch(live), {
+      themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
+      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
+    });
+  // Text, den die ATS-Prüfung im Export-Panel liest (extractExportText) —
+  // scripts/contactwrapcheck.mjs vergleicht ihn mit pdftotext.
+  (window as unknown as { __exportText?: () => string }).__exportText = () =>
+    extractExportText(stretch(live), {
+      themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
+      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
+    });
+  // Die HTML-Datei, die „HTML" im Export herunterlädt (Schriften eingebettet).
+  (window as unknown as { __standaloneHtml?: () => Promise<string> }).__standaloneHtml = () =>
+    buildStandaloneResumeHtmlForTest(stretch(live), {
       themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
       metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
     });

@@ -1,5 +1,4 @@
 ---
-template: hamburg
 lang: de
 fontScale: 1.0
 fontPairing: auto

@@ -6,13 +6,16 @@
  * Two variants exist:
  *   - cv:de / cv:en  → Lebenslauf / Resume
  *   - cl:de / cl:en  → Anschreiben / Cover Letter
+ *
+ * Ohne `template:`-Zeile (seit 08.10.2026): Eine ausgefüllte Vorlage soll die
+ * gewählte Vorlage des Profils behalten. Vorher stand hier „hamburg", und
+ * jeder Import über ein Konto stellte darauf um.
  */
 
 export type MdTemplateKind = 'cv' | 'cl';
 export type MdTemplateLang = 'de' | 'en';
 
 const CV_DE = `---
-template: hamburg
 lang: de
 fontScale: 1.0
 fontPairing: auto
@@ -76,7 +79,6 @@ Schule · Ort · 2008 – 2017
 `;
 
 const CV_EN = `---
-template: hamburg
 lang: en
 fontScale: 1.0
 fontPairing: auto
@@ -138,7 +140,6 @@ University · Location · 2017 – 2020
 const CL_DE = `---
 doc: cover-letter
 lang: de
-template: hamburg
 ---
 
 ## Empfänger
@@ -179,7 +180,6 @@ Dein Name
 const CL_EN = `---
 doc: cover-letter
 lang: en
-template: hamburg
 ---
 
 ## Empfänger

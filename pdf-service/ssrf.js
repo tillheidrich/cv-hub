@@ -26,11 +26,13 @@ export function isPrivateHost(hostname) {
     || a >= 224;
 }
 
-/** Hosts, die der Renderer immer laden darf. */
-export const PDF_ALLOWED_HOSTS = new Set([
-  'fonts.googleapis.com',
-  'fonts.gstatic.com',
-]);
+/** Hosts, die der Renderer immer laden darf.
+ *
+ *  Leer seit dem 08.10.2026. Hier standen Google Fonts — die App liefert ihre
+ *  Schriften aber seit Langem selbst aus (/fonts.css, @fontsource), und jeder
+ *  fremde Host hier ist ein Ziel, das ein Aufrufer ansteuern kann. Ein altes
+ *  HTML mit Google-Link bekommt jetzt die Ersatzschrift statt eines Fehlers. */
+export const PDF_ALLOWED_HOSTS = new Set([]);
 
 /** Darf der Renderer diese Adresse laden?
  *

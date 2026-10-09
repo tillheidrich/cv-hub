@@ -36,10 +36,14 @@ test('blockiert alles außer https, data und about', () => {
   assert.equal(isPdfFetchAllowed('about:blank', EIGEN), true);
 });
 
-test('erlaubt, was der Renderer wirklich braucht', () => {
-  assert.equal(isPdfFetchAllowed('https://fonts.googleapis.com/css2?family=Inter', EIGEN), true);
-  assert.equal(isPdfFetchAllowed('https://fonts.gstatic.com/s/inter/x.woff2', EIGEN), true);
-  assert.equal(isPdfFetchAllowed(`https://${EIGEN}/pdfapi/api/photos/abc`, EIGEN), true);
+test('erlaubt, was der Renderer wirklich braucht: nur den eigenen Host', () => {
+  assert.equal(isPdfFetchAllowed(`https://${EIGEN}/fonts.css`, EIGEN), true);
+  assert.equal(isPdfFetchAllowed(`https://${EIGEN}/fonts/inter-latin-400-normal.woff2`, EIGEN), true);
+});
+
+test('Google Fonts steht nicht mehr in der Allowlist (08.10.2026)', () => {
+  assert.equal(isPdfFetchAllowed('https://fonts.googleapis.com/css2?family=Inter', EIGEN), false);
+  assert.equal(isPdfFetchAllowed('https://fonts.gstatic.com/s/inter/x.woff2', EIGEN), false);
 });
 
 test('ein fremder Host bleibt fremd, auch wenn er so aussieht', () => {

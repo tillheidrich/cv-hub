@@ -85,7 +85,12 @@ if (/ﬁ|ﬂ/.test(all)) problems.push('Ligaturen landen unzerlegt im Text — P
 // global aus ist. Deshalb wird gegenprüft, ob das zusammengesetzte Wort
 // wirklich im Dokumenttext vorkommt.
 const previewFlat = norm(previewTexts.join(' ')).replace(/ /g, '');
-for (const m of all.matchAll(/([A-Za-zÄÖÜäöüß]{2,})-\s*\n([A-Za-zÄÖÜäöüß]{2,})/g)) {
+// Im Rohstrom (-raw), nicht in der Layout-Lesart: Bei zwei Spalten schiebt
+// pdftotext sonst ein Wort aus der Nachbarspalte zwischen „Datenbank-" und
+// „Migrationen" — und meldet einen Trennstrich, den es im Satz nicht gibt
+// (Mailand, Testperson tech, 08.10.2026).
+const rawAll = execFileSync('pdftotext', ['-raw', pdfPath, '-'], { encoding: 'utf8' });
+for (const m of rawAll.matchAll(/([A-Za-zÄÖÜäöüß]{2,})-\s*\n([A-Za-zÄÖÜäöüß]{2,})/g)) {
   const joined = norm(`${m[1]}-${m[2]}`).replace(/ /g, '');
   if (!previewFlat.includes(joined)) {
     problems.push(`Eingefügter Trennstrich im Text: „${m[1]}-${m[2]}" — bricht die Stichwortsuche`);

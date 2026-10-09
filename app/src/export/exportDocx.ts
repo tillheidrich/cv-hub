@@ -31,6 +31,7 @@ import type { CVData, PersonalInfo, SectionKey } from '../data/types';
 import { getTheme } from '../templates/theme';
 import type { HeadingStyle, ResumeTheme } from '../templates/theme';
 import { socialLabel, socialDisplay } from '../templates/ResumeRenderer';
+import { isPlaceholderPhoto } from './photoEmbed';
 import { getPageFormat } from '../data/pageFormats';
 import type { ExportRenderConfig } from './exportHtml';
 import { exportFilename } from './filename';
@@ -1064,6 +1065,8 @@ export async function photoAsRaster(
 export async function withRasterPhoto(cv: CVData, cfg: ExportRenderConfig): Promise<CVData> {
   const src = val(cv.personal?.photo);
   if (!src) return cv;
+  // Der graue Demo-Platzhalter ist kein Foto — er gehört in kein Dokument.
+  if (isPlaceholderPhoto(src)) return { ...cv, personal: { ...cv.personal, photo: '' } };
   // Auch hier die vollständige Konfiguration: Die gewählte Papierfarbe
   // verschiebt `panelBg` — und das ist die Fläche, auf der das Foto sitzt und
   // mit der seine Maske hinterlegt wird.

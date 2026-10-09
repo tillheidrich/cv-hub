@@ -30,7 +30,7 @@ export default [
     // `page.evaluate(() => …)` läuft im Browser, nicht in Node. Die Funktion
     // steht als Quelltext hier, ausgeführt wird sie dort — `document` ist an
     // dieser Stelle also richtig und kein fehlender Name.
-    files: ['server.js'],
+    files: ['server.js', 'pdf.js'],
     languageOptions: { globals: { ...globals.browser } },
   },
   { ignores: ['node_modules/**', 'renderer/**'] },

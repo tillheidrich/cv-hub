@@ -24,6 +24,7 @@
 // — bewusst über die stabile ID des Eintrags, nicht über seine Position: die
 // Reihenfolge kann sich zwischen Tastendruck und Übernahme ändern.
 
+import { shortUrl } from './urls';
 import type { CVData, CoverLetterData } from './types';
 
 export type InlinePath = string;
@@ -86,10 +87,13 @@ export function applyInlineEdit(cv: CVData, path: InlinePath, value: string): CV
       ...cv,
       personal: {
         ...cv.personal,
-        socials: (cv.personal.socials ?? []).map(x => (x.id === id ? { ...x, value: v } : x)),
+        // Die Vorschau zeigt Adressen gekürzt (ohne https://, www.). Wer nur
+        // hinein- und wieder hinausklickt, ändert nichts.
+        socials: (cv.personal.socials ?? []).map(x => (x.id === id && shortUrl(x.value) !== shortUrl(v) ? { ...x, value: v } : x)),
       },
     };
   }
+  if (path === 'personal.website' && shortUrl(cv.personal.website ?? '') === shortUrl(value)) return cv;
 
   if (p[0] === 'personal') return { ...cv, personal: { ...cv.personal, [p[1]]: isMultiline(path) ? keepBreaks(value) : value.trim() } };
   if (p[0] === 'profile') return { ...cv, profile: { ...cv.profile, text: keepBreaks(value) } };

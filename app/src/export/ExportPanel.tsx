@@ -70,6 +70,8 @@ import { LANG_NAMES } from '../data/labels';
 import { api } from '../data/api';
 import type { ShareLink } from '../data/api';
 import { track } from '../data/track';
+import { DEFAULT_TEMPLATE } from '../data/storage';
+import { markdownToCvData, markdownToCoverLetter, clToMarkdown, isCvMarkdown, isClMarkdown } from '../import/markdownBridge';
 
 interface ExportPanelProps {
   data: CVData;
@@ -88,6 +90,8 @@ interface ExportPanelProps {
   onProfileUpdated?: (profile: AppProfile) => void;
   /** Replace the active language's CV data (used by JSON Resume / bare-CVData import). */
   onReplaceData?: (cv: CVData) => void;
+  /** Anschreiben der aktiven Sprache ersetzen (Markdown-Import im Lokalmodus). */
+  onReplaceCoverLetter?: (cl: CoverLetterData) => void;
 }
 
 // Prompt builders. Embedded variant ships the Markdown content inline so the
@@ -275,7 +279,7 @@ function asShares(d: unknown): ShareLink[] {
   return Array.isArray(list) ? list as ShareLink[] : [];
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock }: ExportPanelProps) {
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter }: ExportPanelProps) {
   const t = EXP_I18N[useUiLang()];
   const schmal = useIsMobile();
   const [pdfHover, setPdfHover] = useState(false);
@@ -355,10 +359,33 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       : `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
     window.open(url, '_blank', 'noopener');
   }
+  /* Lokalmodus: Der Markdown-Import läuft im Browser (import/markdownBridge.ts),
+   * derselbe Parser wie am Server. Geschrieben wird in die gerade bearbeitete
+   * Sprache, gespeichert wie jede andere Änderung — im Browser. */
+  function localImport(): { cv?: CVData; cl?: CoverLetterData } {
+    if (isCover) {
+      if (!isClMarkdown(importText)) throw new Error(t.mdTooShort);
+      return { cl: markdownToCoverLetter(importText, coverLetter ?? ({} as CoverLetterData)) };
+    }
+    if (!isCvMarkdown(importText)) throw new Error(t.mdTooShort);
+    return { cv: markdownToCvData(importText, data) };
+  }
+
   // Step 1: run a dry-run import and build a diff for user review.
   async function previewImport() {
     if (!resumeId) return;
     setImportBusy(true); setImportErr(null);
+    if (demoMode) {
+      try {
+        const r = localImport();
+        setImportDiff(diffMaps(
+          isCover ? summariseCl(coverLetter, t) : summariseCv(data, t),
+          isCover ? summariseCl(r.cl, t) : summariseCv(r.cv, t),
+        ));
+      } catch (e) { setImportErr(e instanceof Error ? e.message : t.previewFailed); }
+      finally { setImportBusy(false); }
+      return;
+    }
     try {
       const r = isCover
         ? await api.importCoverLetterMarkdown(resumeId, importText, true)
@@ -379,6 +406,17 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   async function confirmImport() {
     if (!resumeId) return;
     setImportBusy(true); setImportErr(null);
+    if (demoMode) {
+      try {
+        const r = localImport();
+        if (r.cv) onReplaceData?.(r.cv);
+        if (r.cl) onReplaceCoverLetter?.(r.cl);
+        track(isCover ? 'import_cl_markdown' : 'import_markdown', { demo: true });
+        setImportOpen(false); setImportText(''); setImportDiff(null);
+      } catch (e) { setImportErr(e instanceof Error ? e.message : t.importFailed); }
+      finally { setImportBusy(false); }
+      return;
+    }
     try {
       const r = isCover
         ? await api.importCoverLetterMarkdown(resumeId, importText)
@@ -423,8 +461,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     }
   }
 
-  const downloadCoverLetterMd = () => resumeId
-    && ladeMarkdown(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}/cover-letter.md`, 'anschreiben');
+  const downloadCoverLetterMd = () => {
+    // Lokalmodus: dieselbe Bridge-Fassung, im Browser gebaut.
+    if (demoMode && coverLetter) {
+      saveText(exportFilename('anschreiben', data.personal.name, 'md'),
+        clToMarkdown(coverLetter, lang, exportConfig.themeId || DEFAULT_TEMPLATE), 'text/markdown');
+      return;
+    }
+    if (resumeId) ladeMarkdown(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}/cover-letter.md`, 'anschreiben');
+  };
 
   // Download CV markdown directly from the server bridge (same format as import).
   const downloadResumeMd = () => resumeId
@@ -451,6 +496,18 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
 
         // Full profile export from this tool.
         if (parsed.id && parsed.data) {
+          /* Lokalmodus: kein Server, der den Stand sichert — übernommen wird
+           * die Fassung der gerade bearbeiteten Sprache, gespeichert im
+           * Browser wie jede andere Änderung. */
+          if (demoMode) {
+            const cv = (parsed as AppProfile).data?.[lang as Lang];
+            if (!cv || !onReplaceData) throw new Error(t.importUnavailable);
+            onReplaceData(cv);
+            const cl = (parsed as AppProfile).coverLetters?.[lang as Lang];
+            if (cl) onReplaceCoverLetter?.(cl);
+            setImportOpen(false);
+            return;
+          }
           if (!resumeId) throw new Error(t.noActiveProfile);
           const updated: AppProfile = { ...parsed, id: resumeId || parsed.id };
           await api.saveResumeWithSnapshot(updated, 'json_import');
@@ -699,7 +756,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                 verlangt. Wer danach ein schiefes Blatt in der Hand hält, hat
                 nichts falsch gemacht — ihm wurde etwas versprochen. */}
             <ExportButton icon="globe" label="HTML" sub={t.htmlSub} onClick={() => exportHtml(data, exportConfig)} />
-            <ExportButton icon="markdown" label="Markdown" sub={t.mdSub} onClick={resumeId ? downloadResumeMd : () => exportMarkdown(data)} />
+            <ExportButton icon="markdown" label="Markdown" sub={t.mdSub} onClick={resumeId && !demoMode ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="braces" label="JSON" sub={t.jsonSub} onClick={() => exportJson(data)} />
             <ExportButton icon="puzzle" label="JSON Resume" sub={t.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
             {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus

@@ -299,6 +299,32 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
   );
 }
 
+// ── Foto neu codieren ────────────────────────────────────────────────────────
+
+/** Zeichnet ein Bild auf ein Canvas und gibt es als JPEG zurück — ohne
+ *  Metadaten (EXIF, GPS, Gerät), höchstens `maxSide` Pixel an der langen
+ *  Kante. Die EXIF-Ausrichtung wenden aktuelle Browser beim Zeichnen selbst
+ *  an; das Ergebnis steht also richtig herum. Transparenz wird weiß. */
+async function reencodeImage(src: string, maxSide: number, quality: number): Promise<string> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('Bild nicht lesbar'));
+    i.src = src;
+  });
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas nicht verfügbar');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', quality);
+}
+
 // ── Personal Editor ──────────────────────────────────────────────────────────
 
 function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: (d: CVData) => void; demoMode?: boolean }) {
@@ -340,8 +366,15 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
         reader.onerror = () => reject(new Error(t.readerError));
         reader.readAsDataURL(file);
       });
-      frischesOriginal.current = dataUrl;
-      setCropSrc(dataUrl);
+      /* Das Original wird neu codiert, bevor es irgendwohin geht. Ein
+       * Handyfoto trägt in seinen EXIF-Daten meist GPS-Position, Aufnahmezeit
+       * und Gerät — nichts davon gehört in eine Bewerbung oder auf einen
+       * Server. Ein Canvas übernimmt nur die Bildpunkte (Befund Technik-Bericht
+       * 08.10.2026). Im Lokalmodus wird es zudem kleiner gerechnet, weil der
+       * Speicher des Browsers knapp ist. */
+      const original = await reencodeImage(dataUrl, demoMode ? 1200 : 2400, demoMode ? 0.85 : 0.9);
+      frischesOriginal.current = original;
+      setCropSrc(original);
     } catch (err) {
       window.alert(t.alertUploadFailed + (err instanceof Error ? err.message : t.alertUnknown));
     }
@@ -351,6 +384,14 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
     setCropSrc(null);
     const original = frischesOriginal.current;
     frischesOriginal.current = null;
+    /* Lokalmodus (Demo): Das Foto bleibt im Browser, als data:-URL im Profil.
+     * Für das PDF reist es eingebettet mit dem Lebenslauf zum PDF-Dienst und
+     * wird dort nicht gespeichert (export/photoEmbed.ts). */
+    if (demoMode) {
+      if (original) updatePersonalMany({ photo: dataUrl, photoOriginal: original });
+      else updatePersonal('photo', dataUrl);
+      return;
+    }
     try {
       const { api } = await import('../data/api');
       const hoch = async (u: string) => {
@@ -383,7 +424,6 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
    * Angesetzt wird am Original, nicht am bestehenden Ausschnitt; nur so lässt
    * sich auch wieder herauszoomen. */
   function zuschnittOeffnen() {
-    if (demoMode) return;
     const original = (p.photoOriginal || '').trim();
     const quelle = original || (p.photo || '').trim();
     if (!quelle) { fileRef.current?.click(); return; }
@@ -406,31 +446,28 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           <button
             type="button"
             onClick={zuschnittOeffnen}
-            disabled={demoMode}
-            title={demoMode ? t.photoDisabledTitle : (p.photo ? t.photoRecropTitle : t.photoChooseTitle)}
+            title={p.photo ? t.photoRecropTitle : t.photoChooseTitle}
             aria-label={p.photo ? t.photoRecropTitle : t.photoChooseTitle}
             style={{
               width: '52px', height: '52px', borderRadius: '8px', overflow: 'hidden',
               background: 'oklch(0.96 0.03 264)', flexShrink: 0, border: '1px solid oklch(0.91 0.005 264)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: 0, position: 'relative',
-              cursor: demoMode ? 'not-allowed' : 'pointer',
+              cursor: 'pointer',
             }}>
             {p.photo ? (
               <>
                 <img src={p.photo} alt={t.photo} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 {/* Ein Bild allein sieht nicht nach Knopf aus. Das Zeichen sagt,
                     dass hier etwas passiert, ohne die Vorschau zuzudecken. */}
-                {!demoMode && (
-                  <span style={{
-                    position: 'absolute', right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.55)', color: '#fff',
-                    padding: '2px 3px 1px', borderTopLeftRadius: '6px',
-                    display: 'flex', alignItems: 'center',
-                  }}>
-                    <Icon name="crop" size={11} />
-                  </span>
-                )}
+                <span style={{
+                  position: 'absolute', right: 0, bottom: 0,
+                  background: 'rgba(0,0,0,0.55)', color: '#fff',
+                  padding: '2px 3px 1px', borderTopLeftRadius: '6px',
+                  display: 'flex', alignItems: 'center',
+                }}>
+                  <Icon name="crop" size={11} />
+                </span>
               </>
             ) : (
               <Icon name="user" size={20} style={{ color: 'oklch(0.62 0.012 264)' }} />
@@ -439,14 +476,16 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <button
               type="button"
-              onClick={() => !demoMode && fileRef.current?.click()}
-              disabled={demoMode}
-              title={demoMode ? t.photoDisabledTitle : t.photoChooseTitle}
-              style={{ ...addBtn, opacity: demoMode ? 0.5 : 1, cursor: demoMode ? 'not-allowed' : 'pointer' }}>
+              onClick={() => fileRef.current?.click()}
+              title={t.photoChooseTitle}
+              style={{ ...addBtn, cursor: 'pointer' }}>
               {t.photoUpload}
             </button>
-            {p.photo && !demoMode && (
-              <button type="button" onClick={() => updatePersonal('photo', '')} style={{ ...addBtn, color: '#c0392b', background: '#fff5f5', borderColor: '#f0b8b8' }}>
+            {/* Entfernen nimmt auch das Original mit — sonst läge das
+                unbeschnittene Bild weiter im Profil, obwohl der Mensch „weg"
+                gesagt hat. Gibt es auch in der Demo (Persona-Test 08.10.). */}
+            {p.photo && (
+              <button type="button" onClick={() => updatePersonalMany({ photo: '', photoOriginal: '' })} style={{ ...addBtn, color: '#c0392b', background: '#fff5f5', borderColor: '#f0b8b8' }}>
                 {t.photoRemove}
               </button>
             )}
@@ -482,7 +521,7 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
 
       <div style={sectionDivider} />
 
-      <Field label={t.name} value={p.name} onChange={v => updatePersonal('name', v)} />
+      <Field label={t.name} value={p.name} onChange={v => updatePersonal('name', v)} placeholder={t.namePlaceholder} />
       <Field label={t.jobTitle} value={p.title} onChange={v => updatePersonal('title', v)} />
 
       <div style={sectionDivider} />

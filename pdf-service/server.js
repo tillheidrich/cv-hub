@@ -8,13 +8,21 @@ import { mountOAuth, userForAccessToken } from './oauth.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { chromium } from 'playwright';
-import { isPdfFetchAllowed } from './ssrf.js';
+import { readFileSync } from 'node:fs';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl } from './markdown.js';
-import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
+import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplPasswordResetByAdmin, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
+import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError } from './guards.js';
+import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
+import { buildShareSnapshot, shareResponse } from './share.js';
+import { prunePhotos, startJanitor } from './janitor.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
+ * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
+ * RFC-5322-Kommentare und Gruppen, über die nodemailers Adressparser Post an
+ * eine fremde Domain zustellen ließ. Eine Adresse aus einem freien Formular
+ * braucht keins davon. */
+const EMAIL_RE = /^[^\s@()<>",;:\\[\]]+@[^\s@()<>",;:\\[\]]+\.[^\s@()<>",;:\\[\]]+$/;
 
 const MAX_VERSIONS_PER_RESUME = 25;
 
@@ -95,43 +103,21 @@ setInterval(() => {
   for (const [k, v] of rateBuckets) if (v.reset < now) rateBuckets.delete(k);
 }, 5 * 60 * 1000).unref?.();
 
-// Muss mit app/src/templates/theme.ts (THEMES) synchron bleiben — Quelle der
-// Wahrheit ist theme.ts; diese Liste bedient /api/templates + MCP list_templates.
-const TEMPLATES = [
-  { id: 'hamburg', name: 'Hamburg', category: 'klassisch' },
-  { id: 'kopenhagen', name: 'Kopenhagen', category: 'modern' },
-  { id: 'oslo', name: 'Oslo', category: 'modern' },
-  { id: 'berlin', name: 'Berlin', category: 'modern' },
-  { id: 'wien', name: 'Wien', category: 'klassisch' },
-  { id: 'zuerich', name: 'Zürich', category: 'minimal' },
-  { id: 'terrakotta', name: 'Terrakotta', category: 'kreativ' },
-  { id: 'muenchen', name: 'München', category: 'klassisch' },
-  { id: 'lissabon', name: 'Lissabon', category: 'modern' },
-  { id: 'mailand', name: 'Mailand', category: 'kreativ' },
-  { id: 'stockholm', name: 'Stockholm', category: 'modern' },
-  { id: 'bordeaux', name: 'Bordeaux', category: 'kreativ' },
-  { id: 'tokio', name: 'Tokio', category: 'minimal' },
-  { id: 'amsterdam', name: 'Amsterdam', category: 'kreativ' },
-  { id: 'genf', name: 'Genf', category: 'klassisch' },
-  // Reactive-Resume-inspirierte Welle
-  { id: 'pikachu', name: 'Pikachu', category: 'kreativ' },
-  { id: 'onyx', name: 'Onyx', category: 'minimal' },
-  { id: 'azurill', name: 'Azurill', category: 'modern' },
-  { id: 'gengar', name: 'Gengar', category: 'kreativ' },
-  { id: 'leafish', name: 'Leafish', category: 'modern' },
-  // Etsy-Inspo Welle 2026-06
-  { id: 'cobalt', name: 'Cobalt', category: 'kreativ' },
-  { id: 'patterson', name: 'Patterson', category: 'modern' },
-  { id: 'karlsruhe', name: 'Karlsruhe', category: 'minimal' },
-  { id: 'rosenheim', name: 'Rosenheim', category: 'kreativ' },
-  // Nordische/moderne Welle 2026-07
-  { id: 'helsinki', name: 'Helsinki', category: 'minimal' },
-  { id: 'espoo', name: 'Espoo', category: 'minimal' },
-  { id: 'seoul', name: 'Seoul', category: 'modern' },
-  { id: 'lyon', name: 'Lyon', category: 'klassisch' },
-];
+/* Vorlagenliste aus EINER Quelle.
+ *
+ * Hier stand bis zum 08.10.2026 eine Handliste mit dem Kommentar „muss mit
+ * theme.ts synchron bleiben" — fünf Phantom-IDs, fünf ausgemusterte, acht
+ * fehlende. Jetzt erzeugt scripts/sync-templates.mjs die Datei templates.json
+ * aus app/src/templates/theme.ts (PICKABLE_THEMES); templates.test.mjs
+ * schlägt an, sobald beide auseinanderlaufen. */
+const TEMPLATE_DATA = JSON.parse(readFileSync(new URL('./templates.json', import.meta.url), 'utf8'));
+const TEMPLATES = TEMPLATE_DATA.templates;
+const FONT_PAIRING_IDS = TEMPLATE_DATA.fontPairings;
 
 const app = express();
+// Kein „x-powered-by: Express" (N5) — verrät nur die Angriffsfläche.
+app.disable('x-powered-by');
+app.use(securityHeaders);
 /* Befund vom 14.09.2026: „1" war fest verdrahtet.
  *
  * Hinter einem Reverse-Proxy ist das richtig — Express nimmt dann den rechten,
@@ -149,6 +135,7 @@ app.set('trust proxy',
   TRUST_PROXY === '' ? false
   : /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY)
   : TRUST_PROXY);
+app.use(trustProxyWarning(app));
 // CORS: only allow our own frontend origin (plus localhost for dev). Reflecting
 // the request origin (origin: true) is an unnecessary footgun when we also set
 // credentials: true — even with sameSite:'lax' on the session cookie, this used
@@ -172,7 +159,19 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json({ limit: '12mb' }));
+/* JSON-Grenzen (Befund 5). Vorher galten 12 MB für jeden Endpunkt, auch für
+ * nicht angemeldete: Jeder Login-Versuch durfte 12 MB JSON schicken, die
+ * geparst wurden. Jetzt 1 MB für alles, mit genau zwei Ausnahmen:
+ * Foto-Upload (4 MB Bild ≈ 5,4 MB Base64) und PDF (bis 3 MB HTML, als JSON
+ * maskiert etwas mehr, eingebettetes Foto eingeschlossen). */
+const jsonDefault = express.json({ limit: '1mb' });
+const jsonPhoto = express.json({ limit: '6mb' });
+const jsonPdf = express.json({ limit: '4mb' });
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.path === '/api/photos') return jsonPhoto(req, res, next);
+  if (req.method === 'POST' && req.path === '/api/pdf') return jsonPdf(req, res, next);
+  return jsonDefault(req, res, next);
+});
 
 /* Hosts, unter denen dieser Dienst wirklich erreichbar ist.
  *
@@ -194,9 +193,16 @@ for (const v of [process.env.PUBLIC_BASE_URL, process.env.APP_BASE_URL]) {
 function pwdVersion(user) {
   return user?.password_changed_at ? Math.floor(new Date(user.password_changed_at).getTime() / 1000) : 0;
 }
+/* Dieselbe Marke auf die Millisekunde (08.10.2026). In Sekunden überlebte eine
+ * Sitzung einen Reset, der in derselben Sekunde wie die Anmeldung geschah.
+ * Neue Sitzungen tragen beide Marken; geprüft wird die genaue, wenn sie da
+ * ist — alte Sitzungen gelten deshalb beim Deploy weiter. */
+function pwdVersionMs(user) {
+  return user?.password_changed_at ? new Date(user.password_changed_at).getTime() : 0;
+}
 
 function issueSession(res, user) {
-  const token = jwt.sign({ uid: user.id, pcat: pwdVersion(user) }, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
+  const token = jwt.sign({ uid: user.id, pcat: pwdVersion(user), pcm: pwdVersionMs(user) }, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     secure: true,
@@ -270,13 +276,23 @@ async function loadUser(req) {
   if (!token) return null;
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.uid]);
+    if (decoded.purpose) return null;                 // ein Aktions-Token ist keine Sitzung
+    /* Abgemeldete Sitzungen stehen mit dem Hash ihres Tokens in
+     * session_revocations (N7). Eine Abfrage, kein zweiter Rundgang. */
+    const { rows } = await pool.query(
+      `SELECT u.*, EXISTS (SELECT 1 FROM session_revocations r WHERE r.token_hash = $2) AS session_revoked
+         FROM users u WHERE u.id = $1`,
+      [decoded.uid, sha256(token)],
+    );
     const u = rows[0];
-    if (!u || u.disabled) return null;
+    if (!u || u.disabled || u.session_revoked) return null;
+    delete u.session_revoked;
     // Passwortwechsel entwertet ältere Sessions. Fehlt der Claim (Alt-Token vor
     // Einführung), gilt 0 — dann kein Zwangs-Logout beim Deploy, aber ein
     // späterer Passwortwechsel invalidiert auch diese. (Finding #7.)
-    if ((decoded.pcat ?? 0) !== pwdVersion(u)) return null;
+    if (decoded.pcm !== undefined) {
+      if (decoded.pcm !== pwdVersionMs(u)) return null;
+    } else if ((decoded.pcat ?? 0) !== pwdVersion(u)) return null;
     return u;
   } catch {
     return null;
@@ -307,6 +323,7 @@ mountOAuth(app, {
   baseUrlOf: publicBaseUrl,
   appName: process.env.APP_NAME || 'CV-Hub',
   urlencoded: express.urlencoded({ extended: false, limit: '64kb' }),
+  registerLimit: rateLimit({ route: 'oauthreg', max: 20, windowMs: 60 * 60 * 1000 }),
 });
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
@@ -318,7 +335,7 @@ function generateCode() {
 // ── Health / templates ──────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'cv-api' }));
-app.get('/api/templates', (_req, res) => res.json({ templates: TEMPLATES }));
+app.get('/api/templates', (_req, res) => res.json({ templates: TEMPLATES, fontPairings: FONT_PAIRING_IDS }));
 
 // ── Zugangsanfragen (Registrierung anfragen) ─────────────────────────────────
 // Besucher fragen ohne Login Zugang an. Der Admin entscheidet per signiertem
@@ -539,6 +556,12 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
       if (!code || code.revoked) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ungültig.' }); }
       if (code.expires_at && new Date(code.expires_at) < new Date()) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ist abgelaufen.' }); }
       if (code.uses >= code.max_uses) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode wurde bereits aufgebraucht.' }); }
+      /* N8: Ein an eine Adresse gebundener Code war nur dem Namen nach
+       * gebunden — gespeichert wurde die Adresse, verglichen nie. */
+      if (code.email && String(code.email).trim().toLowerCase() !== email) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Dieser Einladungscode gilt nur für die E-Mail-Adresse, an die er geschickt wurde. Bitte genau diese Adresse angeben.' });
+      }
     }
 
     // Erst NACH akzeptiertem Code (bzw. Bootstrap) auf Dubletten prüfen.
@@ -663,8 +686,25 @@ app.post('/api/auth/verify-2fa', rateLimit({ route: 'verify2fa', max: 20, window
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
-  res.clearCookie(COOKIE);
+/* Abmelden entwertet die Sitzung jetzt auch auf dem Server (N7).
+ *
+ * Vorher wurde nur das Cookie gelöscht; das JWT galt 30 Tage weiter. Wer es
+ * vorher abgegriffen hatte, blieb angemeldet. Jetzt landet der Hash des
+ * Tokens bis zu seinem Ablauf in einer Sperrtabelle — die kleinste Lösung,
+ * die einzelne Geräte abmeldet, ohne alle anderen mitzunehmen. */
+app.post('/api/auth/logout', async (req, res) => {
+  const token = req.cookies?.[COOKIE];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const exp = decoded.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + SESSION_DAYS * 86400 * 1000);
+      await pool.query(
+        'INSERT INTO session_revocations (token_hash, user_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_hash) DO NOTHING',
+        [sha256(token), decoded.uid ?? null, exp],
+      );
+    } catch { /* ungültiges oder abgelaufenes Token: nichts zu sperren */ }
+  }
+  res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
   res.json({ ok: true });
 });
 
@@ -672,51 +712,88 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
+/* Passwortwechsel, Reset und Admin-Reset trennen ALLE Zugänge (Befund 2).
+ *
+ * Vorher wurden nur Cookie-Sitzungen entwertet (über die Passwortmarke im
+ * JWT). API-Schlüssel und OAuth-Token galten weiter. Wer eine Sitzung gekapert
+ * hatte, legte sich einen Schlüssel an und behielt den Zugriff nach jedem
+ * Passwortwechsel. Jetzt in derselben Transaktion wie das neue Passwort. */
+async function revokeAllCredentials(client, userId) {
+  const k = await client.query('UPDATE api_keys SET revoked = true WHERE user_id = $1 AND NOT revoked', [userId]);
+  const t = await client.query('UPDATE oauth_tokens SET revoked = true WHERE user_id = $1 AND NOT revoked', [userId]);
+  await client.query('UPDATE login_codes SET used = true WHERE user_id = $1 AND NOT used', [userId]);
+  await client.query('DELETE FROM oauth_codes WHERE user_id = $1', [userId]);
+  return { apiKeys: k.rowCount, connections: t.rowCount };
+}
+
 app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   const cur = String(req.body?.currentPassword || '');
   const nxt = String(req.body?.newPassword || '');
   if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.' });
+  if (!(await bcrypt.compare(cur, req.user.password_hash))) {
+    return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.' });
+  }
+  const hash = await bcrypt.hash(nxt, 10);
+  const client = await pool.connect();
+  let user, revoked;
   try {
-    if (!(await bcrypt.compare(cur, req.user.password_hash))) {
-      return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.' });
-    }
-    const hash = await bcrypt.hash(nxt, 10);
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+    const { rows } = await client.query(
       'UPDATE users SET password_hash = $1, password_changed_at = now() WHERE id = $2 RETURNING *',
       [hash, req.user.id],
     );
-    // Andere (ggf. kompromittierte) Sessions entwerten, eigene aktuelle Session
-    // aber frisch ausstellen, damit der Nutzer angemeldet bleibt.
-    issueSession(res, rows[0]);
-    logEvent(req.user.id, 'password_changed');
-    if (rows[0]?.email) { const m = tplPasswordChanged({ username: rows[0].username }); sendMail({ to: rows[0].email, ...m }); }
-    res.json({ ok: true });
+    user = rows[0];
+    revoked = await revokeAllCredentials(client, req.user.id);
+    await client.query('COMMIT');
   } catch (err) {
-    console.error('change-password failed:', err);
-    res.status(500).json({ error: 'Passwortänderung fehlgeschlagen.' });
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('change-password failed:', err?.message || err);
+    return res.status(500).json({ error: 'Passwortänderung fehlgeschlagen.' });
+  } finally {
+    client.release();
   }
+  // Andere (ggf. kompromittierte) Sessions sind über die Passwortmarke
+  // entwertet; die eigene aktuelle wird frisch ausgestellt.
+  issueSession(res, user);
+  logEvent(req.user.id, 'password_changed');
+  if (user?.email) { const m = tplPasswordChanged({ username: user.username }); sendMail({ to: user.email, ...m }); }
+  res.json({
+    ok: true,
+    revoked,
+    message: 'Passwort geändert. Alle anderen Anmeldungen, API-Schlüssel und KI-Verbindungen wurden getrennt.',
+  });
 });
 
 // Eigene E-Mail-Adresse setzen/ändern/entfernen (für Reset, Benachrichtigungen,
 // 2FA). Leert man sie, wird 2FA sicherheitshalber automatisch deaktiviert.
+//
+// N6 (08.10.2026): Nur noch mit dem aktuellen Passwort. Vorher reichte eine
+// Sitzung: Wer sie gekapert hatte, trug seine Adresse ein, schaltete 2FA ein
+// und sperrte den Inhaber dauerhaft aus. Die alte Adresse bekommt eine
+// Nachricht.
 app.post('/api/auth/email', rateLimit({ route: 'setemail', max: 12, windowMs: 30 * 60 * 1000 }), requireAuth, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.currentPassword || req.body?.password || '');
   if (email && !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.' });
-  try {
-    if (email) {
-      const dupE = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
-      if (dupE.rowCount) return res.status(409).json({ error: 'E-Mail-Adresse ist bereits registriert.' });
-      await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, req.user.id]);
-    } else {
-      // E-Mail entfernt → 2FA kann nicht mehr greifen, also abschalten.
-      await pool.query('UPDATE users SET email = NULL, twofa_enabled = false WHERE id = $1', [req.user.id]);
-    }
-    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
-    res.json({ user: publicUser(rows[0]) });
-  } catch (err) {
-    console.error('set email failed:', err?.message || err);
-    res.status(500).json({ error: 'Änderung fehlgeschlagen.' });
+  if (!password) return res.status(400).json({ error: 'Bitte zur Bestätigung das aktuelle Passwort angeben.', code: 'password_required' });
+  if (!(await bcrypt.compare(password, req.user.password_hash))) {
+    return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.', code: 'password_wrong' });
   }
+  const oldEmail = req.user.email || null;
+  if (email) {
+    const dupE = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
+    if (dupE.rowCount) return res.status(409).json({ error: 'E-Mail-Adresse ist bereits registriert.' });
+    await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, req.user.id]);
+  } else {
+    // E-Mail entfernt → 2FA kann nicht mehr greifen, also abschalten.
+    await pool.query('UPDATE users SET email = NULL, twofa_enabled = false WHERE id = $1', [req.user.id]);
+  }
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+  logEvent(req.user.id, 'email_changed');
+  if (oldEmail && oldEmail.toLowerCase() !== email) {
+    sendMail({ to: oldEmail, ...tplEmailChanged({ username: rows[0].username, newEmail: email || null }) });
+  }
+  res.json({ user: publicUser(rows[0]) });
 });
 
 // ── Zwei-Faktor-Authentifizierung (E-Mail-Code) ─────────────────────────────
@@ -755,8 +832,16 @@ app.post('/api/auth/2fa', rateLimit({ route: 'twofatoggle', max: 20, windowMs: 3
 // User-Enumeration-Leak (verrät nicht, ob eine Adresse existiert).
 app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windowMs: 30 * 60 * 1000 }), async (req, res) => {
   const id = String(req.body?.identifier || req.body?.email || req.body?.username || '').trim().toLowerCase();
+  /* Befund 9: Kein fester Ersatz mehr für die Adresse im Link. Ohne
+   * PUBLIC_BASE_URL/APP_BASE_URL und ohne bekannten Host geht keine Mail
+   * hinaus — lieber keine als eine, die auf einen fremden Server führt. */
+  const base = publicBaseUrl(req);
   res.json({ ok: true }); // früh antworten; Rest läuft best-effort im Hintergrund
   if (!id) return;
+  if (!base) {
+    console.error('forgot-password: keine Basis-URL bekannt (PUBLIC_BASE_URL oder APP_BASE_URL setzen) — Reset-Mail nicht verschickt.');
+    return;
+  }
   try {
     const { rows } = await pool.query(
       'SELECT * FROM users WHERE lower(email) = $1 OR lower(username) = $1',
@@ -771,7 +856,7 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
       [token, user.id, expires],
     );
     logEvent(user.id, 'password_reset_requested');
-    const m = tplPasswordReset({ token });
+    const m = tplPasswordReset({ token, base });
     await sendMail({ to: user.email, ...m });
   } catch (err) {
     console.error('forgot-password failed:', err?.message || err);
@@ -800,6 +885,7 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
     await client.query('UPDATE password_resets SET used = true WHERE token = $1', [token]);
     // Alle anderen offenen Tokens dieses Nutzers entwerten.
     await client.query('UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false', [pr.user_id]);
+    await revokeAllCredentials(client, pr.user_id);
     await client.query('COMMIT');
     logEvent(pr.user_id, 'password_reset_done');
     const { rows: u } = await pool.query('SELECT username, email FROM users WHERE id = $1', [pr.user_id]);
@@ -875,14 +961,49 @@ app.post('/api/photos', requireAuth, rateLimit({ route: 'photos', max: 30, windo
   res.json({ id, url: `${base || ''}/pdfapi/api/photos/${id}` });
 });
 
-app.get('/api/photos/:id', async (req, res) => {
-  const { rows } = await pool.query('SELECT mime, data FROM photos WHERE id = $1', [req.params.id]);
-  const p = rows[0];
-  if (!p) return res.status(404).send('Not found');
+/* Fotos nur noch für den Eigentümer (Befund 1).
+ *
+ * Vorher: ohne Anmeldung, `public, immutable` für ein Jahr, nicht löschbar.
+ * Die Adresse stand in jedem geteilten Profil, im HTML-Export und im
+ * Share-JSON. Jetzt sieht ein Foto nur, wem es gehört (Cookie oder Token);
+ * Empfänger eines Sharelinks bekommen es über /api/share/:token/photo.
+ * Wer keinen Zugriff hat, bekommt 404, nicht 403 — sonst wäre die Antwort
+ * ein Orakel dafür, welche IDs existieren. */
+const PHOTO_ID_RE = /^[0-9a-f]{24}$/;
+
+function sendPhoto(res, p) {
   res.setHeader('Content-Type', p.mime);
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+  res.setHeader('Content-Disposition', 'inline');
   res.send(p.data);
+}
+
+app.get('/api/photos/:id', async (req, res) => {
+  if (!PHOTO_ID_RE.test(req.params.id)) return res.status(404).send('Not found');
+  const user = await loadUser(req).catch(() => null);
+  if (!user) return res.status(404).send('Not found');
+  const { rows } = await pool.query('SELECT mime, data FROM photos WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+  if (!rows[0]) return res.status(404).send('Not found');
+  sendPhoto(res, rows[0]);
 });
+
+/* Foto löschen. Vorher gab es dafür keinen Weg: „Foto entfernen" ließ die
+ * Datei bis zur Kontolöschung in der Datenbank. Eine Profilversion oder ein
+ * Sharelink, der noch darauf zeigt, zeigt danach kein Foto mehr. */
+app.delete('/api/photos/:id', requireAuth, async (req, res) => {
+  if (!PHOTO_ID_RE.test(req.params.id)) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+  const { rowCount } = await pool.query('DELETE FROM photos WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (!rowCount) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+  logEvent(req.user.id, 'photo_delete');
+  res.json({ ok: true });
+});
+
+/** Nach jedem Schreiben eines Profils: Fotos, auf die nichts mehr zeigt,
+ *  sofort entfernen (mit kurzer Schonfrist für frische Uploads). */
+function prunePhotosSoon(userId) {
+  return prunePhotos(pool, userId).catch(err => console.error('prunePhotos failed:', err?.message || err));
+}
 
 // ── Public share links ──────────────────────────────────────────────────────
 
@@ -924,9 +1045,12 @@ app.post('/api/resumes/:id/share', requireAuth, async (req, res) => {
   const days = parseInt(req.body?.expiresInDays, 10);
   const expiresAt = Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86400 * 1000) : null;
   const includeCl = req.body?.includeCoverLetter !== false; // default true
+  // Fester Stand der sichtbaren Fassung (N3) — siehe share.js.
+  const { rows: pr } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+  const snapshot = buildShareSnapshot(pr[0].payload, token);
   await pool.query(
-    'INSERT INTO share_links (token, resume_id, created_by, expires_at, include_cover_letter) VALUES ($1, $2, $3, $4, $5)',
-    [token, id, req.user.id, expiresAt, includeCl],
+    'INSERT INTO share_links (token, resume_id, created_by, expires_at, include_cover_letter, snapshot) VALUES ($1, $2, $3, $4, $5, $6)',
+    [token, id, req.user.id, expiresAt, includeCl, snapshot],
   );
   /* Dieselbe Quelle wie für die E-Mail-Links (siehe publicBaseUrl): aus einem
    * gefälschten X-Forwarded-Host entstand sonst ein Teilen-Link, der den
@@ -955,6 +1079,23 @@ app.get('/api/resumes/:id/shares', requireAuth, async (req, res) => {
 
 app.post('/api/shares/:token/revoke', requireAuth, async (req, res) => {
   await pool.query('UPDATE share_links SET revoked = true WHERE token = $1 AND created_by = $2', [req.params.token, req.user.id]);
+  await prunePhotosSoon(req.user.id);
+  res.json({ ok: true });
+});
+
+/* Den festen Stand eines Links auf den aktuellen Stand des Profils bringen —
+ * für den Fall, dass der Inhaber nach dem Verschicken noch etwas korrigiert
+ * hat und denselben Link behalten will. */
+app.post('/api/shares/:token/refresh', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT r.payload FROM share_links s JOIN resumes r ON r.id = s.resume_id
+      WHERE s.token = $1 AND s.created_by = $2`,
+    [req.params.token, req.user.id],
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Link nicht gefunden.' });
+  await pool.query('UPDATE share_links SET snapshot = $1 WHERE token = $2 AND created_by = $3',
+    [buildShareSnapshot(rows[0].payload, req.params.token), req.params.token, req.user.id]);
+  await prunePhotosSoon(req.user.id);
   res.json({ ok: true });
 });
 
@@ -970,26 +1111,49 @@ app.patch('/api/shares/:token', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Markdown variant — MUST be declared BEFORE the catch-all :token route,
-// otherwise Express matches the .md suffix as part of the token param.
-async function loadShareForMd(token) {
+/* Einen Link laden — für JSON, Markdown, Crawler-Karte und Foto.
+ *
+ * Links von vor dem 08.10.2026 haben keinen festen Stand. Sie bekommen ihn
+ * beim ersten Abruf aus dem dann aktuellen Profil, gefiltert wie ein neuer
+ * Link; ab da gilt dieser Stand. */
+async function loadShare(token) {
+  if (!/^[0-9a-fA-F]{8,64}$/.test(String(token || ''))) return { status: 404, msg: 'Link nicht gefunden.' };
   const { rows } = await pool.query(
-    `SELECT r.payload, s.expires_at, s.revoked, s.include_cover_letter FROM share_links s
-       JOIN resumes r ON r.id = s.resume_id WHERE s.token = $1`,
+    `SELECT s.token, s.created_by, s.expires_at, s.revoked, s.include_cover_letter, s.snapshot, r.payload
+       FROM share_links s JOIN resumes r ON r.id = s.resume_id WHERE s.token = $1`,
     [token],
   );
   const s = rows[0];
   if (!s) return { status: 404, msg: 'Link nicht gefunden.' };
   if (s.revoked) return { status: 403, msg: 'Link widerrufen.' };
   if (s.expires_at && new Date(s.expires_at) < new Date()) return { status: 410, msg: 'Link abgelaufen.' };
-  return { status: 200, payload: s.payload, includeCoverLetter: s.include_cover_letter };
+  let snap = s.snapshot;
+  if (!snap) {
+    snap = buildShareSnapshot(s.payload, s.token);
+    await pool.query('UPDATE share_links SET snapshot = $1 WHERE token = $2 AND snapshot IS NULL', [snap, s.token]);
+  }
+  return { status: 200, snap, ownerId: s.created_by, includeCoverLetter: s.include_cover_letter };
 }
 
+// Markdown variant — MUST be declared BEFORE the catch-all :token route,
+// otherwise Express matches the .md suffix as part of the token param.
 app.get(/^\/api\/share\/([0-9a-fA-F]+)\.md$/, async (req, res) => {
-  const r = await loadShareForMd(req.params[0]);
+  const r = await loadShare(req.params[0]);
   if (r.status !== 200) return res.status(r.status).type('text/plain').send(r.msg);
   recordShareView(req.params[0], 'md', req.get('user-agent'));
-  res.type('text/markdown; charset=utf-8').send(cvToMarkdown(r.payload));
+  const { resume } = shareResponse(r.snap, { includeCoverLetter: r.includeCoverLetter });
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.type('text/markdown; charset=utf-8').send(cvToMarkdown(resume));
+});
+
+/* Foto eines Links: nur der Zuschnitt aus dem festen Stand, nur solange der
+ * Link gilt, nur wenn das Foto dem Inhaber des Links gehört. */
+app.get('/api/share/:token/photo', async (req, res) => {
+  const r = await loadShare(req.params.token);
+  if (r.status !== 200 || !r.snap?.photoId) return res.status(404).send('Not found');
+  const { rows } = await pool.query('SELECT mime, data FROM photos WHERE id = $1 AND user_id = $2', [r.snap.photoId, r.ownerId]);
+  if (!rows[0]) return res.status(404).send('Not found');
+  sendPhoto(res, rows[0]);
 });
 
 /** Per-share OG-card endpoint. Returns minimal HTML with og:title/description/
@@ -1007,29 +1171,19 @@ app.get(/^\/share\/([0-9a-fA-F]+)\/?$/, async (req, res, next) => {
   const ua = String(req.get('user-agent') || '').toLowerCase();
   const isCrawler = /bot|facebookexternalhit|linkedinbot|slackbot|twitterbot|whatsapp|discordbot|telegrambot|pinterest|skypeuripreview|embedly|google-inspectiontool|bingbot|duckduckbot/i.test(ua);
   if (!isCrawler) return next();
-  const r = await loadShareForMd(req.params[0]);
+  const r = await loadShare(req.params[0]);
   if (r.status !== 200) return res.status(r.status).type('text/plain').send(r.msg);
-  const payload = r.payload || {};
-  const cv = (payload.data && (payload.data.de || payload.data.en)) || {};
+  const cv = r.snap.profile?.data?.[r.snap.lang] || {};
   const name = (cv.personal && cv.personal.name) || 'Lebenslauf';
   const title = (cv.personal && cv.personal.title) || '';
   const location = (cv.personal && cv.personal.location) || '';
-  /* OG-image allowlist: only same-origin /api/photos/:id URLs are safe to
-   * emit, otherwise a malicious profile could embed an attacker-controlled
-   * URL as og:image and turn every share-card preview into a confirmed-read
-   * tracking pixel for the recipient. (Audit finding #10.) */
-  const rawPhoto = (cv.personal && cv.personal.photo) || '';
-  /* Der Schutz aus Befund #10 hing an denselben Headern wie alles andere:
-   * Wer `X-Forwarded-Host` auf seine eigene Adresse setzte, bestand die
-   * „gleicher Ursprung"-Prüfung — und das Zählpixel war wieder da. Die
-   * Basis-URL kommt deshalb aus der Konfiguration; fehlt sie, gilt nur noch
-   * die relative Schreibweise, die gar keinen Host enthalten kann. */
+  /* og:image nur aus dem festen Stand und nur als Link-Foto (eigener Host,
+   * eigener Pfad). Eine fremde Adresse wäre ein Zählpixel für jede Vorschau
+   * (Befund #10), und eine /api/photos-Adresse funktioniert für Crawler nicht
+   * mehr, seit Fotos nur der Eigentümer sieht. Die Basis kommt aus der
+   * Konfiguration; fehlt sie, gibt es kein Bild. */
   const ownBase = publicBaseUrl(req);
-  const sameOriginPhoto = rawPhoto && (
-    rawPhoto.startsWith('/pdfapi/api/photos/') ||
-    (!!ownBase && rawPhoto.startsWith(`${ownBase}/pdfapi/api/photos/`))
-  );
-  const photo = sameOriginPhoto ? rawPhoto : '';
+  const photo = ownBase && r.snap.photoPath ? `${ownBase}${r.snap.photoPath}` : '';
   const description = [title, location].filter(Boolean).join(' · ') || 'Lebenslauf in editorialem Layout — geteilte Vorschau.';
   /* `reqProto`/`reqHost` gab es hier einmal. Die Härtung gegen gefälschte
      `X-Forwarded-Host`-Header hat die beiden Definitionen entfernt und diese
@@ -1065,23 +1219,13 @@ ${photo ? `<meta name="twitter:image" content="${escapeHtml(photo)}">` : ''}
 });
 
 app.get('/api/share/:token', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT r.payload, s.expires_at, s.revoked, s.include_cover_letter FROM share_links s
-       JOIN resumes r ON r.id = s.resume_id
-      WHERE s.token = $1`,
-    [req.params.token],
-  );
-  const s = rows[0];
-  if (!s) return res.status(404).json({ error: 'Link nicht gefunden.' });
-  if (s.revoked) return res.status(403).json({ error: 'Link widerrufen.' });
-  if (s.expires_at && new Date(s.expires_at) < new Date()) return res.status(410).json({ error: 'Link abgelaufen.' });
+  const r = await loadShare(req.params.token);
+  if (r.status !== 200) return res.status(r.status).json({ error: r.msg });
   recordShareView(req.params.token, 'html', req.get('user-agent'));
-  // Strip cover-letter from public payload if the link owner disabled the toggle.
-  let payload = s.payload;
-  if (!s.include_cover_letter) {
-    payload = { ...payload, coverLetters: {} };
-  }
-  res.json({ resume: payload, include_cover_letter: s.include_cover_letter });
+  /* Antwortform wie vorher ({ resume, include_cover_letter }) — die ShareView
+   * liest sie unverändert. Inhalt: nur die sichtbare Fassung (share.js). */
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.json(shareResponse(r.snap, { includeCoverLetter: r.includeCoverLetter }));
 });
 
 // Export own résumé as Markdown (auth)
@@ -1112,9 +1256,11 @@ app.post('/api/resumes/:id/import-md', requireAuth, async (req, res) => {
   try { updated = markdownToCV(md, rows[0].payload, wantedLang(req.body?.lang)); }
   catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
   updated.id = req.params.id;
+  if (assertPayloadSize(res, updated)) return;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
   await snapshotResume(req.params.id, req.user.id, 'md_import');
-  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2', [updated, req.params.id]);
+  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2 AND user_id = $3', [updated, req.params.id, req.user.id]);
+  await prunePhotosSoon(req.user.id);
   logEvent(req.user.id, 'md_import');
   res.json({ ok: true, payload: updated });
 });
@@ -1137,9 +1283,10 @@ app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, async (req, res
   try { updated = markdownToCl(md, rows[0].payload, wantedLang(req.body?.lang)); }
   catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
   updated.id = req.params.id;
+  if (assertPayloadSize(res, updated)) return;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
   await snapshotResume(req.params.id, req.user.id, 'cl_md_import');
-  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2', [updated, req.params.id]);
+  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2 AND user_id = $3', [updated, req.params.id, req.user.id]);
   logEvent(req.user.id, 'cl_md_import');
   res.json({ ok: true, payload: updated });
 });
@@ -1157,6 +1304,7 @@ app.get('/api/resumes/:id/versions', requireAuth, async (req, res) => {
 });
 
 app.get('/api/resumes/:id/versions/:vid', requireAuth, async (req, res) => {
+  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
   const { rows } = await pool.query(
     `SELECT v.payload, v.source, v.created_at FROM resume_versions v
        JOIN resumes r ON r.id = v.resume_id
@@ -1168,6 +1316,7 @@ app.get('/api/resumes/:id/versions/:vid', requireAuth, async (req, res) => {
 });
 
 app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, async (req, res) => {
+  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
   const { rows } = await pool.query(
     `SELECT v.payload FROM resume_versions v
        JOIN resumes r ON r.id = v.resume_id
@@ -1176,8 +1325,10 @@ app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, async (req, res)
   );
   if (!rows[0]) return res.status(404).json({ error: 'Version nicht gefunden.' });
   const restored = { ...rows[0].payload, id: req.params.id };
+  if (assertPayloadSize(res, restored)) return;
   await snapshotResume(req.params.id, req.user.id, 'restore');
-  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2', [restored, req.params.id]);
+  await pool.query('UPDATE resumes SET payload = $1, updated_at = now() WHERE id = $2 AND user_id = $3', [restored, req.params.id, req.user.id]);
+  await prunePhotosSoon(req.user.id);
   logEvent(req.user.id, 'resume_restore');
   res.json({ ok: true, payload: restored });
 });
@@ -1192,34 +1343,33 @@ app.get('/api/resumes', requireAuth, async (req, res) => {
   res.json({ resumes: rows });
 });
 
+/* Befund 8: Hier stand die einzige Stelle, an der die Admin-Rolle fremde
+ * Profile öffnete — ohne Protokoll, auch über MCP mit einem Admin-Token.
+ * Gestrichen. Support braucht eine Freigabe des Nutzers, keine Hintertür. */
 app.get('/api/resumes/:id', requireAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM resumes WHERE id = $1', [req.params.id]);
+  const { rows } = await pool.query('SELECT * FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   const r = rows[0];
-  if (!r || (r.user_id !== req.user.id && req.user.role !== 'admin')) {
-    return res.status(404).json({ error: 'Nicht gefunden.' });
-  }
+  if (!r) return res.status(404).json({ error: 'Nicht gefunden.' });
   res.json({ resume: { id: r.id, displayName: r.display_name, payload: r.payload, updatedAt: r.updated_at } });
 });
 
-/** Hard upper bound on a single resume payload — DSGVO-relevant data fits
- *  comfortably in 200 KB JSON. Without this an invited user could push 12 MB
- *  payloads per request (express.json limit), fill the JSONB column and
- *  exhaust the postgres volume. (Security audit finding #3.) */
-const MAX_RESUME_PAYLOAD_BYTES = 200_000;
+/* Obergrenze je Profil: MAX_RESUME_PAYLOAD_BYTES in guards.js (200 KB), seit
+ * dem 08.10.2026 auf ALLEN Schreibwegen (assertPayloadSize). */
 /** Per-user resume cap. Anyone trying to spam the table burns through 50
  *  resumes long before they make a dent. */
 const MAX_RESUMES_PER_USER = 50;
 
 app.post('/api/resumes', requireAuth, async (req, res) => {
   const id = String(req.body?.id || crypto.randomUUID());
+  // Profil-IDs sind kurz und schlicht (App: Base36, MCP: UUID). Alles andere
+  // ist kein Profil, sondern ein Versuch.
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) return res.status(400).json({ error: 'Ungültige Profil-ID.' });
   const displayName = String(req.body?.displayName || 'Profil').slice(0, 120);
   const payload = req.body?.payload;
   if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
-  // Payload-size + per-user-count quotas. Both are cheap to check.
-  const payloadStr = JSON.stringify(payload);
-  if (payloadStr.length > MAX_RESUME_PAYLOAD_BYTES) {
-    return res.status(413).json({ error: `Profil zu groß (${Math.round(payloadStr.length/1024)} KB > ${MAX_RESUME_PAYLOAD_BYTES/1024} KB).` });
-  }
+  if (assertPayloadSize(res, payload)) return;
+  // Der Payload trägt seine eigene id; fehlt sie (über MCP angelegt), gilt die der Zeile.
+  if (!payload.id) payload.id = id;
   // Count current resumes for this user — only block if we're INSERTING a new
   // id; existing-id UPDATEs always pass.
   const existsForUser = await pool.query('SELECT 1 FROM resumes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
@@ -1249,6 +1399,7 @@ app.post('/api/resumes', requireAuth, async (req, res) => {
      WHERE resumes.user_id = $2`,
     [id, req.user.id, displayName, payload],
   );
+  await prunePhotosSoon(req.user.id);
   logEvent(req.user.id, 'resume_save');
   res.json({ id });
 });
@@ -1257,11 +1408,13 @@ app.put('/api/resumes/:id', requireAuth, async (req, res) => {
   const displayName = String(req.body?.displayName || 'Profil').slice(0, 120);
   const payload = req.body?.payload;
   if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
+  if (assertPayloadSize(res, payload)) return;
   const { rowCount } = await pool.query(
     'UPDATE resumes SET display_name = $1, payload = $2, updated_at = now() WHERE id = $3 AND user_id = $4',
     [displayName, payload, req.params.id, req.user.id],
   );
   if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.' });
+  await prunePhotosSoon(req.user.id);
   res.json({ ok: true });
 });
 
@@ -1282,6 +1435,7 @@ app.patch('/api/resumes/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
   await pool.query('DELETE FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  await prunePhotosSoon(req.user.id);
   res.json({ ok: true });
 });
 
@@ -1295,7 +1449,7 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
     const [user, resumes, versions, shares, photos, events, apiKeys] = await Promise.all([
-      pool.query('SELECT id, username, role, created_at, last_seen_at FROM users WHERE id = $1', [req.user.id]),
+      pool.query('SELECT id, username, email, role, twofa_enabled, created_at, last_seen_at FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
                     FROM resume_versions v JOIN resumes r ON r.id = v.resume_id
@@ -1351,10 +1505,35 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
 
     // Kontaktdaten vor dem Löschen sichern (für die Offboarding-Mail).
     const { rows: info } = await pool.query('SELECT username, email FROM users WHERE id = $1', [req.user.id]);
-    // FK cascades handle resumes → versions → shares; photos + api_keys + events
-    // also cascade per schema.
-    await pool.query('DELETE FROM users WHERE id = $1', [req.user.id]);
-    res.clearCookie(COOKIE);
+    /* Befund 7: Die Kaskaden erfassen Profile, Versionen, Fotos, Schlüssel,
+     * OAuth, Sharelinks samt Aufrufen und alle Codes. Nicht erfasst waren:
+     * die Zugangsanfrage (Name, Mail, Freitext), Mail und Notiz am
+     * Einladungscode („Zugangsanfrage #id · Name") und die Ereignisse (nur
+     * auf NULL gesetzt). Alles in einer Transaktion: halb gelöscht gibt es
+     * nicht. */
+    const email = (info[0]?.email || '').trim().toLowerCase();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (email) {
+        await client.query('DELETE FROM access_requests WHERE lower(email) = $1', [email]);
+        await client.query('UPDATE invite_codes SET email = NULL, note = NULL WHERE lower(email) = $1', [email]);
+      }
+      await client.query(
+        `UPDATE invite_codes SET email = NULL, note = NULL
+          WHERE code IN (SELECT code FROM invite_redemptions WHERE user_id = $1)`,
+        [req.user.id],
+      );
+      await client.query('DELETE FROM events WHERE user_id = $1', [req.user.id]);
+      await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
     res.json({ ok: true });
     if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true }); sendMail({ to: info[0].email, ...m }); }
   } catch (err) {
@@ -1453,12 +1632,34 @@ app.post('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req, 
 
 app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Ungültige Nutzer-ID.' });
   const nxt = String(req.body?.newPassword || '');
   if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.' });
   const hash = await bcrypt.hash(nxt, 10);
-  const { rowCount } = await pool.query('UPDATE users SET password_hash = $1, password_changed_at = now() WHERE id = $2', [hash, id]);
-  if (!rowCount) return res.status(404).json({ error: 'Nutzer nicht gefunden.' });
-  res.json({ ok: true });
+  const client = await pool.connect();
+  let target, revoked;
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'UPDATE users SET password_hash = $1, password_changed_at = now() WHERE id = $2 RETURNING username, email',
+      [hash, id],
+    );
+    if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Nutzer nicht gefunden.' }); }
+    target = rows[0];
+    revoked = await revokeAllCredentials(client, id);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('admin reset-password failed:', err?.message || err);
+    return res.status(500).json({ error: 'Zurücksetzen fehlgeschlagen.' });
+  } finally {
+    client.release();
+  }
+  logEvent(req.user.id, 'admin_password_reset');
+  // Der Betroffene erfährt es — vorher geschah das ohne jede Nachricht.
+  let notified = false;
+  if (target.email) notified = await sendMail({ to: target.email, ...tplPasswordResetByAdmin({ username: target.username }) });
+  res.json({ ok: true, revoked, notified });
 });
 
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
@@ -1477,29 +1678,33 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, async (_req, res) => {
 });
 // ── PDF rendering ───────────────────────────────────────────────────────────
 
-let browserPromise = null;
-async function getBrowser() {
-  if (browserPromise) {
-    const b = await browserPromise;
-    if (b.isConnected()) return b;
-  }
-  browserPromise = chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  return browserPromise;
-}
+/* Der Renderer läuft mit einem Chromium, das nur die eigenen, öffentlichen
+ * Hostnamen auflösen kann (N1, siehe pdf.js). Welche das sind, steht in der
+ * Konfiguration — nicht in der Anfrage, sonst erweitert der Aufrufer die
+ * Freigabe selbst. */
+const RENDER_HOSTS = rendererHosts([
+  process.env.PUBLIC_BASE_URL, process.env.APP_BASE_URL, ...ALLOWLIST,
+]);
+const renderer = createRenderer({
+  hosts: RENDER_HOSTS,
+  // Nur für lokale Läufe und Tests, deren Playwright-Browser nicht zur
+  // Paketversion passt. In der Produktion leer.
+  executablePath: (process.env.PDF_CHROMIUM_PATH || '').trim() || undefined,
+});
+/* N2: höchstens zwei Aufträge gleichzeitig, zehn in der Warteschlange.
+ * Gilt für alle Aufrufer, auch ohne Konto (Demo). */
+const pdfLimiter = createLimiter({
+  maxParallel: Math.max(1, parseInt(process.env.PDF_MAX_PARALLEL || '2', 10) || 2),
+  maxQueue: Math.max(0, parseInt(process.env.PDF_MAX_QUEUE || '10', 10) || 10),
+});
+const PDF_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.PDF_TIMEOUT_MS || '30000', 10) || 30_000);
+const MAX_PDF_HTML_CHARS = 3_000_000;
 
 // Map our PageFormat ids → Playwright format strings. preferCSSPageSize on
 // the request still wins, but we set format as a safety net for clients
 // that don't propagate the CSS @page rule cleanly.
 const PDF_FORMAT_MAP = { a4: 'A4', letter: 'Letter', legal: 'Legal', a5: 'A5' };
 
-/** SSRF allowlist for the headless-Chromium PDF render. Without this, a
- *  user-supplied HTML body can pull arbitrary URLs (private-network probes,
- *  AWS/Hetzner metadata at 169.254.169.254, file://, gopher://, internal
- *  Postgres at cv-postgres:5432, etc.) because Playwright honours every
- *  <img src>, <link href> and <script src>. The allowlist below covers
- *  exactly what our renderer legitimately needs: HTTPS Google Fonts +
- *  same-origin photos + data: URLs (inline base64). Everything else gets
- *  aborted before the network request leaves the container. */
 async function optionalAuth(req, _res, next) {
   try { req.user = await loadUser(req); } catch { req.user = null; }
   next();
@@ -1510,10 +1715,8 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
   if (typeof html !== 'string' || html.length < 30) {
     return res.status(400).json({ error: 'Field "html" is required.' });
   }
-  // Cap HTML payload size so a hostile user can't push 12 MB of <img> tags
-  // and keep the Chromium busy.
-  if (html.length > 2_000_000) {
-    return res.status(413).json({ error: 'HTML payload exceeds 2 MB limit.' });
+  if (html.length > MAX_PDF_HTML_CHARS) {
+    return res.status(413).json({ error: 'Das Dokument ist zu groß für den PDF-Export (höchstens 3 MB).' });
   }
   const fmt = PDF_FORMAT_MAP[pageFormat] || 'A4';
   /* Der „eigene Host" für die SSRF-Prüfung kommt aus der Konfiguration, nicht
@@ -1522,38 +1725,30 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
     const base = publicBaseUrl(req);
     try { return base ? new URL(base).host : null; } catch { return null; }
   })();
-  let page;
+
+  // Bricht der Aufrufer ab, während er wartet, gibt er seinen Platz frei.
+  const abort = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) abort.abort(); });
+
+  let release;
   try {
-    const browser = await getBrowser();
-    /* Each PDF request runs in its OWN browser context, not a shared default —
-     * that way the abort-route, no-JS setting and timeouts can't leak between
-     * concurrent users and a crashed page doesn't take down the singleton. */
-    const ctx = await browser.newContext({ javaScriptEnabled: false, bypassCSP: false });
-    page = await ctx.newPage();
-    // SSRF guard: abort every request whose URL falls outside the allowlist.
-    // Belt-and-suspenders with the no-script context (above) so even resource
-    // loaders for fonts/images cannot reach private hosts.
-    await page.route('**', (route) => {
-      const url = route.request().url();
-      if (isPdfFetchAllowed(url, ownHost)) return route.continue();
-      console.warn(`[pdf] blocked SSRF candidate: ${url}`);
-      return route.abort();
-    });
-    await page.emulateMedia({ media: 'print' });
-    await page.setContent(html, { waitUntil: 'networkidle', timeout: 20000 });
-    await page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve()));
-    /* `tagged` erzeugt ein PDF mit Strukturbaum: Überschriften, Absätze und
-     * Listen stehen als solche in der Datei, nicht nur als Text an einer
-     * Position. Das ist genau die Information, die ein Bewerbungsparser
-     * sucht — und die ein Screenreader braucht. */
-    const pdf = await page.pdf({
-      printBackground: true,
-      preferCSSPageSize: true,
-      tagged: true,
+    release = await pdfLimiter.acquire(abort.signal);
+  } catch (err) {
+    if (err instanceof BusyError) {
+      if (res.headersSent || abort.signal.aborted) return;
+      res.setHeader('Retry-After', String(err.retryAfter || 30));
+      return res.status(503).json({ error: err.message });
+    }
+    throw err;
+  }
+  try {
+    const pdf = await renderer.render(html, {
       format: fmt,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      ownHost,
+      timeoutMs: PDF_TIMEOUT_MS,
+      onBlocked: url => console.warn(`[pdf] blocked SSRF candidate: ${String(url).slice(0, 200)}`),
     });
-    const requested = filename || 'Lebenslauf.pdf';
+    const requested = typeof filename === 'string' && filename ? filename.slice(0, 200) : 'Lebenslauf.pdf';
     // Strip anything weird, keep umlauts + dashes + underscores for the UTF-8 filename*.
     const utf8 = requested.replace(/[^\w.\-äöüÄÖÜß]/g, '_');
     // ASCII fallback for old clients: transliterate umlauts.
@@ -1565,6 +1760,7 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
       .replace(/[^\w.-]/g, '_');   // Bindestrich am Ende braucht keine Maskierung
     logEvent(req.user?.id ?? null, 'pdf');
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Pdf-Max-Pages', String(MAX_PAGES));
     // RFC 5987 — modern browsers prefer the filename* with UTF-8 encoding.
     res.setHeader(
       'Content-Disposition',
@@ -1572,17 +1768,15 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
     );
     res.send(pdf);
   } catch (err) {
-    console.error('pdf render failed:', err);
-    res.status(500).json({ error: 'PDF rendering failed' });
-  } finally {
-    // Close BOTH the page and its parent context so the per-request isolation
-    // actually frees memory. Without the context-close the BrowserContext leaks
-    // and accumulates over hours of usage.
-    if (page) {
-      const ctx = page.context();
-      await page.close().catch(() => {});
-      await ctx.close().catch(() => {});
+    if (err?.code === 'ETIMEDOUT') {
+      console.warn('pdf render timed out');
+      if (!res.headersSent) res.status(503).json({ error: 'Das PDF hat zu lange gebraucht und wurde abgebrochen. Bitte erneut versuchen; bei sehr langen Dokumenten erst kürzen.' });
+      return;
     }
+    console.error('pdf render failed:', err?.message || err);
+    if (!res.headersSent) res.status(500).json({ error: 'PDF rendering failed' });
+  } finally {
+    release();
   }
 });
 
@@ -1598,14 +1792,32 @@ async function bootstrapAdmin() {
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(u)) { console.warn('bootstrap: ADMIN_USERNAME invalid — skipped'); return; }
   if (p.length < 8) { console.warn('bootstrap: ADMIN_PASSWORD too short — skipped'); return; }
   try {
-    const hash = await bcrypt.hash(p, 10);
-    const { rows } = await pool.query('SELECT id FROM users WHERE lower(username) = lower($1)', [u]);
+    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE lower(username) = lower($1)', [u]);
     if (!rows[0]) {
-      await pool.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [u, hash, 'admin']);
+      const hash = await bcrypt.hash(p, 10);
+      await pool.query('INSERT INTO users (username, password_hash, role, password_changed_at) VALUES ($1, $2, $3, now())', [u, hash, 'admin']);
       console.log(`bootstrap: admin '${u}' created`);
+    } else if (await bcrypt.compare(p, rows[0].password_hash)) {
+      // Passwort unverändert: nur Rolle und Sperre sicherstellen. Kein
+      // Widerruf — der Abgleich läuft bei jedem Start.
+      await pool.query('UPDATE users SET role = $1, disabled = false WHERE id = $2', ['admin', rows[0].id]);
     } else {
-      await pool.query('UPDATE users SET password_hash = $1, role = $2, disabled = false WHERE id = $3', [hash, 'admin', rows[0].id]);
-      console.log(`bootstrap: admin '${u}' password reset from env`);
+      /* Das Passwort in der Umgebung hat sich geändert — das ist ein
+       * Passwortwechsel und trennt wie jeder andere alle Zugänge. */
+      const hash = await bcrypt.hash(p, 10);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE users SET password_hash = $1, role = $2, disabled = false, password_changed_at = now() WHERE id = $3', [hash, 'admin', rows[0].id]);
+        await revokeAllCredentials(client, rows[0].id);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+      console.log(`bootstrap: admin '${u}' password reset from env (Schlüssel und Verbindungen getrennt)`);
     }
   } catch (err) {
     console.error('bootstrap: admin reset failed:', err);
@@ -1625,15 +1837,23 @@ async function bootstrapAdmin() {
  *
  * Die Middleware ersetzt keine Eingabeprüfung. Sie sorgt nur dafür, dass ein
  * Fehler den Aufrufer trifft und nicht die anderen Nutzer. */
+/* Seit Express 5 (08.10.2026) landen auch Fehler aus async-Handlern hier.
+ * Unter Express 4 blieb eine solche Anfrage bis zum Proxy-Timeout (120 s)
+ * hängen (N4), der Kommentar oben versprach mehr, als der Code hielt. */
 app.use((err, req, res, _next) => {
   const status = err && err.status && Number.isInteger(err.status) ? err.status : 500;
   // Postgres meldet eine unbrauchbare Eingabe mit 22P02/22003 — das ist ein
   // Fehler des Aufrufers, keine Störung.
   const code = err && err.code;
   const eingabe = code === '22P02' || code === '22003';
-  console.error('unhandled:', req.method, req.originalUrl, code || '', err && err.message);
+  const zuGross = err?.type === 'entity.too.large' || status === 413;
+  const kaputt = err?.type === 'entity.parse.failed';
+  if (!zuGross && !kaputt) console.error('unhandled:', req.method, req.originalUrl, code || '', err && err.message);
   if (res.headersSent) return;
-  res.status(eingabe ? 400 : status).json({ error: eingabe ? 'Ungültiger Parameter.' : 'Interner Fehler.' });
+  if (zuGross) return res.status(413).json({ error: 'Anfrage zu groß.' });
+  if (kaputt) return res.status(400).json({ error: 'Ungültiges JSON.' });
+  res.status(eingabe ? 400 : (status >= 400 && status < 600 ? status : 500))
+    .json({ error: eingabe ? 'Ungültiger Parameter.' : (status < 500 ? 'Ungültige Anfrage.' : 'Interner Fehler.') });
 });
 
 process.on('unhandledRejection', (grund) => {
@@ -1645,5 +1865,10 @@ process.on('unhandledRejection', (grund) => {
 const port = process.env.PORT || 3000;
 initDb()
   .then(() => bootstrapAdmin())
-  .then(() => app.listen(port, () => console.log(`cv-api listening on :${port}`)))
+  .then(() => {
+    // Aufräumen beim Start und danach täglich (janitor.js).
+    if (process.env.JANITOR !== '0') startJanitor(pool);
+    console.log(`pdf: Renderer löst nur diese Hosts auf: ${RENDER_HOSTS.join(', ') || '(keine)'}`);
+    app.listen(port, () => console.log(`cv-api listening on :${port}`));
+  })
   .catch(err => { console.error('FATAL: db init failed', err); process.exit(1); });
