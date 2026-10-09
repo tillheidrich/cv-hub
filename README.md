@@ -1,7 +1,7 @@
 # CV-Hub
 
 **Self-hosted résumé & cover-letter studio.** Build print-ready CVs and cover
-letters from structured data — 26 editorial templates, four languages
+letters from structured data — 32 editorial templates, four languages
 (EN / DE / FR / ES), automatic A4 fitting, and AI proofreading through a
 **model-agnostic Markdown bridge** (plus an optional MCP server). **No built-in
 AI, no vendor lock-in.** Runs entirely on your own server.
@@ -47,7 +47,7 @@ its source in a comment next to it:
 
 ## Highlights
 
-- **26 templates** across several layout archetypes (single-column, sidebars,
+- **32 templates** across several layout archetypes (single-column, sidebars,
   header band, top-centered, timeline). Single-column templates are ATS-friendly.
 - **Four languages** for both CV and cover letter, living in parallel in one
   profile; section, date and field labels adapt automatically — and every label

@@ -615,14 +615,14 @@ const DE = {
     ctaPrimary: 'Direkt ausprobieren', ctaSecondary: 'Vorlagen ansehen',
   },
   // Zahlen auf dieser Seite stammen aus dem Code, nicht aus dem Marketing:
-  // 26 = PICKABLE_THEMES in templates/theme.ts (36 Themes minus 10 deprecated),
+  // 32 = PICKABLE_THEMES in templates/theme.ts (42 Themes minus 10 deprecated),
   // 6 = Layout-Archetypen ebenda, 8 Akzentfarben = ACCENTS ohne den Eintrag
   // 'auto' (Vorlagenfarbe), Schriftgrenzen = MIN_FONT_PX und USER_SCALE in
   // templates/metrics.ts. Wer hier etwas ändert, sieht bitte dort nach.
   stats: {
     label: 'Zahlen',
     items: [
-      { mark: '×', value: '26', label: 'Vorlagen, keine Farbdubletten' },
+      { mark: '×', value: '32', label: 'Vorlagen, keine Farbdubletten' },
       { mark: '×', value: '6', label: 'Archetypen, ein System' },
       { mark: '↳', value: 'A4', label: 'Auto-Fit, randscharf' },
       { mark: '·', value: '0', label: 'Werbe-Tracker. Gezählt wird cookielos, ohne Profile' },
@@ -662,11 +662,11 @@ const DE = {
       { num: '02', tag: 'Satz', title: 'Auto-Fit auf A4. Es passt einfach.', body: 'Inhalt fließt, das Raster hält. Verdichtet wird in der Reihenfolge, in der ein Setzer verdichtet — erst Weißraum, dann Ränder, dann Zeilenabstand, zuletzt die Schrift, und die automatisch nie unter 8,2 pt. Passt es dann nicht, kommt eine Seite dazu und das Tool sagt es dir, statt heimlich zu schrumpfen. Kleiner geht nur von Hand, am Regler bis ≈ 7,5 pt — und auch dort mit Warnung statt stillschweigend.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Schreiben', title: 'Klick in den Text. Tipp.', body: 'Die Vorschau ist das Dokument, nicht sein Abbild. Position, Firma, Stichpunkte, Profil — direkt anklicken und ändern. Enter legt den nächsten Stichpunkt an. Was es bewusst nicht gibt: frei platzierbare Textkästen. Genau die sind der Grund, warum Word-Lebensläufe beim Bearbeiten auseinanderfallen.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word mit Design, Markdown.', body: 'Das PDF bekommt exakt die Seiten aus der Vorschau. Word gibt es zweimal: als deine Vorlage mit Farbfläche und Akzenten — geprüft in Word und LibreOffice — und einspaltig ohne Tabellen für Portale, die die Datei maschinell auslesen. Dazu Markdown, damit eine KI gegenlesen kann.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Auswahl', title: 'Sechsundzwanzig Vorlagen, acht Akzentfarben, fünfzig Profile.', body: 'Sechsundzwanzig Vorlagen, die sich in der Konstruktion unterscheiden — nicht in der Farbe. Die wählst du selbst: acht Akzente, jede Kombination auf Kontrast geprüft — oder die Vorlagenfarbe, dann bleibt es bei der Farbe der Vorlage. Und für jede Bewerbungsrichtung ein eigenes Profil.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Auswahl', title: 'Zweiunddreißig Vorlagen, acht Akzentfarben, fünfzig Profile.', body: 'Zweiunddreißig Vorlagen, die sich in der Konstruktion unterscheiden — nicht in der Farbe. Die wählst du selbst: acht Akzente, jede Kombination auf Kontrast geprüft — oder die Vorlagenfarbe, dann bleibt es bei der Farbe der Vorlage. Und für jede Bewerbungsrichtung ein eigenes Profil.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Sechsundzwanzig Vorlagen · sechs Archetypen',
+    eyebrow: 'Zweiunddreißig Vorlagen · sechs Archetypen',
     h: 'Ein System. Sechs Handschriften.',
     cards: [
       { name: 'Einspaltig', tag: '1 Spalte', desc: 'Alles untereinander, Datum in einer eigenen Spalte links. Die Form, die im DACH-Raum erwartet wird — und die jeder Parser sicher liest.' },
@@ -682,7 +682,7 @@ const DE = {
     h: 'Vom leeren Profil zum druckfertigen PDF.',
     items: [
       { num: '01', title: 'Profil anlegen', body: 'Bis zu fünfzig Profile pro Konto. Lege für jede Bewerbungsrichtung eines an.' },
-      { num: '02', title: 'Vorlage und Farbe wählen', body: 'Sechsundzwanzig Vorlagen, sechs Archetypen, acht Akzentfarben plus die Vorlagenfarbe — jederzeit umschaltbar, ohne dass du etwas neu tippst.' },
+      { num: '02', title: 'Vorlage und Farbe wählen', body: 'Zweiunddreißig Vorlagen, sechs Archetypen, acht Akzentfarben plus die Vorlagenfarbe — jederzeit umschaltbar, ohne dass du etwas neu tippst.' },
       { num: '03', title: 'Im Dokument schreiben', body: 'Klick in den Text und tipp. Raster, Ränder und Umbrüche regelt der Satz, nicht du.' },
       { num: '04', title: 'Exportieren', body: 'PDF mit genau den Seiten aus der Vorschau, Word mit deinem Design, oder Markdown für die KI-Korrektur.' },
     ],
@@ -694,7 +694,7 @@ const DE = {
       { q: 'Wie komme ich rein?', a: 'Ausprobieren geht ohne Konto: Die Demo hat Editor, Vorlagen, Foto, Markdown-Import und alle Exporte, und deine Daten bleiben dabei in deinem Browser. Ein Konto brauchst du nur für Sharelinks, Versionen und die KI-Anbindung per MCP. Konten gibt es vorerst nur mit Einladung: Du fragst an und bekommst einen Link per E-Mail.' },
       { q: 'Werde ich getrackt?', a: 'Werbe-Tracker gibt es nicht. Die Software selbst zählt nichts; ergänzt der Betreiber dieser Instanz eine selbst gehostete, cookielose Statistik (etwa Umami), steht das in seiner Datenschutzerklärung. Was in deinem Lebenslauf steht, wird nicht ausgewertet und nicht verkauft.' },
       { q: 'Welche Formate kann ich exportieren?', a: 'Druckfertiges PDF mit Auto-Fit auf A4/Letter/Legal/A5 — mit exakt den Seiten, die in der Vorschau stehen. Word in zwei Fassungen: einmal mit dem Design deiner Vorlage (geprüft in Word und LibreOffice), einmal einspaltig ohne Tabellen für Portale, die die Datei maschinell auslesen. Dazu HTML, JSON und strukturiertes Markdown. Alles aus derselben Quelle, immer synchron.' },
-      { q: 'Kann ich Vorlagen mitten in der Bewerbung wechseln?', a: 'Ja. Inhalt und Layout sind getrennt. Schalte zwischen sechsundzwanzig Vorlagen, sechs Archetypen und acht Akzentfarben plus der Vorlagenfarbe um — der Satz fügt deinen Inhalt neu ein, ohne dass du etwas neu tippst. Die Farbe ist dabei eine eigene Entscheidung und keine eigene Vorlage: Zehn ältere Vorlagen, die faktisch nur Farbvarianten waren, sind aus der Auswahl genommen — gespeicherte Profile behalten sie.' },
+      { q: 'Kann ich Vorlagen mitten in der Bewerbung wechseln?', a: 'Ja. Inhalt und Layout sind getrennt. Schalte zwischen zweiunddreißig Vorlagen, sechs Archetypen und acht Akzentfarben plus der Vorlagenfarbe um — der Satz fügt deinen Inhalt neu ein, ohne dass du etwas neu tippst. Die Farbe ist dabei eine eigene Entscheidung und keine eigene Vorlage: Zehn ältere Vorlagen, die faktisch nur Farbvarianten waren, sind aus der Auswahl genommen — gespeicherte Profile behalten sie.' },
       { q: 'Muss ich meinen Lebenslauf neu abtippen?', a: 'Nein. Lade das ZIP aus dem LinkedIn-Datenexport („Eine Kopie deiner Daten erhalten") hoch — Stationen, Ausbildung, Skills, Sprachen, E-Mail und Telefon werden daraus gelesen. Die Datei wird im Browser geparst und geht an keinen Server; deshalb geht das schon in der Demo ohne Konto. Vor dem Übernehmen siehst du, was gefunden wurde und was nicht. Foto und Profiltext bleiben unangetastet — die kennt LinkedIn nicht. Wer ein bestehendes PDF hat, geht über den Markdown-Weg: Text in die Vorlage, von einer KI strukturieren lassen, zurückimportieren.' },
       { q: 'Kann ich eigene Vorlagen hochladen?', a: 'Nein, und das ist eine Entscheidung. Die Vorlagen sind kein Bilderrahmen, sondern gemessener Satz: Schriftgrad, Sperrung, Zeilenabstand und Umbruch hängen zusammen, und jede Vorlage wird gegen das geprüft, was am Ende aus dem PDF wieder herausgelesen wird. Eine hochgeladene Datei könnte das nicht mitbringen. Was du stattdessen bekommst: den Export „Vorlage ohne Daten" — ein ZIP mit dem Design als eigenständigem HTML und als Word-Datei, Platzhaltern mit ihrem JSON-Pfad und einer leeren daten.json. Damit gehört dir das Design, auch ohne dieses Werkzeug. Und wer selbst hostet, legt eigene Vorlagen direkt in theme.ts an.' },
       { q: 'Was ist mit ATS-Bewerbungen?', a: 'Jede Vorlage wird gegen das gemessen, was am Ende wirklich herauskommt: das gedruckte PDF wird ausgelesen und Seite für Seite mit der Vorschau verglichen — Text, Lesereihenfolge, Wortgrenzen, Trennstriche. Dazu ein ATS-Check im Editor, der deinen Lebenslauf als reinen Text zeigt, so wie ein Parser ihn sieht, plus Abgleich mit einer Stellenanzeige. Einspaltige Vorlagen sind als „Gut für Portale“ markiert. Vorlagen mit Seitenspalte sind für Mail und Druck gestaltet, denn Personio und Greenhouse nennen mehrspaltige Layouts als Ursache für Lesefehler. Für Portale gibt es zu jeder Vorlage die ATS-Fassung: derselbe Inhalt einspaltig, als PDF oder Word, mit einem Klick. Ob ein Unternehmen dich einlädt, entscheidet kein Layout. Geprüft wird hier, ob dein Text vollständig und in der richtigen Reihenfolge ankommt.' },
@@ -733,7 +733,7 @@ const EN: typeof DE = {
   stats: {
     label: 'Numbers',
     items: [
-      { mark: '×', value: '26', label: 'templates, no colour clones' },
+      { mark: '×', value: '32', label: 'templates, no colour clones' },
       { mark: '×', value: '6', label: 'Archetypes, one system' },
       { mark: '↳', value: 'A4', label: 'Auto-fit, edge-sharp' },
       { mark: '·', value: '0', label: 'Ad trackers. Visits are counted without cookies or profiles' },
@@ -773,11 +773,11 @@ const EN: typeof DE = {
       { num: '02', tag: 'Typesetting', title: 'Auto-fit to A4. It just fits.', body: 'Content flows, the grid holds. Condensing happens in the order a typesetter would condense: whitespace first, then margins, then leading, and type last — automatically never below 8.2 pt. If it still does not fit, a page is added and the tool tells you, instead of shrinking in silence. Going smaller is a manual decision: the slider reaches ≈ 7.5 pt, and warns you there rather than staying quiet.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Writing', title: 'Click into the text. Type.', body: 'The preview is the document, not a picture of it. Role, company, bullet points, profile — click and change them in place. Enter starts the next bullet. What deliberately does not exist: free-floating text boxes. They are the reason Word résumés fall apart the moment you edit them.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word with the design, Markdown.', body: 'The PDF gets exactly the pages you saw in the preview. Word comes twice: as your template with its colour panel and accents — checked in Word and LibreOffice — and single-column without tables for portals that read the file by machine. Plus Markdown, so an AI can proofread.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Choice', title: 'Twenty-six templates, eight accent colours, fifty profiles.', body: 'Twenty-six templates that differ in construction — not in colour. You pick that yourself: eight accents, every combination checked for contrast — or the template colour, which leaves each template with the colour it was designed in. And a separate profile for every direction you apply in.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Choice', title: 'Thirty-two templates, eight accent colours, fifty profiles.', body: 'Thirty-two templates that differ in construction — not in colour. You pick that yourself: eight accents, every combination checked for contrast — or the template colour, which leaves each template with the colour it was designed in. And a separate profile for every direction you apply in.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Twenty-six templates · six archetypes',
+    eyebrow: 'Thirty-two templates · six archetypes',
     h: 'One system. Six voices.',
     cards: [
       { name: 'Single column', tag: '1 column', desc: 'Everything below each other, dates in their own column on the left. The shape expected in German-speaking markets — and the one every parser reads safely.' },
@@ -793,7 +793,7 @@ const EN: typeof DE = {
     h: 'From empty profile to print-ready PDF.',
     items: [
       { num: '01', title: 'Create a profile', body: 'Up to fifty profiles per account. Set one up for every direction you apply in.' },
-      { num: '02', title: 'Pick template and colour', body: 'Twenty-six templates, six archetypes, eight accent colours plus the template colour — switch any time without re-typing a thing.' },
+      { num: '02', title: 'Pick template and colour', body: 'Thirty-two templates, six archetypes, eight accent colours plus the template colour — switch any time without re-typing a thing.' },
       { num: '03', title: 'Write in the document', body: 'Click into the text and type. Grid, margins and breaks are the typesetter’s job, not yours.' },
       { num: '04', title: 'Export', body: 'PDF with exactly the pages from the preview, Word with your design, or Markdown for the AI pass.' },
     ],
@@ -805,7 +805,7 @@ const EN: typeof DE = {
       { q: 'How do I get in?', a: 'You can try everything without an account: the demo has the editor, templates, photo, Markdown import and every export, and your data stays in your browser. You only need an account for share links, versions and the AI connection via MCP. For now, accounts are invite-only: you request access and get a link by e-mail.' },
       { q: 'Will I be tracked?', a: 'There are no ad trackers. The software itself counts nothing; if the operator of this instance adds self-hosted, cookie-free statistics (such as Umami), their privacy policy says so. What is in your résumé is not analysed and not sold.' },
       { q: 'What formats can I export?', a: 'Print-ready PDF with auto-fit on A4/Letter/Legal/A5 — with exactly the pages you see in the preview. Word in two versions: one with your template’s design (checked in Word and LibreOffice), one single-column without tables for portals that read the file by machine. Plus HTML, JSON and structured Markdown. All from the same source, always in sync.' },
-      { q: 'Can I switch templates mid-application?', a: 'Yes. Content and layout are separate. Switch between twenty-six templates, six archetypes and eight accent colours plus the template colour — the typesetter places your content again, without re-typing anything. Colour is its own decision here, not its own template: ten older templates that were really just colour variants have been taken out of the picker — saved profiles keep them.' },
+      { q: 'Can I switch templates mid-application?', a: 'Yes. Content and layout are separate. Switch between thirty-two templates, six archetypes and eight accent colours plus the template colour — the typesetter places your content again, without re-typing anything. Colour is its own decision here, not its own template: ten older templates that were really just colour variants have been taken out of the picker — saved profiles keep them.' },
       { q: 'Do I have to retype my résumé?', a: 'No. Upload the ZIP from LinkedIn\'s data export ("Get a copy of your data") — positions, education, skills, languages, email and phone are read from it. The file is parsed in the browser and reaches no server, so it works in the demo without an account. Before anything is replaced you see what was found and what was not. Photo and profile text stay untouched — LinkedIn does not know them. For an existing PDF, take the Markdown route: text into the template, let an AI structure it, import it back.' },
       { q: 'Can I upload my own templates?', a: 'No, and that is a decision. The templates are not picture frames but measured typesetting: font size, tracking, leading and page breaks hang together, and every template is checked against what can actually be read back out of the finished PDF. An uploaded file could not bring that with it. What you get instead is the "template without data" export — a ZIP with the design as standalone HTML and as a Word file, placeholders carrying their JSON path, and an empty daten.json. The design is yours, with or without this tool. And if you self-host, you add your own templates directly in theme.ts.' },
       { q: 'What about ATS applications?', a: 'Every template is measured against what actually comes out: the printed PDF is read back and compared with the preview page by page — text, reading order, word boundaries, hyphens. Plus an ATS check in the editor that shows your résumé as plain text, the way a parser sees it, and matches it against a job ad. Single-column templates are marked “Good for portals”. Templates with a side column are designed for email and print, because Personio and Greenhouse name multi-column layouts as a cause of parsing errors. For portals, every template comes with the ATS version: the same content in one column, as PDF or Word, in one click. No layout decides whether a company invites you. What is checked here is whether your text arrives complete and in the right order.' },
@@ -844,7 +844,7 @@ const FR: typeof DE = {
   stats: {
     label: 'Chiffres',
     items: [
-      { mark: '×', value: '26', label: 'modèles, sans doublons de couleur' },
+      { mark: '×', value: '32', label: 'modèles, sans doublons de couleur' },
       { mark: '×', value: '6', label: 'Archétypes, un seul système' },
       { mark: '↳', value: 'A4', label: 'Auto-Fit, au cordeau' },
       { mark: '·', value: '0', label: 'Traceur publicitaire. Comptage sans cookie ni profil' },
@@ -884,11 +884,11 @@ const FR: typeof DE = {
       { num: '02', tag: 'Composition', title: 'Ajustement automatique en A4. Ça tient.', body: 'Le contenu coule, la grille tient. La densification suit l’ordre d’un typographe : d’abord les blancs, puis les marges, puis l’interligne, et le corps en dernier — automatiquement jamais sous 8,2 pt. Si ça ne tient toujours pas, une page s’ajoute et l’outil vous le dit, au lieu de réduire en silence. Descendre plus bas reste une décision manuelle : le curseur va jusqu’à ≈ 7,5 pt, et vous prévient au lieu de se taire.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Écriture', title: 'Cliquez dans le texte. Tapez.', body: 'L’aperçu est le document, pas son image. Poste, entreprise, puces, profil — cliquez et modifiez sur place. Entrée crée la puce suivante. Ce qui n’existe volontairement pas : des cadres de texte libres. C’est précisément pour cela que les CV Word se désagrègent dès qu’on les modifie.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Export', title: 'PDF, Word avec le design, Markdown.', body: 'Le PDF reçoit exactement les pages vues dans l’aperçu. Word existe en deux versions : votre modèle avec son aplat de couleur et ses accents — vérifié dans Word et LibreOffice — et une version à une colonne sans tableaux pour les portails qui lisent le fichier par machine. Plus Markdown, pour qu’une IA puisse relire.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Choix', title: 'Vingt-six modèles, huit couleurs d’accent, cinquante profils.', body: 'Vingt-six modèles qui diffèrent par la construction — pas par la couleur. Celle-ci, vous la choisissez : huit accents, chaque combinaison vérifiée en contraste — ou la couleur du modèle, qui reste alors telle quelle. Et un profil par direction de candidature.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Choix', title: 'Trente-deux modèles, huit couleurs d’accent, cinquante profils.', body: 'Trente-deux modèles qui diffèrent par la construction — pas par la couleur. Celle-ci, vous la choisissez : huit accents, chaque combinaison vérifiée en contraste — ou la couleur du modèle, qui reste alors telle quelle. Et un profil par direction de candidature.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Vingt-six modèles · six archétypes',
+    eyebrow: 'Trente-deux modèles · six archétypes',
     h: 'Un système. Six écritures.',
     cards: [
       { name: 'Une colonne', tag: '1 colonne', desc: 'Tout les uns sous les autres, les dates dans leur propre colonne à gauche. La forme attendue dans l’espace germanophone — et celle que tout parseur lit sans risque.' },
@@ -904,7 +904,7 @@ const FR: typeof DE = {
     h: 'Du profil vierge au PDF prêt à imprimer.',
     items: [
       { num: '01', title: 'Créer un profil', body: 'Jusqu’à cinquante profils par compte. Un par direction de candidature.' },
-      { num: '02', title: 'Choisir modèle et couleur', body: 'Vingt-six modèles, six archétypes, huit couleurs d’accent plus la couleur du modèle — modifiables à tout moment, sans rien retaper.' },
+      { num: '02', title: 'Choisir modèle et couleur', body: 'Trente-deux modèles, six archétypes, huit couleurs d’accent plus la couleur du modèle — modifiables à tout moment, sans rien retaper.' },
       { num: '03', title: 'Écrire dans le document', body: 'Cliquez dans le texte et tapez. Grille, marges et césures, c’est l’affaire de la composition, pas la vôtre.' },
       { num: '04', title: 'Exporter', body: 'PDF avec exactement les pages de l’aperçu, Word avec votre design, ou Markdown pour la relecture par une IA.' },
     ],
@@ -916,7 +916,7 @@ const FR: typeof DE = {
       { q: 'Comment obtenir l\'accès ?', a: 'Tout s’essaie sans compte : la démo comprend l’éditeur, les modèles, la photo, l’import Markdown et tous les exports, et vos données restent dans votre navigateur. Un compte n’est nécessaire que pour les liens de partage, les versions et la connexion IA via MCP. Pour l’instant, les comptes sont sur invitation : vous demandez l’accès et recevez un lien par e-mail.' },
       { q: 'Suis-je pisté ?', a: 'Il n’y a aucun traceur publicitaire. Le logiciel lui-même ne compte rien ; si l’exploitant de cette instance ajoute des statistiques auto-hébergées sans cookie (par exemple Umami), sa politique de confidentialité l’indique. Le contenu de votre CV n’est ni analysé ni vendu.' },
       { q: 'Quels formats puis-je exporter ?', a: "PDF prêt à imprimer avec ajustement automatique en A4/Letter/Legal/A5 — avec exactement les pages de l'aperçu. Word en deux versions : l'une avec le design de votre modèle (vérifiée dans Word et LibreOffice), l'autre à une colonne sans tableaux pour les portails qui lisent le fichier par machine. Plus HTML, JSON et Markdown structuré. Tout vient de la même source, toujours synchronisé." },
-      { q: 'Puis-je changer de modèle en pleine candidature ?', a: "Oui. Le contenu et la mise en page sont séparés. Passez d'un modèle à l'autre parmi les vingt-six, les six archétypes et les huit couleurs d'accent plus la couleur du modèle — la composition replace votre contenu sans que vous ne retapiez rien. La couleur est ici une décision à part, pas un modèle à part : dix anciens modèles qui n'étaient que des variantes de couleur ont été retirés du choix — les profils enregistrés les conservent." },
+      { q: 'Puis-je changer de modèle en pleine candidature ?', a: "Oui. Le contenu et la mise en page sont séparés. Passez d'un modèle à l'autre parmi les trente-deux, les six archétypes et les huit couleurs d'accent plus la couleur du modèle — la composition replace votre contenu sans que vous ne retapiez rien. La couleur est ici une décision à part, pas un modèle à part : dix anciens modèles qui n'étaient que des variantes de couleur ont été retirés du choix — les profils enregistrés les conservent." },
       { q: 'Dois-je retaper mon CV ?', a: "Non. Téléversez le ZIP de l'export de données LinkedIn (« Obtenir une copie de vos données ») — postes, formation, compétences, langues, e-mail et téléphone en sont extraits. Le fichier est lu dans le navigateur et n'atteint aucun serveur ; cela fonctionne donc dès la démo, sans compte. Avant tout remplacement, vous voyez ce qui a été trouvé et ce qui ne l'a pas été. Photo et texte de profil restent intacts — LinkedIn ne les connaît pas. Pour un PDF existant, passez par le Markdown : le texte dans le modèle, structuré par une IA, réimporté." },
       { q: 'Puis-je téléverser mes propres modèles ?', a: "Non, et c'est un choix. Les modèles ne sont pas des cadres mais une composition mesurée : corps, approche, interlignage et coupures tiennent ensemble, et chaque modèle est vérifié contre ce que l'on peut réellement relire dans le PDF final. Un fichier téléversé ne pourrait pas apporter cela. À la place : l'export « modèle sans données » — un ZIP avec le design en HTML autonome et en fichier Word, des champs porteurs de leur chemin JSON et un daten.json vide. Le design vous appartient, avec ou sans cet outil. Et en auto-hébergement, vos modèles s'ajoutent directement dans theme.ts." },
       { q: 'Et pour les candidatures ATS ?', a: "Chaque modèle est mesuré sur ce qui sort réellement : le PDF imprimé est relu et comparé page par page à l'aperçu — texte, ordre de lecture, limites de mots, césures. S'y ajoute un contrôle ATS dans l'éditeur qui montre votre CV en texte brut, tel qu'un parseur le voit, avec comparaison à une offre d'emploi. Les modèles sur une colonne portent la mention « Bien lu par les portails ». Les modèles avec colonne latérale sont conçus pour l’e-mail et l’impression, car Personio et Greenhouse citent les mises en page en colonnes comme cause d’erreurs de lecture. Pour les portails, chaque modèle a sa version ATS : le même contenu sur une colonne, en PDF ou en Word, en un clic. Aucune mise en page ne décide si une entreprise vous convoque. Ce qui est vérifié ici, c’est que votre texte arrive complet et dans le bon ordre." },
@@ -955,7 +955,7 @@ const ES: typeof DE = {
   stats: {
     label: 'Cifras',
     items: [
-      { mark: '×', value: '26', label: 'plantillas, sin duplicados de color' },
+      { mark: '×', value: '32', label: 'plantillas, sin duplicados de color' },
       { mark: '×', value: '6', label: 'Arquetipos, un sistema' },
       { mark: '↳', value: 'A4', label: 'Auto-Fit, al milímetro' },
       { mark: '·', value: '0', label: 'Rastreadores publicitarios. Contamos sin cookies ni perfiles' },
@@ -995,11 +995,11 @@ const ES: typeof DE = {
       { num: '02', tag: 'Composición', title: 'Ajuste automático a A4. Simplemente encaja.', body: 'El contenido fluye, la retícula aguanta. Se compacta en el orden en que lo haría un tipógrafo: primero el blanco, luego los márgenes, luego el interlineado y la letra al final — automáticamente nunca por debajo de 8,2 pt. Si aun así no cabe, se añade una página y la herramienta te lo dice, en lugar de encoger en silencio. Bajar más es una decisión manual: el control deslizante llega a ≈ 7,5 pt, y ahí avisa en vez de callar.', art: 'autofit' as FeatureArt },
       { num: '03', tag: 'Escribir', title: 'Haz clic en el texto. Escribe.', body: 'La vista previa es el documento, no su imagen. Puesto, empresa, viñetas, perfil — haz clic y cámbialos ahí mismo. Intro crea la siguiente viñeta. Lo que deliberadamente no existe: cuadros de texto libres. Son justo la razón por la que los CV de Word se desmontan al editarlos.', art: 'inline' as FeatureArt },
       { num: '04', tag: 'Exportar', title: 'PDF, Word con el diseño, Markdown.', body: 'El PDF recibe exactamente las páginas de la vista previa. Word viene dos veces: como tu plantilla con su franja de color y sus acentos — comprobado en Word y LibreOffice — y a una columna sin tablas para portales que leen el archivo por máquina. Además Markdown, para que una IA pueda revisarlo.', art: 'bridge' as FeatureArt },
-      { num: '05', tag: 'Elección', title: 'Veintiséis plantillas, ocho colores de acento, cincuenta perfiles.', body: 'Veintiséis plantillas que se diferencian en la construcción — no en el color. Ese lo eliges tú: ocho acentos, cada combinación comprobada en contraste — o el color de la plantilla, que entonces se mantiene. Y un perfil propio para cada dirección en la que te postules.', art: 'profiles' as FeatureArt },
+      { num: '05', tag: 'Elección', title: 'Treinta y dos plantillas, ocho colores de acento, cincuenta perfiles.', body: 'Treinta y dos plantillas que se diferencian en la construcción — no en el color. Ese lo eliges tú: ocho acentos, cada combinación comprobada en contraste — o el color de la plantilla, que entonces se mantiene. Y un perfil propio para cada dirección en la que te postules.', art: 'profiles' as FeatureArt },
     ],
   },
   gallery: {
-    eyebrow: 'Veintiséis plantillas · seis arquetipos',
+    eyebrow: 'Treinta y dos plantillas · seis arquetipos',
     h: 'Un sistema. Seis firmas.',
     cards: [
       { name: 'Una columna', tag: '1 columna', desc: 'Todo uno debajo de otro, las fechas en su propia columna a la izquierda. La forma que se espera en el ámbito germanohablante — y la que cualquier parseador lee con seguridad.' },
@@ -1015,7 +1015,7 @@ const ES: typeof DE = {
     h: 'Del perfil vacío al PDF listo para imprimir.',
     items: [
       { num: '01', title: 'Crear un perfil', body: 'Hasta cincuenta perfiles por cuenta. Uno por cada dirección en la que te postules.' },
-      { num: '02', title: 'Elegir plantilla y color', body: 'Veintiséis plantillas, seis arquetipos, ocho colores de acento más el color de la plantilla — cambiables en cualquier momento, sin volver a escribir nada.' },
+      { num: '02', title: 'Elegir plantilla y color', body: 'Treinta y dos plantillas, seis arquetipos, ocho colores de acento más el color de la plantilla — cambiables en cualquier momento, sin volver a escribir nada.' },
       { num: '03', title: 'Escribir en el documento', body: 'Haz clic en el texto y escribe. Retícula, márgenes y saltos son cosa de la composición, no tuya.' },
       { num: '04', title: 'Exportar', body: 'PDF con exactamente las páginas de la vista previa, Word con tu diseño, o Markdown para la revisión con IA.' },
     ],
@@ -1027,7 +1027,7 @@ const ES: typeof DE = {
       { q: '¿Cómo entro?', a: 'Puedes probarlo todo sin cuenta: la demo tiene el editor, las plantillas, la foto, la importación Markdown y todas las exportaciones, y tus datos se quedan en tu navegador. Solo necesitas cuenta para los enlaces compartidos, las versiones y la conexión con IA por MCP. Por ahora, las cuentas son solo por invitación: solicitas acceso y recibes un enlace por correo.' },
       { q: '¿Me rastrean?', a: 'No hay rastreadores publicitarios. El software en sí no cuenta nada; si quien opera esta instancia añade estadísticas autoalojadas y sin cookies (por ejemplo Umami), lo indica su política de privacidad. Lo que pone en tu CV no se analiza ni se vende.' },
       { q: '¿Qué formatos puedo exportar?', a: 'PDF listo para imprimir con ajuste automático en A4/Letter/Legal/A5 — con exactamente las páginas de la vista previa. Word en dos versiones: una con el diseño de tu plantilla (comprobada en Word y LibreOffice) y otra a una columna sin tablas para portales que leen el archivo por máquina. Además HTML, JSON y Markdown estructurado. Todo de la misma fuente, siempre sincronizado.' },
-      { q: '¿Puedo cambiar de plantilla a mitad de candidatura?', a: 'Sí. Contenido y maquetación van por separado. Cambia entre veintiséis plantillas, seis arquetipos y ocho colores de acento más el color de la plantilla: la composición recoloca tu contenido sin que reescribas nada. Aquí el color es una decisión propia, no una plantilla propia: diez plantillas antiguas que en realidad solo eran variantes de color se han retirado de la selección — los perfiles guardados las conservan.' },
+      { q: '¿Puedo cambiar de plantilla a mitad de candidatura?', a: 'Sí. Contenido y maquetación van por separado. Cambia entre treinta y dos plantillas, seis arquetipos y ocho colores de acento más el color de la plantilla: la composición recoloca tu contenido sin que reescribas nada. Aquí el color es una decisión propia, no una plantilla propia: diez plantillas antiguas que en realidad solo eran variantes de color se han retirado de la selección — los perfiles guardados las conservan.' },
       { q: '¿Tengo que reescribir mi currículum?', a: 'No. Sube el ZIP de la exportación de datos de LinkedIn («Obtener una copia de tus datos»): puestos, formación, competencias, idiomas, correo y teléfono se leen de ahí. El archivo se procesa en el navegador y no llega a ningún servidor; por eso funciona ya en la demo, sin cuenta. Antes de sustituir nada ves qué se encontró y qué no. La foto y el texto de perfil quedan intactos: LinkedIn no los conoce. Si tienes un PDF, ve por la vía Markdown: el texto a la plantilla, que una IA lo estructure, y reimportar.' },
       { q: '¿Puedo subir mis propias plantillas?', a: 'No, y es una decisión. Las plantillas no son marcos sino composición medida: cuerpo, interletraje, interlineado y saltos de página van juntos, y cada plantilla se comprueba contra lo que realmente se puede volver a leer del PDF final. Un archivo subido no podría traer eso. A cambio tienes la exportación «plantilla sin datos»: un ZIP con el diseño como HTML independiente y como archivo de Word, marcadores con su ruta JSON y un daten.json vacío. El diseño es tuyo, con o sin esta herramienta. Y si te autoalojas, añades tus plantillas directamente en theme.ts.' },
       { q: '¿Y las candidaturas ATS?', a: 'Cada plantilla se mide contra lo que realmente sale: el PDF impreso se vuelve a leer y se compara página por página con la vista previa — texto, orden de lectura, límites de palabra, guiones. Además, una comprobación ATS en el editor muestra tu CV como texto plano, tal como lo ve un parseador, y lo contrasta con una oferta. Las plantillas de una columna llevan la marca «Buena para portales». Las plantillas con columna lateral están pensadas para correo e impresión, porque Personio y Greenhouse citan los diseños por columnas como causa de errores de lectura. Para portales, cada plantilla tiene su versión ATS: el mismo contenido a una columna, en PDF o Word, con un clic. Ningún diseño decide si una empresa te invita. Lo que se comprueba aquí es que tu texto llegue completo y en el orden correcto.' },

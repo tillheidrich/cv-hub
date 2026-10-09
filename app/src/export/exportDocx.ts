@@ -87,7 +87,7 @@ function toHex(color: string, fallback = '1A1A1A'): string {
  * so aus, wie es beim Absender aussah.
  */
 function wordFont(t?: ResumeTheme): { body: string; heading: string } {
-  const serifPairings = ['inter-playfair', 'lora-source', 'merri-source', 'garamond-archivo', 'plex-corporate', 'libre-inter'];
+  const serifPairings = ['inter-playfair', 'lora-source', 'merri-source', 'garamond-archivo', 'plex-corporate', 'libre-inter', 'source-classic', 'source-serif', 'fraunces-archivo'];
   const serifHeading = t ? serifPairings.includes(t.defaultPairing) : false;
   return { body: 'Calibri', heading: serifHeading ? 'Georgia' : 'Calibri' };
 }
@@ -321,6 +321,8 @@ function makeParts(
   /** Abschnitte, die der Nutzer ausgeblendet hat. Siehe `personalLines`:
    *  Das ist eine Datenschutz-Einstellung, keine Geschmacksfrage. */
   hidden: Set<SectionKey> = new Set(),
+  /** Publikationen mit laufender Nummer [1], [2] … (Vorlage `numberedPubs`). */
+  numberedPubs = false,
 ) {
   const val2 = val;
   /* Sektionsüberschriften.
@@ -346,8 +348,11 @@ function makeParts(
     'serif': [26, 21], 'display': [34, 23], 'rule-over': [24, 19],
     'block': [18, 17], 'bar': [19, 17], 'caps-plain': [19, 17],
     'caps-rule': [19, 17], 'caps-tracked': [19, 17],
+    'serif-rule': [24, 20], 'serif-quiet': [22, 19], 'numbered': [19, 17],
   };
-  const serifish = (st: HeadStyle) => st === 'serif' || st === 'display';
+  const serifish = (st: HeadStyle) => st === 'serif' || st === 'display' || st === 'serif-rule' || st === 'serif-quiet';
+  /** Laufende Abschnittsnummer für den Stil `numbered`. */
+  let headNo = 0;
 
   /** Leerer Absatz, dessen Unterlinie den Farbbalken bildet. `width` in Twips. */
   const barUnder = (width: number, thickness: number, color: string) =>
@@ -361,14 +366,18 @@ function makeParts(
       children: [new TextRun({ text: '', size: 2, font: fonts.body })],
     });
 
-  const H1For = (text: string, aside: boolean): Paragraph[] => {
+  const H1For = (text: string, aside: boolean, sub = false): Paragraph[] => {
     const st = headStyle;
     const size = HEAD_SIZES[st][aside ? 1 : 0];
-    const label = serifish(st) ? text : text.toUpperCase();
+    const plain = serifish(st) ? text : text.toUpperCase();
+    /* Nummer vor dem Titel, wie in der Vorschau — nur Hauptabschnitte, nicht
+     * die Gruppenüberschriften der Kenntnisse. Zwei Leerzeichen statt eines
+     * Tabstopps: ein Parser liest „1  BERUFSERFAHRUNG" als eine Zeile. */
+    const label = st === 'numbered' && !aside && !sub ? `${++headNo}  ${plain}` : plain;
     const run = new TextRun({
       text: label,
       bold: true,
-      color: st === 'block' ? (pal.accentInk || 'FFFFFF') : pal.ink,
+      color: st === 'block' ? (pal.accentInk || 'FFFFFF') : st === 'serif-quiet' ? pal.accent : pal.ink,
       characterSpacing: serifish(st) ? 0 : 16,
       font: serifish(st) ? fonts.heading : fonts.body,
       size,
@@ -398,6 +407,11 @@ function makeParts(
         return [new Paragraph({ ...base, border: { top: { style: BorderStyle.SINGLE, size: 12, space: 6, color: pal.accent } } })];
       case 'caps-rule':
         return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 4, color: pal.accent } } })];
+      case 'serif-rule':
+      case 'numbered':
+        return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 4, color: pal.soft } } })];
+      case 'serif-quiet':
+        return [new Paragraph(base)];
       case 'block':
         return [new Paragraph(base)];
       case 'caps-plain':
@@ -412,7 +426,7 @@ function makeParts(
     }
   };
 
-  const H1 = (text: string) => H1For(text, false);
+  const H1 = (text: string, sub = false) => H1For(text, false, sub);
   /** Dieselbe Form in der schmalen Spalte, nur kleiner gesetzt. */
   const H1Plain = (text: string) => H1For(text, true);
   const H2 = (text: string) =>
@@ -543,7 +557,7 @@ function makeParts(
         for (const g of skills) {
           const items = (g.items || []).map(val2).filter(Boolean);
           if (!items.length) continue;
-          out.push(...H1(val2(g.label) || 'Skills'));
+          out.push(...H1(val2(g.label) || 'Skills', true));
           for (const it of items) out.push(bullet(it));
         }
         continue;
@@ -631,8 +645,8 @@ function makeParts(
         const list = publicationsOf(cv);
         if (!list.length) continue;
         out.push(...H1(sectionHeading(cv.labels, 'publications')));
-        for (const e of list) {
-          if (val2(e.title)) out.push(H2Dated(val2(e.title), val2(e.date)));
+        for (const [i, e] of list.entries()) {
+          if (val2(e.title)) out.push(H2Dated(numberedPubs ? `[${i + 1}] ${val2(e.title)}` : val2(e.title), val2(e.date)));
           const m = [val2(e.publisher), val2(e.title) ? '' : val2(e.date)].filter(Boolean).join('  ·  ');
           if (m) out.push(meta(m));
           link(e.url);
@@ -824,13 +838,17 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
   };
 
   const layout = theme?.layout ?? 'single-column';
+  /* Kopfband ohne Seitenspalte (Bergen): Band wie die übrigen Bandvorlagen,
+   * darunter der tabellarische Körper über die volle Breite. */
+  const bandSolo = variant === 'design' && layout === 'header-band' && !!theme?.bandSolo;
   const hasAside = variant === 'design'
-    && (layout === 'sidebar-left' || layout === 'sidebar-right' || layout === 'header-band');
+    && (layout === 'sidebar-left' || layout === 'sidebar-right' || (layout === 'header-band' && !bandSolo));
   const tabular = variant === 'design'
     && (layout === 'single-column' || layout === 'timeline' || layout === 'top-centered');
+  const numberedPubs = variant === 'design' && !!theme?.numberedPubs;
 
   // ── Einspaltige Fassung (ATS) ────────────────────────────────────────────
-  if (!hasAside && !tabular) {
+  if (!hasAside && !tabular && !bandSolo) {
     /* Rechte Textkante = Blattbreite minus der beiden 0.5"-Ränder unten.
      * Vorher stand hier eine feste Zahl für A4; auf Letter oder A5 hing die
      * Datumsspalte damit neben dem Blatt. */
@@ -859,7 +877,7 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
     // Rechte Textkante aus dem Blattmaß und den Rändern dieser Bauform
     // (unten: links 20 mm, rechts 18 mm) — nicht aus einer A4-Konstanten.
     const rightTab = PAGE_W - mm(20) - mm(18);
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, dateTab, headStyle, bulletChar, hidden);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, dateTab, headStyle, bulletChar, hidden, numberedPubs);
     const centered = layout === 'top-centered';
     const kids: Paragraph[] = [];
     /* Befund vom 14.09.2026, zweiter Teil: Der tabellarische Zweig hatte nie
@@ -896,6 +914,53 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
     return new Document({
       ...docMeta, numbering, styles,
       sections: [{ properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: mm(18), bottom: mm(16), left: mm(20), right: mm(18) } } }, children: kids }],
+    });
+  }
+
+  // ── Kopfband, darunter eine Spalte (Bergen) ─────────────────────────────
+  if (bandSolo) {
+    const bandBg = theme ? toHex(theme.colors.panelBg, '333333') : '333333';
+    const bandInk = theme ? toHex(theme.colors.panelInk, 'FFFFFF') : 'FFFFFF';
+    const bandSoft = theme ? toHex(theme.colors.panelInkSoft, 'DDDDDD') : 'DDDDDD';
+    const bandAccent = theme ? toHex(theme.colors.panelAccent, 'DDDDDD') : 'DDDDDD';
+    const padL = mm(20), padR = mm(18);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, PAGE_W - padL - padR, mm(30), headStyle, bulletChar, hidden, numberedPubs);
+    const bandCell = new TableCell({
+      width: { size: PAGE_W, type: WidthType.DXA },
+      shading: { type: ShadingType.CLEAR, color: 'auto', fill: bandBg },
+      margins: { top: mm(14), bottom: mm(12), left: padL, right: padR },
+      children: [
+        ...(theme?.photo !== 'none' && val(p.photo)
+          ? [photoRun(val(p.photo), 26, theme?.photo === 'circle' ? 26 : 26 * 1.2)].filter(Boolean) as Paragraph[]
+          : []),
+        new Paragraph({ spacing: { after: 10 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true, size: 44, color: bandInk, font: fonts.heading })] }),
+        ...(val(p.title) ? [new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: bandAccent, characterSpacing: 20, size: 18, font: fonts.body })] })] : []),
+        ...personalLines(p, fields, hidden).map(line => new Paragraph({
+          spacing: { after: 20 }, children: [new TextRun({ text: line, color: bandSoft, size: 17, font: fonts.body })],
+        })),
+      ],
+    });
+    /* Das Band ragt mit negativem Einzug über den linken Seitenrand bis an
+     * die Blattkante; der Körper steht als gewöhnliche Absätze auf dem Blatt.
+     * Erster Versuch war eine einzige randlose Tabellenzelle für den Körper —
+     * LibreOffice schob sie als Ganzes auf Seite 2 und ließ Seite 1 unter dem
+     * Band leer. Absätze brechen, wie sie sollen. Oben hat das Blatt keinen
+     * Rand (sonst stünde Weiß über dem Band); auf Folgeseiten sorgt der
+     * Kopfzeilenabstand für Luft. */
+    const band = new Table({
+      layout: TableLayoutType.FIXED, width: { size: PAGE_W, type: WidthType.DXA }, borders: NO_BORDERS,
+      indent: { size: -padL, type: WidthType.DXA },
+      columnWidths: [PAGE_W], rows: [new TableRow({ children: [bandCell] })],
+    });
+    return new Document({
+      ...docMeta, numbering, styles,
+      sections: [{
+        properties: {
+          titlePage: true,
+          page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: mm(14), bottom: mm(14), left: padL, right: padR, header: 0, footer: mm(6) } },
+        },
+        children: [band, new Paragraph({ spacing: { after: 80 }, children: [] }), ...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder))],
+      }],
     });
   }
 

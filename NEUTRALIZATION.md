@@ -3,6 +3,25 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-09, six new templates)
+
+Mirrored diff-based (`git merge-file`, base = the private tool's previous
+revision). Bamberg, Weimar, Kiel, Göttingen, Bergen and Porto came over
+unchanged in `theme.ts`, `ResumeRenderer.tsx`, `exportDocx.ts` and
+`templates.json` (`sync-templates.mjs --check` passes); they carry no operator
+data.
+
+- **Template count is CV-Hub's own text.** `index.html` and `LandingScreen.tsx`
+  conflicted only where CV-Hub has its own wording (title/meta with `CV-Hub`,
+  the LinkedIn FAQ without "not even ours"); the count moved from 26 to 32
+  there, and also in the JSON-LD FAQ and the README, which the private tool
+  had left at 26.
+- **Fonts:** Fraunces and IBM Plex Mono 500 (plus Source Serif 4 500) are
+  built from `@fontsource` like the others; both are OFL and already listed in
+  `NOTICE`, the licence file is copied next to the build output.
+- **MCP:** the new-resume default template is `espoo`; `fontPairing` no longer
+  lists the IDs inline but points to `get_resume_settings`.
+
 ## Done (2026-10-09, security review round 6)
 
 Mirrored diff-based like the rounds below (`git merge-file`, base = the private

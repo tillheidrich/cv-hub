@@ -2,6 +2,7 @@ import React from 'react';
 import type { CVData, SocialLink, SectionKey, PageFormat } from '../data/types';
 import { getPageFormat } from '../data/pageFormats';
 import type { ResumeTheme, ThemeColors, FontPairing, BulletStyle } from './theme';
+import { MONO } from './theme';
 import { TRACK_CAPS, TRACK_NAME, FS, LH, MIN_X_HEIGHT_PX, fs, fsn, sp, spn, pd, pdn, lh, type Metrics } from './metrics';
 import type { InlinePath } from '../data/inlineEdit';
 import { Ed, EntryTools, InlineEditCtx, type InlineEditApi } from './InlineEdit';
@@ -219,8 +220,10 @@ function Marker({ style, color, M, widthPx }: { style: BulletStyle; color: strin
  *  genau den Merkmalen, die hier zusammenkommen — allein in der Zeile, fett,
  *  größer als der Fließtext. Die Auszeichnung ersetzt den sichtbaren Kontrast
  *  nicht, sie ergänzt ihn. */
-function SectionTitle({ label, T, C, P, M, onPanel, path, aside }: {
+function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num }: {
   label: string; T: ResumeTheme; C: ThemeColors; P: FontPairing; M: Metrics; onPanel?: boolean;
+  /** Gliederungsnummer (nur Überschriftenstil `numbered`, nur Hauptabschnitte). */
+  num?: number;
   /** Steht in der Seitenspalte — dort gilt ein anderer Abstand nach unten. */
   aside?: boolean;
   /** Pfad zum Bearbeiten in der Vorschau — Sektionstitel sind Daten, keine
@@ -322,6 +325,51 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside }: {
           letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: ink,
           overflowWrap: 'normal', wordBreak: 'normal',
         }}>{L}</h2>
+      </div>
+    );
+  }
+  /* Serife in normaler Schreibung über einer Haarlinie über die volle
+   * Breite — die Überschrift des tabellarischen Lebenslaufs. */
+  if (T.heading === 'serif-rule') {
+    return (
+      <div style={{ marginBottom: sp(headGap, M), minWidth: 0 }}>
+        <h2 style={{
+          ...H2, fontFamily: P.heading, fontSize: fs(FS.sec * 0.94, M), fontWeight: 600, color: ink,
+          lineHeight: lh(LH.title, M), letterSpacing: '0.004em', overflowWrap: 'normal', wordBreak: 'normal',
+        }}>{L}</h2>
+        <div style={{ height: `${0.9 * M.t}px`, background: onPanel ? C.panelInkSoft : C.rule, marginTop: sp(5, M) }} />
+      </div>
+    );
+  }
+  /* Serife ohne Linie, im Akzent. Die Gliederung kommt hier aus dem Rand,
+   * in dem die Überschrift allein steht; ein Strich wäre doppelt. */
+  if (T.heading === 'serif-quiet') {
+    return (
+      <h2 style={{
+        ...H2, fontFamily: P.heading, fontSize: fs(FS.entry * 1.04, M), fontWeight: 600, color: accent,
+        lineHeight: lh(LH.title, M), marginBottom: sp(headGap, M), overflowWrap: 'normal', wordBreak: 'normal',
+      }}>{L}</h2>
+    );
+  }
+  /* Nummerierte Abschnitte. Die Ziffer steht in der Datumsspalte, der Titel
+   * auf der Textkante — beide auf einer Grundlinie, darunter eine Haarlinie.
+   * Die Ziffer steht AUSSERHALB des <h2>: in der Tag-Struktur heißt der
+   * Abschnitt weiter „Berufserfahrung", im Textstrom steht „1 BERUFSERFAHRUNG"
+   * in einer Zeile — beides findet ein Parser. Ohne Nummer (Gruppen-
+   * überschriften der Kenntnisse) bleibt nur die Versalzeile. */
+  if (T.heading === 'numbered') {
+    const caps: React.CSSProperties = {
+      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+      textTransform: 'uppercase', color: ink, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
+    };
+    if (num == null) return <h2 style={{ ...caps, marginBottom: sp(headGap, M) }}>{L}</h2>;
+    return (
+      <div style={{ marginBottom: sp(headGap, M), minWidth: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm minmax(0, 1fr)`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'baseline' }}>
+          <span style={{ fontFamily: P.heading, fontSize: fs(FS.sec, M), fontWeight: 600, color: accent, lineHeight: 1 }}>{num}</span>
+          <h2 style={caps}>{L}</h2>
+        </div>
+        <div style={{ height: `${0.9 * M.t}px`, background: C.rule, marginTop: sp(5, M) }} />
       </div>
     );
   }
@@ -665,9 +713,27 @@ function present(data: CVData, end: string) {
   return end === 'present' || end === 'heute' ? data.labels.misc.present : end;
 }
 
-function DateChip({ children, C, P, M, onPanel, align }: {
+function DateChip({ children, C, P, M, onPanel, align, font }: {
   children: React.ReactNode; C: ThemeColors; P: FontPairing; M: Metrics; onPanel?: boolean; align?: 'right';
+  /** Eigene Datumsschrift der Vorlage (`dateFont`). Fehlt sie, gilt der
+   *  bisherige Satz — unverändert für alle älteren Vorlagen. */
+  font?: 'mono' | 'heading';
 }) {
+  /* Gleich breite Ziffern: „03/2021" und „11/2018" stehen spaltengenau
+   * untereinander. Etwas kleiner als die Proportionalschrift, weil eine
+   * Monospace bei gleichem Grad breiter läuft. */
+  if (font === 'mono') return (
+    <span style={{
+      fontFamily: MONO, fontSize: fs(FS.micro * 0.92, M), fontWeight: 500, color: onPanel ? C.panelInkSoft : C.inkMid,
+      whiteSpace: 'nowrap', letterSpacing: '-0.01em', textAlign: align,
+    }}>{children}</span>
+  );
+  if (font === 'heading') return (
+    <span style={{
+      fontFamily: P.heading, fontSize: fs(FS.meta, M), fontWeight: 600, color: onPanel ? C.panelAccent : C.accent,
+      whiteSpace: 'nowrap', textAlign: align,
+    }}>{children}</span>
+  );
   return (
     <span style={{
       fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, color: onPanel ? C.panelInkSoft : C.inkSoft,
@@ -685,10 +751,34 @@ function DateChip({ children, C, P, M, onPanel, align }: {
  *  schoben, den andere Vorlagen auf einer unterbringen. */
 const DATE_COL_MM = 26;
 const DATE_GAP_MM = 7;
+/** Datumsspalte der Vorlagen mit Zeitachse (`rail`). Breiter, weil die
+ *  Daten dort in Monospace stehen: „09/2019 – 04/2022" sind 17 gleich
+ *  breite Zeichen, rund 27 mm. */
+const RAIL_DATE_MM = 30;
 
-function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast }: {
+/** Knoten auf der Zeitachse. Steht im Fluss in der mittleren Rasterspalte
+ *  und deckt die Linie, die als Hintergrund dahinter läuft. Kein Text, also
+ *  ohne Einfluss auf die Textebene. `big` = Abschnitt, sonst Station. */
+function RailNode({ C, M, top, big }: { C: ThemeColors; M: Metrics; top: number; big?: boolean }) {
+  const size = (big ? 7.5 : 6.5) * M.t;
+  return (
+    <span aria-hidden style={{ display: 'flex', justifyContent: 'center', paddingTop: `${top}px` }}>
+      <span style={{
+        display: 'block', width: `${size}px`, height: `${size}px`, flexShrink: 0,
+        background: big ? C.accent : C.pageBg,
+        border: big ? undefined : `${1.5 * M.t}px solid ${C.accent}`,
+        boxSizing: 'border-box',
+      }} />
+    </span>
+  );
+}
+
+function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dateFont }: {
   e: CVData['experience'][number]; data: CVData; C: ThemeColors; P: FontPairing; M: Metrics;
   tabular: boolean; timeline?: boolean; isLast?: boolean;
+  /** Rasterspalten der Zeitachse (Datum · Knoten · Text), siehe `rail`. */
+  rail?: string;
+  dateFont?: 'mono' | 'heading';
 }) {
   const body = (
     <div style={{ minWidth: 0 }}>
@@ -702,13 +792,23 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast }: {
     </div>
   );
   const date = (
-    <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined}>
+    <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`experience.${e.id}.start`}>{e.start}</Ed>
       {' – '}
       <Ed path={`experience.${e.id}.end`}>{present(data, e.end)}</Ed>
     </DateChip>
   );
 
+  if (tabular && rail) {
+    const line = fsn(FS.role, M) * LH.title;
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.role, M) * 0.22}px` }}>{date}</div>
+        <RailNode C={C} M={M} top={(line - 6.5 * M.t) / 2} />
+        {body}
+      </div>
+    );
+  }
   if (tabular) {
     // Tabellarische Datumsspalte — die im DACH-Raum erwartete Form. Das Datum
     // steht 8 mm neben dem Titel statt 190 mm entfernt am rechten Blattrand.
@@ -740,8 +840,9 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast }: {
   );
 }
 
-function EducationEntryBlock({ e, C, P, M, tabular }: {
+function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont }: {
   e: CVData['education'][number]; C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
+  rail?: string; dateFont?: 'mono' | 'heading';
 }) {
   const body = (
     <div style={{ minWidth: 0 }}>
@@ -757,12 +858,21 @@ function EducationEntryBlock({ e, C, P, M, tabular }: {
     </div>
   );
   const date = (
-    <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined}>
+    <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`education.${e.id}.start`}>{e.start}</Ed>
       {' – '}
       <Ed path={`education.${e.id}.end`}>{e.end}</Ed>
     </DateChip>
   );
+  if (tabular && rail) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.22}px` }}>{date}</div>
+        <RailNode C={C} M={M} top={(fsn(FS.entry, M) * LH.title - 6.5 * M.t) / 2} />
+        {body}
+      </div>
+    );
+  }
   if (tabular) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
@@ -806,16 +916,19 @@ function ExtraLink({ url, C, P, M }: { url: string; C: ThemeColors; P: FontPairi
     : <div style={style}><a href={linkHref(url)} style={{ color: 'inherit', textDecoration: 'none' }}>{text}</a></div>;
 }
 
-function ExtraHead({ title, sub, note, url, date, C, P, M, tabular }: {
+function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFont, num }: {
   title: string; sub?: string; note?: string; url?: string; date?: string;
   C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
+  rail?: string; dateFont?: 'mono' | 'heading';
+  /** Laufende Nummer vor dem Titel (`numberedPubs`). */
+  num?: number;
 }) {
   const subLine = [sub, note].filter(Boolean);
   const body = (
     <div style={{ minWidth: 0 }}>
       {title && (
         <h3 style={{ margin: 0, fontFamily: P.heading, fontSize: fs(FS.entry, M), fontWeight: 600, color: C.ink, lineHeight: lh(LH.title, M) }}>
-          {title}
+          {num != null && <span style={{ color: C.accent }}>{`[${num}] `}</span>}{title}
         </h3>
       )}
       {subLine.length > 0 && (
@@ -827,7 +940,16 @@ function ExtraHead({ title, sub, note, url, date, C, P, M, tabular }: {
       {url ? <ExtraLink url={url} C={C} P={P} M={M} /> : null}
     </div>
   );
-  const chip = date ? <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined}>{date}</DateChip> : null;
+  const chip = date ? <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>{date}</DateChip> : null;
+  if (tabular && rail) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.22}px` }}>{chip}</div>
+        <RailNode C={C} M={M} top={(fsn(FS.entry, M) * LH.title - 6.5 * M.t) / 2} />
+        {body}
+      </div>
+    );
+  }
   if (tabular) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
@@ -900,7 +1022,7 @@ function NameBlock({ data, T, C, P, M, big, onPanel }: {
         fontSize: fs((big ? FS.nameL : FS.nameS) * (T.trackedName ? 0.82 : 1), M),
         // Gesperrt wirkt der Name schon bei mittlerem Gewicht groß genug; 700
         // plus Sperrung ergibt eine Mauer statt einer Zeile.
-        fontWeight: T.trackedName ? 500 : 700, color: ink,
+        fontWeight: T.nameWeight ?? (T.trackedName ? 500 : 700), color: ink,
         lineHeight: 1.04,
         // 0,08 em ist keine Geschmacksentscheidung: ab 0,11 em zerlegt die
         // PDF-Textebene den Namen in Einzelbuchstaben, unabhängig vom
@@ -1028,8 +1150,13 @@ export default function ResumeRenderer({
   // Folge, dass Eckdaten, Sprachen und ALLE Skillgruppen doppelt auf der Seite
   // standen (einmal Nebenspalte, einmal Hauptspalte) und die sieben Band-
   // Vorlagen deshalb über den Seitenrand liefen.
-  const hasAside = isSidebar || T.layout === 'header-band';
-  const tabular = T.layout === 'single-column' || T.layout === 'timeline' || T.layout === 'top-centered';
+  const hasAside = isSidebar || (T.layout === 'header-band' && !T.bandSolo);
+  const tabular = ((T.layout === 'single-column' || T.layout === 'timeline' || T.layout === 'top-centered') && !T.hangMm)
+    || (T.layout === 'header-band' && !!T.bandSolo);
+  /** Breiter Rand mit hängenden Überschriften (Weimar): Breite in mm, sonst 0. */
+  const hang = !hasAside && T.hangMm ? T.hangMm : 0;
+  /** Rasterspalten der Zeitachse (Kiel): Datum · Knoten · Text. */
+  const rail = tabular && T.rail ? `${RAIL_DATE_MM}mm ${DATE_GAP_MM}mm minmax(0, 1fr)` : undefined;
 
   /* Wandert der Profiltext in die Seitenspalte, darf er in der Hauptspalte
    * nicht noch einmal auftauchen — sonst stünde er zweimal auf der Seite. */
@@ -1089,11 +1216,41 @@ export default function ResumeRenderer({
    * Diese Hülle zieht die übrigen Abschnittsinhalte auf dieselbe Kante; die
    * Sektionstitel bleiben bewusst am linken Rand hängen.
    */
+  const hangWrap = (node: React.ReactNode): React.ReactNode => (
+    <div style={{ display: 'grid', gridTemplateColumns: `${hang}mm minmax(0, 1fr)` }}><div />{node}</div>
+  );
   const indented = (node: React.ReactNode): React.ReactNode => (tabular
-    ? <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }}>
+    ? (rail
+      ? <div style={{ display: 'grid', gridTemplateColumns: rail }}><div /><div />{node}</div>
+      : <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }}>
         <div />{node}
+      </div>)
+    : hang ? hangWrap(node) : node);
+  /** Eintragsköpfe und Unterschrift: im breiten Rand auf die Textkante
+   *  gerückt, sonst unverändert (die Datumsspalte bringt ihr Raster selbst mit). */
+  const onEdge = (node: React.ReactNode): React.ReactNode => (hang ? hangWrap(node) : node);
+  /** Raster einer Stichpunktzeile — dieselben Spalten wie der Eintragskopf. */
+  const bulletRow = (extraTimeline: boolean): React.CSSProperties | undefined => (rail
+    ? { display: 'grid', gridTemplateColumns: rail }
+    : tabular ? { display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }
+      : hang ? { display: 'grid', gridTemplateColumns: `${hang}mm minmax(0, 1fr)` }
+        : (extraTimeline && T.layout === 'timeline' ? { paddingLeft: `${16 * M.t}px` } : undefined));
+  /* Abschnittsüberschriften der Hauptspalte. Zählt mit, wo die Vorlage
+   * nummeriert, und setzt die Überschrift bei der Zeitachse auf die
+   * Textkante, mit einem Knoten auf der Linie. */
+  let secNo = 0;
+  const secTitle = (label: string, path?: string): React.ReactNode => {
+    const t = <SectionTitle label={label} path={path} T={T} C={C} P={P} M={M} num={T.heading === 'numbered' ? ++secNo : undefined} />;
+    if (!rail) return t;
+    const line = fsn(FS.micro, M) * lh(LH.body, M);
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
+        <div />
+        <RailNode C={C} M={M} top={(line - 7.5 * M.t) / 2} big />
+        <div style={{ minWidth: 0 }}>{t}</div>
       </div>
-    : node);
+    );
+  };
   const push = (b: FlowBlock) => blocks.push(b);
 
   for (const key of mainOrder) {
@@ -1107,7 +1264,7 @@ export default function ResumeRenderer({
       if (isSidebar && !T.nameInSidebar) continue;
       push({
         id: 'profile', section: 'profile', gap: GAP_SECTION, breakBefore,
-        node: <><SectionTitle label={sec.profile} path="labels.sections.profile" T={T} C={C} P={P} M={M} />{indented(profilePara())}</>,
+        node: <>{secTitle(sec.profile, 'labels.sections.profile')}{indented(profilePara())}</>,
       });
       continue;
     }
@@ -1115,11 +1272,13 @@ export default function ResumeRenderer({
     if (key === 'details') {
       const rows = detailRows(data);
       if (!rows.length) continue;
+      /* Der Tabellenkopf (Bamberg) trägt die Eckdaten schon. */
+      if (T.head === 'facts') continue;
       push({
         id: 'details', section: 'details', gap: GAP_SECTION, breakBefore,
         node: (
           <>
-            <SectionTitle label={sec.details} path="labels.sections.details" T={T} C={C} P={P} M={M} />
+            {secTitle(sec.details, 'labels.sections.details')}
             {indented(<div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(rows.length, 4)}, 1fr)`, gap: `${spn(12, M)}px ${spn(24, M)}px` }}>
               {rows.map(r => (
                 <div key={r.k}>
@@ -1139,7 +1298,7 @@ export default function ResumeRenderer({
       if (!entries.length) continue;
       push({
         id: 'experience:title', section: 'experience', gap: GAP_SECTION, keepWithNext: true, breakBefore,
-        node: <SectionTitle label={sec.experience} path="labels.sections.experience" T={T} C={C} P={P} M={M} />,
+        node: secTitle(sec.experience, 'labels.sections.experience'),
       });
       entries.forEach((e, i) => {
         push({
@@ -1148,7 +1307,7 @@ export default function ResumeRenderer({
           keepWithNext: e.bullets.length > 0,
           node: (
             <>
-              <ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} />
+              {onEdge(<ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} rail={rail} dateFont={T.dateFont} />)}
               {/* Nur mit Bearbeitungskontext, ohne Höhe, außerhalb des Flusses. */}
               <EntryTools kind="experience" id={e.id} index={data.experience.indexOf(e)} count={data.experience.length} />
             </>
@@ -1159,8 +1318,9 @@ export default function ResumeRenderer({
             id: `experience:${e.id}:b${bi}`, section: 'experience',
             gap: bi === 0 ? spn(6, M) : GAP_BULLET,
             node: (
-              <div style={tabular ? { display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` } : (T.layout === 'timeline' ? { paddingLeft: `${16 * M.t}px` } : undefined)}>
-                {tabular && <div />}
+              <div style={bulletRow(true)}>
+                {rail && <div />}
+                {(tabular || hang > 0) && <div />}
                 <BulletLine text={b} C={C} T={T} M={M} path={`experience.${e.id}.bullets.${bi}`} />
               </div>
             ),
@@ -1174,14 +1334,14 @@ export default function ResumeRenderer({
       if (!data.education.length) continue;
       push({
         id: 'education:title', section: 'education', gap: GAP_SECTION, keepWithNext: true, breakBefore,
-        node: <SectionTitle label={sec.education} path="labels.sections.education" T={T} C={C} P={P} M={M} />,
+        node: secTitle(sec.education, 'labels.sections.education'),
       });
       data.education.forEach((e, i) => {
         push({
           id: `education:${e.id}`, section: 'education', gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           node: (
             <>
-              <EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} />
+              {onEdge(<EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />)}
               <EntryTools kind="education" id={e.id} index={i} count={data.education.length} />
             </>
           ),
@@ -1199,7 +1359,7 @@ export default function ResumeRenderer({
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: `${spn(16, M)}px ${spn(24, M)}px` }}>
             {mainSkills.map(g => (
               <div key={g.label}>
-                <SectionTitle label={g.label} path={`skills.${data.skillGroups.indexOf(g)}.label`} T={T} C={C} P={P} M={M} />
+                <SectionTitle label={g.label} path={`skills.${data.skillGroups.indexOf(g)}.label`} T={T} C={C} P={P} M={M} aside={T.groupHeads === 'small' ? true : undefined} />
                 <SkillGroupBlock group={g} T={T} C={C} P={P} M={M} pathBase={`skills.${data.skillGroups.indexOf(g)}.items`} />
               </div>
             ))}
@@ -1215,8 +1375,8 @@ export default function ResumeRenderer({
         id: 'languages', section: 'languages', gap: GAP_SECTION, breakBefore,
         node: (
           <>
-            <SectionTitle label={sec.languages} path="labels.sections.languages" T={T} C={C} P={P} M={M} />
-            {indented(<LangBlock data={data} C={C} P={P} M={M} columns={tabular ? 2 : 1} />)}
+            {secTitle(sec.languages, 'labels.sections.languages')}
+            {indented(<LangBlock data={data} C={C} P={P} M={M} columns={tabular || hang > 0 ? 2 : 1} />)}
           </>
         ),
       });
@@ -1229,7 +1389,7 @@ export default function ResumeRenderer({
         id: 'additional', section: 'additional', gap: GAP_SECTION, breakBefore,
         node: (
           <>
-            <SectionTitle label={sec.additional} path="labels.sections.additional" T={T} C={C} P={P} M={M} />
+            {secTitle(sec.additional, 'labels.sections.additional')}
             {indented(<SkillGroupBlock group={{ label: sec.additional, items: data.additionalExperience }} T={T} C={C} P={P} M={M} pathBase="additional" />)}
           </>
         ),
@@ -1244,15 +1404,16 @@ export default function ResumeRenderer({
      * doppelten IDs darf keine Blöcke verschlucken. */
     const extraTitle = (k: FixedExtraKey) => push({
       id: `${k}:title`, section: k, gap: GAP_SECTION, keepWithNext: true, breakBefore,
-      node: <SectionTitle label={sectionHeading(labels, k)} path={`labels.sections.${k}`} T={T} C={C} P={P} M={M} />,
+      node: secTitle(sectionHeading(labels, k), `labels.sections.${k}`),
     });
     const bulletBlocks = (prefix: string, k: SectionKey, items: string[], firstGap: number, caption?: string, entry?: string) => {
       items.forEach((b, bi) => push({
         id: `${prefix}:b${bi}`, section: k, caption, entry,
         gap: bi === 0 ? firstGap : GAP_BULLET,
         node: (
-          <div style={tabular ? { display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` } : undefined}>
-            {tabular && <div />}
+          <div style={bulletRow(false)}>
+            {rail && <div />}
+            {(tabular || hang > 0) && <div />}
             <BulletLine text={b} C={C} T={T} M={M} />
           </div>
         ),
@@ -1272,7 +1433,7 @@ export default function ResumeRenderer({
           id: `projects:${i}:head`, section: 'projects', entry,
           gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           keepWithNext: !!desc || bullets.length > 0,
-          node: <ExtraHead title={(e.title || '').trim()} sub={(e.role || '').trim()} url={(e.url || '').trim()} date={dateRange(e.start, e.end, present)} C={C} P={P} M={M} tabular={tabular} />,
+          node: onEdge(<ExtraHead title={(e.title || '').trim()} sub={(e.role || '').trim()} url={(e.url || '').trim()} date={dateRange(e.start, e.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
         });
         if (desc) push({
           id: `projects:${i}:desc`, section: 'projects', entry, gap: spn(4, M),
@@ -1291,7 +1452,7 @@ export default function ResumeRenderer({
         push({
           id: `certificates:${i}`, section: 'certificates',
           gap: i === 0 ? GAP_HEAD : spn(10, M),
-          node: <ExtraHead title={(c.name || '').trim()} sub={(c.issuer || '').trim()} note={(c.credentialId || '').trim()} url={(c.url || '').trim()} date={(c.date || '').trim()} C={C} P={P} M={M} tabular={tabular} />,
+          node: onEdge(<ExtraHead title={(c.name || '').trim()} sub={(c.issuer || '').trim()} note={(c.credentialId || '').trim()} url={(c.url || '').trim()} date={(c.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
         });
       });
       continue;
@@ -1308,7 +1469,7 @@ export default function ResumeRenderer({
           id: `volunteering:${i}:head`, section: 'volunteering', entry,
           gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           keepWithNext: bullets.length > 0,
-          node: <ExtraHead title={(v.role || '').trim()} sub={(v.organization || '').trim()} note={(v.location || '').trim()} date={dateRange(v.start, v.end, present)} C={C} P={P} M={M} tabular={tabular} />,
+          node: onEdge(<ExtraHead title={(v.role || '').trim()} sub={(v.organization || '').trim()} note={(v.location || '').trim()} date={dateRange(v.start, v.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
         });
         bulletBlocks(`volunteering:${i}`, 'volunteering', bullets, spn(6, M), undefined, entry);
       });
@@ -1325,7 +1486,7 @@ export default function ResumeRenderer({
           id: `publications:${i}:head`, section: 'publications',
           gap: i === 0 ? GAP_HEAD : spn(10, M),
           keepWithNext: !!desc,
-          node: <ExtraHead title={(p.title || '').trim()} sub={(p.publisher || '').trim()} url={(p.url || '').trim()} date={(p.date || '').trim()} C={C} P={P} M={M} tabular={tabular} />,
+          node: onEdge(<ExtraHead title={(p.title || '').trim()} sub={(p.publisher || '').trim()} url={(p.url || '').trim()} date={(p.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} num={T.numberedPubs ? i + 1 : undefined} />),
         });
         if (desc) push({
           id: `publications:${i}:desc`, section: 'publications', gap: spn(4, M),
@@ -1343,7 +1504,7 @@ export default function ResumeRenderer({
         push({
           id: `custom:${si}:title`, section: 'custom', caption, gap: GAP_SECTION, keepWithNext: true,
           breakBefore: si === 0 ? breakBefore : undefined,
-          node: <SectionTitle label={caption} T={T} C={C} P={P} M={M} />,
+          node: secTitle(caption),
         });
         bulletBlocks(`custom:${si}:items`, 'custom', items, GAP_HEAD, caption);
         entries.forEach((e, i) => {
@@ -1358,7 +1519,7 @@ export default function ResumeRenderer({
             id: `custom:${si}:${i}:head`, section: 'custom', caption, entry,
             gap: first ? GAP_HEAD : GAP_ENTRY,
             keepWithNext: !!text,
-            node: <ExtraHead title={title} sub={sub} date={date} C={C} P={P} M={M} tabular={tabular} />,
+            node: onEdge(<ExtraHead title={title} sub={sub} date={date} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
           });
           if (text) push({
             id: `custom:${si}:${i}:text`, section: 'custom', caption, entry,
@@ -1387,7 +1548,7 @@ export default function ResumeRenderer({
       id: 'signature',
       section: 'additional',
       gap: spn(26, M),
-      node: (
+      node: onEdge(
         <div style={{ display: 'flex', flexDirection: 'column', gap: sp(2, M), maxWidth: '122mm' }}>
           <div style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.inkMid, lineHeight: lh(LH.tight, M) }}>
             <Ed path="personal.signatureCity">{data.personal.signatureCity || cityOf(data.personal.location)}</Ed>
@@ -1740,6 +1901,119 @@ export default function ResumeRenderer({
     </div>
   );
 
+  // ── Kopf der einspaltigen Vorlagen (`head`) ───────────────────────────────
+
+  const editing = !!inlineEdit;
+  const hasPhoto = T.photo !== 'none' && !!data.personal.photo;
+  /** Kontakt als fortlaufende Zeile mit Mittelpunkten (wie im Standardkopf). */
+  const contactLine = (extra?: React.CSSProperties) => (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: `${spn(3, M)}px ${spn(10, M)}px`,
+      fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, ...extra,
+    }}>
+      {inlineContact(data.personal, editing).map((r, i) => (
+        <span key={i} style={{ whiteSpace: 'nowrap' }}>
+          {i > 0 && <span style={{ color: `color-mix(in srgb, ${C.accent} 55%, transparent)` }}>{'·\u00A0'}</span>}<Ed path={r.path}>{r.v}</Ed>
+        </span>
+      ))}
+    </div>
+  );
+
+  const fullWidthHead = (wide: { padH: string; padV: string }): React.ReactNode => {
+    if (T.head === 'facts') {
+      /* Tabellenkopf: Anschrift, Telefon, E-Mail … und die Eckdaten als
+       * Zeilen aus Bezeichnung und Wert. Die Bezeichnungen stehen in der
+       * Spalte, in der darunter die Daten des Werdegangs stehen — Kopf und
+       * Körper teilen ein Raster. Ein einzelnes langes Wort
+       * („Staatsangehörigkeit", rund 29 mm) ragt in den Steg hinein, statt
+       * die Wertespalte zu verschieben oder mitten im Wort zu brechen;
+       * mehrere Wörter brechen an Leerzeichen. */
+      const order: Record<string, number> = { address: 0, phone: 1, email: 2, web: 3, social: 4 };
+      const rows = [
+        ...contactRows(data, editing).sort((a, b) => order[a.kind] - order[b.kind])
+          .map(r => ({ l: r.l, lp: r.lp, v: r.v, vp: r.vp, href: r.href, multi: r.kind === 'address' })),
+        ...(hidden.has('details') ? [] : detailRows(data).map(r => ({
+          l: r.l, lp: `labels.fields.${r.k}`, v: r.v, vp: `personal.${r.k}`, href: undefined as string | undefined, multi: true,
+        }))),
+      ];
+      return (
+        <div style={{ padding: `${wide.padV} ${wide.padH} ${sp(24, M)}`, display: 'flex', alignItems: 'flex-start', gap: sp(28, M) }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+            {rows.length > 0 && (
+              <div style={{
+                marginTop: sp(20, M), display: 'grid',
+                gridTemplateColumns: `${DATE_COL_MM}mm minmax(0, 1fr)`,
+                columnGap: `${DATE_GAP_MM}mm`, rowGap: sp(3.5, M), alignItems: 'baseline',
+              }}>
+                {rows.map((r, i) => {
+                  const value = editing && r.vp ? <Ed path={r.vp} block>{r.v}</Ed> : r.v;
+                  return (
+                    <React.Fragment key={i}>
+                      <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, color: C.inkSoft, letterSpacing: '0.01em', lineHeight: lh(LH.tight, M), overflowWrap: 'normal', wordBreak: 'normal', hyphens: 'none' }}>
+                        {r.lp ? <Ed path={r.lp}>{r.l}</Ed> : r.l}
+                      </div>
+                      <div style={{
+                        fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.ink, lineHeight: lh(LH.tight, M), minWidth: 0,
+                        whiteSpace: r.multi ? 'pre-line' : 'nowrap', overflowWrap: r.multi ? 'break-word' : undefined,
+                      }}>
+                        {r.href && !editing ? <a href={r.href} style={{ color: 'inherit', textDecoration: 'none' }}>{value}</a> : value}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {hasPhoto && <Photo data={data} T={T} C={C} widthMm={30} />}
+        </div>
+      );
+    }
+    if (T.head === 'letter') {
+      /* Briefkopf: Name links, Kontakt rechtsbündig gestapelt, darunter eine
+       * doppelte Linie — kräftig, dann fein. */
+      return (
+        <div style={{ padding: `${wide.padV} ${wide.padH} 0` }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: sp(22, M) }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+            </div>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: sp(2.5, M), textAlign: 'right',
+              fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkMid, lineHeight: lh(LH.tight, M),
+            }}>
+              {inlineContact(data.personal, editing).map((r, i) => (
+                <div key={i} style={{ whiteSpace: 'nowrap' }}><Ed path={r.path}>{r.v}</Ed></div>
+              ))}
+            </div>
+            {hasPhoto && <Photo data={data} T={T} C={C} widthMm={24} />}
+          </div>
+          <div aria-hidden style={{
+            marginTop: sp(16, M), height: `${2.4 * M.t}px`,
+            borderTop: `${1.6 * M.t}px solid ${C.accent}`, borderBottom: `${0.6 * M.t}px solid ${C.accent}`,
+            boxSizing: 'content-box',
+          }} />
+        </div>
+      );
+    }
+    /* `margin`: Foto im Rand, Name und Kontakt auf der Textkante — dieselbe
+     * Kante, auf der darunter jeder Eintrag beginnt. */
+    const m = T.hangMm ?? 34;
+    return (
+      <div style={{
+        padding: `${wide.padV} ${wide.padH} ${sp(24, M)}`,
+        display: 'grid', gridTemplateColumns: `${m}mm minmax(0, 1fr)`, alignItems: 'end',
+        borderBottom: `${0.9 * M.t}px solid ${C.rule}`,
+      }}>
+        <div>{hasPhoto && <Photo data={data} T={T} C={C} widthMm={m - 10} />}</div>
+        <div style={{ minWidth: 0 }}>
+          <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+          {contactLine({ marginTop: sp(12, M) })}
+        </div>
+      </div>
+    );
+  };
+
   // ── Layouts ───────────────────────────────────────────────────────────────
 
   const pageCount = pages.length;
@@ -1823,7 +2097,7 @@ export default function ResumeRenderer({
               {pageIndex > 0 && <ContinuationCaption ids={ids} />}
               {renderBlocks(ids)}
             </div>
-            {renderAside(pageIndex, false, true)}
+            {!T.bandSolo && renderAside(pageIndex, false, true)}
           </div>
         </div>
       );
@@ -1840,7 +2114,7 @@ export default function ResumeRenderer({
 
     return (
       <div className="cv-page" key={key} data-cv-measure-page={measure ? String(pageIndex) : undefined} style={pageStyle}>
-        {pageIndex === 0 ? (
+        {pageIndex === 0 && T.head ? fullWidthHead(wide) : pageIndex === 0 ? (
           <div style={{
             padding: `${wide.padV} ${wide.padH} ${sp(20, M)}`,
             display: 'flex', alignItems: T.photo !== 'none' && data.personal.photo ? 'flex-start' : 'flex-end', gap: sp(20, M),
@@ -1879,7 +2153,19 @@ export default function ResumeRenderer({
           style={{ flex: 1, padding: `${sp(20, M)} ${wide.padH} ${wide.padV}`, display: 'flex', flexDirection: 'column', minHeight: 0 }}
         >
           {pageIndex > 0 && <ContinuationCaption ids={ids} />}
-          {renderBlocks(ids)}
+          {rail ? (
+            /* Die Zeitachse: eine Haarlinie als Hintergrund dieser Hülle. Sie
+             * beginnt am ersten und endet am letzten Block der Seite — nicht
+             * am Blattfuß, sonst liefe sie auf der letzten Seite durch leeres
+             * Papier. Flex wie die Hauptspalte, damit sich an den Abständen
+             * der Blöcke nichts ändert. */
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              backgroundImage: `linear-gradient(${C.rule}, ${C.rule})`, backgroundRepeat: 'no-repeat',
+              backgroundSize: `${0.9 * M.t}px 100%`,
+              backgroundPosition: `calc(${RAIL_DATE_MM + DATE_GAP_MM / 2}mm - ${0.45 * M.t}px) 0`,
+            }}>{renderBlocks(ids)}</div>
+          ) : renderBlocks(ids)}
         </div>
       </div>
     );

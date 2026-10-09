@@ -233,7 +233,7 @@ function buildServer() {
         data: { de: leer(), en: leer(), fr: leer(), es: leer() },
         coverLetters: {},
         settings: {
-          lang: lang || 'de', template: 'hamburg', fontScale: 1, fontPairing: 'auto',
+          lang: lang || 'de', template: 'espoo', fontScale: 1, fontPairing: 'auto',
           pageMode: 'one', pageFormat: 'a4',
           sectionOrder: ['profile', 'experience', 'education', 'skills', 'languages', 'additional'],
           hiddenSections: [], respectTemplateStructure: true,
@@ -391,7 +391,7 @@ function buildServer() {
       template: z.string().optional().describe('Design-/Template-ID (siehe list_templates).'),
       pageMode: z.enum(['one', 'two', 'three', 'auto']).optional(),
       pageFormat: z.enum(['a4', 'letter', 'legal', 'a5']).optional(),
-      fontPairing: z.string().optional().describe('auto | inter-playfair | pure-inter | lora-source | merri-source | space-inter | garamond-archivo | plex-corporate | libre-inter'),
+      fontPairing: z.string().optional().describe('Schriftpaar-ID oder auto. Gültige Werte liefert get_resume_settings unter allowed.fontPairings.'),
       fontScale: z.number().optional().describe('Schriftgröße-Faktor, 0.6–1.4.'),
       lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Primäre Sprache für die Ausgabe.'),
       sectionOrder: z.array(z.string()).optional().describe('Reihenfolge der Abschnitts-Keys.'),

@@ -58,6 +58,7 @@ import '@fontsource/source-sans-3/700.css';
 import '@fontsource/merriweather/400.css';
 import '@fontsource/merriweather/700.css';
 import '@fontsource/source-serif-4/400.css';
+import '@fontsource/source-serif-4/500.css';
 import '@fontsource/source-serif-4/600.css';
 import '@fontsource/source-serif-4/700.css';
 import '@fontsource/eb-garamond/400.css';

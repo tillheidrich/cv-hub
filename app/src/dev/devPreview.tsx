@@ -168,4 +168,23 @@ function Harness() {
   );
 }
 
-createRoot(document.getElementById('dev-root')!).render(<Harness />);
+/* Die sechs Vorlagen vom 09.10.2026 setzen Schnitte, die der Prüfstand für
+ * die älteren Vorlagen nicht lädt (Archivo und Plex Sans fett, Source Serif,
+ * Fraunces, Plex Mono). Ohne sie misst der Prüfstand mit künstlich fetter
+ * Schrift und weicht vom PDF ab. Nachgeladen wird nur für diese sechs —
+ * die älteren Vorlagen messen damit exakt wie bisher, und der Byte-Vergleich
+ * ihres PDF-HTML bleibt aussagekräftig. */
+const NEUE_VORLAGEN = ['bamberg', 'weimar', 'kiel', 'goettingen', 'bergen', 'porto'];
+const schriften = NEUE_VORLAGEN.includes(tpl)
+  ? Promise.all([
+    import('@fontsource/source-serif-4/400.css'), import('@fontsource/source-serif-4/500.css'),
+    import('@fontsource/source-serif-4/600.css'), import('@fontsource/source-serif-4/700.css'),
+    import('@fontsource/source-sans-3/600.css'), import('@fontsource/source-sans-3/700.css'),
+    import('@fontsource/ibm-plex-sans/500.css'), import('@fontsource/ibm-plex-sans/600.css'), import('@fontsource/ibm-plex-sans/700.css'),
+    import('@fontsource/ibm-plex-serif/400.css'), import('@fontsource/ibm-plex-serif/700.css'),
+    import('@fontsource/ibm-plex-mono/500.css'),
+    import('@fontsource/archivo/500.css'), import('@fontsource/archivo/600.css'), import('@fontsource/archivo/700.css'),
+    import('@fontsource/fraunces/400.css'), import('@fontsource/fraunces/600.css'), import('@fontsource/fraunces/700.css'),
+  ]).then(() => document.fonts.ready)
+  : Promise.resolve();
+schriften.then(() => createRoot(document.getElementById('dev-root')!).render(<Harness />));

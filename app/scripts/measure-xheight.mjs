@@ -28,6 +28,8 @@ const FAMILIES = [
   ['EB Garamond', 'eb-garamond'],
   ['IBM Plex Serif', 'ibm-plex-serif'],
   ['Libre Baskerville', 'libre-baskerville'],
+  ['Source Serif 4', 'source-serif-4'],
+  ['Fraunces', 'fraunces'],
 ];
 
 const faces = FAMILIES.map(([family, pkg]) => {

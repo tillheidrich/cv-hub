@@ -281,7 +281,12 @@ export type FontPairingId =
   | 'space-inter'
   | 'garamond-archivo'
   | 'plex-corporate'
-  | 'libre-inter';
+  | 'libre-inter'
+  | 'source-classic'
+  | 'source-serif'
+  | 'plex-sans'
+  | 'archivo-grotesk'
+  | 'fraunces-archivo';
 
 /** Stable keys for the main sections — used by sectionOrder + hiddenSections.
  *  'details' = Eckdaten (Geburtsdatum, Ort, Nationalität, Führerschein etc.) */

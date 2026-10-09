@@ -31,7 +31,17 @@ export type HeadingStyle =
   | 'display'
   /** Kräftiger Strich ÜBER der Versalzeile, volle Breite. Teilt die Seite in
    *  Register statt in Absätze (Romain Fournier). */
-  | 'rule-over';
+  | 'rule-over'
+  /** Serifen-Überschrift in normaler Schreibung über einer Haarlinie, die
+   *  über die volle Satzbreite läuft. Die Form des tabellarischen deutschen
+   *  Lebenslaufs: ruhig, eindeutig, ohne Versalzeile. */
+  | 'serif-rule'
+  /** Serifen-Überschrift ohne Linie und ohne Balken, im Akzent. Für Vorlagen,
+   *  deren Gliederung aus dem Rand kommt und nicht aus Strichen. */
+  | 'serif-quiet'
+  /** Nummerierte Abschnitte: Ziffer in der Datumsspalte, Titel auf der
+   *  Textkante, Haarlinie darunter. Gliederung wie in einem Antrag. */
+  | 'numbered';
 
 // ── Font pairings ───────────────────────────────────────────────────────────
 
@@ -101,7 +111,37 @@ export const FONT_PAIRINGS: Record<Exclude<FontPairingId, 'auto'>, FontPairing> 
     heading: "'Libre Baskerville', Georgia, serif", body: SANS,
     xFactor: 1.0,
   },
+  // ── Seit 09.10.2026, mit den sechs neuen Vorlagen ─────────────────────────
+  // Alle SIL Open Font License, selbst ausgeliefert (scripts/build-fonts.mjs).
+  'source-classic': {
+    id: 'source-classic', name: 'Amtlich', note: 'Source Serif 4 + Source Sans 3',
+    heading: "'Source Serif 4', Georgia, serif", body: "'Source Sans 3', sans-serif",
+    xFactor: 1.102,
+  },
+  'source-serif': {
+    id: 'source-serif', name: 'Buchsatz', note: 'Source Serif 4 durchgehend',
+    heading: "'Source Serif 4', Georgia, serif", body: "'Source Serif 4', Georgia, serif",
+    xFactor: 1.080,
+  },
+  'plex-sans': {
+    id: 'plex-sans', name: 'Technisch', note: 'IBM Plex Sans durchgehend',
+    heading: "'IBM Plex Sans', sans-serif", body: "'IBM Plex Sans', sans-serif",
+    xFactor: 1.038,
+  },
+  'archivo-grotesk': {
+    id: 'archivo-grotesk', name: 'Grotesk', note: 'Archivo durchgehend',
+    heading: "'Archivo', sans-serif", body: "'Archivo', sans-serif",
+    xFactor: 1.019,
+  },
+  'fraunces-archivo': {
+    id: 'fraunces-archivo', name: 'Ausdruck', note: 'Fraunces + Archivo',
+    heading: "'Fraunces', Georgia, serif", body: "'Archivo', sans-serif",
+    xFactor: 1.019,
+  },
 };
+
+/** Datumsschrift für `dateFont: 'mono'`. */
+export const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 
 export const FONT_PAIRING_LIST: { id: FontPairingId; name: string; note: string }[] = [
   { id: 'auto', name: 'Automatisch', note: 'Schrift der Vorlage' },
@@ -195,6 +235,56 @@ export interface ResumeTheme {
    *  dort, wo die Vorlage mehr ist als ihr Archetyp. Vier Sprachen, weil der
    *  Satz in der Oberfläche steht, nicht im Dokument. */
   structure?: Record<StructureLang, string>;
+
+  // ── Stellschrauben der Vorlagen vom 09.10.2026 ──────────────────────────
+  // Alle optional und ohne Wirkung, solange sie fehlen: die 26 älteren
+  // Vorlagen setzen keine davon und behalten ihr PDF-HTML Byte für Byte.
+
+  /** Kopf der ersten Seite (nur Vorlagen ohne Seitenspalte).
+   *  - `facts`: Kontakt und Eckdaten als Tabelle aus Bezeichnung und Wert,
+   *    die Bezeichnungen auf der Datumsspalte des Werdegangs — Kopf und
+   *    Körper stehen auf einem Raster. Die Eckdaten stehen dann nur hier.
+   *  - `letter`: Briefkopf — Name links, Kontakt rechtsbündig gestapelt.
+   *  - `margin`: Foto im Rand, Name und Kontakt auf der Textkante.
+   *  Fehlt das Feld, gilt der bisherige Kopf (Name, Kontaktzeile, Linie). */
+  head?: 'facts' | 'letter' | 'margin';
+
+  /** Breiter linker Rand in mm, in dem nur die Überschriften stehen; aller
+   *  übrige Text beginnt auf einer gemeinsamen Kante rechts davon. Das Datum
+   *  steht dann rechts, nicht in einer Datumsspalte. */
+  hangMm?: number;
+
+  /** Zeitachse zwischen Datumsspalte und Text: eine durchgehende Haarlinie,
+   *  auf der jede Station und jede Überschrift einen Knoten trägt. Nur in
+   *  Vorlagen mit Datumsspalte. Die Linie ist Hintergrund, kein Text — im
+   *  Textstrom ändert sich nichts. */
+  rail?: boolean;
+
+  /** Schrift der Datumsangaben: `mono` (IBM Plex Mono, Ziffern gleich breit
+   *  wie in einer Stückliste) oder `heading` (Überschriftenschrift, Akzent). */
+  dateFont?: 'mono' | 'heading';
+
+  /** Publikationen fortlaufend nummeriert: [1], [2], … vor dem Titel. */
+  numberedPubs?: boolean;
+
+  /** Kopfband ohne Seitenspalte darunter: der Körper läuft einspaltig mit
+   *  Datumsspalte über die volle Breite. */
+  bandSolo?: boolean;
+
+  /** Die Farbfläche (Kopfband oder Seitenspalte) folgt der gewählten
+   *  Akzentfarbe, statt eine feste Vorlagenfarbe zu behalten. Schrift und
+   *  Beschriftung auf der Fläche werden aus der Akzentfarbe aufgehellt. */
+  panelFromAccent?: boolean;
+
+  /** Schnitt des Namens, wenn er vom Standard (700) abweichen soll. Ein
+   *  großer Name in Buchschrift wirkt im normalen Schnitt ruhiger als fett. */
+  nameWeight?: number;
+
+  /** Gruppenüberschriften der Kenntnisse in der Hauptspalte eine Stufe
+   *  kleiner als die Abschnittsüberschriften. Bei Anzeigengröße (`display`)
+   *  passen drei Gruppen sonst nicht nebeneinander, und die Rangfolge
+   *  Abschnitt › Gruppe stünde auf dem Kopf. */
+  groupHeads?: 'small';
 }
 
 export type StructureLang = 'de' | 'en' | 'fr' | 'es';
@@ -634,6 +724,107 @@ export const THEMES: ResumeTheme[] = [
       panelInkSoft: 'oklch(0.40 0 0)', panelAccent: '#101010', rule: 'oklch(0.74 0 0)', chipBg: 'oklch(0.945 0 0)',
     },
   },
+  // ── Sechs Entwürfe vom 09.10.2026 ─────────────────────────────────────────
+  //
+  // Auftrag: „gerne weitere Designs entwerfen". Ausgangslage: von 26
+  // wählbaren Vorlagen waren nur drei einspaltig („Gut für Portale"), die
+  // Mehrheit trägt eine Seitenspalte. Fünf der sechs neuen Vorlagen sind
+  // deshalb einspaltig oder haben ein Kopfband, eine ist bewusst laut und
+  // zweispaltig. Keine ist eine Farbvariante: jede hat eine eigene
+  // Konstruktion, die Farbe bleibt ein Regler. Keine bildet eine fremde,
+  // gekaufte Vorlage nach — die Ideen kommen aus dem Satz (Tabelle,
+  // Marginalien, Zeitachse, Gliederungsnummern, Plakat), nicht aus Mustern.
+  {
+    /* Der tabellarische deutsche Lebenslauf, ernst genommen: Kontakt und
+     * Eckdaten als Tabelle im Kopf, die Bezeichnungen auf derselben Spalte
+     * wie die Daten des Werdegangs. Foto im Bewerbungsformat rechts oben,
+     * Ort, Datum und Unterschrift am Fuß. Für Verwaltung, Handwerk,
+     * Mittelstand — dort wird diese Form erwartet. */
+    id: 'bamberg', name: 'Bamberg', description: 'Tabellarisch, Angaben im Kopf, Foto rechts', category: 'klassisch',
+    structure: { de: 'Tabellarisch · Angaben im Kopf, Foto rechts', en: 'Tabular · details in the header, photo right', fr: 'Tabulaire · coordonnées en tête, photo à droite', es: 'Tabular · datos en la cabecera, foto a la derecha' },
+    layout: 'single-column', defaultPairing: 'source-classic', photo: 'rect', bullet: 'dash', heading: 'serif-rule',
+    head: 'facts', signature: true,
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.008 70)', inkMid: 'oklch(0.40 0.010 70)', inkSoft: 'oklch(0.53 0.010 70)',
+      accent: 'oklch(0.40 0.040 65)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.22 0.008 70)',
+      panelInkSoft: 'oklch(0.44 0.010 70)', panelAccent: 'oklch(0.40 0.040 65)', rule: 'oklch(0.82 0.010 70)', chipBg: 'oklch(0.96 0.006 70)',
+    },
+  },
+  {
+    /* Ruhig und editorial: durchgehend Serife, ein breiter linker Rand, in
+     * dem nur die Überschriften stehen. Alles andere beginnt auf einer
+     * einzigen Kante. Für Geistes- und Kulturberufe, Verlag, Beratung,
+     * Kommunikation — Menschen, deren Lebenslauf gelesen wird. */
+    id: 'weimar', name: 'Weimar', description: 'Serifensatz, Überschriften im breiten Rand', category: 'minimal',
+    structure: { de: 'Einspaltig · Überschriften im breiten Rand', en: 'One column · headings in a wide margin', fr: 'Une colonne · titres dans une large marge', es: 'Una columna · títulos en un margen amplio' },
+    layout: 'single-column', defaultPairing: 'source-serif', photo: 'rect', bullet: 'dash', heading: 'serif-quiet',
+    head: 'margin', hangMm: 34, signature: true, nameWeight: 500,
+    colors: {
+      pageBg: '#fdfcf9', ink: 'oklch(0.21 0.008 50)', inkMid: 'oklch(0.38 0.010 50)', inkSoft: 'oklch(0.52 0.010 50)',
+      accent: 'oklch(0.42 0.085 32)', accentInk: '#ffffff', panelBg: '#fdfcf9', panelInk: 'oklch(0.21 0.008 50)',
+      panelInkSoft: 'oklch(0.42 0.010 50)', panelAccent: 'oklch(0.42 0.085 32)', rule: 'oklch(0.84 0.010 60)', chipBg: 'oklch(0.955 0.008 60)',
+    },
+  },
+  {
+    /* Kompakt und technisch: Datum in gleich breiten Ziffern, eine
+     * Zeitachse zwischen Datum und Text, auf der jede Station sitzt. Für
+     * Ingenieurwesen, Technik, IT, Facharbeit — viele Stationen auf wenig
+     * Platz, und das Auge läuft die Achse entlang. */
+    id: 'kiel', name: 'Kiel', description: 'Kompakt, Zeitachse, Ziffern in Monospace', category: 'modern',
+    structure: { de: 'Einspaltig · Zeitachse am linken Rand', en: 'One column · timeline rail on the left', fr: 'Une colonne · axe chronologique à gauche', es: 'Una columna · eje temporal a la izquierda' },
+    layout: 'timeline', defaultPairing: 'plex-sans', photo: 'rounded', bullet: 'square', heading: 'caps-plain',
+    rail: true, dateFont: 'mono', skillsAsChips: true,
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.012 240)', inkMid: 'oklch(0.39 0.014 240)', inkSoft: 'oklch(0.52 0.012 240)',
+      accent: 'oklch(0.44 0.090 232)', accentInk: '#ffffff', panelBg: 'oklch(0.955 0.006 240)', panelInk: 'oklch(0.22 0.012 240)',
+      panelInkSoft: 'oklch(0.44 0.012 240)', panelAccent: 'oklch(0.44 0.090 232)', rule: 'oklch(0.80 0.012 240)', chipBg: 'oklch(0.95 0.010 240)',
+    },
+  },
+  {
+    /* Gegliedert wie ein Antrag: nummerierte Abschnitte, Publikationen mit
+     * laufender Nummer, Briefkopf statt Namenszeile. Für Wissenschaft,
+     * öffentlichen Dienst, Lehre, Medizin — dort, wo Verzeichnisse lang
+     * werden und jemand „siehe Abschnitt 4" sagen will. */
+    id: 'goettingen', name: 'Göttingen', description: 'Nummerierte Abschnitte, Publikationsliste, Briefkopf', category: 'klassisch',
+    structure: { de: 'Einspaltig · nummerierte Abschnitte', en: 'One column · numbered sections', fr: 'Une colonne · sections numérotées', es: 'Una columna · secciones numeradas' },
+    layout: 'single-column', defaultPairing: 'plex-corporate', photo: 'rect', bullet: 'dash', heading: 'numbered',
+    head: 'letter', numberedPubs: true, signature: true,
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.012 255)', inkMid: 'oklch(0.40 0.014 255)', inkSoft: 'oklch(0.53 0.012 255)',
+      accent: 'oklch(0.37 0.075 258)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.22 0.012 255)',
+      panelInkSoft: 'oklch(0.44 0.012 255)', panelAccent: 'oklch(0.37 0.075 258)', rule: 'oklch(0.82 0.010 255)', chipBg: 'oklch(0.96 0.006 255)',
+    },
+  },
+  {
+    /* Moderne Grotesk unter einem Kopfband in der Akzentfarbe, darunter
+     * eine Spalte mit Datumsspalte. Die Fläche folgt dem Farbregler. Für
+     * Marketing, Vertrieb, Produkt, junge Unternehmen — Haltung zeigen und
+     * trotzdem im Portal sauber ankommen. */
+    id: 'bergen', name: 'Bergen', description: 'Farbiges Kopfband, Grotesk, einspaltig', category: 'modern',
+    structure: { de: 'Farbiges Kopfband, darunter einspaltig', en: 'Colour header band, one column below', fr: 'Bandeau de couleur, puis une colonne', es: 'Banda de color y una columna debajo' },
+    layout: 'header-band', defaultPairing: 'archivo-grotesk', photo: 'circle', bullet: 'dot', heading: 'bar',
+    bandSolo: true, panelFromAccent: true,
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.010 30)', inkMid: 'oklch(0.39 0.012 30)', inkSoft: 'oklch(0.52 0.010 30)',
+      accent: '#8C2F23', accentInk: '#ffffff', panelBg: '#8C2F23', panelInk: '#ffffff',
+      panelInkSoft: '#EFE2E0', panelAccent: '#E8D5D3', rule: 'oklch(0.83 0.010 30)', chipBg: 'oklch(0.95 0.010 30)',
+    },
+  },
+  {
+    /* Laut, aber lesbar: der Name in Plakatgröße über zwei Zeilen, eine
+     * Farbspalte rechts in der Akzentfarbe, Überschriften so groß wie
+     * Zwischentitel in einem Magazin. Für Gestaltung, Architektur, Kultur,
+     * Agenturen — und für Bewerbungen, die per Mail an einen Menschen gehen. */
+    id: 'porto', name: 'Porto', description: 'Name in Plakatgröße, Farbspalte rechts', category: 'kreativ',
+    structure: { de: 'Farbspalte rechts · Name in Plakatgröße', en: 'Colour column right · poster-size name', fr: 'Colonne de couleur à droite · nom en grand', es: 'Columna de color a la derecha · nombre en grande' },
+    layout: 'sidebar-right', defaultPairing: 'fraunces-archivo', photo: 'rect', bullet: 'dash', heading: 'display',
+    sidebarMm: 64, stackedName: true, panelFromAccent: true, dateFont: 'heading', groupHeads: 'small',
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.20 0.012 265)', inkMid: 'oklch(0.38 0.014 265)', inkSoft: 'oklch(0.52 0.012 265)',
+      accent: '#23408E', accentInk: '#ffffff', panelBg: '#23408E', panelInk: '#ffffff',
+      panelInkSoft: '#E0E4EF', panelAccent: '#D3D9E8', rule: 'oklch(0.82 0.012 265)', chipBg: 'oklch(0.95 0.012 265)',
+    },
+  },
 ];
 
 /** Vorlagen für die Auswahl — ohne die stillgelegten Farbvarianten. */
@@ -735,6 +926,18 @@ function isLightSurface(color: string): boolean {
   return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] > 0.45;
 }
 
+/** Hex-Farbe zu einem Anteil `w` mit Weiß gemischt (sRGB, wie Druckvorstufe
+ *  „Tonwert"). Nur für die Akzentliste, die durchgehend in Hex notiert ist. */
+function tint(hex: string, w: number): string {
+  const v = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!v) return hex;
+  const out = [0, 2, 4].map(i => {
+    const c = parseInt(v[1].slice(i, i + 2), 16);
+    return Math.round(c + (255 - c) * w).toString(16).padStart(2, '0');
+  });
+  return `#${out.join('').toUpperCase()}`;
+}
+
 /** Vorlage mit gewählter Akzentfarbe. `auto` lässt die Vorlage, wie sie ist. */
 export function applyAccent(theme: ResumeTheme, accent?: AccentId): ResumeTheme {
   const pick = ACCENTS.find(a => a.id === accent);
@@ -743,6 +946,19 @@ export function applyAccent(theme: ResumeTheme, accent?: AccentId): ResumeTheme 
   // richtige Schrift auf einer Akzentfläche — die Vorlagenfarbe konnte dafür
   // auch Schwarz vorgesehen haben, und dunkel auf dunkel wäre unlesbar.
   const colors: ThemeColors = { ...theme.colors, accent: pick.value, accentInk: '#FFFFFF' };
+  /* Fläche in der Akzentfarbe (Bergen, Porto): die Fläche wechselt mit, und
+   * was auf ihr steht, wird aus derselben Farbe aufgehellt — so bleibt die
+   * Rangfolge (Text weiß, Beschriftung und leiser Text getönt) bei jeder
+   * Wahl gleich. Alle Akzente liegen bei ≥ 6,9:1 gegen Weiß; die Tönungen
+   * mit 80 % bzw. 86 % Weiß halten gegen die dunkle Fläche ≥ 4,5:1
+   * (scripts/contrastcheck.mjs). */
+  if (theme.panelFromAccent) {
+    colors.panelBg = pick.value;
+    colors.panelInk = '#FFFFFF';
+    colors.panelAccent = tint(pick.value, 0.80);
+    colors.panelInkSoft = tint(pick.value, 0.86);
+    return { ...theme, colors };
+  }
   // Auf einer hellen Seitenspalte trägt dieselbe Farbe; auf einer dunklen
   // (Seoul, Bordeaux, Patterson) bleibt der helle Akzent der Vorlage stehen,
   // sonst verschwände die Beschriftung im Untergrund.

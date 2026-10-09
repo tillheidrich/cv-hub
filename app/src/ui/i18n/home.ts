@@ -69,10 +69,10 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
     heroOverline: 'Lebenslauf-Werkstatt',
     heroLine1: 'Lebensläufe', heroLine2: 'lesen sich heute', heroLine3: 'wie ', heroAccent: 'Formulare.',
     heroAnswer: 'Hier nicht.',
-    heroBlurb: 'Sechsundzwanzig Vorlagen, die wie editoriale Spreads gesetzt sind. Auto-Fit auf A4. Markdown-Bridge, falls eine KI Korrektur lesen soll. Druckfertig.',
+    heroBlurb: 'Zweiunddreißig Vorlagen, die wie editoriale Spreads gesetzt sind. Auto-Fit auf A4. Markdown-Bridge, falls eine KI Korrektur lesen soll. Druckfertig.',
     heroNote: 'Invite-only · keine Cookies, keine IP-Speicherung',
 
-    stripOverline: 'Sechsundzwanzig Vorlagen, sechs Archetypen',
+    stripOverline: 'Zweiunddreißig Vorlagen, sechs Archetypen',
 
     profilesOverline: 'Deine Lebensläufe',
     profilesEmpty: 'Noch nichts angelegt. Fang mit einem leeren Lebenslauf an — oder nimm den Beispiel-Inhalt und überschreib ihn Feld für Feld.',
@@ -108,10 +108,10 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
     heroOverline: 'Résumé workshop',
     heroLine1: 'Résumés today', heroLine2: 'read like', heroLine3: '', heroAccent: 'forms.',
     heroAnswer: 'Not here.',
-    heroBlurb: 'Twenty-six templates typeset like editorial spreads. Auto-fit to A4. A Markdown bridge for when an AI should proofread. Print-ready.',
+    heroBlurb: 'Thirty-two templates typeset like editorial spreads. Auto-fit to A4. A Markdown bridge for when an AI should proofread. Print-ready.',
     heroNote: 'Invite-only · no cookies, no IP logging',
 
-    stripOverline: 'Twenty-six templates, six archetypes',
+    stripOverline: 'Thirty-two templates, six archetypes',
 
     profilesOverline: 'Your résumés',
     profilesEmpty: 'Nothing here yet. Start with an empty résumé — or take the sample content and overwrite it field by field.',
@@ -147,10 +147,10 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
     heroOverline: 'Atelier de CV',
     heroLine1: 'Les CV se lisent', heroLine2: "aujourd'hui comme", heroLine3: 'des ', heroAccent: 'formulaires.',
     heroAnswer: 'Pas ici.',
-    heroBlurb: "Vingt-six modèles composés comme des doubles pages de magazine. Ajustement automatique au format A4. Passerelle Markdown si une IA doit relire. Prêt à imprimer.",
+    heroBlurb: "Trente-deux modèles composés comme des doubles pages de magazine. Ajustement automatique au format A4. Passerelle Markdown si une IA doit relire. Prêt à imprimer.",
     heroNote: 'Sur invitation · sans cookies, sans stockage d’IP',
 
-    stripOverline: 'Vingt-six modèles, six archétypes',
+    stripOverline: 'Trente-deux modèles, six archétypes',
 
     profilesOverline: 'Vos CV',
     profilesEmpty: "Rien pour l'instant. Commencez par un CV vide — ou reprenez le contenu d'exemple et remplacez-le champ par champ.",
@@ -186,10 +186,10 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
     heroOverline: 'Taller de CV',
     heroLine1: 'Los CV de hoy', heroLine2: 'se leen como', heroLine3: '', heroAccent: 'formularios.',
     heroAnswer: 'Aquí no.',
-    heroBlurb: 'Veintiséis plantillas compuestas como páginas de revista. Ajuste automático a A4. Puente Markdown por si una IA tiene que corregir. Listo para imprimir.',
+    heroBlurb: 'Treinta y dos plantillas compuestas como páginas de revista. Ajuste automático a A4. Puente Markdown por si una IA tiene que corregir. Listo para imprimir.',
     heroNote: 'Solo por invitación · sin cookies, sin registro de IP',
 
-    stripOverline: 'Veintiséis plantillas, seis arquetipos',
+    stripOverline: 'Treinta y dos plantillas, seis arquetipos',
 
     profilesOverline: 'Tus CV',
     profilesEmpty: 'Todavía no hay nada. Empieza con un CV vacío — o toma el contenido de ejemplo y sobrescríbelo campo por campo.',

@@ -23,7 +23,7 @@ const FAMILIES = [
   ['lora', 'Lora', [400, 500, 600, 700]],
   ['source-sans-3', 'Source Sans 3', [400, 500, 600, 700]],
   ['merriweather', 'Merriweather', [400, 700]],
-  ['source-serif-4', 'Source Serif 4', [400, 600, 700]],
+  ['source-serif-4', 'Source Serif 4', [400, 500, 600, 700]],
   ['space-grotesk', 'Space Grotesk', [400, 500, 600, 700]],
   ['eb-garamond', 'EB Garamond', [400, 500, 600]],
   ['archivo', 'Archivo', [400, 500, 600, 700]],
@@ -31,6 +31,9 @@ const FAMILIES = [
   ['ibm-plex-serif', 'IBM Plex Serif', [400, 500, 600, 700]],
   ['libre-baskerville', 'Libre Baskerville', [400, 700]],
   ['jetbrains-mono', 'JetBrains Mono', [400, 500]],
+  // Seit 09.10.2026 (Kiel, Porto): Datumsziffern und Anzeigenserife.
+  ['ibm-plex-mono', 'IBM Plex Mono', [500]],
+  ['fraunces', 'Fraunces', [400, 600, 700]],
   ['caveat', 'Caveat', [500]],
 ];
 

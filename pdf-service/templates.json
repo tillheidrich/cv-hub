@@ -156,6 +156,42 @@
       "name": "Rotterdam",
       "category": "kreativ",
       "description": "Register statt Absätze, gesperrter Name, Raster"
+    },
+    {
+      "id": "bamberg",
+      "name": "Bamberg",
+      "category": "klassisch",
+      "description": "Tabellarisch, Angaben im Kopf, Foto rechts"
+    },
+    {
+      "id": "weimar",
+      "name": "Weimar",
+      "category": "minimal",
+      "description": "Serifensatz, Überschriften im breiten Rand"
+    },
+    {
+      "id": "kiel",
+      "name": "Kiel",
+      "category": "modern",
+      "description": "Kompakt, Zeitachse, Ziffern in Monospace"
+    },
+    {
+      "id": "goettingen",
+      "name": "Göttingen",
+      "category": "klassisch",
+      "description": "Nummerierte Abschnitte, Publikationsliste, Briefkopf"
+    },
+    {
+      "id": "bergen",
+      "name": "Bergen",
+      "category": "modern",
+      "description": "Farbiges Kopfband, Grotesk, einspaltig"
+    },
+    {
+      "id": "porto",
+      "name": "Porto",
+      "category": "kreativ",
+      "description": "Name in Plakatgröße, Farbspalte rechts"
     }
   ],
   "fontPairings": [
@@ -167,6 +203,11 @@
     "space-inter",
     "garamond-archivo",
     "plex-corporate",
-    "libre-inter"
+    "libre-inter",
+    "source-classic",
+    "source-serif",
+    "plex-sans",
+    "archivo-grotesk",
+    "fraunces-archivo"
   ]
 }
