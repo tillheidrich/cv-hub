@@ -73,9 +73,9 @@ export function CarouselNeighbours({ scale, pageFormat, prevId, nextId, renderTe
 }
 
 /** Die Leiste unter der Seite. `compact` = Telefon-Pille. */
-export function CarouselBar({ current, onStep, uiLang, onLoadAts, compact }: {
+export function CarouselBar({ current, onStep, uiLang, onLoadAts, onLoadAtsPdf, compact }: {
   current: string; onStep: (dir: -1 | 1) => void; uiLang: UiLang;
-  onLoadAts?: () => void; compact?: boolean;
+  onLoadAts?: () => void; onLoadAtsPdf?: () => void; compact?: boolean;
 }) {
   const d = DESIGN_I18N[uiLang];
   const nav = useTemplateNav(current);
@@ -117,7 +117,7 @@ export function CarouselBar({ current, onStep, uiLang, onLoadAts, compact }: {
           <div style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {templateStructure(theme, uiLang)}
           </div>
-          <div style={{ marginTop: '2px' }}><AtsLine level={level} uiLang={uiLang} onLoadAts={onLoadAts} /></div>
+          <div style={{ marginTop: '2px' }}><AtsLine level={level} uiLang={uiLang} onLoadAts={onLoadAts} onLoadAtsPdf={onLoadAtsPdf} /></div>
         </div>
       )}
       {arrow(1)}

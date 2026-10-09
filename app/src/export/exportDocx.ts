@@ -36,6 +36,10 @@ import { getPageFormat } from '../data/pageFormats';
 import type { ExportRenderConfig } from './exportHtml';
 import { exportFilename } from './filename';
 import { saveBlob } from './saveFile';
+import {
+  sectionHeading, projectsOf, certificatesOf, volunteeringOf, publicationsOf,
+  customSectionsOf, customEntriesOf, customItemsOf, bulletsOf, dateRange, shortLink,
+} from '../data/extraSections';
 
 const val = (s?: string | null) => (s || '').trim();
 
@@ -245,8 +249,14 @@ export type DocxVariant = 'design' | 'ats';
  * Das entspricht `MAIN_ORDER_SIDEBAR` / `DEFAULT_MAIN_ORDER` im Renderer
  * (templates/ResumeRenderer.tsx). `details` fehlt in beiden, weil die Eckdaten
  * in Word im Kopfbereich bzw. in der Nebenspalte stehen, nicht im Textfluss. */
-const MAIN_ORDER_ASIDE: SectionKey[] = ['profile', 'experience', 'education', 'skills', 'additional'];
-const MAIN_ORDER_FLOW: SectionKey[] = ['profile', 'experience', 'education', 'skills', 'languages', 'additional'];
+const MAIN_ORDER_ASIDE: SectionKey[] = [
+  'profile', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'volunteering', 'publications', 'additional', 'custom',
+];
+const MAIN_ORDER_FLOW: SectionKey[] = [
+  'profile', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'languages', 'volunteering', 'publications', 'additional', 'custom',
+];
 
 /**
  * Die vom Nutzer gewählte Abschnittsreihenfolge auf das anwenden, was diese
@@ -555,6 +565,93 @@ function makeParts(
       if (key === 'additional') {
         const add = (cv.additionalExperience || []).map(val2).filter(Boolean);
         if (add.length) { out.push(...H1(sec.additional)); for (const a of add) out.push(bullet(a)); }
+        continue;
+      }
+      /* ── Eigene Abschnitte ─────────────────────────────────────────────
+       * Dieselben Bausteine wie Berufsweg und Ausbildung: Überschrift 1 für
+       * den Abschnitt, Überschrift 2 mit Datum für den Eintrag, Zeile darunter
+       * in der Akzentfarbe, echte Word-Aufzählung. Ein Parser sieht dieselbe
+       * Gliederung wie bei den übrigen Abschnitten — in beiden Fassungen. */
+      const present = cv.labels?.misc?.present || 'present';
+      const link = (u?: string) => { const t = shortLink(u); if (t) out.push(para(t, { color: pal.soft, size: 18 })); };
+      /* Mehrzeiliger Text bleibt mehrzeilig — Word kennt kein „\n" im Lauf. */
+      const text = (t?: string) => {
+        const v = val2(t);
+        if (v) out.push(new Paragraph({
+          spacing: { after: 40 },
+          indent: dateTab !== null ? { left: dateTab } : undefined,
+          children: multiRuns(v, { color: pal.soft, font: fonts.body }),
+        }));
+      };
+
+      if (key === 'projects') {
+        const list = projectsOf(cv);
+        if (!list.length) continue;
+        out.push(...H1(sectionHeading(cv.labels, 'projects')));
+        for (const e of list) {
+          const d = dateRange(e.start, e.end, present);
+          if (val2(e.title)) out.push(H2Dated(val2(e.title), d));
+          else if (d) out.push(meta(d));
+          if (val2(e.role)) out.push(meta(val2(e.role), { bold: true }));
+          link(e.url);
+          text(e.description);
+          for (const b of bulletsOf(e)) out.push(bullet(b));
+        }
+        continue;
+      }
+
+      if (key === 'certificates') {
+        const list = certificatesOf(cv);
+        if (!list.length) continue;
+        out.push(...H1(sectionHeading(cv.labels, 'certificates')));
+        for (const c of list) {
+          if (val2(c.name)) out.push(H2Dated(val2(c.name), val2(c.date)));
+          const m = [val2(c.issuer), val2(c.credentialId), val2(c.name) ? '' : val2(c.date)].filter(Boolean).join('  ·  ');
+          if (m) out.push(meta(m));
+          link(c.url);
+        }
+        continue;
+      }
+
+      if (key === 'volunteering') {
+        const list = volunteeringOf(cv);
+        if (!list.length) continue;
+        out.push(...H1(sectionHeading(cv.labels, 'volunteering')));
+        for (const e of list) {
+          const d = dateRange(e.start, e.end, present);
+          if (val2(e.role)) out.push(H2Dated(val2(e.role), d));
+          const m = [val2(e.organization), val2(e.location), val2(e.role) ? '' : d].filter(Boolean).join('  ·  ');
+          if (m) out.push(meta(m, { bold: true }));
+          for (const b of bulletsOf(e)) out.push(bullet(b));
+        }
+        continue;
+      }
+
+      if (key === 'publications') {
+        const list = publicationsOf(cv);
+        if (!list.length) continue;
+        out.push(...H1(sectionHeading(cv.labels, 'publications')));
+        for (const e of list) {
+          if (val2(e.title)) out.push(H2Dated(val2(e.title), val2(e.date)));
+          const m = [val2(e.publisher), val2(e.title) ? '' : val2(e.date)].filter(Boolean).join('  ·  ');
+          if (m) out.push(meta(m));
+          link(e.url);
+          text(e.description);
+        }
+        continue;
+      }
+
+      if (key === 'custom') {
+        for (const c of customSectionsOf(cv)) {
+          out.push(...H1(val2(c.title) || '—'));
+          for (const it of customItemsOf(c)) out.push(bullet(it));
+          for (const e of customEntriesOf(c)) {
+            if (val2(e.title)) out.push(H2Dated(val2(e.title), val2(e.date)));
+            const m = [val2(e.subtitle), val2(e.title) ? '' : val2(e.date)].filter(Boolean).join('  ·  ');
+            if (m) out.push(meta(m));
+            text(e.text);
+          }
+        }
         continue;
       }
       /* 'details' steht in dieser Fassung im Kopfbereich (siehe

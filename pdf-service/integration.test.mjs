@@ -520,6 +520,8 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
       assert.ok(Date.now() - t < 30_000, `dauerte ${Date.now() - t} ms`);
       const busyRes = results.find(r => r.status === 503 && r.headers.get('retry-after'));
       assert.ok(busyRes, 'Retry-After fehlt');
+      // Satz und Kopf nennen dieselbe Wartezeit (vorher: „in einer Minute" bei Retry-After 30).
+      assert.match(busy.error, new RegExp(`in ${busyRes.headers.get('retry-after')} Sekunden`), busy.error);
       // Danach geht wieder ein normales PDF
       const ok = await pdf('<!doctype html><p>wieder frei</p>');
       assert.equal(ok.status, 200);

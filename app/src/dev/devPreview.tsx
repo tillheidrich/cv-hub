@@ -26,7 +26,7 @@ import { demoDE } from '../data/demo-de';
 import { DEFAULT_COVER_LETTERS, cloneCVForLang } from '../data/storage';
 import { demoEN } from '../data/demo-en';
 import { PERSONAS } from './personas';
-import type { AccentId, PaperId, CVData, CoverLetterData, PageMode } from '../data/types';
+import type { AccentId, PaperId, CVData, CoverLetterData, PageMode, PageFormat } from '../data/types';
 import { FS, type Metrics } from '../templates/metrics';
 import '../index.css';
 import '@fontsource/inter/400.css';
@@ -54,6 +54,8 @@ const persona = q.get('p') || 'demo';
 const doc = q.get('doc') === 'cl' ? 'cl' : 'cv';
 const accent = (q.get('accent') || 'auto') as AccentId;
 const paper = (q.get('paper') || 'auto') as PaperId;
+/** Papierformat: `fmt=letter` für US Letter (Prüfläufe seit 09.10.2026). */
+const pageFormat: PageFormat = (['a4', 'letter', 'legal', 'a5'] as const).find(f => f === q.get('fmt')) ?? 'a4';
 /** Nutzerregler für die Schriftgröße — 1 = Normalstellung. */
 const userScale = Number(q.get('scale') || '1');
 /* Demo-Profil in allen vier Sprachen: `p=demo-en`, `demo-fr`, `demo-es`.
@@ -89,34 +91,34 @@ function Harness() {
   (window as unknown as { __exportHtml?: () => string }).__exportHtml = () =>
     buildResumeHtmlForTest(stretch(live), {
       themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
-      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
+      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, pageFormat,
     });
   // Text, den die ATS-Prüfung im Export-Panel liest (extractExportText) —
   // scripts/contactwrapcheck.mjs vergleicht ihn mit pdftotext.
   (window as unknown as { __exportText?: () => string }).__exportText = () =>
     extractExportText(stretch(live), {
       themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
-      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
+      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, pageFormat,
     });
   // Die HTML-Datei, die „HTML" im Export herunterlädt (Schriften eingebettet).
   (window as unknown as { __standaloneHtml?: () => Promise<string> }).__standaloneHtml = () =>
     buildStandaloneResumeHtmlForTest(stretch(live), {
       themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
-      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
+      metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, pageFormat,
     });
   (window as unknown as { __mdTemplate?: (k: 'cv' | 'cl', l: 'de' | 'en') => string }).__mdTemplate = getMdTemplate;
   // Vorlagen-Export „ohne Daten": baut das ZIP und stößt den Download an,
   // damit scripts/kitcheck.mjs das echte Paket prüft und nicht eine
   // Nachbildung davon.
   (window as unknown as { __exportKit?: () => Promise<void> }).__exportKit = () =>
-    exportTemplateKit({ themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto' }, 'de');
+    exportTemplateKit({ themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto', pageFormat }, 'de');
   // Word-Export im Prüfstand: liefert die fertige Datei als Base64, damit
   // scripts/docxcheck.mjs sie speichern, mit LibreOffice rendern und ansehen
   // kann. Behauptungen über „sieht in Word gut aus" sind sonst nicht prüfbar.
   (window as unknown as { __docx?: (v: DocxVariant) => Promise<string> }).__docx = async (v: DocxVariant) => {
     // Dieselbe Konfiguration wie für HTML und PDF oben — sonst prüft der
     // Prüfstand eine Word-Datei, die es in der App so nicht gibt.
-    const docxCfg = { themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto' } as const;
+    const docxCfg = { themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto', pageFormat } as const;
     const blob = await Packer.toBlob(buildDocx(v === 'design' ? await withRasterPhoto(stretch(live), docxCfg) : stretch(live), docxCfg, v));
     const buf = await blob.arrayBuffer();
     let bin = '';
@@ -151,16 +153,16 @@ function Harness() {
   };
   const render = (M: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) => (
     doc === 'cl'
-      ? <CoverLetterRenderer cvData={data} clData={letter} theme={theme} pairing={pairing} metrics={M} measure={measure} inlineEdit={measure ? undefined : inlineEdit} />
-      : <ResumeRenderer data={data} theme={theme} pairing={pairing} metrics={M} pageBlocks={pageBlocks} measure={measure} asideSkillCap={asideCap} inlineEdit={measure ? undefined : inlineEdit} />
+      ? <CoverLetterRenderer cvData={data} clData={letter} theme={theme} pairing={pairing} metrics={M} measure={measure} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} />
+      : <ResumeRenderer data={data} theme={theme} pairing={pairing} metrics={M} pageBlocks={pageBlocks} measure={measure} asideSkillCap={asideCap} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} />
   );
   return (
     <>
       <div className="hud" data-hud>
-        {theme.name} · {persona} · {mode} · {len} · {fit ? `${fit.pages}S · c=${fit.condense.toFixed(2)} · ${(FS.body * fit.metrics.t * 0.75).toFixed(1)}pt${fit.overflow ? ' · ÜBERLAUF' : ''}` : '…'}
+        {theme.name} · {persona} · {mode} · {len}{pageFormat !== 'a4' ? ` · ${pageFormat}` : ''} · {fit ? `${fit.pages}S · c=${fit.condense.toFixed(2)} · ${(FS.body * fit.metrics.t * 0.75).toFixed(1)}pt${fit.overflow ? ' · ÜBERLAUF' : ''}` : '…'}
       </div>
       <div className="harness">
-        <DocumentPreview render={render} userScale={userScale} pageMode={mode} onFit={setFit} contentKey={contentKeyOf(doc === 'cl' ? letter : data, doc, tpl, accent)} />
+        <DocumentPreview render={render} userScale={userScale} pageMode={mode} pageFormat={pageFormat} onFit={setFit} contentKey={contentKeyOf(doc === 'cl' ? letter : data, doc, tpl, accent)} />
       </div>
     </>
   );

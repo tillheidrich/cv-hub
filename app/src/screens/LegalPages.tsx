@@ -281,12 +281,15 @@ function PrivacyDE() {
 
       <h2 style={h2}>Ohne Konto (Demo)</h2>
       <p style={p}>
-        Ohne Konto liegen deine Lebensläufe, Anschreiben und ein hochgeladenes Foto ausschließlich im
-        Speicher deines Browsers (localStorage). Wir speichern davon nichts auf dem Server. Wer die
-        Website-Daten im Browser löscht, löscht damit auch die Lebensläufe; Safari tut das nach
-        einiger Zeit ohne Besuch auch von selbst. Sichere deinen Stand deshalb über den Export
-        (JSON). Der Markdown-Import, der LinkedIn-Import, Word, HTML, Markdown und JSON laufen
-        vollständig im Browser.
+        Ohne Konto liegen deine Lebensläufe, Anschreiben, Fotos und der Versionsverlauf
+        ausschließlich im Speicher deines Browsers (IndexedDB; wo der Browser das nicht anbietet,
+        ersatzweise localStorage). Auch ein hochgeladenes Foto bleibt dort. Wir speichern davon
+        nichts auf dem Server. Wer die Website-Daten im Browser löscht, löscht damit auch die
+        Lebensläufe; Safari tut das nach sieben Tagen ohne Besuch der Seite auch von selbst. Sichere
+        deinen Stand deshalb mit der Sicherungsdatei (Menü „Sicherung…"): eine Datei auf deinem
+        Gerät, mit der du alles zurückholst, auch auf einem anderen Gerät. Die Sicherungsdatei, der
+        Markdown-Import, der LinkedIn-Import, Word, HTML, Markdown und JSON entstehen vollständig im
+        Browser.
       </p>
       <p style={p}>
         Eine Ausnahme ist der <strong>PDF-Export</strong>: Zum Erzeugen des PDFs wird der Inhalt des
@@ -489,11 +492,14 @@ function PrivacyEN() {
 
       <h2 style={h2}>Without an account (demo)</h2>
       <p style={p}>
-        Without an account, your résumés, cover letters and any photo you upload live only in your
-        browser's storage (localStorage). We store none of it on the server. Clearing the site data
-        in your browser deletes the résumés too, and Safari does so on its own after a while without
-        a visit, so keep a copy via the JSON export. Markdown import, LinkedIn import, Word, HTML,
-        Markdown and JSON all run entirely in the browser.
+        Without an account, your résumés, cover letters, photos and version history live only in
+        your browser's storage (IndexedDB; where the browser does not offer it, localStorage
+        instead). A photo you upload stays there too. We store none of it on the server. Clearing
+        the site data in your browser deletes the résumés too, and Safari does so on its own after
+        seven days without a visit to the site, so keep a backup file (menu “Backup…”): a file on
+        your device that brings everything back, on another device as well. The backup file,
+        Markdown import, LinkedIn import, Word, HTML, Markdown and JSON are all created entirely in
+        the browser.
       </p>
       <p style={p}>
         The exception is the <strong>PDF export</strong>: to create the PDF, the content of the document,

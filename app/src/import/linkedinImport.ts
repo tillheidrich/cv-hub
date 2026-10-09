@@ -39,6 +39,7 @@
 import JSZip from 'jszip';
 import type {
   CVData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, Lang,
+  ProjectEntry, CertificateEntry, VolunteerEntry, PublicationEntry,
 } from '../data/types';
 
 // ── CSV ─────────────────────────────────────────────────────────────────────
@@ -204,7 +205,12 @@ export interface LinkedInBefund {
    *  Anschreiben), bleiben unangetastet. */
   cv: CVData;
   /** Was gefunden wurde — für die Gegenüberstellung vor dem Übernehmen. */
-  gefunden: { stationen: number; ausbildung: number; skills: number; sprachen: number };
+  gefunden: {
+    stationen: number; ausbildung: number; skills: number; sprachen: number;
+    /** Eigene Abschnitte aus Projects.csv, Certifications.csv,
+     *  Volunteering.csv und Publications.csv. */
+    projekte?: number; zertifikate?: number; ehrenamt?: number; publikationen?: number;
+  };
   /** Was nicht gefunden wurde. Wird dem Nutzer gezeigt, nicht verschluckt. */
   hinweise: string[];
 }
@@ -302,6 +308,65 @@ export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedI
     .filter(x => x.name)
     .map(x => ({ language: x.name, level: x.stufe, dots: dotsFuer(x.stufe) }));
 
+  // ── Eigene Abschnitte ─────────────────────────────────────────────────────
+  /* Seit dem 09.10.2026 hat der Lebenslauf Abschnitte für Projekte,
+   * Zertifikate, Ehrenamt und Publikationen — LinkedIn exportiert genau diese
+   * vier als eigene Tabellen. Wie bei den Stationen gilt: Was im Archiv
+   * steht, ersetzt den Abschnitt; fehlt die Tabelle, bleibt er, wie er war. */
+  const projects: ProjectEntry[] = rows('Projects', 'Project')
+    .filter(r => feld(r, 'Title', 'Name'))
+    .map((r, i) => {
+      const bis = feld(r, 'Finished On', 'End Date');
+      const text = feld(r, 'Description');
+      const punkte = splitBullets(text);
+      return {
+        id: `li-prj-${i}`,
+        title: feld(r, 'Title', 'Name'),
+        role: '',
+        start: normalizeDate(feld(r, 'Started On', 'Start Date')),
+        end: istLaufend(bis) ? laufend : normalizeDate(bis),
+        url: feld(r, 'Url', 'URL'),
+        /* Ein einzelner Absatz bleibt Beschreibung; mehrere Zeilen werden
+         * Stichpunkte — wie bei den Stationen. */
+        description: punkte.length > 1 ? '' : text,
+        bullets: punkte.length > 1 ? punkte : [],
+      };
+    });
+  const certificates: CertificateEntry[] = rows('Certifications', 'Certification')
+    .filter(r => feld(r, 'Name'))
+    .map((r, i) => ({
+      id: `li-crt-${i}`,
+      name: feld(r, 'Name'),
+      issuer: feld(r, 'Authority', 'Issuer'),
+      date: normalizeDate(feld(r, 'Started On', 'Issued On', 'Date')),
+      credentialId: feld(r, 'License Number', 'Credential ID'),
+      url: feld(r, 'Url', 'URL'),
+    }));
+  const volunteering: VolunteerEntry[] = rows('Volunteering', 'Volunteer Experiences', 'Volunteer')
+    .filter(r => feld(r, 'Company Name', 'Organization') || feld(r, 'Role'))
+    .map((r, i) => {
+      const bis = feld(r, 'Finished On', 'End Date');
+      return {
+        id: `li-vol-${i}`,
+        role: feld(r, 'Role', 'Title'),
+        organization: feld(r, 'Company Name', 'Organization'),
+        location: '',
+        start: normalizeDate(feld(r, 'Started On', 'Start Date')),
+        end: !bis || istLaufend(bis) ? laufend : normalizeDate(bis),
+        bullets: splitBullets(feld(r, 'Description')),
+      };
+    });
+  const publications: PublicationEntry[] = rows('Publications', 'Publication')
+    .filter(r => feld(r, 'Name', 'Title'))
+    .map((r, i) => ({
+      id: `li-pub-${i}`,
+      title: feld(r, 'Name', 'Title'),
+      publisher: feld(r, 'Publisher'),
+      date: normalizeDate(feld(r, 'Published On', 'Date')),
+      url: feld(r, 'Url', 'URL'),
+      description: feld(r, 'Description'),
+    }));
+
   // ── Was fehlt, wird gesagt ────────────────────────────────────────────────
   if (!positionen.length) hinweise.push('Keine Berufserfahrung im Archiv gefunden (Positions.csv fehlt oder ist leer).');
   if (!schulen.length) hinweise.push('Keine Ausbildung im Archiv gefunden (Education.csv fehlt oder ist leer).');
@@ -323,6 +388,10 @@ export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedI
     education: education.length ? education : basis.education,
     skillGroups,
     languages: languages.length ? languages : basis.languages,
+    projects: projects.length ? projects : basis.projects,
+    certificates: certificates.length ? certificates : basis.certificates,
+    volunteering: volunteering.length ? volunteering : basis.volunteering,
+    publications: publications.length ? publications : basis.publications,
   };
 
   return {
@@ -332,6 +401,10 @@ export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedI
       ausbildung: education.length,
       skills: skillItems.length,
       sprachen: languages.length,
+      projekte: projects.length,
+      zertifikate: certificates.length,
+      ehrenamt: volunteering.length,
+      publikationen: publications.length,
     },
     hinweise,
   };

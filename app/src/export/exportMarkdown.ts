@@ -19,7 +19,7 @@
  * den Parser, keine Beschriftung für Menschen; die Sprache des Inhalts steht
  * im Frontmatter.
  */
-import type { CVData } from '../data/types';
+import type { CVData, ProjectEntry, CertificateEntry, VolunteerEntry, PublicationEntry, CustomSection, CustomEntry } from '../data/types';
 import { saveText } from './saveFile';
 import { exportFilename } from './filename';
 
@@ -134,5 +134,102 @@ export function buildMarkdown(data: CVData, settings?: {
     out.push('');
   }
 
+  out.push(...extraSectionsToMarkdown(data));
+
   return out.join('\n');
+}
+
+// ── Eigene Abschnitte ───────────────────────────────────────────────────────
+// Zeile für Zeile dasselbe wie `extraSectionsToMarkdown` in
+// pdf-service/markdown.js (dort steht das Format beschrieben). Gelesen wird es
+// in import/markdownBridge.ts. Geprüft in scripts/sectionsroundtrip.mjs: beide
+// Schreiber liefern für dieselben Daten denselben Text.
+
+/** Wie `v`, aber auch für Werte, die keine Zeichenkette sind (fremdes JSON). */
+const w = (x: unknown): string => (x == null ? '' : String(x)).trim();
+const extraList = <T>(x: unknown): T[] => (Array.isArray(x) ? x.filter(e => e && typeof e === 'object') as T[] : []);
+const extraLines = (x: unknown): string[] => (Array.isArray(x) ? x.map(w).filter(Boolean) : []);
+
+function periodLine(start?: string, end?: string): string {
+  const a = w(start), b = w(end);
+  if (!a && !b) return '';
+  return `Zeitraum: ${[a, '–', b].filter(Boolean).join(' ')}`;
+}
+
+export function extraSectionsToMarkdown(cv: CVData): string[] {
+  const out: string[] = [];
+  const heading = (t: string) => out.push(t ? `### ${t}` : '###');
+  const field = (k: string, x?: string) => { if (w(x)) out.push(`${k}: ${w(x)}`); };
+  const text = (x?: string) => { if (w(x)) out.push(w(x)); };
+  const bullets = (x?: unknown) => { for (const b of extraLines(x)) out.push(`- ${b}`); };
+
+  const projects = extraList<ProjectEntry>(cv.projects).filter(p => w(p.title) || w(p.role) || w(p.description) || w(p.url) || extraLines(p.bullets).length);
+  if (projects.length) {
+    out.push('## Projekte', '');
+    for (const p of projects) {
+      heading(w(p.title));
+      field('Rolle', p.role);
+      const per = periodLine(p.start, p.end); if (per) out.push(per);
+      field('Link', p.url);
+      text(p.description);
+      bullets(p.bullets);
+      out.push('');
+    }
+  }
+
+  const certs = extraList<CertificateEntry>(cv.certificates).filter(c => w(c.name) || w(c.issuer) || w(c.credentialId) || w(c.url));
+  if (certs.length) {
+    out.push('## Zertifikate', '');
+    for (const c of certs) {
+      heading(w(c.name));
+      field('Aussteller', c.issuer);
+      field('Datum', c.date);
+      field('Kennung', c.credentialId);
+      field('Link', c.url);
+      out.push('');
+    }
+  }
+
+  const vols = extraList<VolunteerEntry>(cv.volunteering).filter(x => w(x.role) || w(x.organization) || extraLines(x.bullets).length);
+  if (vols.length) {
+    out.push('## Ehrenamt', '');
+    for (const x of vols) {
+      heading(w(x.role));
+      const dates = (w(x.start) || w(x.end)) ? `${w(x.start)} – ${w(x.end)}`.trim() : '';
+      const meta = [w(x.organization), w(x.location), dates].filter(Boolean).join(' · ');
+      if (meta) out.push(meta);
+      bullets(x.bullets);
+      out.push('');
+    }
+  }
+
+  const pubs = extraList<PublicationEntry>(cv.publications).filter(p => w(p.title) || w(p.publisher) || w(p.url) || w(p.description));
+  if (pubs.length) {
+    out.push('## Publikationen', '');
+    for (const p of pubs) {
+      heading(w(p.title));
+      field('Verlag', p.publisher);
+      field('Datum', p.date);
+      field('Link', p.url);
+      text(p.description);
+      out.push('');
+    }
+  }
+
+  for (const c of extraList<CustomSection>(cv.customSections)) {
+    const items = extraLines(c.items);
+    const entries = extraList<CustomEntry>(c.entries).filter(e => w(e.title) || w(e.subtitle) || w(e.text));
+    if (!items.length && !entries.length) continue;
+    out.push(`## Abschnitt: ${w(c.title)}`.trimEnd());
+    for (const it of items) out.push(`- ${it}`);
+    out.push('');
+    for (const e of entries) {
+      heading(w(e.title));
+      field('Untertitel', e.subtitle);
+      field('Datum', e.date);
+      text(e.text);
+      out.push('');
+    }
+  }
+  return out;
 }

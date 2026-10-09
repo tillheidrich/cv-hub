@@ -367,23 +367,35 @@ export const LOCAL_VERSIONS_I18N: Record<UiLang, LocalVersionsStrings> = {
 export interface PdfServiceStrings {
   retryIn: (seconds: number) => string;
   tooMany: (seconds?: number) => string;
+  /** 503 mit `Retry-After`: Warteschlange voll. */
+  busy: (seconds: number) => string;
+  /** 413: mehr als 3.000.000 Zeichen HTML. */
+  tooLarge: string;
 }
 
 export const PDF_SERVICE_I18N: Record<UiLang, PdfServiceStrings> = {
   de: {
     retryIn: s => `Neuer Versuch frühestens in ${s} s.`,
+    busy: s => `Der PDF-Dienst ist gerade ausgelastet. Bitte in ${s} Sekunden noch einmal versuchen.`,
+    tooLarge: 'Das Dokument ist zu groß für den PDF-Export (höchstens 3 MB). Meist ist es ein sehr großes Foto: im Profil neu zuschneiden oder ein kleineres wählen.',
     tooMany: s => (s ? `Zu viele PDF-Exporte in kurzer Zeit. Bitte in ${Math.ceil(s / 60)} min erneut.` : 'Zu viele PDF-Exporte in kurzer Zeit. In ein paar Minuten nochmal.'),
   },
   en: {
     retryIn: s => `Try again in ${s} s at the earliest.`,
+    busy: s => `The PDF service is busy right now. Please try again in ${s} seconds.`,
+    tooLarge: 'The document is too large for the PDF export (3 MB at most). Usually it is a very large photo: re-crop it in the profile or pick a smaller one.',
     tooMany: s => (s ? `Too many PDF exports in a short time. Please try again in ${Math.ceil(s / 60)} min.` : 'Too many PDF exports in a short time. Try again in a few minutes.'),
   },
   fr: {
     retryIn: s => `Nouvel essai possible dans ${s} s au plus tôt.`,
+    busy: s => `Le service PDF est très sollicité en ce moment. Réessaie dans ${s} secondes.`,
+    tooLarge: 'Le document est trop volumineux pour l’export PDF (3 Mo au maximum). C’est souvent une très grande photo : recadre-la dans le profil ou choisis-en une plus petite.',
     tooMany: s => (s ? `Trop d’exports PDF en peu de temps. Réessaie dans ${Math.ceil(s / 60)} min.` : 'Trop d’exports PDF en peu de temps. Réessaie dans quelques minutes.'),
   },
   es: {
     retryIn: s => `Nuevo intento como pronto en ${s} s.`,
+    busy: s => `El servicio PDF está saturado ahora mismo. Vuelve a intentarlo en ${s} segundos.`,
+    tooLarge: 'El documento es demasiado grande para la exportación PDF (3 MB como máximo). Suele ser una foto muy grande: recórtala de nuevo en el perfil o elige una más pequeña.',
     tooMany: s => (s ? `Demasiadas exportaciones PDF en poco tiempo. Vuelve a intentarlo en ${Math.ceil(s / 60)} min.` : 'Demasiadas exportaciones PDF en poco tiempo. Inténtalo de nuevo en unos minutos.'),
   },
 };

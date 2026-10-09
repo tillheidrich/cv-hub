@@ -10,6 +10,7 @@ import { markdownToCvData, isCvMarkdown } from '../import/markdownBridge';
 import { useUiLang } from '../ui/useUiLang';
 import { HOME_I18N } from '../ui/i18n/home';
 import { APP_NAME } from '../brand';
+import { FASSUNG_I18N } from '../ui/i18n/fassung';
 
 function useViewport() {
   const [w, setW] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -33,6 +34,12 @@ interface Props {
   onOpenAdmin?: () => void;
   /** Lokalmodus: Sicherungsfenster öffnen (ui/BackupReminder.tsx). */
   onOpenBackup?: () => void;
+  /** Fassung duplizieren (fehlt im Nur-Lese-Modus). */
+  onDuplicate?: (id: string) => void;
+  /** Zugang abgelaufen: Anlegen gesperrt, mit diesem Satz als Erklärung. */
+  readOnlyNote?: string;
+  /** Laufzeit-Band unter der Kopfleiste (App.tsx). */
+  banner?: React.ReactNode;
 }
 
 // ── Create Profile Modal ───────────────────────────────────────────────────
@@ -317,13 +324,15 @@ function TemplateStrip({ isMobile }: { isMobile: boolean }) {
 
 // ── Profile Row (editorial card) ─────────────────────────────────────────
 
-function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
+function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }: {
   profile: AppProfile; index: number; featured: boolean;
-  onOpen: () => void; onDelete: () => void;
+  onOpen: () => void; onDelete: () => void; onDuplicate?: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hover, setHover] = useState(false);
-  const t = HOME_I18N[useUiLang()];
+  const uiLang = useUiLang();
+  const t = HOME_I18N[uiLang];
+  const Fs = FASSUNG_I18N[uiLang];
   const created = new Date(profile.createdAt).toLocaleDateString(t.dateLocale, { day: '2-digit', month: 'short', year: 'numeric' });
   const num = String(index + 1).padStart(2, '0');
   // Exponential ease-out (cubic-bezier ≈ ease-out-expo). No layout properties get animated.
@@ -374,6 +383,16 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {onDuplicate && !confirmDelete && (
+          <button type="button"
+            onClick={e => { e.stopPropagation(); onDuplicate(); }}
+            onKeyDown={e => e.stopPropagation()}
+            title={Fs.duplicateSub}
+            aria-label={`${Fs.duplicate}: ${profile.displayName}`}
+            style={{ padding: '8px 10px', minHeight: '32px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.04em', color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {Fs.duplicate}
+          </button>
+        )}
         {confirmDelete ? (
           <button type="button"
             onClick={e => { e.stopPropagation(); onDelete(); }}
@@ -403,7 +422,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete }: {
 
 // ── HomeScreen ───────────────────────────────────────────────────────────
 
-export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup }: Props) {
+export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup, onDuplicate, readOnlyNote, banner }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const { isMobile } = useViewport();
   const uiLangHome = useUiLang();
@@ -448,6 +467,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           )}
         </div>
       </div>
+      {banner && <div style={{ paddingTop: '10px' }}>{banner}</div>}
 
       <main style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: isMobile ? '0 20px' : '0 32px' }}>
         <div style={{ width: '100%', maxWidth: '960px', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: isMobile ? '20px' : '32px', padding: isMobile ? '40px 0 64px' : '64px 0 96px' }}>
@@ -496,19 +516,20 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                 ? t.profilesEmpty
                 : t.profilesCount(profiles.length)}
             </div>
-            <button type="button" onClick={() => setShowCreate(true)}
+            <button type="button" onClick={() => setShowCreate(true)} disabled={!!readOnlyNote}
               style={{
+                opacity: readOnlyNote ? 0.45 : 1, cursor: readOnlyNote ? 'not-allowed' : 'pointer',
                 marginTop: '24px',
                 display: 'inline-flex', alignItems: 'center', gap: '10px',
                 padding: '14px 22px', background: C.ink, color: C.paper,
-                border: 'none', cursor: 'pointer', fontFamily: F.ui,
+                border: 'none', fontFamily: F.ui,
                 fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
               <span style={{ fontFamily: F.mono, fontSize: '14px', fontWeight: 400 }}>＋</span>
               {t.newResume}
             </button>
             <div style={{ fontFamily: F.ui, fontSize: '11.5px', color: C.pencil, lineHeight: 1.6, marginTop: '14px', maxWidth: '46ch' }}>
-              {t.profilesHint}
+              {readOnlyNote ?? t.profilesHint}
             </div>
           </div>
 
@@ -520,6 +541,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
                     key={p.id} profile={p} index={i} featured={i === 0 && profiles.length > 1}
                     onOpen={() => onSelect(p.id)}
                     onDelete={() => onDelete(p.id)}
+                    onDuplicate={onDuplicate ? () => onDuplicate(p.id) : undefined}
                   />
                 ))}
               </div>

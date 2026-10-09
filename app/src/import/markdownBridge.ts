@@ -21,6 +21,11 @@
 
 import type { CVData, CoverLetterData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, SocialLink, SocialPlatform } from '../data/types';
 
+// Eigene Abschnitte (Projekte, Zertifikate, Ehrenamt, Publikationen, freie
+// Abschnitte): Port von `extraSectionOf` / `parseExtraSection` aus
+// pdf-service/markdown.js, dort ist das Format beschrieben. Geschrieben wird
+// es in export/exportMarkdown.ts.
+
 const val = (s: unknown) => (s ?? '').toString().trim();
 
 /** Begrenzt ein eingelesenes Feld (Schutz vor überlangen KI-Ausgaben). */
@@ -76,6 +81,110 @@ function sectionOf(title: string): CvSection {
   return null;
 }
 
+type ExtraKind = 'projects' | 'certificates' | 'volunteering' | 'publications' | 'custom';
+
+/** Abschnittsart der eigenen Abschnitte — oder null. Vor den übrigen
+ *  Abschnitten geprüft: „Volunteer experience" ist kein Berufsweg. */
+export function extraSectionOf(title: string): ExtraKind | null {
+  const t = val(title).toLowerCase();
+  if (/^(abschnitt|section)\s*:/.test(t)) return 'custom';
+  if (/^(projekte?|projects?)\b/.test(t)) return 'projects';
+  if (/zertifikat|certific/.test(t)) return 'certificates';
+  if (/ehrenamt|volunteer/.test(t)) return 'volunteering';
+  if (/publikation|publication|veröffentlichung/.test(t)) return 'publications';
+  return null;
+}
+
+const FIELD_RE = /^(rolle|role|zeitraum|period|dates?|link|url|aussteller|issuer|datum|kennung|id|credential(?:\s*id)?|verlag|publisher|ort\/verlag|untertitel|subtitle)\s*:\s*(.*)$/i;
+const FIELD_KEY: Record<string, string> = {
+  rolle: 'role', role: 'role', zeitraum: 'period', period: 'period', date: 'date', dates: 'period',
+  link: 'url', url: 'url', aussteller: 'issuer', issuer: 'issuer', datum: 'date',
+  kennung: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
+  verlag: 'publisher', publisher: 'publisher', 'ort/verlag': 'publisher', untertitel: 'subtitle', subtitle: 'subtitle',
+};
+const FIELDS_IN: Record<ExtraKind, string[]> = {
+  projects: ['role', 'period', 'url'],
+  certificates: ['issuer', 'date', 'credentialId', 'url'],
+  publications: ['publisher', 'date', 'url'],
+  custom: ['subtitle', 'date'],
+  volunteering: [],
+};
+function splitPeriod(v: unknown): { start: string; end: string } {
+  const m = val(v).match(/^(.*?)\s*(?:[–—]|\s-\s)\s*(.*)$/) || val(v).match(/^(.*?)\s*[–—-]\s*$/);
+  if (!m) return { start: val(v), end: '' };
+  return { start: val(m[1]), end: val(m[2] ?? '') };
+}
+
+interface RawEntry { title: string; fields: Record<string, string>; textLines: string[]; bullets: string[]; meta: string | null; text?: string }
+
+/** Liest die Zeilen EINES eigenen Abschnitts (ohne die `##`-Zeile) in `cv`. */
+export function parseExtraSection(kind: ExtraKind, title: string, sectionLines: string[], cv: CVData, uid: (p: string) => string): void {
+  const SHORT = 240, LONG = 2000;
+  const entries: RawEntry[] = [];
+  let cur: RawEntry | null = null;
+  const items: string[] = [];
+  const flush = () => { if (cur) { cur.text = cur.textLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(); entries.push(cur); cur = null; } };
+  for (let i = 0; i < sectionLines.length; i++) {
+    const t = sectionLines[i].trim();
+    if (/^###(\s|$)/.test(t)) {
+      flush();
+      const e: RawEntry = { title: clipField(stripMd(t.slice(3)), SHORT), fields: {}, textLines: [], bullets: [], meta: null };
+      cur = e;
+      if (kind === 'volunteering') {
+        let j = i + 1;
+        while (j < sectionLines.length && !sectionLines[j].trim()) j++;
+        const nxt = (sectionLines[j] || '').trim();
+        if (j < sectionLines.length && nxt && !/^[-*+]\s/.test(nxt) && !nxt.startsWith('#')) { e.meta = stripMd(nxt); i = j; }
+      }
+      continue;
+    }
+    if (/^[-*+]\s/.test(t)) {
+      const b = clipField(t.slice(2), LONG);
+      if (!b) continue;
+      if (!cur) { if (kind === 'custom') items.push(b); continue; }
+      if (kind === 'custom' || kind === 'publications') (cur as RawEntry).textLines.push(sectionLines[i].replace(/\s+$/, ''));
+      else (cur as RawEntry).bullets.push(b);
+      continue;
+    }
+    if (!cur) continue;
+    const c: RawEntry = cur;
+    const f = t.match(FIELD_RE);
+    const key = f ? FIELD_KEY[f[1].toLowerCase().replace(/\s+/g, ' ')] : null;
+    if (f && key && FIELDS_IN[kind].includes(key) && !c.textLines.length) { c.fields[key] = clipField(f[2], SHORT); continue; }
+    if (c.textLines.length || t) c.textLines.push(sectionLines[i].replace(/\s+$/, ''));
+  }
+  flush();
+  if (kind === 'projects') {
+    const list = cv.projects ?? (cv.projects = []);
+    for (const e of entries) {
+      const p = splitPeriod(e.fields.period);
+      list.push({ id: uid('prj'), title: e.title, role: e.fields.role || '', start: p.start, end: p.end, url: e.fields.url || '', description: clipField(e.text, LONG), bullets: e.bullets });
+    }
+  } else if (kind === 'certificates') {
+    const list = cv.certificates ?? (cv.certificates = []);
+    for (const e of entries) list.push({ id: uid('crt'), name: e.title, issuer: e.fields.issuer || '', date: e.fields.date || '', credentialId: e.fields.credentialId || '', url: e.fields.url || '' });
+  } else if (kind === 'volunteering') {
+    const list = cv.volunteering ?? (cv.volunteering = []);
+    for (const e of entries) {
+      const m = e.meta ? parseMeta(e.meta) : { company: '', location: '', start: '', end: '' };
+      list.push({ id: uid('vol'), role: e.title, organization: clipField(m.company, SHORT), location: clipField(m.location, SHORT), start: m.start, end: m.end, bullets: e.bullets });
+    }
+  } else if (kind === 'publications') {
+    const list = cv.publications ?? (cv.publications = []);
+    for (const e of entries) list.push({ id: uid('pub'), title: e.title, publisher: e.fields.publisher || '', date: e.fields.date || '', url: e.fields.url || '', description: clipField(e.text, LONG) });
+  } else {
+    /* Eine Überschrift ohne Inhalt ist kein Abschnitt. */
+    if (!items.length && !entries.length) return;
+    const list = cv.customSections ?? (cv.customSections = []);
+    list.push({
+      id: uid('sec'),
+      title: clipField(val(title).replace(/^(abschnitt|section)\s*:\s*/i, ''), SHORT),
+      items,
+      entries: entries.map(e => ({ id: uid('ent'), title: e.title, subtitle: e.fields.subtitle || '', date: e.fields.date || '', text: clipField(e.text, LONG) })),
+    });
+  }
+}
+
 /** Frontmatter abtrennen. */
 function splitFrontmatter(md: string): { fm: string | null; body: string } {
   const m = md.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
@@ -112,6 +221,7 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
   const flushProfile = () => { if (section === 'profile') { cv.profile.text = profileLines.join('\n').trim(); profileLines = []; } };
   const uid = (p: string) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+  let lastContact = '';
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -119,7 +229,16 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
 
     if (t.startsWith('## ')) {
       flushExp(); flushEdu(); flushSkill(); flushProfile();
-      section = sectionOf(t.slice(3).trim());
+      const title = t.slice(3).trim();
+      const kind = extraSectionOf(title);
+      if (kind) {
+        let j = i + 1;
+        while (j < lines.length && !/^#{1,2}\s/.test(lines[j].trim())) j++;
+        parseExtraSection(kind, title, lines.slice(i + 1, j), cv, uid);
+        section = null;
+        i = j; continue;
+      }
+      section = sectionOf(title);
       i++; continue;
     }
 
@@ -155,7 +274,13 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
             socials.push({ id: `s-${Date.now()}-${socials.length}`, platform: plat, value: v });
           }
         }
-      }
+        lastContact = /ort|location|adresse|address/.test(k) && !/e[-\s]?mail|telefon|phone|website|web|portfolio/.test(k) ? 'location' : '';
+      } else if (t && lastContact === 'location' && !/^[-*+]\s/.test(t)) {
+        /* Zweizeilige Anschrift: Die zweite Zeile („21335 Lüneburg") steht
+         * ohne Spiegelstrich unter „- Ort:". Bis zum 09.10.2026 fiel sie beim
+         * Einlesen weg — der Lebenslauf kam ohne Postleitzahl und Ort zurück. */
+        cv.personal.location = clipField(`${cv.personal.location}\n${t}`, 240);
+      } else lastContact = '';
       i++; continue;
     }
 
@@ -198,6 +323,12 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
           }
         }
         continue;
+      }
+      /* Anmerkung unter der Kopfzeile (Schwerpunkt, Note): wird geschrieben,
+       * fiel aber bis zum 09.10.2026 beim Einlesen weg. */
+      if (t && curEdu && !/^[-*+]\s/.test(t)) {
+        const e: EducationEntry = curEdu;
+        e.notes = clipField(e.notes ? `${e.notes}\n${t}` : t, 2000);
       }
       i++; continue;
     }

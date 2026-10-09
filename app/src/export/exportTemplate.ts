@@ -88,7 +88,18 @@ function emptyData(lang: Lang): unknown {
     }
     return o;
   };
-  return blank(p);
+  /* Die eigenen Abschnitte stehen als leeres Gerüst mit je einem Eintrag
+   * darin: Wer das Formular füllt, sieht die Felder, ohne sie zu kennen.
+   * In der Vorlage selbst (vorlage.html) erscheinen sie nicht — ein leerer
+   * Abschnitt erscheint nirgends, und unausgefüllt bleibt er leer. */
+  return {
+    ...(blank(p) as Record<string, unknown>),
+    projects: [{ id: 'p1', title: '', role: '', start: '', end: '', url: '', description: '', bullets: [''] }],
+    certificates: [{ id: 'z1', name: '', issuer: '', date: '', credentialId: '', url: '' }],
+    volunteering: [{ id: 'v1', role: '', organization: '', location: '', start: '', end: '', bullets: [''] }],
+    publications: [{ id: 'q1', title: '', publisher: '', date: '', url: '', description: '' }],
+    customSections: [{ id: 'a1', title: '', items: [''], entries: [{ id: 'a1e1', title: '', subtitle: '', date: '', text: '' }] }],
+  };
 }
 
 function anleitung(themeName: string, themeId: string, lang: Lang): string {
@@ -154,6 +165,21 @@ solltest — sie sind gemessen, nicht geraten:
   Wenn du Blöcke verschiebst, verschiebe sie im Kopf mit.
 * **Kein unsichtbarer Text.** Keine weiße Schrift auf Weiß, keine
   ausgeblendeten Schlagwortlisten. Danach suchen Spamfilter.
+
+## Weitere Abschnitte
+
+\`daten.json\` kennt neben Berufsweg und Ausbildung fünf Abschnitte, die nur
+erscheinen, wenn etwas darin steht:
+
+| Feld | Inhalt |
+|---|---|
+| \`projects\` | Projekte: \`title\`, \`role\`, \`start\`, \`end\`, \`url\`, \`description\`, \`bullets\` |
+| \`certificates\` | Zertifikate: \`name\`, \`issuer\`, \`date\`, \`credentialId\`, \`url\` |
+| \`volunteering\` | Ehrenamt, aufgebaut wie eine Station: \`role\`, \`organization\`, \`location\`, \`start\`, \`end\`, \`bullets\` |
+| \`publications\` | Publikationen: \`title\`, \`publisher\`, \`date\`, \`url\`, \`description\` |
+| \`customSections\` | Freie Abschnitte mit eigener Überschrift (\`title\`): reine Stichpunkte in \`items\` und/oder Einträge in \`entries\` (\`title\`, \`subtitle\`, \`date\`, \`text\`) |
+
+Was leer bleibt, fehlt im Dokument — leere Einträge muss niemand löschen.
 
 ## Feldnamen
 

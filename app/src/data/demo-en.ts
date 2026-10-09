@@ -20,7 +20,7 @@ export const demoEN: CVData = {
   },
 
   profile: {
-    text: 'Senior product designer with seven years of experience across B2B SaaS and e-commerce. I focus on scalable design systems, research-driven product work, and close collaboration with engineering. I take products from the first wireframe through to shipped feature and can navigate equally well between C-level stakeholders and frontend teams.',
+    text: 'Senior product designer with seven years of experience across B2B SaaS and e-commerce. I focus on scalable design systems, research-driven product work and close collaboration with engineering — from the first wireframe to the shipped feature.',
   },
 
   experience: [
@@ -35,7 +35,6 @@ export const demoEN: CVData = {
         'Owner of the design system (Figma + tokens) rolled out across four product areas',
         'Led discovery and delivery for three core features — from user interviews to hi-fi specs',
         'Reworked the onboarding flow; analytics team reported a clear day-7 activation lift',
-        'Established a design-review format with engineering that halved iteration time',
       ],
     },
     {
@@ -48,7 +47,6 @@ export const demoEN: CVData = {
       bullets: [
         'Designer in a cross-functional team for the SaaS platform (logistics, mid-market)',
         'Ran on-site user research with customers in DE and NL — findings fed directly into roadmap planning',
-        'Drove the tool migration from Sketch to Figma, including library setup',
         'Consolidated the internal pattern inventory from 180 components to 42 reusable building blocks',
       ],
     },
@@ -62,19 +60,6 @@ export const demoEN: CVData = {
       bullets: [
         'Client work for e-commerce brands (fashion, home) — end-to-end design from concept to web launch',
         'Designed and analyzed A/B tests in partnership with the analytics team',
-        'Built style guides and component documentation for three clients',
-      ],
-    },
-    {
-      id: 'pilz',
-      role: 'Junior UX Designer (Internship)',
-      company: 'Pilz Digital',
-      location: 'Berlin',
-      start: '04/2018',
-      end: '09/2018',
-      bullets: [
-        'Wireframes and prototypes for internal tools for a healthtech client',
-        'Moderated on-site usability tests with end users',
       ],
     },
   ],
@@ -127,15 +112,6 @@ export const demoEN: CVData = {
         'Workshop facilitation (Design Sprint, Lightning Decision Jam)',
       ],
     },
-    {
-      label: 'Soft skills',
-      items: [
-        'Clear communication with engineering and product',
-        'C-level stakeholder management',
-        'Mentoring junior designers',
-        'Hands-on and decisive',
-      ],
-    },
   ],
 
   languages: [
@@ -147,7 +123,6 @@ export const demoEN: CVData = {
   additionalExperience: [
     'Speaker at design meetups (UX Hamburg, Friends of Figma)',
     'Mentor in the ADPList programme',
-    'Active in the local AIGA chapter',
   ],
 
   labels: labelsEN,

@@ -421,3 +421,11 @@
 }
 .cv-export-group[open] > summary::after { transform: rotate(45deg) translate(-2px, -2px); }
 .cv-sheet .ui-menu-item { min-height: 46px; }
+
+/* Nur-Lese-Modus nach Ablauf eines Pilot-Platzes (App.tsx, Runde 3). */
+.ui-status[data-state="readonly"] .ui-status-dot { background: var(--ink-3); box-shadow: 0 0 0 3px oklch(0.55 0.01 264 / 0.18); }
+/* Hinweisband unter der Kopfleiste: Laufzeit des Zugangs. */
+.ui-access-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 16px 6px; padding: 9px 10px 9px 14px; border-radius: 12px; background: oklch(0.97 0.03 85); box-shadow: inset 0 0 0 1px oklch(0.86 0.06 85); color: oklch(0.32 0.05 70); font-size: var(--t-sm); line-height: 1.45; }
+.ui-access-banner[data-notice="final"], .ui-access-banner[data-notice="expired"] { background: oklch(0.96 0.025 30); box-shadow: inset 0 0 0 1px oklch(0.84 0.06 30); color: oklch(0.36 0.09 30); }
+.ui-access-banner > span { flex: 1 1 260px; min-width: 0; }
+.ui-readonly-note { margin: 0 16px 10px 20px; padding: 9px 12px; border-radius: 10px; background: oklch(0.96 0.01 264); color: var(--ink-2); font-size: var(--t-xs); line-height: 1.5; }

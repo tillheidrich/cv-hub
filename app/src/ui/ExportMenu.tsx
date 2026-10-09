@@ -10,11 +10,15 @@ import { clToMarkdown } from '../import/markdownBridge';
 import { saveText } from '../export/saveFile';
 import { exportFilename } from '../export/filename';
 import { track } from '../data/track';
+import { api, pdfServiceAnswered } from '../data/api';
+import { atsPdfTemplateFor } from '../export/atsPdfTemplate';
+import { getTheme } from '../templates/theme';
 import type { AtsLevel } from '../templates/atsScore';
 import { Icon } from './Icon';
 import { Menu, MenuItem } from './Overlay';
 import type { UiLang } from './i18n';
 import { DESIGN_I18N } from './i18n/design';
+import { FASSUNG_I18N } from './i18n/fassung';
 
 /**
  * „PDF herunterladen | ▾" — der einzige Primärknopf der Oberfläche.
@@ -25,7 +29,7 @@ import { DESIGN_I18N } from './i18n/design';
  * und trägt bei riskanten und mittleren Vorlagen die Marke „empfohlen".
  * Fachbegriffe stehen höchstens klein dahinter.
  */
-export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, docType, demoMode, atsLevel, onPrintFallback, onOpenAll, onShare, compact }: {
+export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, docType, demoMode, atsLevel, onPrintFallback, onOpenAll, onShare, onAtsPdf, compact }: {
   uiLang: UiLang;
   data: CVData;
   coverLetter?: CoverLetterData;
@@ -36,9 +40,13 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   onPrintFallback: () => void;
   onOpenAll: () => void;
   onShare: () => void;
+  /** ATS-Fassung als PDF — derselbe Inhalt in einer einspaltigen Vorlage
+   *  (App.tsx `exportAtsPdf`, export/AtsPdfRunner.tsx). */
+  onAtsPdf?: () => Promise<{ pages: number; bytes: number; template: string }>;
   compact?: boolean;
 }) {
   const d = DESIGN_I18N[uiLang];
+  const F = FASSUNG_I18N[uiLang];
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
@@ -59,14 +67,33 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
       track('export_pdf', { docType: isCover ? 'cover' : 'resume', demo: demoMode });
       flash(d.pdfDone(res.pages, Math.max(1, Math.round(res.bytes / 1024))));
     } catch (err) {
-      // Wie bisher im Export-Paneel: fällt der Dienst in der Demo aus, bleibt
-      // der Browserdruck als Rückfall.
-      if (demoMode) { onPrintFallback(); }
+      /* Hat der Dienst geantwortet (413 zu groß, 429 Kontingent, 503
+       * ausgelastet), zählt seine Antwort — im Klartext, ohne Druckdialog.
+       * Der Rückfall auf den Browserdruck bleibt für den Fall, dass er gar
+       * nicht zu erreichen war (data/api.ts, `pdfServiceAnswered`). */
+      if (!pdfServiceAnswered(err)) onPrintFallback();
       else flash(d.pdfFailed(err instanceof Error ? err.message : '?'), true);
     } finally {
       setBusy(false);
     }
   }
+
+  async function atsPdf() {
+    if (busy || !onAtsPdf) return;
+    setBusy(true);
+    setMsg({ text: F.atsPdfBusy });
+    try {
+      const r = await onAtsPdf();
+      flash(F.atsPdfDone(r.pages, Math.max(1, Math.round(r.bytes / 1024)), r.template));
+    } catch (err) {
+      flash(F.atsPdfFailed(err instanceof Error ? err.message : '?'), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** Word entsteht im Browser — der Server erfährt nur über dieses Ereignis
+   *  davon (Auswertung je Einladungscode). Ohne Konto gibt es den Weg nicht. */
+  const docxEvent = () => { if (!demoMode) void api.event('docx'); };
 
   const run = (fn: () => void | Promise<void>) => () => { setOpen(false); void fn(); };
   const recommend = atsLevel !== 'high';
@@ -91,11 +118,18 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
         {!isCover && (
           <>
             <div className="ui-menu-label">{d.secPortals}</div>
-            <MenuItem onSelect={run(() => { track('export_docx_ats'); return exportDocx(data, exportConfig, 'ats'); })}
+            <MenuItem onSelect={run(() => { track('export_docx_ats'); docxEvent(); return exportDocx(data, exportConfig, 'ats'); })}
               icon={<Icon name="file-text" size={15} />} sub={d.wordAtsSub}
               tag={recommend ? <span className="ui-tag">{d.recommended}</span> : undefined}>
               {d.wordAts}
             </MenuItem>
+            {onAtsPdf && (
+              <MenuItem onSelect={run(atsPdf)} icon={<Icon name="download" size={15} />}
+                sub={F.atsPdfSub(getTheme(atsPdfTemplateFor(data)).name)}
+                tag={recommend ? <span className="ui-tag">{d.recommended}</span> : undefined}>
+                {F.atsPdf}
+              </MenuItem>
+            )}
           </>
         )}
         <div className="ui-menu-label">{d.secMore}</div>
@@ -110,7 +144,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
           </>
         ) : (
           <>
-            <MenuItem onSelect={run(() => { track('export_docx'); return exportDocx(data, exportConfig, 'design'); })} icon={<Icon name="file-text" size={15} />} sub={d.wordDesignSub}>{d.wordDesign}</MenuItem>
+            <MenuItem onSelect={run(() => { track('export_docx'); docxEvent(); return exportDocx(data, exportConfig, 'design'); })} icon={<Icon name="file-text" size={15} />} sub={d.wordDesignSub}>{d.wordDesign}</MenuItem>
             <MenuItem onSelect={run(() => exportHtml(data, exportConfig))} icon={<Icon name="globe" size={15} />} sub={d.htmlSub}>{d.html}</MenuItem>
           </>
         )}

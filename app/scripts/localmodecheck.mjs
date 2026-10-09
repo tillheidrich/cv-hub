@@ -167,10 +167,20 @@ check(after?.experience?.[0]?.company === 'Stadtwerke Lüneburg' && after?.perso
 
 // 8. Rundweg: Markdown aus der Demo herunterladen und unverändert zurückspielen.
 const vorher = (await profiles()).find(p => p.displayName === 'Bewerbung Stadtwerke')?.data.en;
+/* Seit der neuen Oberfläche (08.10.2026) heißt der Knopf „Text für
+ * KI-Korrektur" (Unterzeile: Markdown) und liegt im zugeklappten Bereich
+ * „Für KI und Entwickler" des Export-Paneels. Aufklappen wie ein Mensch —
+ * über die Zusammenfassung, nicht per Skript. */
+const devGroup = page.locator('#ui-panel summary', { hasText: 'Für KI und Entwickler' }).first();
+check(await devGroup.count() > 0, 'Bereich „Für KI und Entwickler" im Export-Paneel');
+if (!(await devGroup.evaluate(el => el.parentElement.open))) await devGroup.click();
+const mdKnopf = page.locator('#ui-panel button').filter({ hasText: /^Text für KI-Korrektur/ }).first();
+check(await mdKnopf.isVisible(), 'Knopf „Text für KI-Korrektur" sichtbar');
 const [dl] = await Promise.all([
   page.waitForEvent('download'),
-  page.locator('button').filter({ hasText: /^Markdown/ }).first().click(),
+  mdKnopf.click(),
 ]);
+check(/\.md$/.test(dl.suggestedFilename()), 'Download ist eine Markdown-Datei', dl.suggestedFilename());
 const mdBack = await (await import('fs')).promises.readFile(await dl.path(), 'utf8');
 await page.locator('input[type=file][accept=".md,text/markdown,text/plain"]').setInputFiles({ name: 'zurueck.md', mimeType: 'text/markdown', buffer: Buffer.from(mdBack) });
 await page.waitForTimeout(400);

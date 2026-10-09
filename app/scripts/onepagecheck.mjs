@@ -7,8 +7,14 @@
 // einspaltigen, bei denen Kontakt, Sprachen und Skills im Textfluss stehen.
 // Schafft eine es nicht, liegt es an der Vorlage, nicht am Text.
 //
-//   node scripts/onepagecheck.mjs            → alle Vorlagen
+//   node scripts/onepagecheck.mjs            → alle Vorlagen, A4 und US Letter
 //   node scripts/onepagecheck.mjs marketing  → andere Testperson
+//   FORMATS=a4 node scripts/onepagecheck.mjs → nur A4
+//
+// US Letter (seit 09.10.2026): 216 × 279 mm statt 210 × 297 mm — sechs mm
+// breiter, achtzehn mm kürzer. Die Seite fasst also weniger Zeilen; was auf
+// A4 knapp passt, kann auf Letter umbrechen. Geprüft wurde bisher nur A4
+// (Wettbewerbsbericht: „Letter wählbar, aber nur A4 geprüft").
 import { chromium } from 'playwright';
 
 const persona = process.argv[2] || 'einseiter';
@@ -25,9 +31,14 @@ await page.goto(`${BASE}/dev-preview.html`, { waitUntil: 'networkidle' });
 const TPLS = process.argv[3]
   ? process.argv[3].split(',')
   : await page.evaluate(async () => (await import('/src/templates/theme.ts')).PICKABLE_THEMES.map(t => t.id));
+const FORMATS = (process.env.FORMATS || 'a4,letter').split(',').filter(Boolean);
 const bad = [];
+let runs = 0;
+for (const fmt of FORMATS) {
+if (FORMATS.length > 1) console.log(`\n${fmt === 'letter' ? 'US Letter' : fmt.toUpperCase()}`);
 for (const t of TPLS) {
-  await page.goto(`${BASE}/dev-preview.html?tpl=${t}&mode=one&len=normal&p=${persona}`, { waitUntil: 'networkidle' });
+  runs++;
+  await page.goto(`${BASE}/dev-preview.html?tpl=${t}&mode=one&len=normal&p=${persona}&fmt=${fmt}`, { waitUntil: 'networkidle' });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1000);
   const r = await page.evaluate(() => {
@@ -36,10 +47,11 @@ for (const t of TPLS) {
     return { seiten: m ? Number(m[1]) : null, c: m ? Number(m[2]) : null, pt: m ? m[3] : null, ueberlauf: /ÜBERLAUF/.test(hud) };
   });
   const ok = r.seiten === 1 && !r.ueberlauf;
-  if (!ok) bad.push(`${t}: ${r.seiten ?? '?'} Seite(n)${r.ueberlauf ? ' mit Überlauf' : ''}`);
+  if (!ok) bad.push(`${t} (${fmt}): ${r.seiten ?? '?'} Seite(n)${r.ueberlauf ? ' mit Überlauf' : ''}`);
   console.log(`  ${ok ? '✓' : '✗'} ${t.padEnd(12)} ${r.seiten}S · ${r.pt} pt · Verdichtung ${r.c === null ? '?' : Math.round(r.c * 100) + ' %'}`);
 }
-console.log(`\nTestperson ${persona}: ${TPLS.length - bad.length}/${TPLS.length} Vorlagen auf einer Seite`);
+}
+console.log(`\nTestperson ${persona}: ${runs - bad.length}/${runs} Läufe auf einer Seite (${TPLS.length} Vorlagen × ${FORMATS.join(', ')})`);
 bad.forEach(b => console.log(`   ! ${b}`));
 await browser.close();
 if (bad.length) process.exitCode = 1;

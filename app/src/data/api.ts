@@ -13,7 +13,25 @@ export interface AuthUser {
   email?: string | null;
   twofaEnabled?: boolean;
   createdAt: string;
+  /** Laufzeit des Kontos (Pilot-Platz). null/fehlt = unbegrenzt.
+   *  Gerechnet wird am Server (pdf-service/access.js, `accessInfo`). */
+  access?: AccessInfo | null;
 }
+
+/** Laufzeit eines Pilot-Platzes, wie /api/auth/me und der Login sie liefern.
+ *  notice: 'soon' ab 14 Tagen vor Ablauf, 'final' ab 3 Tagen, 'expired'. */
+export interface AccessInfo {
+  until: string;
+  expired: boolean;
+  daysLeft: number;
+  notice: 'soon' | 'final' | 'expired' | null;
+  readOnly: boolean;
+}
+
+/** Ereignisse, die nur im Browser entstehen (DOCX, Druck-PDF, Sharelink) —
+ *  der Server zählt sie je Konto für die Auswertung je Einladungscode
+ *  (POST /api/events, pdf-service/server.js). */
+export type ClientEvent = 'docx' | 'pdf_local' | 'share_create';
 
 /** Login may succeed directly ({ user }) or require a 2FA e-mail code
  *  ({ twofa: true, challenge }). */
@@ -98,6 +116,10 @@ export class ApiError extends Error {
   code?: string;
   /** Sekunden aus `Retry-After` (429/503), falls gesetzt. */
   retryAfter?: number;
+  /** Hat unser Dienst selbst geantwortet (JSON mit `error`)? Ein 502/503/504
+   *  eines vorgeschalteten Proxys ohne diesen Text heißt dagegen: der Dienst
+   *  ist nicht erreichbar. Danach richtet sich der Druck-Rückfall beim PDF. */
+  answered?: boolean;
   constructor(message: string, status: number, code?: string, retryAfter?: number) {
     super(message);
     this.name = 'ApiError';
@@ -121,8 +143,20 @@ export function parseRetryAfter(h: string | null): number | undefined {
  *  bleibt erhalten, ebenso Code und Wartezeit. */
 export async function apiErrorFrom(r: Response): Promise<ApiError> {
   const data = await r.json().catch(() => ({})) as { error?: unknown; code?: unknown };
-  const msg = typeof data.error === 'string' && data.error ? data.error : `Fehler ${r.status}`;
-  return new ApiError(msg, r.status, typeof data.code === 'string' ? data.code : undefined, parseRetryAfter(r.headers.get('Retry-After')));
+  const answered = typeof data.error === 'string' && !!data.error;
+  const msg = answered ? data.error as string : `Fehler ${r.status}`;
+  const err = new ApiError(msg, r.status, typeof data.code === 'string' ? data.code : undefined, parseRetryAfter(r.headers.get('Retry-After')));
+  if (answered) err.answered = true;
+  return err;
+}
+
+/** Hat der PDF-Dienst geantwortet (413 zu groß, 429 Kontingent, 503
+ *  ausgelastet …)? Dann zählt seine Antwort, und es gibt keinen Rückfall auf
+ *  den Browserdruck — der hätte das eigentliche Problem nur überdeckt. Nur
+ *  wenn er gar nicht zu erreichen war (Netzfehler, Proxy ohne Dienst), bleibt
+ *  der Druckdialog als Ausweg. */
+export function pdfServiceAnswered(err: unknown): boolean {
+  return err instanceof ApiError && (err.answered === true || err.status === 413 || err.status === 429);
 }
 
 /**
@@ -131,7 +165,9 @@ export async function apiErrorFrom(r: Response): Promise<ApiError> {
  * Seit 08.10.2026 nimmt der Dienst höchstens 3.000.000 Zeichen HTML an (413)
  * und antwortet bei voller Warteschlange oder Zeitüberschreitung mit 503,
  * Klartext und `Retry-After`. Der Klartext wird durchgereicht — „Fehler" allein
- * hilft niemandem —, die Wartezeit hinten angehängt. 429 (Kontingent) kommt
+ * hilft niemandem. Für die beiden Fälle, die der Dienst mit festem Satz
+ * beantwortet (413, 503 „ausgelastet"), steht derselbe Satz hier in der
+ * Oberflächensprache; der Server spricht nur Deutsch. 429 (Kontingent) kommt
  * vom allgemeinen Begrenzer mit einer Meldung über „Versuche"; dafür steht
  * hier ein eigener Satz in der Oberflächensprache.
  */
@@ -139,6 +175,8 @@ export async function pdfErrorFrom(r: Response): Promise<ApiError> {
   const err = await apiErrorFrom(r);
   const T = PDF_SERVICE_I18N[detectInitialUiLang()];
   if (r.status === 429) err.message = T.tooMany(err.retryAfter);
+  else if (r.status === 413) err.message = T.tooLarge;
+  else if (r.status === 503 && err.answered && err.retryAfter) err.message = T.busy(err.retryAfter);
   else if (r.status === 503 && err.retryAfter) err.message = `${err.message} ${T.retryIn(err.retryAfter)}`;
   else if (/^Fehler \d+$/.test(err.message)) err.message = `PDF-Dienst antwortete mit ${r.status}`;
   return err;
@@ -171,6 +209,10 @@ export interface ChangePasswordResult {
 
 export const api = {
   me: () => req<{ user: AuthUser }>('/api/auth/me'),
+  /** Ereignis melden — nur mit Konto aufrufen (ohne Konto antwortet der
+   *  Server 401). Schlägt still fehl: Zählen darf nie einen Export stören. */
+  event: (kind: ClientEvent): Promise<void> =>
+    req<unknown>('/api/events', { method: 'POST', body: JSON.stringify({ kind }) }).then(() => undefined, () => undefined),
   login: (username: string, password: string) =>
     req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   verify2fa: (challenge: string, code: string) =>

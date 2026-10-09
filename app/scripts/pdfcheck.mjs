@@ -14,12 +14,20 @@
 //      ist — ein größeres reales Risiko als jede Schriftgrößenregel.
 //
 //   node scripts/pdfcheck.mjs hamburg two long handwerk
+//   node scripts/pdfcheck.mjs hamburg one normal demo letter   → US Letter
+//
+// Fünftes Argument: Papierformat (a4 | letter), seit 09.10.2026. Geprüft wird
+// zusätzlich, dass das PDF wirklich in diesem Format herauskommt (pdfinfo).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { join } from 'path';
 
-const [tpl = 'hamburg', mode = 'one', len = 'normal', persona = 'demo'] = process.argv.slice(2);
+const [tpl = 'hamburg', mode = 'one', len = 'normal', persona = 'demo', fmt = 'a4'] = process.argv.slice(2);
+const PW_FORMAT = { a4: 'A4', letter: 'Letter', legal: 'Legal', a5: 'A5' }[fmt];
+/** Seitengröße in pt, wie pdfinfo sie meldet. */
+const SOLL_PT = { a4: [595, 842], letter: [612, 792], legal: [612, 1008], a5: [420, 595] }[fmt];
+if (!PW_FORMAT) throw new Error(`Unbekanntes Format: ${fmt}`);
 const BASE = process.env.HARNESS_BASE || 'http://localhost:5199';
 const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const out = join(process.cwd(), 'tmp-preview');
@@ -36,12 +44,13 @@ function overlap(a, b) {
 
 const browser = await chromium.launch({ executablePath: EXECUTABLE });
 const page = await browser.newPage({ viewport: { width: 900, height: 2400 } });
-await page.goto(`${BASE}/dev-preview.html?tpl=${tpl}&mode=${mode}&len=${len}&p=${persona}`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/dev-preview.html?tpl=${tpl}&mode=${mode}&len=${len}&p=${persona}&fmt=${fmt}`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 const previewTexts = await page.$$eval('.cv-scale-wrapper .cv-page', els => els.map(e => e.innerText));
 const personName = await page.$eval('.cv-scale-wrapper .cv-page h1', h => h.textContent.trim());
 const html = await page.evaluate(() => window.__exportHtml());
-const htmlPath = join(out, `${persona}-${tpl}-${mode}-${len}.html`);
+const tag = `${persona}-${tpl}-${mode}-${len}${fmt === 'a4' ? '' : '-' + fmt}`;
+const htmlPath = join(out, `${tag}.html`);
 writeFileSync(htmlPath, html);
 
 const printer = await browser.newPage();
@@ -52,8 +61,10 @@ const fontsLoaded = await printer.evaluate(async () => {
   await document.fonts.ready;
   return [...document.fonts].filter(f => f.status === 'loaded').length;
 });
-const pdfPath = join(out, `${persona}-${tpl}-${mode}-${len}.pdf`);
-await printer.pdf({ path: pdfPath, format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+const pdfPath = join(out, `${tag}.pdf`);
+// Wie der PDF-Dienst: Format als Sicherheitsnetz, die @page-Regel des
+// Dokuments gewinnt (preferCSSPageSize). Ob sie stimmt, prüft pdfinfo unten.
+await printer.pdf({ path: pdfPath, format: PW_FORMAT, printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
 await browser.close();
 
 const raw = readFileSync(pdfPath, 'latin1');
@@ -67,6 +78,14 @@ for (let i = 1; i <= pdfPages; i++) {
 }
 
 const problems = [];
+{
+  const info = execFileSync('pdfinfo', [pdfPath], { encoding: 'utf8' });
+  const m = /Page size:\s+([\d.]+) x ([\d.]+) pts/.exec(info);
+  const ist = m ? [Math.round(Number(m[1])), Math.round(Number(m[2]))] : null;
+  if (!ist || Math.abs(ist[0] - SOLL_PT[0]) > 2 || Math.abs(ist[1] - SOLL_PT[1]) > 2) {
+    problems.push(`Papierformat: ${ist ? ist.join(' × ') : '?'} pt statt ${SOLL_PT.join(' × ')} pt (${fmt})`);
+  }
+}
 if (previewTexts.length !== pdfPages) problems.push(`Seitenzahl: Vorschau ${previewTexts.length}, PDF ${pdfPages}`);
 const scores = [];
 for (let i = 0; i < Math.min(previewTexts.length, pdfPages); i++) {
@@ -118,7 +137,7 @@ if (!/[äöüßÄÖÜ]/.test(all)) problems.push('Keine Umlaute im extrahierten 
 const spaced = all.match(/(?:[A-ZÄÖÜ] ){3,}[A-ZÄÖÜ]/g);
 if (spaced) problems.push(`Gesperrte Versalzeile zerfällt im Text in Einzelbuchstaben: „${spaced[0]}"`);
 
-const head = `${persona}/${tpl}/${mode}/${len}`.padEnd(32);
+const head = `${persona}/${tpl}/${mode}/${len}${fmt === 'a4' ? '' : '/' + fmt}`.padEnd(32);
 const ok = problems.length === 0;
 console.log(`${head} ${previewTexts.length}→${pdfPages} S · Text ${scores.map(s => Math.round(s * 100) + '%').join(' ')} · ${fontsLoaded} Schriften · ${ok ? '✓' : '✗'}`);
 for (const p of problems) console.log(`   ! ${p}`);

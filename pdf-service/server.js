@@ -1819,10 +1819,20 @@ const renderer = createRenderer({
   executablePath: (process.env.PDF_CHROMIUM_PATH || '').trim() || undefined,
 });
 /* N2: höchstens zwei Aufträge gleichzeitig, zehn in der Warteschlange.
- * Gilt für alle Aufrufer, auch ohne Konto (Demo). */
+ * Gilt für alle Aufrufer, auch ohne Konto (Demo).
+ *
+ * Ganzzahl aus der Umgebung, mit Untergrenze. Vorher `parseInt(x) || 10`:
+ * PDF_MAX_QUEUE=0 („keine Warteschlange, sofort 503") ergab 0 → falsy → 10,
+ * die Einstellung wurde still ignoriert. */
+function envInt(name, fallback, min) {
+  const raw = String(process.env[name] ?? '').trim();
+  if (raw === '') return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? Math.max(min, n) : fallback;
+}
 const pdfLimiter = createLimiter({
-  maxParallel: Math.max(1, parseInt(process.env.PDF_MAX_PARALLEL || '2', 10) || 2),
-  maxQueue: Math.max(0, parseInt(process.env.PDF_MAX_QUEUE || '10', 10) || 10),
+  maxParallel: envInt('PDF_MAX_PARALLEL', 2, 1),
+  maxQueue: envInt('PDF_MAX_QUEUE', 10, 0),
 });
 const PDF_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.PDF_TIMEOUT_MS || '30000', 10) || 30_000);
 const MAX_PDF_HTML_CHARS = 3_000_000;
@@ -1863,8 +1873,11 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
   } catch (err) {
     if (err instanceof BusyError) {
       if (res.headersSent || abort.signal.aborted) return;
-      res.setHeader('Retry-After', String(err.retryAfter || 30));
-      return res.status(503).json({ error: err.message });
+      /* Der Satz aus guards.js sagt „in einer Minute", der Kopf `Retry-After`
+       * aber 30 Sekunden. Hier stehen beide auf demselben Wert. */
+      const wait = err.retryAfter || 30;
+      res.setHeader('Retry-After', String(wait));
+      return res.status(503).json({ error: `Der PDF-Dienst ist gerade ausgelastet. Bitte in ${wait} Sekunden noch einmal versuchen.` });
     }
     throw err;
   }

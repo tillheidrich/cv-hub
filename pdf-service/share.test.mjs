@@ -136,3 +136,17 @@ test('kaputte Profile führen nicht zum Absturz', () => {
     assert.ok(out.resume.data);
   }
 });
+
+test('Eigene Abschnitte gehen mit in den Link, ausgeblendete nicht', () => {
+  const payload = {
+    settings: { lang: 'de', hiddenSections: ['certificates'] },
+    data: { de: { personal: { name: 'A' }, profile: { text: '' }, experience: [], education: [], skillGroups: [], languages: [],
+      projects: [{ id: 'p', title: 'Projekt' }], certificates: [{ id: 'c', name: 'Zert' }],
+      customSections: [{ id: 's', title: 'Interessen', items: ['Laufen'] }] } },
+  };
+  const cv = buildShareSnapshot(payload, 'tok').profile.data.de;
+  assert.deepEqual(cv.projects, [{ id: 'p', title: 'Projekt' }]);
+  assert.deepEqual(cv.certificates, []);
+  assert.deepEqual(cv.customSections, [{ id: 's', title: 'Interessen', items: ['Laufen'] }]);
+  assert.equal('volunteering' in cv, false, 'Bestandsprofile bekommen keinen neuen Schlüssel');
+});

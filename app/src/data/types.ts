@@ -74,6 +74,80 @@ export interface EducationEntry {
   notes?: string;
 }
 
+// ── Eigene Abschnitte (seit 09.10.2026) ─────────────────────────────────────
+//
+// Feste Liste plus freie Abschnitte, wie im Wettbewerbsbericht vom 08.10.
+// empfohlen (Lücke 2, offene Frage 3): Parser ordnen bekannte Überschriften
+// besser zu als frei erfundene, deshalb gibt es Projekte, Zertifikate,
+// Ehrenamt und Publikationen als eigene Abschnitte mit festen Feldern — und
+// für alles andere beliebig viele freie Abschnitte mit eigener Überschrift.
+//
+// Alle Felder sind optional. Ein Profil von vor diesem Tag hat sie nicht, und
+// das ist kein Sonderfall: fehlend heißt leer, und ein leerer Abschnitt
+// erscheint nirgends — nicht im PDF, nicht in Word, nicht im Markdown.
+// Bewusst kein Bild an Projekten: Druck und ATS-Lesbarkeit gehen vor.
+
+/** Projekt — Titel, Rolle, Zeitraum, Link, Beschreibung und/oder Stichpunkte. */
+export interface ProjectEntry {
+  id: string;
+  title: string;
+  role?: string;
+  start?: string;
+  end?: string;
+  url?: string;
+  description?: string;
+  bullets?: string[];
+}
+
+/** Zertifikat — Name, Aussteller, Datum, Kennung und/oder Link. */
+export interface CertificateEntry {
+  id: string;
+  name: string;
+  issuer?: string;
+  date?: string;
+  credentialId?: string;
+  url?: string;
+}
+
+/** Ehrenamt — aufgebaut wie eine Station im Berufsweg. */
+export interface VolunteerEntry {
+  id: string;
+  role: string;
+  organization: string;
+  location?: string;
+  start?: string;
+  end?: string;
+  bullets?: string[];
+}
+
+/** Publikation — Titel, Ort/Verlag, Datum, Link, optional ein Satz dazu. */
+export interface PublicationEntry {
+  id: string;
+  title: string;
+  publisher?: string;
+  date?: string;
+  url?: string;
+  description?: string;
+}
+
+/** Eintrag eines freien Abschnitts. Jedes Feld darf leer bleiben. */
+export interface CustomEntry {
+  id: string;
+  title?: string;
+  subtitle?: string;
+  date?: string;
+  text?: string;
+}
+
+/** Freier Abschnitt: eigene Überschrift, darunter reine Stichpunkte
+ *  (`items`) und/oder Einträge mit Titel, Untertitel, Datum und Text. */
+export interface CustomSection {
+  id: string;
+  title: string;
+  items?: string[];
+  entries?: CustomEntry[];
+}
+
 export interface SkillGroup {
   label: string;
   items: string[];
@@ -103,6 +177,13 @@ export interface UILabels {
     education: string;       // "Ausbildung" / "Education"
     languages: string;       // "Sprachen" / "Languages"
     additional: string;      // "Weiteres" / "Additional"
+    /* Optional, weil gespeicherte Profile ihre Beschriftungen mitbringen und
+     * die älteren diese Schlüssel nicht kennen. Fehlt einer, gilt die
+     * Vorgabe der Sprache aus `LABELS` (siehe data/extraSections.ts). */
+    projects?: string;       // "Projekte" / "Projects"
+    certificates?: string;   // "Zertifikate" / "Certifications"
+    volunteering?: string;   // "Ehrenamt" / "Volunteering"
+    publications?: string;   // "Publikationen" / "Publications"
   };
   fields: {
     email: string;
@@ -168,6 +249,12 @@ export interface CVData {
   skillGroups: SkillGroup[];
   languages: LanguageEntry[];
   additionalExperience?: string[];
+  projects?: ProjectEntry[];
+  certificates?: CertificateEntry[];
+  volunteering?: VolunteerEntry[];
+  publications?: PublicationEntry[];
+  /** Beliebig viele freie Abschnitte, in dieser Reihenfolge untereinander. */
+  customSections?: CustomSection[];
   labels: UILabels;
 }
 
@@ -198,9 +285,18 @@ export type FontPairingId =
 
 /** Stable keys for the main sections — used by sectionOrder + hiddenSections.
  *  'details' = Eckdaten (Geburtsdatum, Ort, Nationalität, Führerschein etc.) */
-export type SectionKey = 'profile' | 'details' | 'experience' | 'education' | 'skills' | 'languages' | 'additional';
+export type SectionKey = 'profile' | 'details' | 'experience' | 'education' | 'skills' | 'languages' | 'additional'
+  | 'projects' | 'certificates' | 'volunteering' | 'publications' | 'custom';
 
-export const DEFAULT_SECTION_ORDER: SectionKey[] = ['profile', 'details', 'experience', 'education', 'skills', 'languages', 'additional'];
+/** Die neuen Schlüssel stehen dort, wo sie in einem deutschen Lebenslauf
+ *  üblicherweise stehen: Projekte hinter dem Berufsweg, Zertifikate hinter der
+ *  Ausbildung, Ehrenamt und Publikationen vor „Weiteres", freie Abschnitte
+ *  am Schluss. Gespeicherte Reihenfolgen ohne diese Schlüssel bleiben gültig —
+ *  fehlende Schlüssel rücken vor ihren nächsten bekannten Nachbarn. */
+export const DEFAULT_SECTION_ORDER: SectionKey[] = [
+  'profile', 'details', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'languages', 'volunteering', 'publications', 'additional', 'custom',
+];
 
 /** Page format key — full specs live in data/pageFormats.ts */
 export type PageFormat = 'a4' | 'letter' | 'legal' | 'a5';

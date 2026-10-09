@@ -7,6 +7,11 @@ import type { InlinePath } from '../data/inlineEdit';
 import { Ed, EntryTools, InlineEditCtx, type InlineEditApi } from './InlineEdit';
 import { textWidthPx } from './textWidth';
 import { shortUrl } from '../data/urls';
+import {
+  sectionHeading, projectsOf, certificatesOf, volunteeringOf, publicationsOf,
+  customSectionsOf, customEntriesOf, customItemsOf, bulletsOf, dateRange, shortLink, linkHref,
+  type FixedExtraKey,
+} from '../data/extraSections';
 export type { InlineEditApi };
 
 // ── Social rendering helpers ────────────────────────────────────────────────
@@ -170,6 +175,11 @@ export interface FlowBlock {
   breakBefore?: boolean;
   /** Sektion, zu der der Block gehört — für den Klick-in-die-Vorschau-Sprung. */
   section: SectionKey;
+  /** Überschrift für die Fortsetzungszeile, wenn sie nicht aus `section`
+   *  folgt — bei freien Abschnitten trägt jeder seine eigene. */
+  caption?: string;
+  /** Eintragskopf für die Fortsetzungszeile („Projekt · Rolle"). */
+  entry?: string;
 }
 
 /** Welcher Teil der Seitenspalte gerendert wird — siehe `renderAside`. */
@@ -769,6 +779,82 @@ function EducationEntryBlock({ e, C, P, M, tabular }: {
   );
 }
 
+// ── Eigene Abschnitte: Projekte, Zertifikate, Ehrenamt, Publikationen, frei ──
+//
+// Gebaut wie Ausbildung und Berufsweg, nicht als eigene Gestaltung: dieselbe
+// Datumsspalte in den tabellarischen Vorlagen, dasselbe Datum am rechten Rand
+// in den übrigen, dieselben Schriftgrade. Ein Projekt soll aussehen, als
+// hätte die Vorlage es schon immer gekannt. Die Abschnitte stehen in der
+// Hauptspalte — dort, wo jede Vorlage Berufsweg und Ausbildung führt —, weil
+// nur die Hauptspalte umbricht; die Seitenspalte würde lange Einträge im PDF
+// stillschweigend abschneiden.
+
+/** Ein Link im Dokument. Im Export klickbar, beim Bearbeiten in der Vorschau
+ *  bloßer Text — ein Klick dort soll nicht aus dem Editor führen. */
+function ExtraLink({ url, C, P, M }: { url: string; C: ThemeColors; P: FontPairing; M: Metrics }) {
+  const editing = !!React.useContext(InlineEditCtx);
+  const text = shortLink(url);
+  const style: React.CSSProperties = {
+    fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, marginTop: sp(2, M),
+    /* Ein Link bricht nur, wenn er allein nicht in die Zeile passt — und dann
+     * lieber mitten in der Adresse als abgeschnitten: Abgeschnittenes fehlt
+     * in der Textebene des PDF ganz. */
+    overflowWrap: 'anywhere', maxWidth: '122mm',
+  };
+  return editing
+    ? <div style={style}>{text}</div>
+    : <div style={style}><a href={linkHref(url)} style={{ color: 'inherit', textDecoration: 'none' }}>{text}</a></div>;
+}
+
+function ExtraHead({ title, sub, note, url, date, C, P, M, tabular }: {
+  title: string; sub?: string; note?: string; url?: string; date?: string;
+  C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
+}) {
+  const subLine = [sub, note].filter(Boolean);
+  const body = (
+    <div style={{ minWidth: 0 }}>
+      {title && (
+        <h3 style={{ margin: 0, fontFamily: P.heading, fontSize: fs(FS.entry, M), fontWeight: 600, color: C.ink, lineHeight: lh(LH.title, M) }}>
+          {title}
+        </h3>
+      )}
+      {subLine.length > 0 && (
+        <div style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.accent, marginTop: title ? sp(2, M) : 0 }}>
+          {sub}
+          {note ? <span style={{ color: C.inkSoft }}>{sub ? '  ·  ' : ''}{note}</span> : null}
+        </div>
+      )}
+      {url ? <ExtraLink url={url} C={C} P={P} M={M} /> : null}
+    </div>
+  );
+  const chip = date ? <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined}>{date}</DateChip> : null;
+  if (tabular) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.18}px` }}>{chip}</div>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: sp(10, M) }}>
+      <div style={{ flex: 1, minWidth: 0 }}>{body}</div>
+      {chip}
+    </div>
+  );
+}
+
+/** Fließtext unter einem Eintrag (Projektbeschreibung, Text eines freien
+ *  Eintrags). Zeilenmaß und Farbe wie die Notizen der Ausbildung. */
+function ExtraText({ text, C, P, M }: { text: string; C: ThemeColors; P: FontPairing; M: Metrics }) {
+  return (
+    <p style={{
+      fontFamily: P.body, fontSize: fs(FS.body, M), color: C.inkMid, lineHeight: lh(LH.body, M),
+      margin: 0, maxWidth: '122mm', whiteSpace: 'pre-line',
+    }}>{text}</p>
+  );
+}
+
 // ── Name block ──────────────────────────────────────────────────────────────
 
 /** Name, der nur an Wortzwischenräumen umbricht, nie am Bindestrich.
@@ -872,8 +958,14 @@ function todayIn(lang: string): string {
 
 /** Reihenfolge, die volle-Breite-Layouts durchlaufen. Sidebar-Layouts parken
  *  Eckdaten/Sprachen und die ersten zwei Skillgruppen in der Seitenspalte. */
-const DEFAULT_MAIN_ORDER: SectionKey[] = ['profile', 'details', 'experience', 'education', 'skills', 'languages', 'additional'];
-const MAIN_ORDER_SIDEBAR: SectionKey[] = ['profile', 'experience', 'education', 'skills', 'additional'];
+const DEFAULT_MAIN_ORDER: SectionKey[] = [
+  'profile', 'details', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'languages', 'volunteering', 'publications', 'additional', 'custom',
+];
+const MAIN_ORDER_SIDEBAR: SectionKey[] = [
+  'profile', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'volunteering', 'publications', 'additional', 'custom',
+];
 
 interface Props {
   data: CVData;
@@ -1142,6 +1234,140 @@ export default function ResumeRenderer({
           </>
         ),
       });
+      continue;
+    }
+
+    /* ── Eigene Abschnitte ──────────────────────────────────────────────────
+     * Dieselbe Blockteilung wie beim Berufsweg: Überschrift klebt am ersten
+     * Eintrag, Eintragskopf klebt an seinem Text, Stichpunkte fließen einzeln.
+     * Die Kennungen tragen den Index statt der Eintrags-ID — ein Import mit
+     * doppelten IDs darf keine Blöcke verschlucken. */
+    const extraTitle = (k: FixedExtraKey) => push({
+      id: `${k}:title`, section: k, gap: GAP_SECTION, keepWithNext: true, breakBefore,
+      node: <SectionTitle label={sectionHeading(labels, k)} path={`labels.sections.${k}`} T={T} C={C} P={P} M={M} />,
+    });
+    const bulletBlocks = (prefix: string, k: SectionKey, items: string[], firstGap: number, caption?: string, entry?: string) => {
+      items.forEach((b, bi) => push({
+        id: `${prefix}:b${bi}`, section: k, caption, entry,
+        gap: bi === 0 ? firstGap : GAP_BULLET,
+        node: (
+          <div style={tabular ? { display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` } : undefined}>
+            {tabular && <div />}
+            <BulletLine text={b} C={C} T={T} M={M} />
+          </div>
+        ),
+      }));
+    };
+    const present = labels.misc.present;
+
+    if (key === 'projects') {
+      const list = projectsOf(data);
+      if (!list.length) continue;
+      extraTitle('projects');
+      list.forEach((e, i) => {
+        const bullets = bulletsOf(e);
+        const desc = (e.description || '').trim();
+        const entry = [e.title, e.role].map(x => (x || '').trim()).filter(Boolean).join(' · ');
+        push({
+          id: `projects:${i}:head`, section: 'projects', entry,
+          gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
+          keepWithNext: !!desc || bullets.length > 0,
+          node: <ExtraHead title={(e.title || '').trim()} sub={(e.role || '').trim()} url={(e.url || '').trim()} date={dateRange(e.start, e.end, present)} C={C} P={P} M={M} tabular={tabular} />,
+        });
+        if (desc) push({
+          id: `projects:${i}:desc`, section: 'projects', entry, gap: spn(4, M),
+          node: indented(<ExtraText text={desc} C={C} P={P} M={M} />),
+        });
+        bulletBlocks(`projects:${i}`, 'projects', bullets, spn(desc ? 4 : 6, M), undefined, entry);
+      });
+      continue;
+    }
+
+    if (key === 'certificates') {
+      const list = certificatesOf(data);
+      if (!list.length) continue;
+      extraTitle('certificates');
+      list.forEach((c, i) => {
+        push({
+          id: `certificates:${i}`, section: 'certificates',
+          gap: i === 0 ? GAP_HEAD : spn(10, M),
+          node: <ExtraHead title={(c.name || '').trim()} sub={(c.issuer || '').trim()} note={(c.credentialId || '').trim()} url={(c.url || '').trim()} date={(c.date || '').trim()} C={C} P={P} M={M} tabular={tabular} />,
+        });
+      });
+      continue;
+    }
+
+    if (key === 'volunteering') {
+      const list = volunteeringOf(data);
+      if (!list.length) continue;
+      extraTitle('volunteering');
+      list.forEach((v, i) => {
+        const bullets = bulletsOf(v);
+        const entry = [v.role, v.organization].map(x => (x || '').trim()).filter(Boolean).join(' · ');
+        push({
+          id: `volunteering:${i}:head`, section: 'volunteering', entry,
+          gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
+          keepWithNext: bullets.length > 0,
+          node: <ExtraHead title={(v.role || '').trim()} sub={(v.organization || '').trim()} note={(v.location || '').trim()} date={dateRange(v.start, v.end, present)} C={C} P={P} M={M} tabular={tabular} />,
+        });
+        bulletBlocks(`volunteering:${i}`, 'volunteering', bullets, spn(6, M), undefined, entry);
+      });
+      continue;
+    }
+
+    if (key === 'publications') {
+      const list = publicationsOf(data);
+      if (!list.length) continue;
+      extraTitle('publications');
+      list.forEach((p, i) => {
+        const desc = (p.description || '').trim();
+        push({
+          id: `publications:${i}:head`, section: 'publications',
+          gap: i === 0 ? GAP_HEAD : spn(10, M),
+          keepWithNext: !!desc,
+          node: <ExtraHead title={(p.title || '').trim()} sub={(p.publisher || '').trim()} url={(p.url || '').trim()} date={(p.date || '').trim()} C={C} P={P} M={M} tabular={tabular} />,
+        });
+        if (desc) push({
+          id: `publications:${i}:desc`, section: 'publications', gap: spn(4, M),
+          node: indented(<ExtraText text={desc} C={C} P={P} M={M} />),
+        });
+      });
+      continue;
+    }
+
+    if (key === 'custom') {
+      customSectionsOf(data).forEach((cs, si) => {
+        const caption = (cs.title || '').trim();
+        const items = customItemsOf(cs);
+        const entries = customEntriesOf(cs);
+        push({
+          id: `custom:${si}:title`, section: 'custom', caption, gap: GAP_SECTION, keepWithNext: true,
+          breakBefore: si === 0 ? breakBefore : undefined,
+          node: <SectionTitle label={caption} T={T} C={C} P={P} M={M} />,
+        });
+        bulletBlocks(`custom:${si}:items`, 'custom', items, GAP_HEAD, caption);
+        entries.forEach((e, i) => {
+          const text = (e.text || '').trim();
+          const title = (e.title || '').trim();
+          const sub = (e.subtitle || '').trim();
+          const date = (e.date || '').trim();
+          const hasHead = !!(title || sub || date);
+          const entry = [title, sub].filter(Boolean).join(' · ');
+          const first = i === 0 && !items.length;
+          if (hasHead) push({
+            id: `custom:${si}:${i}:head`, section: 'custom', caption, entry,
+            gap: first ? GAP_HEAD : GAP_ENTRY,
+            keepWithNext: !!text,
+            node: <ExtraHead title={title} sub={sub} date={date} C={C} P={P} M={M} tabular={tabular} />,
+          });
+          if (text) push({
+            id: `custom:${si}:${i}:text`, section: 'custom', caption, entry,
+            gap: hasHead ? spn(4, M) : (first ? GAP_HEAD : GAP_ENTRY),
+            node: indented(<ExtraText text={text} C={C} P={P} M={M} />),
+          });
+        });
+      });
+      continue;
     }
   }
 
@@ -1223,6 +1449,8 @@ export default function ResumeRenderer({
       case 'education': return sec.education;
       case 'languages': return sec.languages;
       case 'additional': return sec.additional;
+      case 'projects': case 'certificates': case 'volunteering': case 'publications':
+        return sectionHeading(labels, k);
       default: return '';
     }
   };
@@ -1257,10 +1485,12 @@ export default function ResumeRenderer({
     }
     const first = byId.get(ids[0]);
     if (!first || first.id.endsWith(':title')) return null;
-    const label = sectionLabel(first.section);
+    const label = first.caption ?? sectionLabel(first.section);
     if (!label) return null;
     const m = /^(experience|education):([^:]+):/.exec(first.id);
-    let entry = '';
+    /* Die eigenen Abschnitte tragen ihren Eintragskopf am Block mit — nur
+     * wenn die Seite mitten im Eintrag beginnt, nicht vor seinem Kopf. */
+    let entry = first.entry && !/:head$/.test(first.id) ? first.entry : '';
     if (m && m[1] === 'experience') {
       const e = data.experience.find(x => x.id === m[2]);
       if (e) entry = [e.role, e.company].filter(Boolean).join(' · ');
@@ -1308,18 +1538,25 @@ export default function ResumeRenderer({
   };
 
   const BULLET_ID = /^experience:(.+):b\d+$/;
+  /* Stichpunkte der eigenen Abschnitte bilden ebenso echte Listen. */
+  const EXTRA_BULLET_ID = /^((?:projects|volunteering):\d+|custom:\d+:items):b\d+$/;
+  const runOf = (id: string): string | null => {
+    const m = BULLET_ID.exec(id);
+    if (m) return m[1];
+    const x = EXTRA_BULLET_ID.exec(id);
+    return x ? x[1] : null;
+  };
 
   const renderBlocks = (ids: string[]) => {
     const out: React.ReactNode[] = [];
     let i = 0;
     while (i < ids.length) {
-      const m = BULLET_ID.exec(ids[i]);
-      if (!m) { out.push(renderBlock(ids[i], i, false)); i++; continue; }
-      const entry = m[1];
+      const entry = runOf(ids[i]);
+      if (entry === null) { out.push(renderBlock(ids[i], i, false)); i++; continue; }
       const run: { id: string; idx: number }[] = [];
       while (i < ids.length) {
-        const mm = BULLET_ID.exec(ids[i]);
-        if (!mm || mm[1] !== entry) break;
+        const mm = runOf(ids[i]);
+        if (mm !== entry) break;
         run.push({ id: ids[i], idx: i });
         i++;
       }

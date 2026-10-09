@@ -4,6 +4,7 @@ import { extractExportText, type ExportRenderConfig } from '../export/exportHtml
 import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
 import { ATS_I18N, type AtsStrings } from '../ui/i18n/ats';
 import { useUiLang } from '../ui/useUiLang';
+import { extraSectionsPlain, extraSectionsText } from '../data/extraSections';
 
 interface Props {
   data: CVData;
@@ -200,6 +201,9 @@ function buildNotepadText(data: CVData, t: AtsStrings): string {
     out.push('LANGUAGES');
     for (const l of data.languages) out.push(`${l.language}: ${l.level}`);
   }
+  /* Projekte, Zertifikate, Ehrenamt, Publikationen, freie Abschnitte. */
+  const extra = extraSectionsPlain(data);
+  if (extra.length) out.push('', ...extra);
   return out.join('\n');
 }
 
@@ -284,6 +288,7 @@ function KeywordMatchView({ data }: { data: CVData }) {
       ...data.experience.flatMap(e => [e.role, e.company, ...(e.bullets || [])]),
       ...data.skillGroups.flatMap(g => g.items),
       ...data.education.map(e => `${e.degree} ${e.institution}`),
+      extraSectionsText(data),
     ].join(' ');
     const cvTokens = tokenize(cvText);
     const cvLower = cvText.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

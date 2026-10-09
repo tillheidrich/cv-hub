@@ -102,6 +102,13 @@ export function buildShareSnapshot(payload, token) {
     languages: hidden.has('languages') ? [] : (Array.isArray(src.languages) ? clone(src.languages) : []),
     additionalExperience: hidden.has('additional') ? [] : (Array.isArray(src.additionalExperience) ? clone(src.additionalExperience) : []),
   };
+  /* Eigene Abschnitte (seit 09.10.2026). Nur, wenn es sie gibt — ein
+   * Bestandsprofil bekommt keinen neuen Schlüssel —, und ausgeblendet heißt
+   * auch hier: nicht im Link. */
+  for (const [k, key] of [['projects', 'projects'], ['certificates', 'certificates'], ['volunteering', 'volunteering'], ['publications', 'publications'], ['customSections', 'custom']]) {
+    if (!Array.isArray(src[k])) continue;
+    cv[k] = hidden.has(key) ? [] : clone(src[k]);
+  }
   if (src.labels) cv.labels = clone(src.labels);
 
   const settings = {};

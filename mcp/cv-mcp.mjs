@@ -109,7 +109,10 @@ const ok = (text) => ({ content: [{ type: 'text', text }] });
 const fail = (e) => ({ isError: true, content: [{ type: 'text', text: `Fehler: ${e instanceof Error ? e.message : String(e)}` }] });
 
 // ── Struktur-/Design-Konstanten (Spiegel von app/src/data/types.ts) ──────────
-const SECTION_KEYS = ['profile', 'details', 'experience', 'education', 'skills', 'languages', 'additional'];
+/* Seit 09.10.2026 mit den eigenen Abschnitten (Projekte, Zertifikate, Ehrenamt,
+ * Publikationen, freie Abschnitte) — dieselben Schlüssel wie
+ * DEFAULT_SECTION_ORDER in app/src/data/types.ts. */
+const SECTION_KEYS = ['profile', 'details', 'experience', 'projects', 'education', 'certificates', 'skills', 'languages', 'volunteering', 'publications', 'additional', 'custom'];
 const PAGE_MODES = ['one', 'two', 'three', 'auto'];
 const PAGE_FORMATS = ['a4', 'letter', 'legal', 'a5'];
 const FONT_PAIRINGS = ['auto', 'inter-playfair', 'pure-inter', 'lora-source', 'merri-source', 'space-inter', 'garamond-archivo', 'plex-corporate', 'libre-inter'];
@@ -270,7 +273,7 @@ function buildServer() {
 
   tool(
     'get_resume_markdown', META.get_resume_markdown,
-    'Gibt einen Lebenslauf als Markdown zurück. Dieses Markdown ist das Bearbeitungsformat: überarbeite es und schreibe es mit update_resume_markdown zurück. Struktur (Überschriften, Feld-Reihenfolge) beibehalten. Mit lang eine andere Sprachfassung lesen.',
+    'Gibt einen Lebenslauf als Markdown zurück. Dieses Markdown ist das Bearbeitungsformat: überarbeite es und schreibe es mit update_resume_markdown zurück. Struktur (Überschriften, Feld-Reihenfolge) beibehalten. Mit lang eine andere Sprachfassung lesen. Optionale Abschnitte, die bei Bedarf neu angelegt werden dürfen: „## Projekte“ (### Titel, darunter Rolle:, Zeitraum:, Link:, Beschreibung, - Stichpunkte), „## Zertifikate“ (### Name, Aussteller:, Datum:, Kennung:, Link:), „## Ehrenamt“ (wie Berufserfahrung), „## Publikationen“ (### Titel, Verlag:, Datum:, Link:, Beschreibung) und „## Abschnitt: <eigene Überschrift>“ (- Stichpunkte und/oder ### Einträge mit Untertitel:, Datum:, Text). Die Feldschlüssel bleiben deutsch.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
       lang: z.enum(['de', 'en', 'fr', 'es']).optional().describe('Sprachfassung. Ohne Angabe die im Profil eingestellte. Ein Profil führt ALLE vier Fassungen getrennt — wer nur eine überarbeitet, lässt die anderen unverändert stehen.'),
@@ -382,7 +385,7 @@ function buildServer() {
 
   tool(
     'update_resume_settings', META.update_resume_settings,
-    'Ändert Design/Struktur eines Lebenslaufs (nur die übergebenen Felder). template = Design-Wechsel (gültige IDs via list_templates). pageMode: one|two|three|auto. pageFormat: a4|letter|legal|a5. sectionOrder ordnet die Abschnitte um, hiddenSections blendet welche aus (Keys: profile, details, experience, education, skills, languages, additional). Inhalte werden separat mit update_resume_markdown bearbeitet. Version wird vorher gesichert.',
+    'Ändert Design/Struktur eines Lebenslaufs (nur die übergebenen Felder). template = Design-Wechsel (gültige IDs via list_templates). pageMode: one|two|three|auto. pageFormat: a4|letter|legal|a5. sectionOrder ordnet die Abschnitte um, hiddenSections blendet welche aus (Keys: profile, details, experience, projects, education, certificates, skills, languages, volunteering, publications, additional, custom). Inhalte werden separat mit update_resume_markdown bearbeitet. Version wird vorher gesichert.',
     {
       id: z.string().describe('Die Lebenslauf-id aus list_resumes.'),
       template: z.string().optional().describe('Design-/Template-ID (siehe list_templates).'),

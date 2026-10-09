@@ -15,9 +15,10 @@ import { DESIGN_I18N } from './i18n/design';
  * ATS-Prüfung mit Abgleich gegen eine Stellenanzeige. Auf dem Telefon stehen
  * die Tipps darunter (dort gibt es keine eigene Schiene).
  */
-export default function CheckPanel({ uiLang, fit, pageMode, data, coverLetter, exportConfig, atsLevel, onJump, onLoadAts, withTips }: {
+export default function CheckPanel({ uiLang, fit, pageMode, data, coverLetter, exportConfig, atsLevel, onJump, onLoadAts, onLoadAtsPdf, withTips }: {
   uiLang: UiLang; fit: FitInfo | null; pageMode: PageMode; data: CVData; coverLetter?: CoverLetterData;
   exportConfig: ExportRenderConfig; atsLevel: AtsLevel; onJump: (t: EditorTab) => void; onLoadAts: () => void;
+  onLoadAtsPdf?: () => void;
   withTips?: boolean;
 }) {
   const d = DESIGN_I18N[uiLang];
@@ -30,7 +31,7 @@ export default function CheckPanel({ uiLang, fit, pageMode, data, coverLetter, e
       </div>
       <div className="ui-section">
         <h3 className="ui-label">{d.checkPortals}</h3>
-        <AtsLine level={atsLevel} uiLang={uiLang} onLoadAts={onLoadAts} />
+        <AtsLine level={atsLevel} uiLang={uiLang} onLoadAts={onLoadAts} onLoadAtsPdf={onLoadAtsPdf} />
         <button type="button" className="ui-btn ui-btn-soft" onClick={() => setAtsOpen(true)}
           style={{ marginTop: '12px', width: '100%', justifyContent: 'space-between', minHeight: '52px', borderRadius: '14px', padding: '8px 14px', textAlign: 'left' }}>
           <span>

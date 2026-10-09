@@ -135,7 +135,229 @@ export function cvToMarkdown(profile, targetLang) {
     out.push('');
   }
 
+  out.push(...extraSectionsToMarkdown(cv));
+
   return out.join('\n');
+}
+
+// ── Eigene Abschnitte (seit 09.10.2026) ─────────────────────────────────────
+//
+// Projekte, Zertifikate, Ehrenamt, Publikationen und freie Abschnitte. Das
+// Format ist mit app/src/export/exportMarkdown.ts (Schreiben im Browser) und
+// app/src/import/markdownBridge.ts (Lesen im Browser) Zeichen für Zeichen
+// gleich — wer hier etwas ändert, ändert alle drei. Geprüft in
+// markdown.test.mjs und app/scripts/sectionsroundtrip.mjs.
+//
+//   ## Projekte                 ## Zertifikate         ## Ehrenamt
+//   ### Titel                   ### Name               ### Rolle
+//   Rolle: …                    Aussteller: …          Verein · Ort · 2018 – heute
+//   Zeitraum: 03/2023 – 11/2023 Datum: …               - Stichpunkt
+//   Link: …                     Kennung: …
+//   Beschreibung als Absatz     Link: …                ## Publikationen
+//   - Stichpunkt                                       ### Titel
+//                                                      Verlag: … / Datum: … / Link: …
+//   ## Abschnitt: Eigene Überschrift                   Beschreibung als Absatz
+//   - reiner Stichpunkt
+//   ### Eintrag (darf leer sein: „###")
+//   Untertitel: … / Datum: …
+//   Text als Absatz
+//
+// Feldzeilen haben feste deutsche Schlüssel wie im Kontaktblock: sie sind
+// Schlüssel für den Parser, keine Beschriftung. Gelesen werden auch die
+// englischen (Role, Period, Issuer, Date, ID, Publisher, Subtitle).
+// Leere Felder fallen weg; ein Eintrag ohne Titel steht als „###" da, damit
+// er beim Zurücklesen nicht im vorigen aufgeht.
+
+const isArr = Array.isArray;
+const extraList = v => (isArr(v) ? v.filter(x => x && typeof x === 'object') : []);
+const extraLines = v => (isArr(v) ? v.map(val).filter(Boolean) : []);
+/** Zeitraum so, dass Anfang und Ende auch einzeln wieder lesbar sind. */
+function periodLine(start, end) {
+  const a = val(start), b = val(end);
+  if (!a && !b) return '';
+  return `Zeitraum: ${[a, '–', b].filter(Boolean).join(' ')}`;
+}
+
+export function extraSectionsToMarkdown(cv) {
+  const out = [];
+  const heading = t => out.push(t ? `### ${t}` : '###');
+  const field = (k, v) => { if (val(v)) out.push(`${k}: ${val(v)}`); };
+  const text = v => { if (val(v)) out.push(val(v)); };
+  const bullets = v => { for (const b of extraLines(v)) out.push(`- ${b}`); };
+
+  const projects = extraList(cv.projects).filter(p => val(p.title) || val(p.role) || val(p.description) || val(p.url) || extraLines(p.bullets).length);
+  if (projects.length) {
+    out.push('## Projekte', '');
+    for (const p of projects) {
+      heading(val(p.title));
+      field('Rolle', p.role);
+      const per = periodLine(p.start, p.end); if (per) out.push(per);
+      field('Link', p.url);
+      text(p.description);
+      bullets(p.bullets);
+      out.push('');
+    }
+  }
+
+  const certs = extraList(cv.certificates).filter(c => val(c.name) || val(c.issuer) || val(c.credentialId) || val(c.url));
+  if (certs.length) {
+    out.push('## Zertifikate', '');
+    for (const c of certs) {
+      heading(val(c.name));
+      field('Aussteller', c.issuer);
+      field('Datum', c.date);
+      field('Kennung', c.credentialId);
+      field('Link', c.url);
+      out.push('');
+    }
+  }
+
+  const vols = extraList(cv.volunteering).filter(v => val(v.role) || val(v.organization) || extraLines(v.bullets).length);
+  if (vols.length) {
+    out.push('## Ehrenamt', '');
+    for (const v of vols) {
+      heading(val(v.role));
+      const dates = (val(v.start) || val(v.end)) ? `${val(v.start)} – ${val(v.end)}`.trim() : '';
+      const meta = [val(v.organization), val(v.location), dates].filter(Boolean).join(' · ');
+      if (meta) out.push(meta);
+      bullets(v.bullets);
+      out.push('');
+    }
+  }
+
+  const pubs = extraList(cv.publications).filter(p => val(p.title) || val(p.publisher) || val(p.url) || val(p.description));
+  if (pubs.length) {
+    out.push('## Publikationen', '');
+    for (const p of pubs) {
+      heading(val(p.title));
+      field('Verlag', p.publisher);
+      field('Datum', p.date);
+      field('Link', p.url);
+      text(p.description);
+      out.push('');
+    }
+  }
+
+  for (const c of extraList(cv.customSections)) {
+    const items = extraLines(c.items);
+    const entries = extraList(c.entries).filter(e => val(e.title) || val(e.subtitle) || val(e.text));
+    if (!items.length && !entries.length) continue;
+    out.push(`## Abschnitt: ${val(c.title)}`.trimEnd());
+    for (const it of items) out.push(`- ${it}`);
+    out.push('');
+    for (const e of entries) {
+      heading(val(e.title));
+      field('Untertitel', e.subtitle);
+      field('Datum', e.date);
+      text(e.text);
+      out.push('');
+    }
+  }
+  return out;
+}
+
+/** Abschnittsart der eigenen Abschnitte — oder null. Vor den übrigen
+ *  Abschnitten geprüft: „Volunteer experience" ist kein Berufsweg. */
+export function extraSectionOf(title) {
+  const t = val(title).toLowerCase();
+  if (/^(abschnitt|section)\s*:/.test(t)) return 'custom';
+  if (/^(projekte?|projects?)\b/.test(t)) return 'projects';
+  if (/zertifikat|certific/.test(t)) return 'certificates';
+  if (/ehrenamt|volunteer/.test(t)) return 'volunteering';
+  if (/publikation|publication|veröffentlichung/.test(t)) return 'publications';
+  return null;
+}
+
+const FIELD_RE = /^(rolle|role|zeitraum|period|dates?|link|url|aussteller|issuer|datum|kennung|id|credential(?:\s*id)?|verlag|publisher|ort\/verlag|untertitel|subtitle)\s*:\s*(.*)$/i;
+const FIELD_KEY = {
+  rolle: 'role', role: 'role', zeitraum: 'period', period: 'period', date: 'date', dates: 'period',
+  link: 'url', url: 'url', aussteller: 'issuer', issuer: 'issuer', datum: 'date',
+  kennung: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
+  verlag: 'publisher', publisher: 'publisher', 'ort/verlag': 'publisher', untertitel: 'subtitle', subtitle: 'subtitle',
+};
+/** Welche Feldzeilen in welchem Abschnitt Felder sind — alles andere ist Text. */
+const FIELDS_IN = {
+  projects: ['role', 'period', 'url'],
+  certificates: ['issuer', 'date', 'credentialId', 'url'],
+  publications: ['publisher', 'date', 'url'],
+  custom: ['subtitle', 'date'],
+  volunteering: [],
+};
+function splitPeriod(v) {
+  const m = val(v).match(/^(.*?)\s*(?:[–—]|\s-\s)\s*(.*)$/) || val(v).match(/^(.*?)\s*[–—-]\s*$/);
+  if (!m) return { start: val(v), end: '' };
+  return { start: val(m[1]), end: val(m[2] ?? '') };
+}
+
+/**
+ * Parser für die eigenen Abschnitte. Bekommt die Zeilen EINES Abschnitts
+ * (ohne die `##`-Zeile) und hängt das Ergebnis an `cv`. `uid` liefert Kennungen.
+ */
+export function parseExtraSection(kind, title, sectionLines, cv, uid) {
+  const SHORT = 240, LONG = 2000;
+  const entries = [];
+  let cur = null;
+  const items = [];
+  const flush = () => { if (cur) { cur.text = cur.textLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(); entries.push(cur); cur = null; } };
+  for (let i = 0; i < sectionLines.length; i++) {
+    const t = sectionLines[i].trim();
+    if (/^###(\s|$)/.test(t)) {
+      flush();
+      cur = { title: clipField(stripMd(t.slice(3)), SHORT), fields: {}, textLines: [], bullets: [], meta: null };
+      if (kind === 'volunteering') {
+        let j = i + 1;
+        while (j < sectionLines.length && !sectionLines[j].trim()) j++;
+        const nxt = (sectionLines[j] || '').trim();
+        if (j < sectionLines.length && nxt && !/^[-*+]\s/.test(nxt) && !nxt.startsWith('#')) { cur.meta = stripMd(nxt); i = j; }
+      }
+      continue;
+    }
+    if (/^[-*+]\s/.test(t)) {
+      const b = clipField(t.slice(2), LONG);
+      if (!b) continue;
+      if (!cur) { if (kind === 'custom') items.push(b); continue; }
+      /* Wo der Eintrag keine Stichpunkte kennt, gehört die Zeile zum Text —
+       * so, wie sie dasteht. */
+      if (kind === 'custom' || kind === 'publications') cur.textLines.push(sectionLines[i].replace(/\s+$/, ''));
+      else cur.bullets.push(b);
+      continue;
+    }
+    if (!cur) continue;
+    const f = t.match(FIELD_RE);
+    const key = f ? FIELD_KEY[f[1].toLowerCase().replace(/\s+/g, ' ')] : null;
+    if (f && key && FIELDS_IN[kind].includes(key) && !cur.textLines.length) { cur.fields[key] = clipField(f[2], SHORT); continue; }
+    if (cur.textLines.length || t) cur.textLines.push(sectionLines[i].replace(/\s+$/, ''));
+  }
+  flush();
+  if (kind === 'projects') {
+    if (!cv.projects) cv.projects = [];
+    for (const e of entries) {
+      const p = splitPeriod(e.fields.period);
+      cv.projects.push({ id: uid('prj'), title: e.title, role: e.fields.role || '', start: p.start, end: p.end, url: e.fields.url || '', description: clipField(e.text, LONG), bullets: e.bullets });
+    }
+  } else if (kind === 'certificates') {
+    if (!cv.certificates) cv.certificates = [];
+    for (const e of entries) cv.certificates.push({ id: uid('crt'), name: e.title, issuer: e.fields.issuer || '', date: e.fields.date || '', credentialId: e.fields.credentialId || '', url: e.fields.url || '' });
+  } else if (kind === 'volunteering') {
+    if (!cv.volunteering) cv.volunteering = [];
+    for (const e of entries) {
+      const m = e.meta ? parseMeta(e.meta) : { company: '', location: '', start: '', end: '' };
+      cv.volunteering.push({ id: uid('vol'), role: e.title, organization: clipField(m.company, SHORT), location: clipField(m.location, SHORT), start: m.start, end: m.end, bullets: e.bullets });
+    }
+  } else if (kind === 'publications') {
+    if (!cv.publications) cv.publications = [];
+    for (const e of entries) cv.publications.push({ id: uid('pub'), title: e.title, publisher: e.fields.publisher || '', date: e.fields.date || '', url: e.fields.url || '', description: clipField(e.text, LONG) });
+  } else if (kind === 'custom') {
+    /* Eine Überschrift ohne Inhalt ist kein Abschnitt. */
+    if (!items.length && !entries.length) return;
+    if (!cv.customSections) cv.customSections = [];
+    cv.customSections.push({
+      id: uid('sec'),
+      title: clipField(val(title).replace(/^(abschnitt|section)\s*:\s*/i, ''), SHORT),
+      items,
+      entries: entries.map(e => ({ id: uid('ent'), title: e.title, subtitle: e.fields.subtitle || '', date: e.fields.date || '', text: clipField(e.text, LONG) })),
+    });
+  }
 }
 
 // ── Parser ──────────────────────────────────────────────────────────────────
@@ -221,6 +443,8 @@ export function markdownToCV(md, existing, targetLang) {
   const flushSkill = () => { if (curSkill) { cv.skillGroups.push(curSkill); curSkill = null; } };
   const flushProfile = () => { if (section === 'profile') { cv.profile.text = profileLines.join('\n').trim(); profileLines = []; } };
 
+  const uid = p => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  let lastContact = '';
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -228,7 +452,18 @@ export function markdownToCV(md, existing, targetLang) {
 
     if (t.startsWith('## ')) {
       flushExp(); flushEdu(); flushSkill(); flushProfile();
-      section = sectionOf(t.slice(3).trim());
+      const title = t.slice(3).trim();
+      /* Eigene Abschnitte lesen ihren ganzen Block auf einmal, bis zur
+       * nächsten `##`-Zeile oder dem Namen. */
+      const kind = extraSectionOf(title);
+      if (kind) {
+        let j = i + 1;
+        while (j < lines.length && !/^#{1,2}\s/.test(lines[j].trim())) j++;
+        parseExtraSection(kind, title, lines.slice(i + 1, j), cv, uid);
+        section = null;
+        i = j; continue;
+      }
+      section = sectionOf(title);
       i++; continue;
     }
 
@@ -265,7 +500,12 @@ export function markdownToCV(md, existing, targetLang) {
             cv.personal.socials.push({ id: `s-${Date.now()}-${cv.personal.socials.length}`, platform: plat, value: v });
           }
         }
-      }
+        lastContact = /ort|location|adresse|address/.test(k) && !/e[-\s]?mail|telefon|phone|website|web|portfolio/.test(k) ? 'location' : '';
+      } else if (t && lastContact === 'location' && !/^[-*+]\s/.test(t)) {
+        // Zweizeilige Anschrift: die zweite Zeile steht ohne Spiegelstrich
+        // unter „- Ort:" und fiel bis zum 09.10.2026 beim Einlesen weg.
+        cv.personal.location = clipField(`${cv.personal.location}\n${t}`, 240);
+      } else lastContact = '';
       i++; continue;
     }
 
@@ -317,6 +557,9 @@ export function markdownToCV(md, existing, targetLang) {
         }
         continue;
       }
+      // Anmerkung unter der Kopfzeile: wird geschrieben, fiel aber bis zum
+      // 09.10.2026 beim Einlesen weg.
+      if (t && curEdu && !/^[-*+]\s/.test(t)) curEdu.notes = clipField(curEdu.notes ? `${curEdu.notes}\n${t}` : t, 2000);
       i++; continue;
     }
 

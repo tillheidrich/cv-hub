@@ -73,9 +73,29 @@ Schule · Ort · 2008 – 2017
 - Englisch — C1 (4/5)
 - Französisch — A2 (2/5)
 
+## Projekte
+
+### Projektname
+Rolle: deine Rolle im Projekt
+Zeitraum: 03/2023 – 11/2023
+Link: example.org/projekt
+Ein Satz, worum es ging und was am Ende herauskam.
+- Ergebnis mit Zahl
+
+## Zertifikate
+
+### Name des Zertifikats
+Aussteller: ausstellende Stelle
+Datum: 05/2024
+
 ## Weiteres
-- Ehrenamt, Speaking-Engagements, Publikationen
-- Zertifikate
+- Interessen, Speaking-Engagements
+
+<!-- Weitere Abschnitte, bei Bedarf als eigene Überschrift einfügen:
+Ehrenamt: Überschrift „Ehrenamt“, Einträge wie eine Station (Rolle, darunter Verein · Ort · 2019 – heute).
+Publikationen: Überschrift „Publikationen“, je Titel die Zeilen Verlag, Datum und Link.
+Eigener Abschnitt: Überschrift „Abschnitt: Dein Titel“, darunter Stichpunkte oder Einträge.
+Leere Abschnitte einfach weglassen. -->
 `;
 
 const CV_EN = `---
@@ -132,9 +152,29 @@ University · Location · 2017 – 2020
 - German — B2 (3/5)
 - French — A2 (2/5)
 
+## Projekte
+
+### Project name
+Rolle: your role in the project
+Zeitraum: 03/2023 – 11/2023
+Link: example.org/project
+One sentence: what it was about and what came out of it.
+- Outcome with a number
+
+## Zertifikate
+
+### Certification name
+Aussteller: issuing body
+Datum: 05/2024
+
 ## Weiteres
-- Volunteering, talks, publications
-- Certifications
+- Interests, talks
+
+<!-- More sections, add as their own heading when needed (keep the German keys, they are parser keys):
+Volunteering: heading "Ehrenamt", entries like a job (role, then Organisation · Place · 2019 – present).
+Publications: heading "Publikationen", per title the lines Verlag, Datum and Link.
+Own section: heading "Abschnitt: Your title", then bullets or entries.
+Leave empty sections out. -->
 `;
 
 const CL_DE = `---

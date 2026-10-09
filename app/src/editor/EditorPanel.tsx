@@ -7,6 +7,7 @@ import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
 import type { PanelStrings } from '../ui/editorI18n';
 import { LABELS } from '../data/labels';
 import ChipInput from '../ui/ChipInput';
+import ExtraSectionsEditor from './ExtraSectionsEditor';
 
 // ── Social platforms ────────────────────────────────────────────────────────
 // Keep prefix logic in one place. Renderer reads this same map to display links.
@@ -334,7 +335,7 @@ async function reencodeImage(src: string, maxSide: number, quality: number): Pro
 
 // ── Personal Editor ──────────────────────────────────────────────────────────
 
-function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: (d: CVData) => void; demoMode?: boolean }) {
+function PersonalEditor({ data, onChange, demoMode, onPhotoRemoved }: { data: CVData; onChange: (d: CVData) => void; demoMode?: boolean; onPhotoRemoved?: (urls: string[]) => void }) {
   const t = usePanelT();
   const fileRef = useRef<HTMLInputElement>(null);
   /** Datei im Zuschnitt — solange gesetzt, steht der Dialog offen. */
@@ -492,7 +493,13 @@ function PersonalEditor({ data, onChange, demoMode }: { data: CVData; onChange: 
                 unbeschnittene Bild weiter im Profil, obwohl der Mensch „weg"
                 gesagt hat. Gibt es auch in der Demo (Persona-Test 08.10.). */}
             {p.photo && (
-              <button type="button" onClick={() => updatePersonalMany({ photo: '', photoOriginal: '' })} style={{ ...addBtn, color: '#c0392b', background: '#fff5f5', borderColor: '#f0b8b8' }}>
+              <button type="button" onClick={() => {
+                const urls = [p.photo, p.photoOriginal].map(u => (u || '').trim()).filter(Boolean);
+                updatePersonalMany({ photo: '', photoOriginal: '' });
+                // Mit Konto löscht App.tsx die Datei am Server, wenn sie sonst
+                // niemand mehr benutzt (andere Sprachfassung, Kopie).
+                onPhotoRemoved?.(urls);
+              }} style={{ ...addBtn, color: '#c0392b', background: '#fff5f5', borderColor: '#f0b8b8' }}>
                 {t.photoRemove}
               </button>
             )}
@@ -1218,9 +1225,19 @@ interface EditorPanelProps {
   /** Click-on-preview support: when jumpTick changes, switch to jumpTab. */
   jumpTab?: Tab | null;
   jumpTick?: number;
+  /** „Foto entfernen" wurde gedrückt — mit den Adressen, die das Foto hatte
+   *  (Bild und Original). App.tsx entscheidet, ob die Datei am Server weg kann. */
+  onPhotoRemoved?: (urls: string[]) => void;
+  /** Nur lesen (Zugang abgelaufen): Felder gesperrt, Reiter bleiben bedienbar. */
+  readOnly?: boolean;
 }
 
-export default function EditorPanel({ data, uiLang, onUpdate, demoMode = false, jumpTab, jumpTick = 0 }: EditorPanelProps) {
+/** Gesperrt nur, wenn nötig — im Normalfall bleibt der DOM wie er war. */
+function wrapReadOnly(readOnly: boolean, node: React.ReactNode): React.ReactNode {
+  return readOnly ? <fieldset disabled style={{ display: 'contents' }}>{node}</fieldset> : node;
+}
+
+export default function EditorPanel({ data, uiLang, onUpdate, demoMode = false, jumpTab, jumpTick = 0, onPhotoRemoved, readOnly = false }: EditorPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('personal');
   const t = EP[uiLang];
 
@@ -1253,14 +1270,18 @@ export default function EditorPanel({ data, uiLang, onUpdate, demoMode = false, 
           ))}
         </div>
 
-        {/* Tab content */}
-        {activeTab === 'personal' && <PersonalEditor data={data} onChange={handleChange} demoMode={demoMode} />}
+        {/* Tab content — im Nur-Lese-Modus in einem gesperrten fieldset;
+            `display: contents` lässt das Layout unberührt. */}
+        {wrapReadOnly(readOnly, <>
+        {activeTab === 'personal' && <PersonalEditor data={data} onChange={handleChange} demoMode={demoMode} onPhotoRemoved={onPhotoRemoved} />}
         {activeTab === 'profil' && <ProfileEditor data={data} onChange={handleChange} />}
         {activeTab === 'erfahrung' && <ExperienceEditor data={data} onChange={handleChange} />}
         {activeTab === 'bildung' && <EducationEditor data={data} onChange={handleChange} />}
         {activeTab === 'skills' && <SkillsEditor data={data} onChange={handleChange} />}
         {activeTab === 'sprachen' && <LanguagesEditor data={data} onChange={handleChange} />}
         {activeTab === 'texte' && <LabelsEditor data={data} onChange={handleChange} />}
+        </>)}
+        <ExtraSectionsEditor data={data} onChange={handleChange} uiLang={uiLang} readOnly={readOnly} />
       </div>
     </PanelI18nCtx.Provider>
   );

@@ -16,6 +16,9 @@ import EditorPanel from './editor/EditorPanel';
 import CoverLetterEditor from './editor/CoverLetterEditor';
 import ExportPanel from './export/ExportPanel';
 import { exportDocx } from './export/exportDocx';
+import { exportPdf, type ExportRenderConfig } from './export/exportHtml';
+import { AtsPdfRunner, type AtsPdfJob } from './export/AtsPdfRunner';
+import { atsPdfTemplateFor } from './export/atsPdfTemplate';
 import HomeScreen from './screens/HomeScreen';
 import KnowledgePanel from './knowledge/KnowledgePanel';
 import AuthScreen from './screens/AuthScreen';
@@ -26,6 +29,8 @@ import { detectInitialUiLang, setUiLang, type UiLang } from './ui/i18n';
 import { ET } from './ui/editorI18n';
 import { DESIGN_I18N } from './ui/i18n/design';
 import { LOCAL_I18N } from './ui/i18n/local';
+import { ZUGANG_I18N, formatAccessDate } from './ui/i18n/zugang';
+import { FASSUNG_I18N } from './ui/i18n/fassung';
 import DesignPanel from './ui/DesignPanel';
 import CheckPanel from './ui/CheckPanel';
 import ExportMenu from './ui/ExportMenu';
@@ -34,7 +39,7 @@ import BackupReminder, { LocalBackupPanel } from './ui/BackupReminder';
 import AdminPanel from './screens/AdminPanel';
 import KeysPanel from './screens/KeysPanel';
 import VersionsPanel from './screens/VersionsPanel';
-import { api } from './data/api';
+import { api, ApiError, photoIdOf } from './data/api';
 import type { AuthUser } from './data/api';
 import { track } from './data/track';
 import {
@@ -42,7 +47,8 @@ import {
   updateProfileInList, deleteProfileFromList,
   saveProfiles as saveProfilesLocal, loadProfiles as loadProfilesLocal,
   loadProfilesAsync as loadProfilesLocalAsync,
-  createDemoProfile, withAllLangs, carryContactToLang,
+  saveProfilesAsync as saveProfilesLocalAsync, clearLocalStore,
+  createDemoProfile, duplicateProfile, withAllLangs, carryContactToLang,
 } from './data/storage';
 import { useIsMobile } from './ui/useIsMobile';
 import { ALL_LANGS, LANG_NAMES } from './data/labels';
@@ -163,6 +169,21 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  /** Rückfrage beim Abmelden: Zahl der lokalen Profile in diesem Browser. */
+  const [logoutAsk, setLogoutAsk] = useState<number | null>(null);
+  const [logoutWipe, setLogoutWipe] = useState(false);
+  /** Ein Schreibweg hat mit `access_expired` geantwortet, obwohl /api/me beim
+   *  Laden noch keinen Ablauf kannte (Ablauf während der Sitzung). */
+  const [accessExpiredHit, setAccessExpiredHit] = useState(false);
+  /** Ausgeblendetes Laufzeit-Band (je Hinweisstufe, nur für diese Sitzung). */
+  const [accessHidden, setAccessHidden] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('cv-access-hidden'); } catch { return null; }
+  });
+  /** Kurze Meldung ohne Rückgängig (ATS-PDF fertig, Kopie angelegt …). */
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const [atsJob, setAtsJob] = useState<AtsPdfJob | null>(null);
+  const atsBusy = useRef(false);
   const isMobile = useIsMobile();
 
   /* Click-on-preview-jumps-to-editor: when the user clicks a section in the
@@ -316,18 +337,51 @@ export default function App() {
     return true;
   }
 
-  async function handleLogout() {
+  /* Abmelden löscht die lokalen Profile nicht mehr ungefragt (Runde 3).
+   *
+   * Bis zum 08.10.2026 entfernte Abmelden alle localStorage-Schlüssel — damals
+   * lagen dort die Lebensläufe aus dem Arbeiten ohne Konto. Wer vor dem
+   * Anmelden etwas ausprobiert hatte, verlor es beim Abmelden kommentarlos.
+   * Jetzt: Liegen lokale Profile in diesem Browser, wird gefragt; Standard ist
+   * „behalten". Am fremden Rechner wählt man „löschen". Die Kontolöschung
+   * räumt weiterhin alles ab (siehe KeysPanel unten). */
+  async function requestLogout() {
+    let n = 0;
+    try { n = (await loadProfilesLocalAsync()).length; } catch { /* lokaler Speicher nicht lesbar */ }
+    if (n > 0) { setLogoutWipe(false); setLogoutAsk(n); }
+    else void handleLogout(false);
+  }
+  async function handleLogout(wipeLocal: boolean) {
+    setLogoutAsk(null);
     try { await api.logout(); } catch { /* ignore */ }
-    // Wipe every local artifact so the next login on this browser starts clean.
-    try {
-      [
-        'appstudio-profiles-v2', 'appstudio-active-v2',
-        'appstudio-v1', 'appstudio-cl-v1',
-      ].forEach(k => localStorage.removeItem(k));
-    } catch { /* ignore */ }
+    if (wipeLocal) await clearLocalStore();
+    setAccessExpiredHit(false);
     setAuthUser(null);
     setProfiles([]); setActiveId(null); setScreen('home'); setDataLoaded(false);
   }
+
+  const showNotice = useCallback((text: string, error?: boolean) => {
+    window.clearTimeout(noticeTimer.current);
+    setNotice({ text, error });
+    noticeTimer.current = window.setTimeout(() => setNotice(null), error ? 9000 : 6000);
+  }, []);
+
+  /* Laufzeit des Pilot-Platzes. Der Server rechnet (access.js), hier wird nur
+   * gelesen. Nach Ablauf: lesen und exportieren ja, ändern nein. */
+  const access = !demoMode ? (authUser?.access ?? null) : null;
+  const readOnly = !demoMode && !!authUser && (!!access?.readOnly || accessExpiredHit);
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+  /** Ein Schreibweg wurde wegen Ablauf abgelehnt: Nur-Lese-Modus einschalten
+   *  und die Laufzeit neu holen, damit das Band das Datum kennt. */
+  const noteWriteError = useCallback((err: unknown): boolean => {
+    if (err instanceof ApiError && err.code === 'access_expired') {
+      setAccessExpiredHit(true);
+      api.me().then(d => setAuthUser(d.user)).catch(() => {});
+      return true;
+    }
+    return false;
+  }, []);
 
   // Load résumés from the server once authenticated; migrate any local ones.
   useEffect(() => {
@@ -390,39 +444,62 @@ export default function App() {
   const dirtyRef = useRef<AppProfile | null>(null);
   const skipSave = useRef(true); // skip the initial server-load population
 
+  /** Wartet ein Speichervorgang noch auf seine 900 ms? */
+  const pendingSave = useRef(false);
   const queueSave = useCallback((profile: AppProfile) => {
     dirtyRef.current = profile;
     setSaveStatus('saving');
+    pendingSave.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      pendingSave.current = false;
       const p = dirtyRef.current;
       if (!p) return;
+      // Nach Ablauf des Zugangs wird nichts mehr gespeichert — auch kein
+      // Speichervorgang, der vor dem Umschalten angestoßen war.
+      if (readOnlyRef.current && !demoMode) { setSaveStatus('saved'); return; }
       if (demoMode) {
-        // localStorage-only save in demo mode — never hits the server.
-        try {
-          const all = loadProfilesLocal();
-          const next = all.find(x => x.id === p.id) ? all.map(x => x.id === p.id ? p : x) : [...all, p];
-          setSaveStatus(saveProfilesLocal(next) ? 'saved' : 'error');
-        } catch { setSaveStatus('error'); }
+        // Lokal (IndexedDB): „Gespeichert" erst, wenn es wirklich auf der
+        // Platte liegt. Die synchrone Rückgabe von saveProfiles kennt nur das
+        // VORIGE Schreiben — beim ersten Fehlschlag stand sonst „Gespeichert" da.
+        const all = loadProfilesLocal();
+        const next = all.find(x => x.id === p.id) ? all.map(x => x.id === p.id ? p : x) : [...all, p];
+        saveProfilesLocalAsync(next).then(ok => setSaveStatus(ok ? 'saved' : 'error'), () => setSaveStatus('error'));
         return;
       }
-      api.saveResume(p).then(() => setSaveStatus('saved')).catch(() => setSaveStatus('error'));
+      api.saveResume(p).then(() => setSaveStatus('saved')).catch(err => {
+        // Ablauf während der Sitzung: kein „Nicht gespeichert", sondern der
+        // Nur-Lese-Modus mit Erklärung.
+        if (noteWriteError(err)) setSaveStatus('saved');
+        else setSaveStatus('error');
+      });
     }, 900);
-  }, [setSaveStatus, demoMode]);
+  }, [setSaveStatus, demoMode, noteWriteError]);
+
+  /** Wartendes Speichern sofort ausführen — vor allem, was den Stand am
+   *  Server liest (Sharelink anlegen oder auffrischen). Sonst hielte ein Link
+   *  den Stand von vor der letzten Tipp-Pause fest. */
+  const flushSave = useCallback(async (): Promise<void> => {
+    if (demoMode || readOnlyRef.current || !pendingSave.current || !dirtyRef.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    pendingSave.current = false;
+    try { await api.saveResume(dirtyRef.current); setSaveStatus('saved'); }
+    catch (err) { if (!noteWriteError(err)) setSaveStatus('error'); }
+  }, [demoMode, noteWriteError]);
 
   function patchProfile(updater: (p: AppProfile) => AppProfile) {
     if (!activeId) return;
     setProfiles(prev => updateProfileInList(prev, activeId, updater));
   }
   const updateData = useCallback((updater: (d: CVData) => CVData) => {
-    if (!activeId) return;
+    if (!activeId || readOnlyRef.current) return;
     setProfiles(prev => updateProfileInList(prev, activeId, p0 => {
       const p = p0.data[p0.settings.lang] ? p0 : withAllLangs(p0);
       return { ...p, data: { ...p.data, [p.settings.lang]: updater(p.data[p.settings.lang]) } };
     }));
   }, [activeId]);
   const updateCoverLetter = useCallback((updater: (d: CoverLetterData) => CoverLetterData) => {
-    if (!activeId) return;
+    if (!activeId || readOnlyRef.current) return;
     setProfiles(prev => updateProfileInList(prev, activeId, p0 => {
       const p = p0.coverLetters[p0.settings.lang] ? p0 : withAllLangs(p0);
       return { ...p, coverLetters: { ...p.coverLetters, [p.settings.lang]: updater(p.coverLetters[p.settings.lang]) } };
@@ -471,20 +548,19 @@ export default function App() {
   useEffect(() => {
     if (!dataLoaded) return;
     if (skipSave.current) { skipSave.current = false; return; }
+    if (readOnly) return;
     const active = profiles.find(p => p.id === activeId);
     if (active) queueMicrotask(() => queueSave(active));
-  }, [profiles, activeId, dataLoaded, queueSave]);
+  }, [profiles, activeId, dataLoaded, queueSave, readOnly]);
 
   function handleSelectProfile(id: string) { setActiveId(id); setActiveProfileId(id); setScreen('editor'); openEditorPanels('existing'); }
   function handleCreateProfile(profile: AppProfile) {
+    if (readOnly) return;
     setProfiles(prev => [...prev, profile]);
     if (demoMode) {
-      try {
-        const all = loadProfilesLocal();
-        saveProfilesLocal([...all, profile]);
-      } catch { /* ignore */ }
+      saveProfilesLocalAsync([...loadProfilesLocal(), profile]).then(ok => { if (!ok) setSaveStatus('error'); });
     } else {
-      api.saveResume(profile).catch(err => console.error('create failed:', err));
+      api.saveResume(profile).catch(err => { if (!noteWriteError(err)) console.error('create failed:', err); });
     }
     setActiveId(profile.id); setActiveProfileId(profile.id); setScreen('editor');
     /* Abweichung vom Bericht („neues Profil öffnet Gestaltung"), bewusst: Ein
@@ -499,12 +575,52 @@ export default function App() {
     const rest = deleteProfileFromList(profiles, id);
     setProfiles(rest);
     if (demoMode) {
-      try { saveProfilesLocal(rest); } catch { /* ignore */ }
+      saveProfilesLocalAsync(rest).then(ok => { if (!ok) setSaveStatus('error'); });
     } else {
       api.deleteResume(id).catch(err => console.error('delete failed:', err));
     }
     if (activeId === id) { setActiveId(rest[0]?.id ?? null); if (rest.length === 0) setScreen('home'); }
   }
+  /* Fassung duplizieren (Wettbewerbsbericht, Lücke 3): vollständige Kopie mit
+   * „(Kopie)" im Titel, direkt hinter dem Original. Mit Konto über dieselbe
+   * Anlege-Route wie ein neues Profil (POST /api/resumes, voller Inhalt);
+   * Fotoadressen zeigen auf Fotos desselben Nutzers und bleiben gültig. Aus
+   * dem Editor heraus geht es gleich in die Kopie — dafür wird man sie
+   * angelegt haben —, mit Rückgängig. */
+  function handleDuplicateProfile(id: string, open = false) {
+    if (readOnly) return;
+    const src = profiles.find(p => p.id === id);
+    if (!src) return;
+    const F = FASSUNG_I18N[uiLang];
+    const copy = duplicateProfile(src, F.copyName(src.displayName));
+    const at = profiles.findIndex(p => p.id === id);
+    const next = [...profiles.slice(0, at + 1), copy, ...profiles.slice(at + 1)];
+    setProfiles(next);
+    const fail = () => {
+      setProfiles(prev => prev.filter(p => p.id !== copy.id));
+      setActiveId(cur => (cur === copy.id ? id : cur));
+      showNotice(F.duplicateFailed, true);
+    };
+    if (demoMode) {
+      saveProfilesLocalAsync(next).then(ok => { if (!ok) fail(); }, fail);
+    } else {
+      api.saveResume(copy).catch(err => { noteWriteError(err); fail(); });
+    }
+    if (open) {
+      skipSave.current = true; // die Kopie ist eben gespeichert worden
+      setActiveId(copy.id); setActiveProfileId(copy.id);
+      showToast(F.duplicated(copy.displayName), () => {
+        // Erst löschen (setzt die aktive Fassung um), dann das Original wählen
+        // — der letzte Aufruf gewinnt.
+        handleDeleteProfileRef.current?.(copy.id);
+        setActiveId(id); setActiveProfileId(id);
+      });
+    } else {
+      showNotice(F.duplicated(copy.displayName));
+    }
+  }
+  const handleDeleteProfileRef = useRef<((id: string) => void) | null>(null);
+  handleDeleteProfileRef.current = handleDeleteProfile;
 
   useEffect(() => {
     const handler = () => setPrinting(false);
@@ -519,6 +635,8 @@ export default function App() {
       ? coverWord[lang]
       : currentData.labels.misc.cvLabel;
     document.title = currentData.personal.name ? `${currentData.personal.name} – ${docWord}` : docWord;
+    // Das Druck-PDF entsteht im Browser; der Server erfährt davon nur hierüber.
+    if (authUser && !demoMode) void api.event('pdf_local');
     setPrinting(true);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       window.print();
@@ -650,7 +768,8 @@ export default function App() {
    * Felder behalten den Tipp für sich (siehe DocumentPreview), alles andere
    * springt weiterhin in die passende Rubrik. Die Lesbarkeit löst
    * `MobilePreview`, indem es beim Hineintippen auf volle Größe zoomt. */
-  const inlineEdit = inlineEditApi;
+  // Nach Ablauf des Zugangs: kein Schreiben in der Vorschau.
+  const inlineEdit = readOnly ? undefined : inlineEditApi;
 
   /** Alles, was den Satz beeinflusst — ändert sich davon etwas, rechnet die
    *  Vorschau den Umbruch neu. */
@@ -686,7 +805,67 @@ export default function App() {
 
   function loadAts() {
     track('export_docx_ats');
+    if (!demoMode) void api.event('docx');
     void exportDocx(currentData, exportConfig, 'ats');
+  }
+
+  /* ATS-Fassung als PDF (export/AtsPdfRunner.tsx): derselbe Inhalt in einer
+   * einspaltigen Vorlage, gemessen wie die Vorschau, über denselben PDF-Weg.
+   * Die Vorlage im Profil bleibt, wie sie ist. */
+  async function exportAtsPdf(): Promise<{ pages: number; bytes: number; template: string }> {
+    if (atsBusy.current) throw new Error('busy');
+    atsBusy.current = true;
+    try {
+      const data = currentData;
+      const themeId = atsPdfTemplateFor(data);
+      const base = {
+        data, themeId, fontScale, pageMode, pageFormat,
+        hiddenSections, sectionOrder, forcedBreaks,
+      };
+      const atsFit = await new Promise<FitInfo>((resolve, reject) => {
+        setAtsJob({ ...base, id: Date.now(), resolve, reject });
+      });
+      setAtsJob(null);
+      const cfg: ExportRenderConfig = {
+        themeId, accentId: 'auto', paperId: 'auto', pairingId: 'auto',
+        metrics: atsFit.metrics, pageBlocks: atsFit.pageBlocks, asideSkillCap: atsFit.asideCap,
+        hiddenSections, sectionOrder, pageFormat, forcedBreaks,
+      };
+      track('export_pdf_ats', { demo: demoMode });
+      const res = await exportPdf({ data, cfg, isCover: false, variant: 'ats' });
+      return { ...res, template: getTheme(themeId).name };
+    } finally {
+      setAtsJob(null);
+      atsBusy.current = false;
+    }
+  }
+  /** Für die Knöpfe ohne eigene Rückmeldung (ATS-Zeile): Ergebnis als Meldung. */
+  function loadAtsPdf() {
+    const F = FASSUNG_I18N[uiLang];
+    if (atsBusy.current) return;
+    showNotice(F.atsPdfBusy);
+    exportAtsPdf().then(
+      r => showNotice(F.atsPdfDone(r.pages, Math.max(1, Math.round(r.bytes / 1024)), r.template)),
+      err => showNotice(F.atsPdfFailed(err instanceof Error ? err.message : '?'), true),
+    );
+  }
+
+  /* „Foto entfernen" mit Konto: die Datei am Server gleich mit löschen — aber
+   * nur, wenn keine andere Sprachfassung und kein anderes Profil (etwa eine
+   * duplizierte Fassung) dieselbe Adresse benutzt. Verglichen wird über die
+   * Foto-ID, nicht über die ganze Adresse. */
+  function handlePhotoRemoved(urls: string[]) {
+    if (demoMode || !activeProfile) return;
+    const used = new Set<string>();
+    for (const p of profiles) {
+      for (const l of Object.keys(p.data) as Lang[]) {
+        if (p.id === activeProfile.id && l === lang) continue;
+        const ps = p.data[l]?.personal;
+        for (const u of [ps?.photo, ps?.photoOriginal]) { const pid = photoIdOf(u); if (pid) used.add(pid); }
+      }
+    }
+    const ids = [...new Set(urls.map(u => photoIdOf(u)).filter((x): x is string => !!x))].filter(pid => !used.has(pid));
+    ids.forEach(pid => { api.deletePhoto(pid).catch(() => { /* Aufräumen am Server erledigt den Rest */ }); });
   }
   function changeTemplate(id: string, dir: -1 | 0 | 1, undoable = false) {
     if (resolveThemeId(id) === resolveThemeId(template)) return;
@@ -747,16 +926,73 @@ export default function App() {
     />
   );
 
+  const Z = ZUGANG_I18N[uiLang];
+  const F = FASSUNG_I18N[uiLang];
+
+  /** Laufzeit-Band: 14 und 3 Tage vor Ablauf, danach dauerhaft (je Stufe in
+   *  dieser Sitzung ausblendbar). */
+  const accessNoticeKey = access?.notice ? `${access.notice}|${access.until}` : (accessExpiredHit ? 'expired|?' : null);
+  const accessBanner = accessNoticeKey && accessHidden !== accessNoticeKey ? (
+    <div className="ui-access-banner ui" role="status" data-noprint data-notice={access?.notice ?? 'expired'}>
+      <span>
+        {access?.notice === 'soon' ? Z.soon(formatAccessDate(access.until, uiLang), access.daysLeft)
+          : access?.notice === 'final' ? Z.final(formatAccessDate(access.until, uiLang), access.daysLeft)
+          : Z.expired(access ? formatAccessDate(access.until, uiLang) : '…')}
+      </span>
+      {screen === 'editor' && (
+        <button type="button" className="ui-btn ui-btn-soft" style={{ minHeight: '32px', fontSize: 'var(--t-xs)' }}
+          onClick={() => (isMobile ? setMPanel('export') : setPanel('export'))}>{Z.exportNow}</button>
+      )}
+      <button type="button" className="ui-btn ui-icon-btn" aria-label={Z.dismiss} title={Z.dismiss}
+        style={{ minHeight: '32px', width: '32px', minWidth: '32px', color: 'inherit' }}
+        onClick={() => { setAccessHidden(accessNoticeKey); try { sessionStorage.setItem('cv-access-hidden', accessNoticeKey); } catch { /* ignore */ } }}>×</button>
+    </div>
+  ) : null;
+
+  const logoutDialog = logoutAsk !== null ? (
+    <div onClick={() => setLogoutAsk(null)} className="ui" style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'oklch(0.21 0.021 264 / 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="cv-logout-title" onClick={e => e.stopPropagation()} className="ui-float"
+        onKeyDown={e => { if (e.key === 'Escape') setLogoutAsk(null); }}
+        style={{ background: 'var(--float-solid)', width: '100%', maxWidth: '480px', padding: 'clamp(20px, 4vw, 28px)' }}>
+        <h2 id="cv-logout-title" style={{ margin: '0 0 10px', fontSize: '22px', fontWeight: 640, color: 'var(--ink)', letterSpacing: '-0.01em' }}>{Z.logoutTitle}</h2>
+        <p style={{ margin: '0 0 16px', fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.55 }}>{Z.logoutBody(logoutAsk)}</p>
+        <div role="radiogroup" aria-labelledby="cv-logout-title" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {([false, true] as const).map(wipe => (
+            <label key={String(wipe)} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 12px', borderRadius: '12px', cursor: 'pointer', background: logoutWipe === wipe ? 'oklch(1 0 0 / 0.8)' : 'transparent', boxShadow: logoutWipe === wipe ? 'inset 0 0 0 2px var(--accent)' : 'inset 0 0 0 1px var(--hair)' }}>
+              <input type="radio" name="cv-logout-local" checked={logoutWipe === wipe} onChange={() => setLogoutWipe(wipe)} style={{ marginTop: '3px', width: '18px', height: '18px' }} autoFocus={!wipe} />
+              <span>
+                <span style={{ display: 'block', fontSize: 'var(--t-sm)', fontWeight: 600, color: 'var(--ink)' }}>{wipe ? Z.deleteLocal : Z.keepLocal}</span>
+                <span style={{ display: 'block', fontSize: 'var(--t-xs)', color: 'var(--ink-2)', marginTop: '2px', lineHeight: 1.45 }}>{wipe ? Z.deleteLocalSub : Z.keepLocalSub}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '20px' }}>
+          <button type="button" className="ui-btn ui-btn-soft" onClick={() => setLogoutAsk(null)} style={{ minHeight: '44px' }}>{Z.cancel}</button>
+          <button type="button" className="ui-btn ui-btn-primary" onClick={() => void handleLogout(logoutWipe)} style={{ minHeight: '44px', padding: '0 18px' }}>{Z.logoutConfirm}</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const noticeEl = notice ? (
+    <div role="status" aria-live="polite" className="ui-toast ui" style={{ bottom: isMobile ? '168px' : '24px', padding: '11px 16px', color: notice.error ? 'var(--ats-low-ink)' : undefined }}>{notice.text}</div>
+  ) : null;
+
   // ── Home ──────────────────────────────────────────────────────────────────
   if (screen === 'home') {
     return (
       <>
         <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile}
-          username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={demoMode ? undefined : handleLogout} onOpenAdmin={() => setAdminOpen(true)}
+          onDuplicate={readOnly ? undefined : (id => handleDuplicateProfile(id))}
+          readOnlyNote={readOnly ? Z.readOnlyHome : undefined} banner={accessBanner}
+          username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={demoMode ? undefined : () => void requestLogout()} onOpenAdmin={() => setAdminOpen(true)}
           onOpenBackup={demoMode ? () => setBackupOpen(true) : undefined} />
         {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
+        {logoutDialog}
+        {noticeEl}
       </>
     );
   }
@@ -798,7 +1034,8 @@ export default function App() {
     />
   );
 
-  const saveText = saveStatus === 'error' ? et.unsaved : saveStatus === 'saving' ? et.saving : (demoMode ? dsT.savedLocal : et.saved);
+  const saveText = readOnly ? Z.readOnlyStatus : saveStatus === 'error' ? et.unsaved : saveStatus === 'saving' ? et.saving : (demoMode ? dsT.savedLocal : et.saved);
+  const saveState = readOnly ? 'readonly' : saveStatus;
   const panelTitle: Record<PanelId, string> = { content: dsT.content, design: dsT.design, check: dsT.check, tips: dsT.tips, export: dsT.exportAll };
 
   const docSegment = (
@@ -829,31 +1066,39 @@ export default function App() {
     </div>
   );
 
+  const editors = docType === 'resume'
+    ? <EditorPanel data={currentData} lang={lang} uiLang={uiLang} onUpdate={updateData} demoMode={demoMode} jumpTab={editJumpTab} jumpTick={editJumpTick} onPhotoRemoved={handlePhotoRemoved} readOnly={readOnly} />
+    : <CoverLetterEditor data={currentCoverLetter} uiLang={uiLang} onUpdate={updateCoverLetter} resumeId={activeId} />;
   const contentBody = (
     <>
       {docLangRow}
+      {readOnly && <div className="ui-readonly-note" role="note">{Z.readOnlyContent}</div>}
       <div className="ui-panel-fill" style={{ flex: 1, minHeight: 0 }}>
-        {docType === 'resume'
-          ? <EditorPanel data={currentData} lang={lang} uiLang={uiLang} onUpdate={updateData} demoMode={demoMode} jumpTab={editJumpTab} jumpTick={editJumpTick} />
-          : <CoverLetterEditor data={currentCoverLetter} uiLang={uiLang} onUpdate={updateCoverLetter} resumeId={activeId} />}
+        {/* Nach Ablauf: Felder gesperrt (disabled), Lesen und Blättern bleibt.
+            Der Lebenslauf sperrt selbst (Reiter bleiben bedienbar), das
+            Anschreiben hier im Ganzen. */}
+        {readOnly && docType !== 'resume' ? <fieldset disabled style={{ display: 'contents' }}>{editors}</fieldset> : editors}
       </div>
     </>
   );
   const designBody = (
+    <>
+    {readOnly && <div className="ui-readonly-note" role="note">{Z.readOnlyDesign}</div>}
     <DesignPanel uiLang={uiLang} settings={activeProfile?.settings ?? { template, fontScale, fontPairing, pageMode, lang }}
       onSettings={patch => {
         if (patch.template) { changeTemplate(patch.template, (nav.list.findIndex(t => t.id === resolveThemeId(patch.template!)) > nav.idx ? 1 : -1)); const { template: _t, ...rest } = patch; void _t; if (Object.keys(rest).length) updateSettings(rest); return; }
         updateSettings(patch);
       }}
-      fit={fit} data={currentData} onJump={handlePreviewEdit} renderThumb={renderTemplate} onLoadAts={loadAts} />
+      fit={fit} data={currentData} onJump={handlePreviewEdit} renderThumb={renderTemplate} onLoadAts={loadAts} onLoadAtsPdf={loadAtsPdf} />
+    </>
   );
   const checkBody = (withTips: boolean) => (
     <CheckPanel uiLang={uiLang} fit={fit} pageMode={pageMode} data={currentData} coverLetter={currentCoverLetter}
-      exportConfig={exportConfig} atsLevel={atsLevel} onJump={handlePreviewEdit} onLoadAts={loadAts} withTips={withTips} />
+      exportConfig={exportConfig} atsLevel={atsLevel} onJump={handlePreviewEdit} onLoadAts={loadAts} onLoadAtsPdf={loadAtsPdf} withTips={withTips} />
   );
   const exportBody = (
     <div className="ui-panel-body ui-panel-fill">
-      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={setSoftWall} atsLevel={atsLevel} embedded />
+      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={setSoftWall} atsLevel={atsLevel} onAtsPdf={exportAtsPdf} onBeforeShare={flushSave} embedded />
     </div>
   );
   const tipsBody = (
@@ -864,7 +1109,7 @@ export default function App() {
 
   const exportMenu = (
     <ExportMenu uiLang={uiLang} data={currentData} coverLetter={currentCoverLetter} exportConfig={exportConfig}
-      docType={docType} demoMode={demoMode} atsLevel={atsLevel} onPrintFallback={handlePrint}
+      docType={docType} demoMode={demoMode} atsLevel={atsLevel} onPrintFallback={handlePrint} onAtsPdf={exportAtsPdf}
       onOpenAll={() => (isMobile ? setMPanel('export') : setPanel('export'))}
       onShare={() => { if (gateAction('Sharelinks')) { if (isMobile) setMPanel('export'); else setPanel('export'); } }} />
   );
@@ -881,11 +1126,13 @@ export default function App() {
         </MenuItem>
       ))}
       <div className="ui-menu-sep" />
-      {activeId && <MenuItem onSelect={() => { close(); if (gateAction('Versionen')) setVersionsOpen(true); }} sub={et.ttVersions}>{et.versions}</MenuItem>}
+      {activeId && !readOnly && <MenuItem onSelect={() => { close(); handleDuplicateProfile(activeId, true); }} sub={F.duplicateSub}>{F.duplicateTitle}</MenuItem>}
+      {/* Versionen gibt es seit 08.10.2026 auch ohne Konto (lokaler Verlauf). */}
+      {activeId && <MenuItem onSelect={() => { close(); setVersionsOpen(true); }} sub={et.ttVersions}>{et.versions}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); setBackupOpen(true); }}>{LOCAL_I18N[uiLang].more}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); setKeysOpen(true); }} sub={authUser?.username}>{et.account}</MenuItem>}
       {authUser?.role === 'admin' && <MenuItem onSelect={() => { close(); setAdminOpen(true); }}>{et.admin}</MenuItem>}
-      {!demoMode && <MenuItem onSelect={() => { close(); handleLogout(); }}>{et.signOut}</MenuItem>}
+      {!demoMode && <MenuItem onSelect={() => { close(); void requestLogout(); }}>{et.signOut}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); exitDemo(); }}>{et.createAccount}</MenuItem>}
     </>
   );
@@ -905,6 +1152,8 @@ export default function App() {
                'appstudio-demo-mode',
               ].forEach(k => localStorage.removeItem(k));
             } catch { /* ignore */ }
+            // Die lokalen Profile liegen seit 08.10.2026 in IndexedDB.
+            void clearLocalStore();
             setKeysOpen(false);
             setAuthUser(null);
             setDemoMode(false);
@@ -917,12 +1166,16 @@ export default function App() {
       {versionsOpen && activeId && (
         <VersionsPanel
           resumeId={activeId}
+          local={demoMode}
           onClose={() => setVersionsOpen(false)}
           onRestored={handleProfileUpdated}
         />
       )}
       {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
       {backupReminder}
+      {logoutDialog}
+      {noticeEl}
+      {atsJob && <AtsPdfRunner job={atsJob} />}
       {langNotice && (
         <div role="status" aria-live="polite" className="ui-toast" style={{ bottom: isMobile ? '168px' : '24px', padding: '11px 16px' }}>{langNotice}</div>
       )}
@@ -975,6 +1228,7 @@ export default function App() {
             aria-haspopup="dialog" aria-expanded={moreOpen} style={{ minHeight: '44px', width: '44px', fontSize: '19px', flexShrink: 0 }}>⋯</button>
           <span className="cv-sr-only" role="status" aria-live="polite">{saveText}</span>
         </header>
+        {accessBanner}
 
         <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
           <MobilePreview doneLabel={et.zoomDone} hintLabel={et.tapToWrite} pageFormat={pageFormat} bottomInset={168}
@@ -1080,7 +1334,7 @@ export default function App() {
         </div>
         {docSegment}
         <div style={{ flex: 1, minWidth: 0 }} />
-        <span className="ui-status" data-state={saveStatus} title={saveText}>
+        <span className="ui-status" data-state={saveState} title={saveText}>
           <span className="ui-status-dot" aria-hidden />
           <span className="ui-hide-2xl" aria-hidden>{saveText}</span>
         </span>
@@ -1100,6 +1354,7 @@ export default function App() {
           </Menu>
         </div>
       </header>
+      {accessBanner}
 
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '6px 16px 16px', gap: '12px' }}>
         <nav data-noprint className="ui-rail ui-float" aria-label={dsT.railLabel}>
@@ -1142,7 +1397,7 @@ export default function App() {
           </Canvas>
           <div data-noprint style={{ position: 'absolute', left: '12px', right: '12px', bottom: '4px', zIndex: 30, pointerEvents: 'none' }}>
             <div style={{ pointerEvents: 'auto' }}>
-              <CarouselBar current={template} onStep={d => stepTemplate(d)} uiLang={uiLang} onLoadAts={docType === 'resume' ? loadAts : undefined} />
+              <CarouselBar current={template} onStep={d => stepTemplate(d)} uiLang={uiLang} onLoadAts={docType === 'resume' ? loadAts : undefined} onLoadAtsPdf={docType === 'resume' ? loadAtsPdf : undefined} />
             </div>
           </div>
         </div>

@@ -125,6 +125,21 @@ export const LABELS: Record<Lang, UILabels> = {
   es: labelsES,
 };
 
+/** Überschriften der neuen Abschnitte, je Dokumentsprache.
+ *
+ *  Bewusst NICHT in `LABELS[lang].sections`: Jedes gespeicherte Profil trägt
+ *  seine eigene Kopie der Beschriftungen, und die älteren kennen diese
+ *  Schlüssel nicht. Stünden die Vorgaben dort, hielte der Beschriftungs-
+ *  editor jedes alte Profil für „umbenannt". So gilt: steht im Profil eine
+ *  eigene Überschrift (`labels.sections.projects`), dann die — sonst diese.
+ *  Aufgelöst wird an einer Stelle, `sectionHeading` in data/extraSections.ts. */
+export const EXTRA_SECTION_LABELS: Record<Lang, { projects: string; certificates: string; volunteering: string; publications: string }> = {
+  de: { projects: 'Projekte', certificates: 'Zertifikate', volunteering: 'Ehrenamt', publications: 'Publikationen' },
+  en: { projects: 'Projects', certificates: 'Certifications', volunteering: 'Volunteering', publications: 'Publications' },
+  fr: { projects: 'Projets', certificates: 'Certifications', volunteering: 'Bénévolat', publications: 'Publications' },
+  es: { projects: 'Proyectos', certificates: 'Certificaciones', volunteering: 'Voluntariado', publications: 'Publicaciones' },
+};
+
 /** Display names for the language switcher. */
 export const LANG_NAMES: Record<Lang, string> = {
   de: 'Deutsch',

@@ -31,7 +31,7 @@ export const demoDE: CVData = {
   },
 
   profile: {
-    text: 'Senior Product Designer mit sieben Jahren Erfahrung in B2B-SaaS und E-Commerce. Schwerpunkte: skalierbare Design Systems, Research-getriebene Produktentwicklung und enge Zusammenarbeit mit Engineering. Bringt Produkte vom ersten Wireframe bis zum produktiven Feature und kann gleichermaßen mit Stakeholdern auf C-Level wie mit Frontend-Teams reden.',
+    text: 'Senior Product Designer mit sieben Jahren Erfahrung in B2B-SaaS und E-Commerce. Schwerpunkte: skalierbare Design Systems, Research-getriebene Produktentwicklung und enge Zusammenarbeit mit Engineering — vom ersten Wireframe bis zum produktiven Feature.',
   },
 
   experience: [
@@ -46,7 +46,6 @@ export const demoDE: CVData = {
         'Verantwortung für das Design System (Figma + Tokens, ausgerollt auf vier Produktbereiche)',
         'Discovery- und Delivery-Phasen für drei Kernfeatures geleitet — von User Interviews bis zur Hi-Fi-Spezifikation',
         'Onboarding-Flow überarbeitet: Aktivierungsrate (Day-7) laut Analytics-Team deutlich verbessert',
-        'Design-Review-Format mit Engineering etabliert, das Iterationszeiten halbiert hat',
       ],
     },
     {
@@ -59,7 +58,6 @@ export const demoDE: CVData = {
       bullets: [
         'Designer im Cross-Functional-Team für die SaaS-Plattform (Logistik-Branche, Mid-Market)',
         'User Research vor Ort bei Kunden in DE und NL durchgeführt — Insights flossen direkt in das Roadmap-Planning',
-        'Migration des Design-Tool-Stacks von Sketch nach Figma verantwortet inkl. Library-Setup',
         'Internes Pattern-Inventar konsolidiert: aus 180 Komponenten wurden 42 wiederverwendbare Bausteine',
       ],
     },
@@ -73,19 +71,6 @@ export const demoDE: CVData = {
       bullets: [
         'Kundenprojekte für E-Commerce-Brands (Mode, Wohnen) — End-to-End Design vom Konzept bis zum Web-Launch',
         'A/B-Tests konzipiert und mit dem Analytics-Team ausgewertet',
-        'Style Guides und Komponenten-Dokumentationen für drei Kunden aufgebaut',
-      ],
-    },
-    {
-      id: 'praktikum-pilz',
-      role: 'Junior UX Designer (Praktikum)',
-      company: 'Pilz Digital',
-      location: 'Berlin',
-      start: '04/2018',
-      end: '09/2018',
-      bullets: [
-        'Wireframes und Prototypen für interne Tools im Auftrag eines Healthtech-Kunden',
-        'Usability-Tests mit Endnutzer:innen vor Ort moderiert',
       ],
     },
   ],
@@ -138,15 +123,6 @@ export const demoDE: CVData = {
         'Workshop-Facilitation (Design Sprint, Lightning Decision Jam)',
       ],
     },
-    {
-      label: 'Soft Skills',
-      items: [
-        'Klare Kommunikation mit Engineering und Product',
-        'Stakeholder-Management auf C-Level',
-        'Mentoring von Junior-Designer:innen',
-        'Hands-on und entscheidungsfreudig',
-      ],
-    },
   ],
 
   languages: [
@@ -158,7 +134,6 @@ export const demoDE: CVData = {
   additionalExperience: [
     'Speakerin auf Design-Meetups (UX Hamburg, Friends of Figma)',
     'Mentorin im ADPList-Programm',
-    'Aktiv im AIGA-Local-Chapter',
   ],
 
   labels: labelsDE,

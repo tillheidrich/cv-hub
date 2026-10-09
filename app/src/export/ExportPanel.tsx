@@ -69,8 +69,12 @@ import { exportTemplateKit } from './exportTemplate';
 import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
 import { LANG_NAMES } from '../data/labels';
-import { api } from '../data/api';
+import { api, pdfServiceAnswered } from '../data/api';
 import type { ShareLink } from '../data/api';
+import { SHARE_SNAPSHOT_I18N } from '../ui/i18n/local';
+import { FASSUNG_I18N } from '../ui/i18n/fassung';
+import { atsPdfTemplateFor } from './atsPdfTemplate';
+import { getTheme } from '../templates/theme';
 import { track } from '../data/track';
 import { DEFAULT_TEMPLATE } from '../data/storage';
 import { markdownToCvData, markdownToCoverLetter, clToMarkdown, isCvMarkdown, isClMarkdown } from '../import/markdownBridge';
@@ -99,6 +103,11 @@ interface ExportPanelProps {
   atsLevel?: AtsLevel;
   /** Im schwebenden Paneel der App: volle Breite, ohne eigenen Kopf. */
   embedded?: boolean;
+  /** ATS-Fassung als PDF (App.tsx `exportAtsPdf`). */
+  onAtsPdf?: () => Promise<{ pages: number; bytes: number; template: string }>;
+  /** Wartendes Speichern ausführen, bevor ein Sharelink den Stand am Server
+   *  festhält (App.tsx `flushSave`). */
+  onBeforeShare?: () => Promise<void>;
 }
 
 // Prompt builders. Embedded variant ships the Markdown content inline so the
@@ -284,10 +293,28 @@ function asShares(d: unknown): ShareLink[] {
   return Array.isArray(list) ? list as ShareLink[] : [];
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter, atsLevel, embedded = false }: ExportPanelProps) {
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter, atsLevel, embedded = false, onAtsPdf, onBeforeShare }: ExportPanelProps) {
   const uiLang = useUiLang();
   const t = EXP_I18N[uiLang];
   const d = DESIGN_I18N[uiLang];
+  const F = FASSUNG_I18N[uiLang];
+  const snap = SHARE_SNAPSHOT_I18N[uiLang];
+  /** Word entsteht im Browser — gezählt wird es nur über dieses Ereignis. */
+  const docxEvent = () => { if (!demoMode) void api.event('docx'); };
+  const [atsPdfState, setAtsPdfState] = useState<{ busy?: boolean; text?: string; error?: boolean }>({});
+  async function handleAtsPdf() {
+    if (!onAtsPdf || atsPdfState.busy) return;
+    setAtsPdfState({ busy: true, text: F.atsPdfBusy });
+    try {
+      const r = await onAtsPdf();
+      setAtsPdfState({ text: F.atsPdfDone(r.pages, Math.max(1, Math.round(r.bytes / 1024)), r.template) });
+    } catch (err) {
+      setAtsPdfState({ text: F.atsPdfFailed(err instanceof Error ? err.message : '?'), error: true });
+    }
+  }
+  /** Sharelink: welcher Link wird gerade aufgefrischt, welcher ist es eben. */
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshedToken, setRefreshedToken] = useState<string | null>(null);
   const schmal = useIsMobile();
   const [pdfHover, setPdfHover] = useState(false);
   const [pdfState, setPdfState] = useState<'idle' | 'busy' | 'error'>('idle');
@@ -579,6 +606,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     if (!resumeId) return;
     setShareBusy(true); setShareErr(null);
     try {
+      await onBeforeShare?.();
       await api.createShare(resumeId, { includeCoverLetter: newShareIncludeCl });
       setShares(asShares(await api.listShares(resumeId)));
     } catch (e) { setShareErr(e instanceof Error ? e.message : t.shareError); }
@@ -590,6 +618,22 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       await api.updateShare(token, { includeCoverLetter: next });
       setShares(asShares(await api.listShares(resumeId)));
     } catch (e) { setShareErr(e instanceof Error ? e.message : t.shareError); }
+  }
+  /* „Stand aktualisieren": Ein Link zeigt den Stand beim Anlegen (fester
+   * Schnappschuss, pdf-service/share.js). Wer danach weiterschreibt, bringt
+   * den Link hiermit auf den aktuellen Stand — derselbe Link, neuer Inhalt. */
+  async function refreshShare(token: string) {
+    if (!resumeId || refreshing) return;
+    if (!window.confirm(snap.refreshConfirm)) return;
+    setRefreshing(token); setShareErr(null); setRefreshedToken(null);
+    try {
+      await onBeforeShare?.();
+      await api.refreshShare(token);
+      setShares(asShares(await api.listShares(resumeId)));
+      setRefreshedToken(token);
+      setTimeout(() => setRefreshedToken(cur => (cur === token ? null : cur)), 6000);
+    } catch (e) { setShareErr(e instanceof Error && e.message ? e.message : snap.refreshFailed); }
+    finally { setRefreshing(null); }
   }
   async function revokeShare(token: string) {
     if (!resumeId) return;
@@ -636,7 +680,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       setPdfDone(t.pdfReady(res.pages, Math.max(1, Math.round(res.bytes / 1024))));
       setTimeout(() => setPdfDone(null), 9000);
     } catch (err) {
-      if (demoMode && onPrint) { setPdfState('idle'); onPrint(); return; }
+      /* Kein Druck-Rückfall, wenn der Dienst geantwortet hat (413, 429, 503):
+       * dann zählt seine Antwort, im Klartext. Nur wenn er gar nicht zu
+       * erreichen war, bleibt der Browserdruck (data/api.ts). */
+      if (!pdfServiceAnswered(err) && onPrint) { setPdfState('idle'); onPrint(); return; }
       setPdfState('error');
       setPdfErrMsg(err instanceof Error ? err.message : t.pdfServiceError);
       setTimeout(() => setPdfState('idle'), 8000);
@@ -747,8 +794,22 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               icon="file-text"
               label={atsLevel && atsLevel !== 'high' ? `${d.wordAts} · ${d.recommended}` : d.wordAts}
               sub={d.wordAtsSub}
-              onClick={() => { track('export_docx_ats'); exportDocx(data, exportConfig, 'ats'); }}
+              onClick={() => { track('export_docx_ats'); docxEvent(); exportDocx(data, exportConfig, 'ats'); }}
             />
+            {onAtsPdf && (
+              <>
+                <ExportButton
+                  icon="download"
+                  label={atsLevel && atsLevel !== 'high' ? `${F.atsPdf} · ${d.recommended}` : F.atsPdf}
+                  sub={F.atsPdfSub(getTheme(atsPdfTemplateFor(data)).name)}
+                  busy={!!atsPdfState.busy}
+                  onClick={handleAtsPdf}
+                />
+                <div role="status" aria-live="polite" style={{ fontSize: '10.5px', lineHeight: 1.5, color: atsPdfState.error ? '#b91c1c' : 'var(--ink-3)', fontFamily: 'inherit', minHeight: atsPdfState.text ? undefined : 0 }}>
+                  {atsPdfState.text ?? ''}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -773,7 +834,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <ExportButton
               icon="file-text" label={d.wordDesign}
               sub={t.docxSub}
-              onClick={() => { track('export_docx'); exportDocx(data, exportConfig, 'design'); }}
+              onClick={() => { track('export_docx'); docxEvent(); exportDocx(data, exportConfig, 'design'); }}
             />
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
                 Was der Browserdruck aus einer HTML-Datei macht, entscheidet
@@ -905,7 +966,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.section}>
             <div style={s.sectionLabel}>{t.shareSection}</div>
             <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
-              {t.shareHint}
+              {t.shareHint} {snap.snapshotNote}
             </div>
             {shareErr && (
               <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '7px 10px', fontSize: '11.5px', color: '#c0392b', marginBottom: '10px', fontFamily: 'inherit' }}>
@@ -936,6 +997,13 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                     </button>
                   )}
                   {!sh.revoked && (
+                    <button type="button" onClick={() => refreshShare(sh.token)} disabled={refreshing !== null}
+                      title={snap.snapshotNote}
+                      style={{ background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '5px', padding: '3px 8px', fontSize: '10.5px', color: '#555', cursor: refreshing ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      {refreshing === sh.token ? snap.refreshing : snap.refresh}
+                    </button>
+                  )}
+                  {!sh.revoked && (
                     <button type="button" onClick={() => revokeShare(sh.token)}
                       style={{ background: 'transparent', border: 'none', color: '#c0392b', fontSize: '10.5px', cursor: 'pointer', fontFamily: 'inherit' }}>
                       {t.shareRevoke}
@@ -947,6 +1015,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
                   <span>{t.shareLastAccess(relativeTime(sh.last_viewed_at))}</span>
                   {sh.expires_at && <span>{t.shareExpires(new Date(sh.expires_at).toLocaleDateString(t.locale))}</span>}
                 </div>
+                {refreshedToken === sh.token && (
+                  <div role="status" style={{ fontSize: '10.5px', color: '#2d6a3e', fontFamily: 'inherit', marginTop: '4px' }}>{snap.refreshed}</div>
+                )}
                 {sh.recent_views && sh.recent_views.length > 0 && (
                   <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     {sh.recent_views.slice(0, 5).map((v, i) => (

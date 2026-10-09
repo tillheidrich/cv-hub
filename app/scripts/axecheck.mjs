@@ -104,6 +104,25 @@ await page.click('button.ui-row:has-text("Abschnitte ordnen")');
 await page.waitForTimeout(500);
 berichte.push(await pruefe('Editor · Abschnitte ordnen'));
 
+/* Weitere Abschnitte (seit 09.10.2026): Blatt mit Auswahl, dann jeder
+   Abschnitt einmal angelegt — so prüft axe jedes Formular, das dabei
+   entsteht. Bewusst als letzter Schritt am Schreibtisch: Die Änderungen
+   rufen den Sicherungshinweis auf den Plan, und der liegt danach über
+   den Knöpfen der Kopfleiste. */
+await rail('Inhalt');
+await page.click('button[aria-haspopup="dialog"]:has-text("Abschnitt hinzufügen"), button[aria-haspopup="dialog"]:has-text("Bearbeiten")');
+await page.waitForTimeout(500);
+berichte.push(await pruefe('Editor · Weitere Abschnitte (Auswahl)'));
+for (const art of ['Projekte', 'Zertifikate', 'Ehrenamt', 'Publikationen', 'Freier Abschnitt']) {
+  const auswahl = page.locator('[role="dialog"] [role="group"] button', { hasText: art });
+  if (!(await auswahl.count())) await page.click('[role="dialog"] button[aria-expanded]:has-text("Abschnitt hinzufügen")');
+  await page.locator('[role="dialog"] [role="group"] button', { hasText: art }).first().click();
+  await page.waitForTimeout(300);
+}
+berichte.push(await pruefe('Editor · Weitere Abschnitte (alle angelegt)'));
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+
 // Telefon
 const tel = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'de-DE' });
 {

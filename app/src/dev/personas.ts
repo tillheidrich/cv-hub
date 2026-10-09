@@ -319,4 +319,34 @@ export const langkontakt: CVData = {
   },
 };
 
-export const PERSONAS: Record<string, CVData> = { marketing, tech, handwerk, einseiter, langkontakt };
+/** Prüffall für scripts/sectionscheck.mjs: alle eigenen Abschnitte befüllt —
+ *  Projekte, Zertifikate, Ehrenamt, Publikationen und zwei freie Abschnitte
+ *  (einer nur Stichpunkte, einer mit Einträgen). Jeder Wert ist eindeutig,
+ *  damit die Prüfung Reihenfolge und Vollständigkeit im PDF-Text findet. */
+export const abschnitte: CVData = {
+  ...einseiter,
+  projects: [
+    { id: 'pr1', title: 'Relaunch Kundenportal', role: 'Projektleitung', start: '03/2023', end: '11/2023', url: 'https://example.org/portal-relaunch',
+      description: 'Neuaufbau des Kundenportals für 40.000 Nutzer, barrierefrei nach WCAG 2.2.', bullets: ['Ladezeit von 4,1 auf 1,3 Sekunden gesenkt', 'Supportanfragen um ein Drittel reduziert'] },
+    { id: 'pr2', title: 'Wissensdatenbank Werkstatt', role: '', start: '2022', end: '', url: '', description: '', bullets: ['Einführung in drei Filialen begleitet'] },
+  ],
+  certificates: [
+    { id: 'ce1', name: 'Scrum Master PSM I', issuer: 'Scrum.org', date: '05/2021', credentialId: 'PSM-123456', url: '' },
+    { id: 'ce2', name: 'Datenschutzbeauftragter TÜV', issuer: 'TÜV Nord Akademie', date: '2020', credentialId: '', url: 'https://example.org/zertifikat/42' },
+  ],
+  volunteering: [
+    { id: 'vo1', role: 'Jugendtrainerin Handball', organization: 'TSV Musterstadt', location: 'Musterstadt', start: '2018', end: 'present', bullets: ['Betreuung von zwei Mannschaften mit 30 Kindern'] },
+  ],
+  publications: [
+    { id: 'pu1', title: 'Digitale Werkstattakte im Mittelstand', publisher: 'Fachverlag Handwerk', date: '2024', url: 'https://example.org/artikel', description: 'Praxisbeitrag über papierlose Auftragsabwicklung.' },
+  ],
+  customSections: [
+    { id: 'cu1', title: 'Interessen', items: ['Langstreckenlauf', 'Analoge Fotografie'], entries: [] },
+    { id: 'cu2', title: 'Auszeichnungen', items: [], entries: [
+      { id: 'ce-1', title: 'Innovationspreis Handwerk', subtitle: 'Handwerkskammer Hamburg', date: '2023', text: 'Für das digitale Aufmaßverfahren.' },
+      { id: 'ce-2', title: '', subtitle: '', date: '', text: 'Nominiert für den Ausbildungspreis 2022.' },
+    ] },
+  ],
+};
+
+export const PERSONAS: Record<string, CVData> = { marketing, tech, handwerk, einseiter, langkontakt, abschnitte };

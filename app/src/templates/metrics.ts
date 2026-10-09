@@ -23,15 +23,16 @@
  *  Umrechnung: pt = px × 0.75.
  *
  *  ── Gemessen am 14.09.2026 ────────────────────────────────────────────────
- *  Till: „Die Schriftart ist zu groß, wenn du das mit den Screenshots von
- *  Etsy vergleichst — kein Wunder, dass es immer zwei Seiten sind."
+ *  Befund: Die Schrift war deutlich größer als bei gekauften
+ *  Lebenslauf-Vorlagen — kein Wunder, dass es immer zwei Seiten wurden.
  *
- *  Nachgemessen an den Vorlagen seiner Sammlung: Blattbreite als Maßstab
- *  (210 mm), Zeilenabstand des Fließtexts in Pixeln, zurückgerechnet:
+ *  Nachgemessen an drei Vorlagen aus einer Vergleichssammlung: Blattbreite
+ *  als Maßstab (210 mm), Zeilenabstand des Fließtexts in Pixeln,
+ *  zurückgerechnet:
  *
- *      Pam Beesly       10,2 pt Zeilenabstand  →  ~7,2 pt Fließtext
- *      Sophie Wagner    11,3 pt                →  ~7,9 pt
- *      Katharina Mai    12,0 pt                →  ~8,4 pt
+ *      Vorlage A        10,2 pt Zeilenabstand  →  ~7,2 pt Fließtext
+ *      Vorlage B        11,3 pt                →  ~7,9 pt
+ *      Vorlage C        12,0 pt                →  ~8,4 pt
  *      wir (vorher)     15,1 pt                →  10,1 pt
  *
  *  Also 25–40 % größer als jede Vorlage, an der wir uns orientieren. Das ist

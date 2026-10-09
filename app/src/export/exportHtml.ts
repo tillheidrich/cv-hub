@@ -567,6 +567,9 @@ export interface PdfExportArgs {
   cfg: ExportRenderConfig;
   isCover?: boolean;
   coverLetter?: CoverLetterData;
+  /** 'ats': die ATS-Fassung (einspaltige Vorlage, export/AtsPdfRunner.tsx) —
+   *  bekommt „-ATS" im Dateinamen wie die Word-ATS-Fassung. */
+  variant?: 'ats';
 }
 
 /**
@@ -574,14 +577,15 @@ export interface PdfExportArgs {
  * directly — no browser print dialog. Throws on failure so the caller can
  * fall back to window.print().
  */
-export async function exportPdf({ data: raw, cfg, isCover, coverLetter }: PdfExportArgs): Promise<{ pages: number; bytes: number }> {
+export async function exportPdf({ data: raw, cfg, isCover, coverLetter, variant }: PdfExportArgs): Promise<{ pages: number; bytes: number }> {
   /* Das Foto geht eingebettet mit (siehe photoEmbed.ts) — der PDF-Dienst holt
    * nichts mehr über HTTP nach. */
   const data = await withEmbeddedPhoto(raw);
   const html = isCover && coverLetter
     ? buildCoverLetterHtml(data, coverLetter, cfg)
     : buildResumeHtml(data, cfg);
-  const filename = exportFilename(isCover ? 'anschreiben' : 'lebenslauf', data.personal.name, 'pdf');
+  const base = exportFilename(isCover ? 'anschreiben' : 'lebenslauf', data.personal.name, 'pdf');
+  const filename = variant === 'ats' ? base.replace(/\.pdf$/, '-ATS.pdf') : base;
 
   const pageFormat = cfg.pageFormat || 'a4';
   const resp = await fetch(`${PDF_SERVICE}/api/pdf`, {

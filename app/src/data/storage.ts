@@ -219,6 +219,18 @@ export function createBlankProfile(displayName: string): AppProfile {
   };
 }
 
+/**
+ * Kopie einer Fassung für die nächste Bewerbung (Wettbewerbsbericht,
+ * Lücke 3): alle Sprachfassungen, Anschreiben und Einstellungen, neue ID,
+ * neuer Titel. Fotos bleiben, was sie sind — im Lokalmodus eine data:-URL
+ * (der Speicher legt sie nur einmal ab), mit Konto eine Adresse auf ein Foto
+ * desselben Nutzers. Das Original bleibt unberührt.
+ */
+export function duplicateProfile(p: AppProfile, displayName: string): AppProfile {
+  const copy = deepClone(p);
+  return { ...copy, id: uid(), displayName, createdAt: new Date().toISOString() };
+}
+
 // ── Kontaktdaten in eine neue Sprachfassung übernehmen ───────────────────────
 
 /** Was in jeder Sprache gleich ist: Name, Kontakt, Adressen, Foto. Texte

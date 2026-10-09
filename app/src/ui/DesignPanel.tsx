@@ -3,7 +3,6 @@ import { PICKABLE_THEMES, ACCENTS, PAPERS, FONT_PAIRING_LIST, getTheme, resolveT
 import { atsLevelForLayout, atsLabel } from '../templates/atsScore';
 import { USER_SCALE, FS, FLOOR, MIN_FONT_PX } from '../templates/metrics';
 import { PAGE_FORMAT_LIST } from '../data/pageFormats';
-import { DEFAULT_SECTION_ORDER } from '../data/types';
 import type { AppProfile, CVData, PageMode, PageFormat, SectionKey, FontPairingId } from '../data/types';
 import type { FitInfo, EditorTab } from '../preview/DocumentPreview';
 import { suggestCuts } from '../preview/shorten';
@@ -12,6 +11,8 @@ import type { UiLang } from './i18n';
 import { DESIGN_I18N, type DesignStrings } from './i18n/design';
 import AtsLine from './AtsLine';
 import { ET } from './editorI18n';
+import { sectionOrderFor } from '../data/extraSections';
+import { extraSectionUiName } from '../editor/extraSectionsText';
 
 type Settings = AppProfile['settings'];
 type View = 'main' | 'type' | 'page' | 'sections';
@@ -29,7 +30,7 @@ const pt = (px: number) => (px * 0.75).toFixed(1).replace('.', ',');
  * darunter; Schrift, Seite und Abschnitte als Zeilen, die eine Unteransicht
  * öffnen. Keine Funktion fällt weg — jede steht eine Ebene tiefer.
  */
-export default function DesignPanel({ uiLang, settings, onSettings, fit, data, onJump, renderThumb, onLoadAts }: {
+export default function DesignPanel({ uiLang, settings, onSettings, fit, data, onJump, renderThumb, onLoadAts, onLoadAtsPdf }: {
   uiLang: UiLang;
   settings: Settings;
   onSettings: (patch: Partial<Settings>) => void;
@@ -40,6 +41,8 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
    *  Eine neue Funktion heißt: neuer Inhalt — die Miniaturen rechnen neu. */
   renderThumb: (themeId: string) => React.ReactNode;
   onLoadAts: () => void;
+  /** ATS-Fassung als PDF (export/AtsPdfRunner.tsx). */
+  onLoadAtsPdf?: () => void;
 }) {
   const d = DESIGN_I18N[uiLang];
   const [view, setView] = useState<View>('main');
@@ -51,7 +54,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
   const pageMode: PageMode = settings.pageMode ?? 'one';
   const fontScale = settings.fontScale ?? 1;
   const fontPairing: FontPairingId = settings.fontPairing ?? 'auto';
-  const order = settings.sectionOrder ?? DEFAULT_SECTION_ORDER;
+  const order = sectionOrderFor(data, settings.sectionOrder);
   const hidden = settings.hiddenSections ?? [];
   const list = PICKABLE_THEMES.filter(t => cat === 'all' || t.category === cat);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -93,7 +96,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
                 <strong style={{ fontWeight: 650 }}>{getTheme(current).name}</strong>
                 <span style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', textAlign: 'right' }}>{templateStructure(getTheme(current), uiLang)}</span>
               </div>
-              <AtsLine level={level} uiLang={uiLang} onLoadAts={onLoadAts} />
+              <AtsLine level={level} uiLang={uiLang} onLoadAts={onLoadAts} onLoadAtsPdf={onLoadAtsPdf} />
             </div>
             <div className="ui-cards" role="radiogroup" aria-label={d.template}>
               {list.map(t => (
@@ -219,7 +222,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
       {view === 'sections' && (
         <>
           {back(d.rowSections)}
-          <SectionsEditor settings={settings} onSettings={onSettings} d={d} />
+          <SectionsEditor settings={settings} onSettings={onSettings} d={d} data={data} uiLang={uiLang} />
         </>
       )}
     </div>
@@ -325,10 +328,10 @@ export function FitSummary({ fit, pageMode, data, onJump, uiLang }: {
 
 // ── Abschnitte ordnen ───────────────────────────────────────────────────────
 
-function SectionsEditor({ settings, onSettings, d }: {
-  settings: Settings; onSettings: (patch: Partial<Settings>) => void; d: DesignStrings;
+function SectionsEditor({ settings, onSettings, d, data, uiLang }: {
+  settings: Settings; onSettings: (patch: Partial<Settings>) => void; d: DesignStrings; data: CVData; uiLang: UiLang;
 }) {
-  const order = settings.sectionOrder ?? DEFAULT_SECTION_ORDER;
+  const order = sectionOrderFor(data, settings.sectionOrder);
   const hidden = settings.hiddenSections ?? [];
   const pages = settings.sectionPages ?? {};
   const pageMode = settings.pageMode ?? 'one';
@@ -336,7 +339,7 @@ function SectionsEditor({ settings, onSettings, d }: {
   const maxPage = pageMode === 'three' ? 3 : 2;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
-  const name = (k: SectionKey) => d.sectionNames[k] ?? k;
+  const name = (k: SectionKey) => (d.sectionNames as Partial<Record<SectionKey, string>>)[k] ?? extraSectionUiName(k, uiLang) ?? k;
   /** Tastatur-Alternative zum Ziehen. */
   const move = (idx: number, delta: number) => {
     const next = [...order];
