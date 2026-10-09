@@ -3,6 +3,7 @@ import { api, ApiError } from '../data/api';
 import type { TwoFaStatus, OauthConnection } from '../data/api';
 import { useUiLang } from '../ui/useUiLang';
 import { KEYS_I18N } from '../ui/i18n/keys';
+import PassSection from '../billing/PassSection';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -19,7 +20,8 @@ const SERIF = "'Space Grotesk', serif";
  * schlimmer als keiner. */
 export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () => void; onAccountDeleted?: () => void }) {
   // Sprache der Oberfläche, nicht des Dokuments — das Konto gehört dem Nutzer.
-  const t = KEYS_I18N[useUiLang()];
+  const uiLang = useUiLang();
+  const t = KEYS_I18N[uiLang];
 
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -178,7 +180,9 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
         </div>
 
         <div style={{ padding: '18px 26px 28px' }}>
-          <div style={sectionH}>{t.sectionPassword}</div>
+          {/* „Mein Pass" zuerst: Laufzeit, Bestellungen, Rechnungen, Widerruf. */}
+          <PassSection lang={uiLang} compact />
+          <div style={{ ...sectionH, marginTop: '28px' }}>{t.sectionPassword}</div>
           <div style={card}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div><label style={inputLabel}>{t.currentPassword}</label><input type="password" value={curPw} onChange={e => setCurPw(e.target.value)} style={input} autoComplete="current-password" /></div>

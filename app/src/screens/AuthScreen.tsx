@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { APP_NAME } from '../brand';
 import { api } from '../data/api';
 import type { AuthUser } from '../data/api';
 import { T, type UiLang } from '../ui/i18n';
+import { BILLING_I18N } from '../ui/i18n/billing';
+import { SiteFooter } from '../billing/BillingShell';
+import { useOffer, registrationOpen } from '../billing/hooks';
+import { PATHS, linkClick } from '../billing/route';
 
 /* Marken-Tokens der neuen Website-Identität — bewusst LOKAL gehalten (nicht
  * die app-weiten ui/tokens.ts), damit die Editor-Chrome unberührt bleibt. */
@@ -80,6 +83,8 @@ export default function AuthScreen({
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const isMobile = useIsMobile();
+  const { offer } = useOffer();
+  const bt = BILLING_I18N[lang] ?? BILLING_I18N.de;
 
   const t = T[lang]?.auth ?? T.de.auth;
   // Zusatz-Strings für E-Mail / Passwort-vergessen (nicht im Haupt-T-Katalog).
@@ -225,7 +230,9 @@ export default function AuthScreen({
             ) : (
             <>
             <form onSubmit={submit}>
-              <label style={label}>{t.username}</label>
+              {/* Seit der offenen Registrierung meldet man sich auch mit der
+                  E-Mail-Adresse an (pdf-service, /api/auth/login). */}
+              <label style={label}>{mode === 'login' ? bt.identifier : t.username}</label>
               <input style={field('u')} value={username} onChange={e => setUsername(e.target.value)}
                 onFocus={() => setFocus('u')} onBlur={() => setFocus(null)}
                 autoCapitalize="none" autoComplete="username" placeholder="username" />
@@ -314,6 +321,16 @@ export default function AuthScreen({
                 {mode === 'login' ? t.swap.toRegister : t.swap.toLogin}
               </button>
             </div>
+            {/* Offene Registrierung (mit Bewerbungs-Pass) läuft über /kauf:
+                E-Mail, Passwort, Bot-Schutz, Altersbestätigung. */}
+            {registrationOpen(offer) && (
+              <div style={{ marginTop: '12px' }}>
+                <a href={PATHS.checkout} onClick={linkClick(PATHS.checkout)}
+                  style={{ color: ACCENT_HOVER, fontWeight: 550, fontFamily: SANS, fontSize: '13px', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                  {bt.regTitle} · {bt.productName} →
+                </a>
+              </div>
+            )}
             </>
             )}
           </div>
@@ -343,9 +360,8 @@ export default function AuthScreen({
         </div>
       </main>
 
-      <div style={{ borderTop: `1px solid ${LINE}`, padding: '14px clamp(20px, 5vw, 44px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ ...micromono, color: FAINT }}>CV-Hub</div>
-        <div style={{ ...micromono, color: FAINT }}>{APP_NAME}</div>
+      <div style={{ borderTop: `1px solid ${LINE}` }}>
+        <SiteFooter lang={lang} />
       </div>
     </div>
   );

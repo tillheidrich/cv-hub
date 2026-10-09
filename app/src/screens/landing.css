@@ -111,6 +111,9 @@
 .lp-nav-links button::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 1.5px; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.26s var(--ease); }
 .lp-nav-links button:hover { color: var(--ink); }
 .lp-nav-links button:hover::after { transform: scaleX(1); }
+/* Links in der Navigation (Preise, AGB, Widerruf …) sehen aus wie die Knöpfe. */
+.lp-nav-links a { padding: 4px 0; font-size: 15px; font-weight: 450; color: var(--ink-soft); text-decoration: none; position: relative; font-family: var(--font-text); }
+.lp-nav-links a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
 .lp-lang-row { display: inline-flex; gap: 2px; margin-right: 10px; background: var(--raised); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .lp-lang-row button { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; color: var(--ink-faint); padding: 4px 9px; border: 0; background: none; cursor: pointer; border-radius: 999px; transition: color var(--ease) 0.15s, background var(--ease) 0.15s; }
 .lp-lang-row button:hover { color: var(--ink); }
@@ -141,6 +144,10 @@
 .lp-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .lp-btn.lp-ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); box-shadow: none; }
 .lp-btn.lp-ghost:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+/* „.lp-root a" erbt die Textfarbe — für Knöpfe als Link (Preise) gilt die des Knopfs. */
+.lp-root a.lp-btn { color: #fff; }
+.lp-root a.lp-btn.lp-ghost { color: var(--ink); }
+.lp-root a.lp-btn.lp-ghost:hover { color: var(--paper); }
 
 .lp-link-arrow {
   font-family: var(--font-text); font-style: normal; font-weight: 550;
@@ -391,6 +398,10 @@
 .lp-footer-marks .lp-fm { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
 .lp-footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 28px; flex-wrap: wrap; }
 .lp-footer-bar .lp-nav-links button { font-size: 15px; }
+/* Mit AGB, Widerrufsbelehrung und „Vertrag widerrufen" ist die Fußzeile
+   länger geworden: umbrechen statt aus dem Telefon zu laufen. */
+.lp-footer-bar .lp-nav-links { flex-wrap: wrap; gap: 10px 22px; margin-left: 0; min-width: 0; }
+.lp-footer-bar .lp-nav-links button, .lp-footer-bar .lp-nav-links a { min-height: 32px; }
 .lp-footer-meta { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 40px; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--ink-faint); text-transform: uppercase; }
 /* --ink-ghost bleibt für die Strichzeichnungen; als Textfarbe reichte der
    Kontrast nicht (2,36:1 bei 11,5 px). Dekoration und Text brauchen nicht
@@ -426,6 +437,12 @@
   .lp-step { border-right: 0 !important; border-bottom: 1px solid var(--line); }
   .lp-step:last-child { border-bottom: 0; }
   .lp-footer-bar { justify-content: flex-start; }
+  /* Kopf auf dem Telefon: Marke und Sprachen oben, Anmelden und Zugang
+     darunter. Vorher lief die Leiste auf 390 px bis 628 px Breite aus dem
+     Bild (gefunden mit billingcheck, 09.10.2026). */
+  .lp-nav-inner { flex-wrap: wrap; height: auto; padding-block: 10px; gap: 8px; }
+  .lp-lang-row { margin-left: auto; margin-right: 0; }
+  .lp-nav-actions { width: 100%; justify-content: space-between; }
 }
 
 /* ── REQUEST-ACCESS MODAL ───────────────────────────────────────── */

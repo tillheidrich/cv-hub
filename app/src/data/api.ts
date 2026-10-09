@@ -16,6 +16,34 @@ export interface AuthUser {
   /** Laufzeit des Kontos (Pilot-Platz). null/fehlt = unbegrenzt.
    *  Gerechnet wird am Server (pdf-service/access.js, `accessInfo`). */
   access?: AccessInfo | null;
+  /** Bezahlmodell (Bewerbungs-Pass, 09.10.2026): unbegrenzt, Pilot, Pass oder
+   *  noch kein Pass. Fehlt bei Diensten ohne Bezahlwege. */
+  plan?: Plan | null;
+  /** Bei offener Registrierung: ist die E-Mail-Adresse bestätigt? */
+  emailConfirmed?: boolean;
+}
+
+/** Laufzeit-Modell aus /api/me und den Login-Antworten (Schnittstellenvertrag
+ *  Bezahlung, „Plan-Modell"). `none` = Konto ohne aktiven Pass: lesen,
+ *  exportieren, löschen ja, schreiben nein. */
+export type PlanKind = 'unlimited' | 'pilot' | 'pass' | 'none';
+export interface Plan {
+  kind: PlanKind;
+  until: string | null;
+  daysLeft: number | null;
+  notice: 'soon' | 'final' | 'expired' | null;
+}
+
+/** Plan und Bestätigungsstand stehen je nach Route am Nutzer oder daneben —
+ *  hier wird beides auf den Nutzer gelegt, damit die Oberfläche nur eine
+ *  Stelle lesen muss. */
+export function withPlan<T extends { user?: AuthUser }>(d: T & { plan?: Plan | null; emailConfirmed?: boolean; access?: AccessInfo | null }): T {
+  if (!d || !d.user) return d;
+  const user: AuthUser = { ...d.user };
+  if (user.plan === undefined && d.plan !== undefined) user.plan = d.plan;
+  if (user.emailConfirmed === undefined && d.emailConfirmed !== undefined) user.emailConfirmed = d.emailConfirmed;
+  if (user.access === undefined && d.access !== undefined) user.access = d.access;
+  return { ...d, user };
 }
 
 /** Laufzeit eines Pilot-Platzes, wie /api/auth/me und der Login sie liefern.
@@ -208,15 +236,15 @@ export interface ChangePasswordResult {
 }
 
 export const api = {
-  me: () => req<{ user: AuthUser }>('/api/auth/me'),
+  me: () => req<{ user: AuthUser; plan?: Plan | null; emailConfirmed?: boolean }>('/api/auth/me').then(withPlan),
   /** Ereignis melden — nur mit Konto aufrufen (ohne Konto antwortet der
    *  Server 401). Schlägt still fehl: Zählen darf nie einen Export stören. */
   event: (kind: ClientEvent): Promise<void> =>
     req<unknown>('/api/events', { method: 'POST', body: JSON.stringify({ kind }) }).then(() => undefined, () => undefined),
   login: (username: string, password: string) =>
-    req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }).then(withPlan),
   verify2fa: (challenge: string, code: string) =>
-    req<{ user: AuthUser }>('/api/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge, code }) }),
+    req<{ user: AuthUser }>('/api/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge, code }) }).then(withPlan),
   twofaStatus: () => req<TwoFaStatus>('/api/auth/2fa'),
   setTwofa: (enabled: boolean) =>
     req<{ ok: boolean; enabled: boolean }>('/api/auth/2fa', { method: 'POST', body: JSON.stringify({ enabled }) }),

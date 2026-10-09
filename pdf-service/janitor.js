@@ -15,6 +15,10 @@ export const RETENTION = {
   deadOauthTokensDays: 30,
   idleOauthClientHours: 24,
   orphanPhotoHours: 24,
+  // Bezahlung und offene Registrierung (09.10.2026)
+  unconfirmedAccountHours: 48,
+  unpaidOrderDays: 30,
+  paidOrderYears: 10,
 };
 
 /* Ein Foto gilt als benutzt, wenn seine ID im aktuellen Stand eines Profils
@@ -74,6 +78,31 @@ export async function runJanitor(db) {
                             AND coalesce(decided_at, created_at) < now() - interval '${R.rejectedAccessRequestsDays} days'`],
     ['share_views', `DELETE FROM share_views WHERE viewed_at < now() - interval '${R.shareViewsDays} days'`],
     ['session_revocations', `DELETE FROM session_revocations WHERE expires_at < now()`],
+    /* Offene Registrierung: unbestätigte Konten ohne bezahlte Bestellung nach
+     * 48 Stunden — es sei denn, ein frisch angeforderter Bestätigungslink
+     * gilt noch. Ihre nie bezahlten Bestellungen und Ereignisse gehen mit. */
+    ['unconfirmed_users', `WITH doomed AS (
+                              SELECT u.id FROM users u
+                               WHERE u.signup_source = 'self' AND u.email_confirmed_at IS NULL AND u.role <> 'admin'
+                                 AND u.created_at < now() - interval '${R.unconfirmedAccountHours} hours'
+                                 AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.id AND o.paid_at IS NOT NULL)
+                                 AND NOT EXISTS (SELECT 1 FROM email_confirmations c WHERE c.user_id = u.id AND NOT c.used AND c.expires_at > now())),
+                            o AS (DELETE FROM orders WHERE user_id IN (SELECT id FROM doomed) AND paid_at IS NULL),
+                            e AS (DELETE FROM events WHERE user_id IN (SELECT id FROM doomed))
+                            DELETE FROM users WHERE id IN (SELECT id FROM doomed)`],
+    ['email_confirmations', `DELETE FROM email_confirmations WHERE expires_at < now() OR used`],
+    ['altcha_spent', `DELETE FROM altcha_spent WHERE expires_at < now()`],
+    // Nie bezahlte Bestellungen: 30 Tage (Nachfragen zu abgebrochenen Zahlungen).
+    ['orders_unpaid', `DELETE FROM orders WHERE paid_at IS NULL AND created_at < now() - interval '${R.unpaidOrderDays} days'`],
+    /* Bezahlte Bestellungen samt Rechnungsdaten: zehn Jahre, gerechnet ab dem
+     * Ende des Kalenderjahres der Zahlung (Paragraf 147 Abs. 4 AO). */
+    /* Erklärungen (Widerruf, Kündigung): zugeordnete so lange wie die
+     * Bestellung, nicht zugeordnete drei Jahre (regelmäßige Verjährung). */
+    ['declarations', `DELETE FROM declarations
+                       WHERE (cardinality(order_ids) = 0 AND received_at < now() - interval '3 years')
+                          OR received_at < date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin' - interval '${R.paidOrderYears} years'`],
+    ['orders_paid', `DELETE FROM orders WHERE paid_at IS NOT NULL
+                      AND paid_at < date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin' - interval '${R.paidOrderYears} years'`],
   ];
   const out = {};
   for (const [name, sql] of steps) {

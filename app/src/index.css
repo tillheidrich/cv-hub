@@ -245,3 +245,7 @@ body {
   .cv-page [data-cv-section]:hover > .cv-entry-anchor > .cv-entry-tools { display: none; }
   .cv-page [data-cv-section]:focus-within > .cv-entry-anchor > .cv-entry-tools { display: flex; }
 }
+
+/* Profilübersicht: Auf sehr schmalen Telefonen trägt die ganze Zeile den
+   Klick; das Wort „Öffnen →" daneben kostet nur Platz. */
+@media (max-width: 400px) { .cv-home-open-label { display: none; } }

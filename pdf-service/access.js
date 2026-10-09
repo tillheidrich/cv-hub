@@ -23,6 +23,7 @@
 // laufen über dieselben gesperrten Routen).
 
 import { sendMail, tplAccessEnding } from './mail.js';
+import { tplPassEnding } from './mailtexts/index.js';
 
 const DAY_MS = 86_400_000;
 export const NOTICE_DAYS = { soon: 14, final: 3 };
@@ -68,19 +69,74 @@ export function expiredMessage(user) {
     + 'Für eine Verlängerung wende dich an die Person, von der du den Zugang hast.';
 }
 
+/* ── Plan-Modell (Bezahlung, 09.10.2026) ─────────────────────────────────
+ *
+ * plan.kind:
+ *   unlimited  Admin oder access_until NULL (Bestand, Einladung ohne Laufzeit)
+ *   pilot      Laufzeit aus einem Einladungscode oder vom Admin gesetzt
+ *   pass       aktiver, bezahlter Bewerbungs-Pass
+ *   none       registriert ohne aktiven Pass (offene Registrierung, oder der
+ *              Pass ist abgelaufen bzw. widerrufen)
+ *
+ * Abgeleitet nur aus der Zeile in users (access_until, plan_kind, role) —
+ * keine zusätzliche Abfrage je Anfrage. plan_kind setzt die Registrierung
+ * ('none') und die erste Zahlung ('pass'). Ein abgelaufener Pilot bleibt
+ * 'pilot' mit notice 'expired' und der bisherigen Sperre access_expired. */
+export function planInfo(user, now = Date.now()) {
+  if (!user) return null;
+  if (user.role === 'admin' || !user.access_until) {
+    return { kind: 'unlimited', until: null, daysLeft: null, notice: null, readOnly: false };
+  }
+  const a = accessInfo(user, now);
+  const pk = user.plan_kind || null;
+  if (!a.expired) {
+    return { kind: pk === 'pass' ? 'pass' : 'pilot', until: a.until, daysLeft: a.daysLeft, notice: a.notice, readOnly: false };
+  }
+  if (pk === 'none') {
+    // Nie bezahlt: kein Datum, kein Ablauf-Hinweis — es gab nichts, das ablief.
+    return { kind: 'none', until: null, daysLeft: null, notice: null, readOnly: true };
+  }
+  if (pk === 'pass') return { kind: 'none', until: a.until, daysLeft: 0, notice: 'expired', readOnly: true };
+  return { kind: 'pilot', until: a.until, daysLeft: 0, notice: 'expired', readOnly: true };
+}
+
+/** Klartext für die 403 bei plan.kind 'none'. */
+export function passRequiredMessage() {
+  return 'Für Speichern im Konto, Sharelinks, Versionen und die KI-Verbindung brauchst du einen aktiven Bewerbungs-Pass. '
+    + 'Ohne Konto bleibt alles kostenlos: alle Vorlagen, PDF und Word, die Daten bleiben in deinem Browser. '
+    + 'Was schon im Konto liegt, bleibt erhalten: Lesen, Exportieren und Löschen gehen weiter.';
+}
+
+/** Antwortet mit der passenden 403 und gibt true zurück, wenn das Konto
+ *  gerade nicht schreiben darf. */
+export function denyIfReadOnly(req, res) {
+  if (!isAccessExpired(req.user)) return false;
+  const plan = planInfo(req.user);
+  if (plan?.kind === 'none') {
+    res.status(403).json({
+      error: passRequiredMessage(),
+      code: 'pass_required',
+      accessUntil: plan.until,
+      plan,
+    });
+    return true;
+  }
+  res.status(403).json({
+    error: expiredMessage(req.user),
+    code: 'access_expired',
+    accessUntil: new Date(req.user.access_until).toISOString(),
+  });
+  return true;
+}
+
 /**
  * Express-Middleware hinter requireAuth: sperrt Schreibwege nach Ablauf.
- * Antwort 403 mit code 'access_expired', damit die Oberfläche die Meldung
+ * Antwort 403 mit code 'access_expired' (Pilot) bzw. 'pass_required'
+ * (registriert ohne aktiven Pass), damit die Oberfläche die Meldung
  * sprachunabhängig erkennen kann.
  */
 export function requireWritable(req, res, next) {
-  if (isAccessExpired(req.user)) {
-    return res.status(403).json({
-      error: expiredMessage(req.user),
-      code: 'access_expired',
-      accessUntil: new Date(req.user.access_until).toISOString(),
-    });
-  }
+  if (denyIfReadOnly(req, res)) return;
   next();
 }
 
@@ -96,7 +152,7 @@ export function requireWritable(req, res, next) {
  */
 export async function runAccessNotices(db, { send = sendMail, base = null } = {}) {
   const { rows } = await db.query(
-    `SELECT id, username, email, access_until, access_notice14_at, access_notice3_at
+    `SELECT id, username, email, access_until, access_notice14_at, access_notice3_at, plan_kind
        FROM users
       WHERE access_until IS NOT NULL AND access_until > now()
         AND NOT disabled AND role <> 'admin' AND email IS NOT NULL
@@ -116,7 +172,10 @@ export async function runAccessNotices(db, { send = sendMail, base = null } = {}
     if (!claim.rowCount) continue;
     let sent;
     try {
-      sent = await send({ to: u.email, ...tplAccessEnding({ username: u.username, until: u.access_until, daysLeft, base }) });
+      // Pass-Inhaber bekommen den Hinweis mit „Pass verlängern“, Pilot-Konten
+      // den bisherigen mit „wende dich an die Person …“.
+      const tpl = u.plan_kind === 'pass' ? tplPassEnding : tplAccessEnding;
+      sent = await send({ to: u.email, ...tpl({ username: u.username, until: u.access_until, daysLeft, base }) });
     } catch { sent = false; }
     if (sent) {
       // Der letzte Hinweis ersetzt den ersten, falls der nie verschickt wurde.

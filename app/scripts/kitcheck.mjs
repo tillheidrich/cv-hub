@@ -60,7 +60,7 @@ check(!!bsp.personal?.name, 'beispiel.json ist ausgefüllt');
  *
  * Der Prüfstand lädt ein Profil mit einem bekannten Namen; taucht der im
  * Beispiel auf, ist es der falsche Inhalt. */
-const ausProfil = /Till Heidrich|Lina Sandmann|Katharina Vogt/;
+const ausProfil = /Lina Sandmann|Katharina Vogt/;
 check(!ausProfil.test(JSON.stringify(bsp)),
   'beispiel.json enthält eine Musterperson, nicht den geladenen Lebenslauf');
 const mail = String(bsp.personal?.email || '');

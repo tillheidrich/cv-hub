@@ -3,6 +3,25 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-09)
+
+- **Operator details in one file.** `app/src/data/operator.ts` holds name,
+  address and contact for the legal pages, the contract texts of the paid mode
+  and the "report content" link. In this repository it carries placeholders
+  (`Your Name`, `example.com`, `phone: null`) — fill it in before going live.
+  The backend takes the same data from `SELLER_*`.
+- **Contract texts are templates.** `app/src/legal/` (terms, withdrawal notice,
+  order page, cancellation, mails) only uses `{{SELLER_*}}` placeholders; the
+  references to the original operator's research notes are replaced by a note
+  that they are not part of this repository.
+- **Not mirrored:** the original operator's pilot and payment planning
+  documents (records of processing, TOMs, pilot agreement, payment research,
+  tax thresholds). They describe one specific deployment.
+- **Identifiers:** IndexedDB and backup-file names are `cv-hub-local` and
+  `cv-hub-backup`; the Codex snippet uses the `cv-hub` server name.
+- **Guard:** the names of the commercial sample templates that comments once
+  referred to are now in the private pattern list as well.
+
 ## Done (2026-09-17)
 
 - **Word export reworked.** The sidebar colour panel now reaches all four edges

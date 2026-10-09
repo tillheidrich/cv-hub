@@ -10,7 +10,9 @@ import { SHARE } from '../ui/editorI18n';
 import { detectInitialUiLang, type UiLang } from '../ui/i18n';
 import { withAllLangs } from '../data/storage';
 import { getPageFormat } from '../data/pageFormats';
-import { LEGAL_CONTACT_EMAIL } from './LegalPages';
+import { OPERATOR } from '../data/operator';
+
+const LEGAL_CONTACT_EMAIL = OPERATOR.email;
 import type { AppProfile, FontPairingId, PageMode, PageFormat } from '../data/types';
 
 const UI = "'Inter', sans-serif";

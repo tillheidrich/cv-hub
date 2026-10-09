@@ -22,6 +22,9 @@ interface Props {
   /** Lokalmodus: Verlauf aus dem Browser statt vom Server. Ohne Angabe
    *  entscheidet, ob das Profil im lokalen Speicher liegt. */
   local?: boolean;
+  /** Zeile unter der Liste, etwa der Freischalt-Hinweis „Versionen am
+   *  Server gibt es mit dem Pass" im Lokalmodus. */
+  footerNote?: React.ReactNode;
 }
 
 function relativeTime(iso: string, T: VersionsStrings): string {
@@ -45,7 +48,7 @@ function relativeTime(iso: string, T: VersionsStrings): string {
  * dieselbe Form ({ id, source, created_at }), darum bleibt die Liste gleich.
  * Das Wiederherstellen speichert im Lokalmodus selbst — `onRestored` meldet
  * der App nur noch den neuen Stand. */
-export default function VersionsPanel({ resumeId, onClose, onRestored, local: localProp }: Props) {
+export default function VersionsPanel({ resumeId, onClose, onRestored, local: localProp, footerNote }: Props) {
   const uiLang = useUiLang();
   const local = localProp ?? isLocalProfile(resumeId);
   const L = LOCAL_VERSIONS_I18N[uiLang];
@@ -132,6 +135,7 @@ export default function VersionsPanel({ resumeId, onClose, onRestored, local: lo
               </button>
             </div>
           ))}
+          {footerNote && <div style={{ marginTop: '14px' }}>{footerNote}</div>}
         </div>
       </div>
 

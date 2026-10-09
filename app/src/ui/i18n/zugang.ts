@@ -32,6 +32,19 @@ export interface ZugangStrings {
   readOnlyContent: string;
   readOnlyDesign: string;
   readOnlyHome: string;
+  // Bewerbungs-Pass (Runde 4): dieselben Stufen, aber mit Ausgang „verlängern"
+  // statt „wende dich an die Person, von der du den Zugang hast".
+  passSoon: (date: string, days: number) => string;
+  passFinal: (date: string, days: number) => string;
+  passExpired: (date: string) => string;
+  planNone: string;
+  getPass: string;
+  extendPass: string;
+  noneReadOnlyContent: string;
+  noneReadOnlyDesign: string;
+  noneReadOnlyHome: string;
+  passReadOnlyContent: string;
+  passReadOnlyHome: string;
 }
 
 const days = {
@@ -61,6 +74,17 @@ export const ZUGANG_I18N: Record<UiLang, ZugangStrings> = {
     readOnlyContent: 'Bearbeiten ist gesperrt, weil dein Zugang abgelaufen ist. Exportieren geht weiter.',
     readOnlyDesign: 'Vorlage und Gestaltung kannst du für einen Export wechseln. Gespeichert wird das nicht mehr.',
     readOnlyHome: 'Neue Lebensläufe anlegen geht nicht mehr, weil dein Zugang abgelaufen ist.',
+    passSoon: (d, n) => `Dein Bewerbungs-Pass läuft am ${d} ab, in ${days.de(n)}. Danach kannst du weiter lesen und exportieren. Wenn du länger brauchst, verlängere ihn: Die neuen Tage hängen sich an.`,
+    passFinal: (d, n) => `Dein Bewerbungs-Pass läuft in ${days.de(n)} ab (am ${d}). Danach kannst du nur noch lesen und exportieren.`,
+    passExpired: d => `Dein Bewerbungs-Pass ist am ${d} abgelaufen. Deine Daten bleiben erhalten, Lesen und Exportieren gehen weiter. Zum Ändern brauchst du einen neuen Pass.`,
+    planNone: 'Dein Konto ist angelegt. Speichern im Konto, Sharelinks und die KI-Verbindung gibt es mit dem Bewerbungs-Pass. Ohne Konto bleibt alles im Browser kostenlos.',
+    getPass: 'Pass holen',
+    extendPass: 'Pass verlängern',
+    noneReadOnlyContent: 'Speichern im Konto gibt es mit dem Bewerbungs-Pass. Lesen und Exportieren gehen schon jetzt.',
+    noneReadOnlyDesign: 'Vorlage und Gestaltung kannst du für einen Export wechseln. Gespeichert wird das erst mit dem Pass.',
+    noneReadOnlyHome: 'Neue Lebensläufe im Konto gibt es mit dem Bewerbungs-Pass.',
+    passReadOnlyContent: 'Bearbeiten ist gesperrt, weil dein Pass abgelaufen ist. Exportieren geht weiter.',
+    passReadOnlyHome: 'Neue Lebensläufe gehen erst wieder mit einem neuen Pass.',
   },
   en: {
     locale: 'en-GB',
@@ -81,6 +105,17 @@ export const ZUGANG_I18N: Record<UiLang, ZugangStrings> = {
     readOnlyContent: 'Editing is locked because your access has ended. Exporting still works.',
     readOnlyDesign: 'You can switch template and design for an export. It is no longer saved.',
     readOnlyHome: 'Creating new résumés is no longer possible because your access has ended.',
+    passSoon: (d, n) => `Your Application Pass ends on ${d}, in ${days.en(n)}. After that you can still read and export. If you need longer, extend it: the new days are added on.`,
+    passFinal: (d, n) => `Your Application Pass ends in ${days.en(n)} (on ${d}). After that you can only read and export.`,
+    passExpired: d => `Your Application Pass ended on ${d}. Your data is kept, reading and exporting still work. To make changes you need a new pass.`,
+    planNone: 'Your account is set up. Saving in the account, share links and the AI connection come with the Application Pass. Without an account everything in the browser stays free.',
+    getPass: 'Get the pass',
+    extendPass: 'Extend the pass',
+    noneReadOnlyContent: 'Saving in the account comes with the Application Pass. Reading and exporting already work.',
+    noneReadOnlyDesign: 'You can switch template and design for an export. It is only saved with the pass.',
+    noneReadOnlyHome: 'New résumés in the account come with the Application Pass.',
+    passReadOnlyContent: 'Editing is locked because your pass has ended. Exporting still works.',
+    passReadOnlyHome: 'New résumés need a new pass.',
   },
   fr: {
     locale: 'fr-FR',
@@ -101,6 +136,17 @@ export const ZUGANG_I18N: Record<UiLang, ZugangStrings> = {
     readOnlyContent: 'La modification est bloquée car votre accès a pris fin. L’exportation reste possible.',
     readOnlyDesign: 'Vous pouvez changer de modèle et de mise en forme pour un export. Ce n’est plus enregistré.',
     readOnlyHome: 'Créer de nouveaux CV n’est plus possible car votre accès a pris fin.',
+    passSoon: (d, n) => `Votre Pass candidature prend fin le ${d}, dans ${days.fr(n)}. Ensuite, vous pourrez toujours lire et exporter. S’il vous faut plus de temps, prolongez-le : les nouveaux jours s’ajoutent.`,
+    passFinal: (d, n) => `Votre Pass candidature prend fin dans ${days.fr(n)} (le ${d}). Ensuite, seules la lecture et l’exportation resteront possibles.`,
+    passExpired: d => `Votre Pass candidature a pris fin le ${d}. Vos données sont conservées, lire et exporter restent possibles. Pour modifier, il vous faut un nouveau pass.`,
+    planNone: 'Votre compte est créé. L’enregistrement dans le compte, les liens de partage et la connexion IA viennent avec le Pass candidature. Sans compte, tout ce qui tourne dans le navigateur reste gratuit.',
+    getPass: 'Obtenir le pass',
+    extendPass: 'Prolonger le pass',
+    noneReadOnlyContent: 'L’enregistrement dans le compte vient avec le Pass candidature. Lire et exporter fonctionnent déjà.',
+    noneReadOnlyDesign: 'Vous pouvez changer de modèle et de mise en forme pour un export. Ce n’est enregistré qu’avec le pass.',
+    noneReadOnlyHome: 'Les nouveaux CV dans le compte viennent avec le Pass candidature.',
+    passReadOnlyContent: 'La modification est bloquée car votre pass a pris fin. L’exportation reste possible.',
+    passReadOnlyHome: 'De nouveaux CV demandent un nouveau pass.',
   },
   es: {
     locale: 'es-ES',
@@ -121,6 +167,17 @@ export const ZUGANG_I18N: Record<UiLang, ZugangStrings> = {
     readOnlyContent: 'La edición está bloqueada porque tu acceso ha terminado. Exportar sigue funcionando.',
     readOnlyDesign: 'Puedes cambiar de plantilla y de diseño para una exportación. Ya no se guarda.',
     readOnlyHome: 'Ya no puedes crear currículums nuevos porque tu acceso ha terminado.',
+    passSoon: (d, n) => `Tu Pase de candidatura termina el ${d}, dentro de ${days.es(n)}. Después podrás seguir leyendo y exportando. Si necesitas más tiempo, amplíalo: los días nuevos se suman.`,
+    passFinal: (d, n) => `Tu Pase de candidatura termina dentro de ${days.es(n)} (el ${d}). Después solo podrás leer y exportar.`,
+    passExpired: d => `Tu Pase de candidatura terminó el ${d}. Tus datos se conservan, leer y exportar siguen funcionando. Para hacer cambios necesitas un pase nuevo.`,
+    planNone: 'Tu cuenta está creada. Guardar en la cuenta, los enlaces para compartir y la conexión con IA vienen con el Pase de candidatura. Sin cuenta, todo lo que funciona en el navegador sigue siendo gratis.',
+    getPass: 'Conseguir el pase',
+    extendPass: 'Ampliar el pase',
+    noneReadOnlyContent: 'Guardar en la cuenta viene con el Pase de candidatura. Leer y exportar ya funcionan.',
+    noneReadOnlyDesign: 'Puedes cambiar de plantilla y de diseño para una exportación. Solo se guarda con el pase.',
+    noneReadOnlyHome: 'Los currículums nuevos en la cuenta vienen con el Pase de candidatura.',
+    passReadOnlyContent: 'La edición está bloqueada porque tu pase ha terminado. Exportar sigue funcionando.',
+    passReadOnlyHome: 'Para currículums nuevos necesitas un pase nuevo.',
   },
 };
 

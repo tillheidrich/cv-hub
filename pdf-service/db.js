@@ -249,6 +249,111 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS access_notice14_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS access_notice3_at TIMESTAMPTZ;
 -- Die Auswertung je Code zählt Ereignisse je Nutzer und Art.
 CREATE INDEX IF NOT EXISTS events_user_kind_idx ON events(user_id, kind);
+
+-- ── Bezahlung über Mollie, offene Registrierung (09.10.2026) ──────────────
+-- signup_source: NULL = Einladung oder Bestand, 'self' = offene Registrierung.
+-- plan_kind: NULL = aus access_until abgeleitet (unbegrenzt oder Pilot),
+-- 'none' = registriert ohne Pass, 'pass' = mindestens einmal bezahlt.
+-- Bestandskonten bekommen keinen Wert und bleiben damit, wie sie sind.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_kind TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmed_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS age_confirmed_16_at TIMESTAMPTZ;
+
+-- Double-Opt-in. Gespeichert wird nur der Hash des Tokens, 48 Stunden gültig.
+CREATE TABLE IF NOT EXISTS email_confirmations (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email       TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used        BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS email_confirmations_user_idx ON email_confirmations(user_id);
+
+-- Gelöste ALTCHA-Aufgaben bis zu ihrem Ablauf (Wiederholungsschutz).
+CREATE TABLE IF NOT EXISTS altcha_spent (
+  id          TEXT PRIMARY KEY,
+  expires_at  TIMESTAMPTZ NOT NULL
+);
+
+-- Bestellungen. Bleiben nach einer Kontolöschung mit Minimaldaten stehen
+-- (user_id wird NULL): Rechnungen sind 10 Jahre aufzubewahren (Paragraf 147
+-- AO, 14b UStG; Art. 17 Abs. 3 lit. b DSGVO). Nie bezahlte Bestellungen
+-- löscht der Aufräumjob nach 30 Tagen.
+CREATE SEQUENCE IF NOT EXISTS order_no_seq START 1001;
+CREATE TABLE IF NOT EXISTS orders (
+  id                  UUID PRIMARY KEY,
+  order_no            TEXT UNIQUE NOT NULL,
+  user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email               TEXT NOT NULL,
+  billing_name        TEXT NOT NULL,
+  country             TEXT NOT NULL,
+  sku                 TEXT NOT NULL,
+  amount_cents        INTEGER NOT NULL,
+  currency            TEXT NOT NULL DEFAULT 'EUR',
+  status              TEXT NOT NULL DEFAULT 'open',
+  mollie_payment_id   TEXT UNIQUE,
+  checkout_url        TEXT,
+  locale              TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  paid_at             TIMESTAMPTZ,
+  terms_version       TEXT,
+  withdrawal_version  TEXT,
+  age_confirmed_18    BOOLEAN NOT NULL DEFAULT false,
+  pass_days           INTEGER NOT NULL,
+  pass_from           TIMESTAMPTZ,
+  pass_until          TIMESTAMPTZ,
+  invoice_no          TEXT UNIQUE,
+  refund_id           TEXT,
+  refund_status       TEXT,
+  refund_attempts     INTEGER NOT NULL DEFAULT 0,
+  withdrawn_at        TIMESTAMPTZ,
+  withdraw_channel    TEXT,
+  withdraw_statement  TEXT,
+  confirmation_sent_at TIMESTAMPTZ,
+  last_synced_at      TIMESTAMPTZ,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS orders_user_idx ON orders(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS orders_paid_idx ON orders(paid_at);
+
+-- Kündigung (Paragraf 312k BGB, Kündigungsschaltfläche). Der Pass endet
+-- zum gewählten Zeitpunkt; die Bestellung bleibt "paid".
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_kind TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_effective_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_channel TEXT;
+
+-- Jede Widerrufs- und Kündigungserklärung im Wortlaut, auch die, die sich
+-- nicht sofort einer Bestellung zuordnen lässt — eine Erklärung ist wirksam,
+-- auch wenn der Abgleich scheitert, und braucht dann Handarbeit.
+-- status: 'processed' (automatisch erledigt), 'manual' (offen), 'done'.
+CREATE TABLE IF NOT EXISTS declarations (
+  id           UUID PRIMARY KEY,
+  type         TEXT NOT NULL,
+  channel      TEXT NOT NULL,
+  name         TEXT,
+  email        TEXT,
+  order_no     TEXT,
+  user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  order_ids    UUID[] NOT NULL DEFAULT '{}',
+  received_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  statement    TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  note         TEXT,
+  resolved_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS declarations_status_idx ON declarations(status, received_at);
+
+-- Lückenlose Rechnungsnummern je Jahr. Vergeben wird erst bei "paid", in
+-- derselben Transaktion wie der Statuswechsel: Die Zeile des Jahres ist
+-- dabei gesperrt, ein Abbruch nimmt die Nummer mit zurück.
+CREATE TABLE IF NOT EXISTS invoice_counters (
+  year  INTEGER PRIMARY KEY,
+  last  INTEGER NOT NULL
+);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

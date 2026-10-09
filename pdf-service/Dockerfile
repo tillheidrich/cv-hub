@@ -17,6 +17,9 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY *.js ./
 # Vorlagenliste, erzeugt aus app/src/templates/theme.ts (scripts/sync-templates.mjs).
 COPY templates.json ./
+# Mailtexte und Vertragstexte rund um den Bewerbungs-Pass (Unterordner — das
+# Glob oben erfasst nur die oberste Ebene).
+COPY mailtexts ./mailtexts
 
 # Befund vom 14.09.2026: Der Dienst lief als root — und mit ihm ein Chromium
 # ohne Sandbox, das HTML von nicht angemeldeten Aufrufern rendert. Ein Fehler im

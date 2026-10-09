@@ -80,11 +80,33 @@ its source in a comment next to it:
   it, import the result. Version history snapshots before every import.
 - **Optional MCP server** (`mcp/`) for registered users — programmatic access
   via a personal API key.
-- **Accounts are invite-only** (nothing works without a code); optional
-  **two-factor login by email code**; self-service password reset; GDPR data
-  export & account deletion.
-- **Demo mode** with no account (localStorage only) — nothing is stored server-side.
+- **Accounts are invite-only** by default (nothing works without a code);
+  open registration with double opt-in and self-hosted ALTCHA bot protection
+  can be switched on (`OPEN_REGISTRATION=1`). Optional **two-factor login by
+  email code**; self-service password reset; GDPR data export & account
+  deletion.
+- **Local mode** with no account — nothing is stored server-side. Profiles,
+  photos and version history live in the browser's IndexedDB (localStorage as a
+  fallback), and a **backup file** with a reminder brings everything back,
+  also on another device. Local mode is the main path, not a trial.
+- **More sections:** projects, certificates, volunteering, publications and
+  free-form sections, in every template, in Word, Markdown, JSON Resume, share
+  links and the LinkedIn import. Versions can be duplicated.
+- **ATS PDF in one click** next to the ATS check, alongside the ATS Word file.
+  The ATS check reads the same text layer as the PDF.
+- **Optional paid mode** (`BILLING_ENABLED=1`, off by default): a one-off,
+  time-limited pass sold through Mollie, with order page, invoice, withdrawal
+  and cancellation buttons. Local use and export stay free. The contract
+  texts in `app/src/legal/` are templates written for German law and must be
+  reviewed before you sell anything; seller details come from `SELLER_*` in
+  `.env` and `app/src/data/operator.ts`.
 - Self-hosted fonts (no Google Fonts calls), sane security headers, rate limiting.
+- **Hardening:** the PDF renderer cannot reach the internal network, is limited
+  to six pages, 30 seconds and a small queue; share links serve a frozen
+  snapshot of the visible version only; password changes and resets revoke API
+  keys and OAuth tokens; sign-out ends the session on the server; photos are
+  served only to their owner or through a share link, and a daily cleanup job
+  removes unreferenced ones.
 
 ## Quickstart (Docker)
 
@@ -100,9 +122,10 @@ Open **http://localhost:8080**. The first account you register becomes the admin
 **Behind a reverse proxy**, set two variables or two things break quietly:
 
 - `TRUST_PROXY=1` — otherwise every rate limit keys on the proxy's IP and all
-  your users share one bucket. Without a proxy, leave it unset: the default is
-  "no proxy", because trusting a client-settable `X-Forwarded-For` would switch
-  off brute-force protection entirely.
+  your users share one bucket. The bundled `docker-compose.yml` sets it to 1,
+  because its frontend nginx proxies the API. If the backend is reachable
+  directly, set it empty: trusting a client-settable `X-Forwarded-For` would
+  switch off brute-force protection entirely.
 - `PUBLIC_BASE_URL=https://your.domain` — the base for links that leave the
   house (emails, share links). It is deliberately **not** derived from request
   headers; see `pdf-service/server.js`, `publicBaseUrl`.
@@ -110,12 +133,16 @@ Open **http://localhost:8080**. The first account you register becomes the admin
 ## Running the checks
 
 ```bash
-cd pdf-service && npm test          # unit tests, no browser, no database
+cd pdf-service && npm test          # unit and integration tests
 cd app && npm run dev               # then, in a second shell:
 node scripts/onepagecheck.mjs einseiter
 node scripts/contrastcheck.mjs
 CHROMIUM_PATH=/path/to/chromium node scripts/pdfcheck.mjs hamburg one normal marketing
 ```
+
+The backend integration tests start a throwaway PostgreSQL instance and the
+real service; without `initdb`/`pg_ctl` (or Chromium for the PDF tests) they
+are skipped rather than failed.
 
 The browser-driven scripts need a running dev server (`HARNESS_BASE`, default
 `http://localhost:5199`) and a Chromium binary (`CHROMIUM_PATH`). `pdfcheck` and

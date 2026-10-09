@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const EXEC = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const NAME = 'KATHARINA MAI';
+const NAME = 'KATHARINA VOGT';
 const SIZES = [11, 16, 22, 28];
 const TRACKS = [0.08, 0.09, 0.10, 0.11, 0.12];
 
@@ -41,7 +41,7 @@ execFileSync('pdftotext', ['-layout', pdf, join(dir, 'probe.txt')]);
 const lines = readFileSync(join(dir, 'probe.txt'), 'utf8')
   .split('\n').map(l => l.trim()).filter(Boolean);
 
-console.log('Name „KATHARINA MAI" — hält die Textebene das Wort zusammen?\n');
+console.log('Name „KATHARINA VOGT" — hält die Textebene das Wort zusammen?\n');
 console.log('  pt   ' + TRACKS.map(t => String(t).padStart(6)).join(''));
 let li = 0;
 const grenze = {};
@@ -52,7 +52,7 @@ for (const pt of SIZES) {
     // „zusammen" heißt: keine Einzelbuchstaben mit Leerzeichen dazwischen und
     // der Wortabstand ist erhalten (zwei Wörter, nicht eins, nicht dreizehn).
     const woerter = got.split(/\s+/).filter(Boolean);
-    const ok = woerter.length === 2 && woerter[0] === 'KATHARINA' && woerter[1] === 'MAI';
+    const ok = woerter.length === 2 && woerter[0] === 'KATHARINA' && woerter[1] === 'VOGT';
     if (ok) grenze[pt] = em;
     cells.push((ok ? '  ✓' : '  ✗').padStart(6));
   }

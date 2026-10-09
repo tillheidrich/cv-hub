@@ -1,4 +1,9 @@
 import type { UiLang } from '../ui/i18n';
+import { OPERATOR } from '../data/operator';
+import { privacyBilling } from '../billing/legalTexts';
+import { LegalSections } from '../billing/LegalText';
+import { SiteFooter } from '../billing/BillingShell';
+import { useOffer, registrationOpen } from '../billing/hooks';
 
 /**
  * Statische Rechtspages (Impressum, Datenschutz). Werden vom LandingFooter und
@@ -19,8 +24,7 @@ import type { UiLang } from '../ui/i18n';
 
 /** Kontaktadresse aus dem Impressum — auch Kontaktstelle nach Art. 11/12 DSA
  *  und Ziel des Links „Inhalt melden" auf geteilten Lebensläufen. */
-// Vor dem Betrieb ausfüllen: die Kontaktadresse des Betreibers dieser Instanz.
-export const LEGAL_CONTACT_EMAIL = 'your-email@example.com';
+const LEGAL_CONTACT_EMAIL = OPERATOR.email;
 
 const PAPER = 'oklch(0.985 0.003 264)';
 const INK = 'oklch(0.21 0.021 264)';
@@ -72,6 +76,28 @@ function legalLang(lang?: UiLang): LegalLang {
 const STAND_DE = 'Stand [Datum] · gilt für cv.example.com';
 const STAND_EN = 'Last updated [date] · applies to cv.example.com';
 
+/** Anschrift und Kontakt aus der einen Quelle (data/operator.ts). */
+function OperatorAddress({ lang }: { lang: LegalLang }) {
+  return (
+    <p style={p}>
+      <strong>{OPERATOR.name}</strong><br />
+      {OPERATOR.tradeName !== OPERATOR.name && <>{OPERATOR.tradeName}<br /></>}
+      {OPERATOR.street}<br />
+      {OPERATOR.postalCode} {OPERATOR.city}<br />
+      {OPERATOR.country[lang]}
+    </p>
+  );
+}
+function OperatorContact({ lang }: { lang: LegalLang }) {
+  return (
+    <p style={p}>
+      {lang === 'de' ? 'E-Mail' : 'E-mail'}: <a style={a} href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a><br />
+      {OPERATOR.phone && <>{lang === 'de' ? 'Telefon' : 'Phone'}: <a style={a} href={`tel:${OPERATOR.phone.replace(/[^+\d]/g, '')}`}>{OPERATOR.phone}</a><br /></>}
+      {OPERATOR.web && <>Web: <a style={a} href={`https://${OPERATOR.web}`} target="_blank" rel="noopener noreferrer">{OPERATOR.web}</a></>}
+    </p>
+  );
+}
+
 export function ImpressumPage({ onBack, lang }: { onBack: () => void; lang?: UiLang }) {
   const L = legalLang(lang);
   return (
@@ -81,6 +107,7 @@ export function ImpressumPage({ onBack, lang }: { onBack: () => void; lang?: UiL
         <TemplateNotice lang={L} />
         {L === 'de' ? <ImpressumDE /> : <ImpressumEN />}
       </div>
+      <SiteFooter lang={lang ?? 'de'} />
     </div>
   );
 }
@@ -91,18 +118,10 @@ function ImpressumDE() {
       <h1 style={h1}>Impressum</h1>
       <div style={sub}>Angaben gemäß § 5 DDG</div>
 
-      <p style={p}>
-        <strong>[Operator Name]</strong><br />
-        [Street Address]<br />
-        [Postal Code, City]<br />
-        [Country]
-      </p>
+      <OperatorAddress lang="de" />
 
       <h2 style={h2}>Kontakt</h2>
-      <p style={p}>
-        E-Mail: <a style={a} href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a><br />
-        Web: <a style={a} href="https://example.com" target="_blank" rel="noopener noreferrer">example.com</a>
-      </p>
+      <OperatorContact lang="de" />
       {/* Alle Pflichtangaben nach § 5 DDG stehen auf DIESER Seite; ein Verweis
           auf eine andere Website genügt dafür nicht.
           Vor dem Betrieb: Wirtschafts-Identifikationsnummer (§ 5 Abs. 1 Nr. 6
@@ -112,7 +131,7 @@ function ImpressumDE() {
 
       <h2 style={h2}>Verantwortlich für den Inhalt</h2>
       <p style={p}>
-        [Operator Name], Anschrift wie oben. Inhalte, die Nutzer selbst eintragen und über Sharelinks
+        {OPERATOR.name}, Anschrift wie oben. Inhalte, die Nutzer selbst eintragen und über Sharelinks
         teilen, stammen von diesen Nutzern.
       </p>
 
@@ -150,24 +169,16 @@ function ImpressumEN() {
       <h1 style={h1}>Legal notice</h1>
       <div style={sub}>Information pursuant to § 5 DDG (German Digital Services Act)</div>
 
-      <p style={p}>
-        <strong>[Operator Name]</strong><br />
-        [Street Address]<br />
-        [Postal Code, City]<br />
-        [Country]
-      </p>
+      <OperatorAddress lang="en" />
 
       <h2 style={h2}>Contact</h2>
-      <p style={p}>
-        E-mail: <a style={a} href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a><br />
-        Web: <a style={a} href="https://example.com" target="_blank" rel="noopener noreferrer">example.com</a>
-      </p>
+      <OperatorContact lang="en" />
       {/* Vor dem Betrieb: siehe ImpressumDE — Wirtschafts-Identifikationsnummer
           hier ebenfalls eintragen, falls erteilt. */}
 
       <h2 style={h2}>Responsible for the content</h2>
       <p style={p}>
-        [Operator Name], address as above. Content that users enter themselves and share via share
+        {OPERATOR.name}, address as above. Content that users enter themselves and share via share
         links comes from those users.
       </p>
 
@@ -205,13 +216,18 @@ function ImpressumEN() {
 
 export function PrivacyPage({ onBack, lang }: { onBack: () => void; lang?: UiLang }) {
   const L = legalLang(lang);
+  /* Mit offener Registrierung gilt „Konten nur mit Einladung" nicht mehr
+   * (Hinweis im Kopf von legal/datenschutzBezahlung.ts). */
+  const { offer } = useOffer();
+  const open = registrationOpen(offer);
   return (
     <div style={{ minHeight: '100dvh', background: PAPER }}>
       <BackBar onBack={onBack} lang={L} />
       <div style={wrap}>
         <TemplateNotice lang={L} />
-        {L === 'de' ? <PrivacyDE /> : <PrivacyEN />}
+        {L === 'de' ? <PrivacyDE open={open} billing={<BillingPrivacy lang={lang} />} /> : <PrivacyEN open={open} billing={<BillingPrivacy lang={lang} />} />}
       </div>
+      <SiteFooter lang={lang ?? 'de'} />
     </div>
   );
 }
@@ -243,7 +259,21 @@ const list: React.CSSProperties = { margin: '0 0 14px', paddingLeft: '20px', col
  * Eine Löschung inaktiver Konten ist NICHT umgesetzt und wird deshalb nicht
  * angekündigt.
  */
-function PrivacyDE() {
+/* Abschnitte zur Bezahlung (Bewerbungs-Pass: Bestellung, Mollie, Rechnung,
+ * Aufbewahrung nach § 147 AO, Widerruf, Bot-Schutz) aus
+ * app/src/legal/datenschutzBezahlung.ts. Fehlt die Datei, fehlt der Abschnitt. */
+function BillingPrivacy({ lang }: { lang?: UiLang }) {
+  const { offer } = useOffer();
+  if (!offer) return null;
+  const c = privacyBilling(lang ?? 'de', offer);
+  return (
+    <div data-privacy-billing className="bl-legal-embed">
+      <LegalSections sections={c.t.sections} idPrefix="bezahlung-" />
+    </div>
+  );
+}
+
+function PrivacyDE({ billing, open }: { billing?: React.ReactNode; open?: boolean }) {
   return (
     <>
       <h1 style={h1}>Datenschutzerklärung</h1>
@@ -253,12 +283,12 @@ function PrivacyDE() {
         Diese Seite erklärt, welche Daten bei der Nutzung von cv.example.com anfallen,
         wofür, auf welcher Rechtsgrundlage, wie lange sie bleiben und wer sie sieht. Du kannst das
         Werkzeug auf zwei Arten nutzen: ohne Konto (die Daten bleiben in deinem Browser) oder mit
-        einem Konto auf Einladung (die Daten liegen auf unserem Server).
+        {open ? ' einem Konto, das du selbst anlegst oder per Einladung bekommst' : ' einem Konto auf Einladung'} (die Daten liegen auf unserem Server).
       </p>
 
       <h2 style={h2}>Verantwortlich</h2>
       <p style={p}>
-        [Operator Name], [Street Address], [Postal Code, City], [Country],{' '}
+        {OPERATOR.name}, {OPERATOR.street}, {OPERATOR.postalCode} {OPERATOR.city}, {OPERATOR.country.de},{' '}
         <a style={a} href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>.
         Einen Datenschutzbeauftragten gibt es nicht; er ist für ein Angebot dieser Größe nicht
         vorgeschrieben.
@@ -305,7 +335,7 @@ function PrivacyDE() {
 
       <h2 style={h2}>Mit Konto</h2>
       <p style={p}>
-        Konten gibt es derzeit nur mit Einladung. Für ein Konto speichern wir <strong>Nutzername,
+        {open ? 'Ein Konto legst du selbst an (siehe „Registrierung und Bestätigungsmail") oder bekommst es per Einladung. ' : 'Konten gibt es derzeit nur mit Einladung. '}Für ein Konto speichern wir <strong>Nutzername,
         Passwort-Hash</strong> (bcrypt), <strong>Zeitpunkte</strong> von Anlage und letzter Anmeldung und,
         wenn du sie angibst, eine <strong>E-Mail-Adresse</strong>. Deine Lebensläufe und Anschreiben liegen
         als Datensätze in unserer Datenbank, dazu bis zu 25 ältere Stände je Lebenslauf
@@ -360,7 +390,7 @@ function PrivacyDE() {
       <h2 style={h2}>Pflichtangaben und freiwillige Angaben</h2>
       <p style={p}>
         Gesetzlich oder vertraglich musst du uns nichts mitteilen. Für ein Konto brauchen wir
-        Nutzername, Passwort und Einladungscode; ohne sie können wir kein Konto anlegen. Alle
+        {open ? ' E-Mail-Adresse und Passwort (mit Einladung: Nutzername, Passwort und Einladungscode)' : ' Nutzername, Passwort und Einladungscode'}; ohne sie können wir kein Konto anlegen. Für einen Kauf brauchen wir zusätzlich Namen und Land für die Rechnung. Alle
         anderen Angaben, auch die E-Mail-Adresse und alles im Lebenslauf, sind freiwillig.
       </p>
 
@@ -411,6 +441,8 @@ function PrivacyDE() {
         Einmalcode an deine E-Mail-Adresse. Wir speichern ihn nur als Hash; er gilt zehn Minuten.
       </p>
 
+      {billing}
+
       <h2 style={h2}>Wie lange Daten bleiben</h2>
       <ul style={list}>
         <li>Konto, Lebensläufe, Versionen und Fotos: bis du sie löschst. Löschst du dein Konto, ist alles sofort aus der Datenbank entfernt, einschließlich deiner Zugangsanfrage.</li>
@@ -455,7 +487,7 @@ function PrivacyDE() {
   );
 }
 
-function PrivacyEN() {
+function PrivacyEN({ billing, open }: { billing?: React.ReactNode; open?: boolean }) {
   return (
     <>
       <h1 style={h1}>Privacy policy</h1>
@@ -464,13 +496,13 @@ function PrivacyEN() {
       <p style={p}>
         This page explains which data is processed when you use cv.example.com, for what
         purpose, on which legal basis, how long it is kept and who sees it. You can use the tool in
-        two ways: without an account (your data stays in your browser) or with an invite-only
-        account (your data is stored on our server).
+        two ways: without an account (your data stays in your browser) or with an
+        {open ? ' account you create yourself or get by invitation' : ' invite-only account'} (your data is stored on our server).
       </p>
 
       <h2 style={h2}>Controller</h2>
       <p style={p}>
-        [Operator Name], [Street Address], [Postal Code, City], [Country],{' '}
+        {OPERATOR.name}, {OPERATOR.street}, {OPERATOR.postalCode} {OPERATOR.city}, {OPERATOR.country.en},{' '}
         <a style={a} href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>.
         There is no data protection officer; one is not required for a service of this size.
       </p>
@@ -514,7 +546,7 @@ function PrivacyEN() {
 
       <h2 style={h2}>With an account</h2>
       <p style={p}>
-        Accounts are currently invite-only. For an account we store <strong>username, password hash</strong>{' '}
+        {open ? 'You can create an account yourself (see "Registration and confirmation e-mail") or get one by invitation. ' : 'Accounts are currently invite-only. '}For an account we store <strong>username, password hash</strong>{' '}
         (bcrypt), the <strong>times</strong> of creation and last sign-in and, if you provide one, an{' '}
         <strong>e-mail address</strong>. Your résumés and cover letters are stored as records in our
         database, together with up to 25 earlier states per résumé (versions) and uploaded{' '}
@@ -563,8 +595,8 @@ function PrivacyEN() {
 
       <h2 style={h2}>Required and voluntary information</h2>
       <p style={p}>
-        You are under no legal or contractual obligation to give us any data. For an account we need a
-        username, a password and an invite code; without them we cannot create one. Everything else,
+        You are under no legal or contractual obligation to give us any data. For an account we need
+        {open ? ' an e-mail address and a password (with an invitation: username, password and invite code)' : ' a username, a password and an invite code'}; without them we cannot create one. For a purchase we also need a name and country for the invoice. Everything else,
         including the e-mail address and everything in the résumé, is voluntary.
       </p>
 
@@ -612,6 +644,8 @@ function PrivacyEN() {
         If you enable two-factor login, we send a six-digit one-time code to your e-mail address on
         every sign-in. We store it only as a hash; it is valid for ten minutes.
       </p>
+
+      {billing}
 
       <h2 style={h2}>How long data is kept</h2>
       <ul style={list}>

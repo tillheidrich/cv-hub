@@ -177,7 +177,7 @@ export function consentPage({ appName, username, clientName, redirectUri, params
  * @param urlencoded Express-Body-Parser für Formulare
  * @param registerLimit Middleware, die die offene Client-Registrierung begrenzt
  */
-export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appName, urlencoded, registerLimit }) {
+export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appName, urlencoded, registerLimit, canConnect = () => true, cannotConnectMessage = '' }) {
   const form = urlencoded;
   const limitRegister = registerLimit || ((_req, _res, next) => next());
 
@@ -288,6 +288,15 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
       const path = endpointsBase(base).replace(base, '') || '/oauth';
       return res.redirect(302, `${base}/?next=${encodeURIComponent(`${path}/authorize?${qs}`)}`);
     }
+    /* Bezahlung (09.10.2026): Eine neue KI-Verbindung gibt es nur mit
+     * aktivem Pass. Statt der Zustimmung kommt eine Erklärung; der Client
+     * bekommt nichts. */
+    if (!canConnect(user)) {
+      return res.status(403).type('html').send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KI-Verbindung — ${esc(appName)}</title></head>
+<body style="margin:0;background:#f8f9fb;font-family:Inter,Segoe UI,Arial,sans-serif;color:#1b1c22;"><div style="max-width:460px;margin:12vh auto;background:#fff;border:1px solid #e6e7ec;border-radius:14px;padding:32px;">
+<div style="font-size:20px;font-weight:700;margin-bottom:10px;">KI-Verbindung braucht einen Pass</div>
+<p style="font-size:14px;line-height:1.6;color:#5c5e6b;margin:0;">${esc(cannotConnectMessage)}</p></div></body></html>`);
+    }
     // Die Weiterleitung nach dem Absenden geht an den Client; ohne seinen
     // Ursprung in form-action blockiert Chrome sie (CSP aus guards.js).
     res.setHeader('Content-Security-Policy', consentCsp(chk.redirectUri));
@@ -309,7 +318,7 @@ export function mountOAuth(app, { pool, loadUser, requireAuth, baseUrlOf, appNam
     const back = new URL(chk.redirectUri);
     if (req.body.state) back.searchParams.set('state', req.body.state);
 
-    if (req.body.action !== 'allow') {
+    if (req.body.action !== 'allow' || !canConnect(user)) {
       back.searchParams.set('error', 'access_denied');
       return res.redirect(302, back.toString());
     }

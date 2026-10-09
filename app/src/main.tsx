@@ -8,7 +8,7 @@ import './index.css'
 import '@fontsource-variable/geist/wght.css'
 import '@fontsource-variable/geist-mono/wght.css'
 import './ui/surface.css'
-import App from './App.tsx'
+import BillingRoot from './billing/BillingRoot.tsx'
 import ShareView from './screens/ShareView.tsx'
 import ResetPassword from './screens/ResetPassword.tsx'
 
@@ -19,6 +19,6 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {shareMatch ? <ShareView token={shareMatch[1]} />
       : resetMatch ? <ResetPassword token={resetMatch[1]} />
-      : <App />}
+      : <BillingRoot />}
   </StrictMode>,
 )

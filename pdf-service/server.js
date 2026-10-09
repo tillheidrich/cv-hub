@@ -16,7 +16,10 @@ import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, B
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
 import { prunePhotos, startJanitor } from './janitor.js';
-import { accessInfo, requireWritable, isAccessExpired, startAccessNotices, MAX_ACCESS_DAYS } from './access.js';
+import { accessInfo, requireWritable, isAccessExpired, startAccessNotices, MAX_ACCESS_DAYS, planInfo, passRequiredMessage } from './access.js';
+import { createBilling, billingConfig } from './billing.js';
+import { createAltcha } from './altcha.js';
+import { tplConfirmEmail } from './mailtexts/index.js';
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -75,7 +78,11 @@ const SESSION_DAYS = 30;
 // Not a replacement for Redis or a WAF, but enough to make casual abuse
 // expensive — the next attacker would need a botnet.
 const rateBuckets = new Map();
-function rateLimit({ route, max, windowMs }) {
+/* Nur für Integrationstests, die viele Konten von 127.0.0.1 anlegen: hebt alle
+ * Grenzen um diesen Faktor an. Greift ausschließlich bei NODE_ENV=test. */
+const RATE_FACTOR = process.env.NODE_ENV === 'test' ? Math.max(1, Number.parseInt(process.env.TEST_RATE_LIMIT_FACTOR || '1', 10) || 1) : 1;
+function rateLimit({ route, max: baseMax, windowMs }) {
+  const max = baseMax * RATE_FACTOR;
   return (req, res, next) => {
     // req.ip wird von Express aus 'trust proxy' abgeleitet (rechter, vom
     // vertrauten Proxy gesetzter Hop) und ist NICHT client-spoofbar. Den rohen
@@ -98,6 +105,27 @@ function rateLimit({ route, max, windowMs }) {
     next();
   };
 }
+/* Dasselbe je Netz statt je Adresse (offene Registrierung, öffentlicher
+ * Widerruf): IPv4 je /24, IPv6 je /64. Wer viele Adressen eines Netzes hat,
+ * teilt sich einen Eimer. */
+function subnetOf(ip) {
+  const s = String(ip || '').replace(/^::ffff:/i, '');
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(s)) return s.split('.').slice(0, 3).join('.') + '.0/24';
+  if (s.includes(':')) {
+    const full = s.split('%')[0];
+    const [head, tail = ''] = full.split('::');
+    const h = head ? head.split(':') : [];
+    const t = tail ? tail.split(':') : [];
+    const groups = full.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+    return groups.slice(0, 4).map(g => g || '0').join(':') + '::/64';
+  }
+  return s || 'unknown';
+}
+function subnetLimit({ route, max, windowMs }) {
+  const inner = rateLimit({ route: `${route}/net`, max, windowMs });
+  return (req, res, next) => inner({ ip: subnetOf(req.ip) }, res, next);
+}
+
 // Janitor — purge stale entries every 5min so the map doesn't grow forever.
 setInterval(() => {
   const now = Date.now();
@@ -212,12 +240,21 @@ function issueSession(res, user) {
   });
 }
 
+/** Bestätigt gilt jede Adresse aus Einladung und Bestand; nur selbst
+ *  registrierte Konten brauchen den Klick in der Mail. */
+function emailConfirmed(u) {
+  return u?.signup_source !== 'self' || !!u?.email_confirmed_at;
+}
+
 function publicUser(u) {
   return {
     id: u.id, username: u.username, role: u.role, email: u.email ?? null,
     twofaEnabled: !!u.twofa_enabled, createdAt: u.created_at,
     // Laufzeit des Kontos (Pilot). null = unbegrenzt. Siehe access.js.
     access: accessInfo(u),
+    // Bezahlmodell (09.10.2026): unlimited | pilot | pass | none.
+    plan: planInfo(u),
+    emailConfirmed: emailConfirmed(u),
   };
 }
 
@@ -326,6 +363,9 @@ mountOAuth(app, {
   baseUrlOf: publicBaseUrl,
   appName: process.env.APP_NAME || 'CV-Hub',
   urlencoded: express.urlencoded({ extended: false, limit: '64kb' }),
+  // Die KI-Verbindung ist eine Pass-Funktion: ohne aktiven Pass keine neue.
+  canConnect: user => planInfo(user)?.kind !== 'none',
+  cannotConnectMessage: passRequiredMessage(),
   registerLimit: rateLimit({ route: 'oauthreg', max: 20, windowMs: 60 * 60 * 1000 }),
 });
 
@@ -522,12 +562,126 @@ app.post('/api/access/action', express.urlencoded({ extended: false, limit: '8kb
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
+/* ── Offene Registrierung (09.10.2026) ──────────────────────────────────────
+ *
+ * OPEN_REGISTRATION=1: Konto mit E-Mail und Passwort, ohne Einladungscode.
+ * Bot-Schutz über ALTCHA (selbst geprüft), Begrenzung je Adresse und je Netz,
+ * Pflicht-Häkchen „ab 16“. Das Konto ist sofort angemeldet, aber noch nicht
+ * bestätigt; die Mail mit dem Bestätigungslink gilt 48 Stunden. Unbestätigte
+ * Konten ohne Kauf löscht der Aufräumjob danach (janitor.js). Neue Konten
+ * starten ohne Pass (plan.kind 'none'): lesen ja, schreiben erst mit Pass.
+ * Einladungscodes gehen weiter den bisherigen Weg. */
+const OPEN_REGISTRATION = /^(1|true|yes|on)$/i.test(String(process.env.OPEN_REGISTRATION || '').trim());
+const altcha = createAltcha({ pool });
+const CONFIRM_HOURS = 48;
+
+async function issueEmailConfirmation(user, base, lang = 'de') {
+  const token = crypto.randomBytes(32).toString('base64url');
+  await pool.query('UPDATE email_confirmations SET used = true WHERE user_id = $1 AND NOT used', [user.id]);
+  await pool.query(
+    `INSERT INTO email_confirmations (token_hash, user_id, email, expires_at) VALUES ($1, $2, $3, now() + make_interval(hours => $4))`,
+    [sha256(token), user.id, String(user.email).toLowerCase(), CONFIRM_HOURS],
+  );
+  if (!base) {
+    console.error('confirm-email: keine Basis-URL bekannt (PUBLIC_BASE_URL setzen) — Bestätigungsmail nicht verschickt.');
+    return false;
+  }
+  return sendMail({ to: user.email, ...tplConfirmEmail({ token, base, lang, productName: (process.env.PRODUCT_NAME || 'CV-Hub').trim() }) });
+}
+
+/** Nutzername aus der Mailadresse, wenn keiner angegeben ist: lokaler Teil,
+ *  bereinigt, plus vier Zeichen Zufall. Angemeldet wird mit der Adresse. */
+async function generateUsername(client, email) {
+  const local = String(email).split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '').replace(/^[._-]+/, '').slice(0, 20) || 'konto';
+  for (let i = 0; i < 8; i++) {
+    const name = `${local.length < 3 ? `${local}konto` : local}-${crypto.randomBytes(2).toString('hex')}`;
+    const { rowCount } = await client.query('SELECT 1 FROM users WHERE lower(username) = lower($1)', [name]);
+    if (!rowCount) return name;
+  }
+  return `konto-${crypto.randomBytes(6).toString('hex')}`;
+}
+
+async function registerOpen(req, res) {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const wanted = String(req.body?.username || '').trim();
+  if (!EMAIL_RE.test(email) || email.length > 200) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.', code: 'email_invalid' });
+  if (password.length < 8) return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen haben.', code: 'password_short' });
+  if (wanted && !/^[a-zA-Z0-9_.-]{3,32}$/.test(wanted)) return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).' });
+  if (req.body?.ageConfirmed16 !== true) {
+    return res.status(400).json({ error: 'Ein Konto ist ab 16 Jahren möglich. Bitte bestätige dein Alter.', code: 'age16_required' });
+  }
+  if (!altcha.configured) {
+    console.error('register: OPEN_REGISTRATION=1, aber ALTCHA_HMAC_KEY fehlt — offene Registrierung abgewiesen.');
+    return res.status(503).json({ error: 'Die Registrierung ist gerade nicht verfügbar.', code: 'registration_unavailable' });
+  }
+  const check = await altcha.verify(req.body?.altcha);
+  if (!check.ok) return res.status(400).json({ error: 'Die Sicherheitsprüfung ist fehlgeschlagen. Bitte noch einmal versuchen.', code: 'altcha_invalid' });
+
+  const client = await pool.connect();
+  let user;
+  try {
+    await client.query('BEGIN');
+    const dupE = await client.query('SELECT 1 FROM users WHERE lower(email) = $1', [email]);
+    if (dupE.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Für diese E-Mail-Adresse gibt es schon ein Konto. Melde dich an oder setze das Passwort zurück.', code: 'email_taken' });
+    }
+    if (wanted) {
+      const dup = await client.query('SELECT 1 FROM users WHERE lower(username) = lower($1)', [wanted]);
+      if (dup.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Nutzername ist bereits vergeben.', code: 'username_taken' }); }
+    }
+    const username = wanted || await generateUsername(client, email);
+    const hash = await bcrypt.hash(password, 10);
+    /* access_until = jetzt: Das Konto hat keine Laufzeit, die läuft — es
+     * ist ab dem ersten Augenblick „ohne Pass“ (plan_kind 'none'). Der erste
+     * Kauf setzt die Laufzeit ab jetzt. */
+    const { rows } = await client.query(
+      `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until,
+                          signup_source, plan_kind, age_confirmed_16_at)
+       VALUES ($1, $2, 'user', $3, now(), now(), 'self', 'none', now()) RETURNING *`,
+      [username, hash, email],
+    );
+    user = rows[0];
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err?.code === '23505') return res.status(409).json({ error: 'Für diese E-Mail-Adresse gibt es schon ein Konto.', code: 'email_taken' });
+    console.error('register (offen) failed:', err?.message || err);
+    return res.status(500).json({ error: 'Registrierung fehlgeschlagen.' });
+  } finally {
+    client.release();
+  }
+  logEvent(user.id, 'register_open');
+  issueSession(res, user);
+  res.json({ user: publicUser(user), emailConfirmed: false, plan: planInfo(user) });
+  const lang = String(req.body?.lang || req.get('accept-language') || 'de').slice(0, 2).toLowerCase();
+  issueEmailConfirmation(user, publicBaseUrl(req), lang).catch(err => console.error('confirm-email failed:', err?.message || err));
+}
+
 // Register: 10/hour/IP — keeps invite-burning bots in check.
-app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs: 60 * 60 * 1000 }), async (req, res) => {
-  const username = String(req.body?.username || '').trim();
+app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs: 60 * 60 * 1000 }), async (req, res, next) => {
+  /* Offener Weg nur ohne Einladungscode und nur, wenn es schon Konten gibt
+   * (das erste Konto wird wie bisher der Admin). Zusätzlich je Netz begrenzt. */
+  if (OPEN_REGISTRATION && !String(req.body?.inviteCode || '').trim()) {
+    const { rows } = await pool.query('SELECT EXISTS (SELECT 1 FROM users) AS any');
+    if (rows[0].any) {
+      return subnetLimit({ route: 'register-open', max: 30, windowMs: 60 * 60 * 1000 })(req, res, () => {
+        rateLimit({ route: 'register-open', max: 5, windowMs: 60 * 60 * 1000 })(req, res, () => {
+          registerOpen(req, res).catch(next);
+        });
+      });
+    }
+  }
+  return next();
+}, async (req, res) => {
+  let username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   const inviteCode = String(req.body?.inviteCode || '').trim().toUpperCase();
   const email = String(req.body?.email || '').trim().toLowerCase();
+  /* Das neue Registrierungsformular fragt keinen Nutzernamen mehr ab — auch
+   * nicht mit Einladungscode. Dann entsteht er aus der Adresse. */
+  if (!username && email && EMAIL_RE.test(email)) username = await generateUsername(pool, email);
 
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
     return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).' });
@@ -612,7 +766,12 @@ app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 6
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   try {
-    const { rows } = await pool.query('SELECT * FROM users WHERE lower(username) = lower($1)', [username]);
+    /* Anmeldung mit Nutzername ODER E-Mail-Adresse — selbst registrierte
+     * Konten kennen ihren erzeugten Nutzernamen nicht. Ein @ kommt in
+     * Nutzernamen nicht vor, die beiden Wege können sich nicht überschneiden. */
+    const { rows } = username.includes('@')
+      ? await pool.query('SELECT * FROM users WHERE lower(email) = lower($1)', [username])
+      : await pool.query('SELECT * FROM users WHERE lower(username) = lower($1)', [username]);
     const user = rows[0];
     // Immer einen bcrypt-Vergleich ausführen (Dummy-Hash bei fehlendem Nutzer),
     // damit die Antwortzeit keine gültigen Nutzernamen verrät. (Finding #5.)
@@ -723,7 +882,54 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
  * readOnly } — notice 'soon' ab 14 Tagen, 'final' ab 3 Tagen, 'expired'. */
 app.get('/api/me', requireAuth, (req, res) => {
   const user = publicUser(req.user);
-  res.json({ user, access: user.access });
+  res.json({ user, access: user.access, plan: user.plan, emailConfirmed: user.emailConfirmed });
+});
+
+/* Double-Opt-in: Token aus der Mail (nur sein Hash liegt in der Datenbank).
+ * Ohne Anmeldung — der Token ist die Berechtigung. Gilt nur für die Adresse,
+ * an die er ging. */
+app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windowMs: 30 * 60 * 1000 }), async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(token)) return res.status(400).json({ error: 'Der Bestätigungslink ist ungültig oder abgelaufen.', code: 'token_invalid' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT c.*, u.email AS current_email FROM email_confirmations c JOIN users u ON u.id = c.user_id
+        WHERE c.token_hash = $1 FOR UPDATE OF c`,
+      [sha256(token)],
+    );
+    const c = rows[0];
+    if (!c || c.used || new Date(c.expires_at) < new Date() || String(c.current_email || '').toLowerCase() !== c.email) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Der Bestätigungslink ist ungültig oder abgelaufen.', code: 'token_invalid' });
+    }
+    await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
+    await client.query('UPDATE users SET email_confirmed_at = coalesce(email_confirmed_at, now()) WHERE id = $1', [c.user_id]);
+    await client.query('COMMIT');
+    logEvent(c.user_id, 'email_confirmed');
+    res.json({ ok: true, emailConfirmed: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('confirm-email failed:', err?.message || err);
+    res.status(500).json({ error: 'Bestätigung fehlgeschlagen.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/auth/resend-confirmation', rateLimit({ route: 'resend-confirm', max: 3, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+  if (emailConfirmed(req.user)) return res.json({ ok: true, alreadyConfirmed: true });
+  if (!req.user.email) return res.status(400).json({ error: 'Im Konto ist keine E-Mail-Adresse hinterlegt.' });
+  const sent = await issueEmailConfirmation(req.user, publicBaseUrl(req));
+  res.json({ ok: true, sent: !!sent });
+});
+
+/* ALTCHA-Aufgabe für Registrierung und öffentlichen Widerruf. */
+app.get('/api/altcha/challenge', rateLimit({ route: 'altcha', max: 120, windowMs: 10 * 60 * 1000 }), async (_req, res) => {
+  if (!altcha.configured) return res.status(503).json({ error: 'Die Sicherheitsprüfung ist nicht eingerichtet.' });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await altcha.challenge());
 });
 
 /* Passwortwechsel, Reset und Admin-Reset trennen ALLE Zugänge (Befund 2).
@@ -863,6 +1069,9 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
     );
     const user = rows[0];
     if (!user || user.disabled || !user.email) return;   // ohne hinterlegte Mail kein Reset
+    // Offene Registrierung: Reset erst, wenn die Adresse bestätigt ist —
+    // sonst wäre ein Konto mit fremder Adresse über deren Postfach übernehmbar.
+    if (!emailConfirmed(user)) return;
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 60 min
     await pool.query(
@@ -917,6 +1126,11 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
 // ── API keys (per-user, for MCP / programmatic access) ──────────────────────
 
 app.post('/api/keys', requireAuth, async (req, res) => {
+  // API-Schlüssel sind eine Pass-Funktion. Bestehende Schlüssel gelten weiter
+  // (nur noch lesend, die Schreibwege sperren selbst).
+  if (planInfo(req.user)?.kind === 'none') {
+    return res.status(403).json({ error: passRequiredMessage(), code: 'pass_required', plan: planInfo(req.user) });
+  }
   const name = (String(req.body?.name || '').trim().slice(0, 80)) || 'MCP-Key';
   const key = 'cvk_' + crypto.randomBytes(20).toString('hex');
   const prefix = key.slice(0, 14);
@@ -1465,8 +1679,8 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
  */
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
-    const [user, resumes, versions, shares, photos, events, apiKeys] = await Promise.all([
-      pool.query('SELECT id, username, email, role, twofa_enabled, created_at, last_seen_at FROM users WHERE id = $1', [req.user.id]),
+    const [user, resumes, versions, shares, photos, events, apiKeys, orders] = await Promise.all([
+      pool.query('SELECT id, username, email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
                     FROM resume_versions v JOIN resumes r ON r.id = v.resume_id
@@ -1476,6 +1690,10 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       pool.query('SELECT id, mime, data, size_bytes, created_at FROM photos WHERE user_id = $1', [req.user.id]),
       pool.query('SELECT id, kind, created_at FROM events WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1000', [req.user.id]),
       pool.query('SELECT id, name, prefix, created_at, last_used_at, revoked FROM api_keys WHERE user_id = $1', [req.user.id]),
+      pool.query(`SELECT order_no, email, billing_name, country, sku, amount_cents, currency, status, created_at, paid_at,
+                         terms_version, withdrawal_version, age_confirmed_18, pass_days, pass_from, pass_until, invoice_no,
+                         refund_status, withdrawn_at, withdraw_channel, withdraw_statement
+                    FROM orders WHERE user_id = $1 ORDER BY created_at`, [req.user.id]),
     ]);
 
     const dump = {
@@ -1490,6 +1708,7 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       })),
       events: events.rows,
       apiKeys: apiKeys.rows,
+      orders: orders.rows,
     };
 
     logEvent(req.user.id, 'dsgvo_export');
@@ -1529,6 +1748,7 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
      * auf NULL gesetzt). Alles in einer Transaktion: halb gelöscht gibt es
      * nicht. */
     const email = (info[0]?.email || '').trim().toLowerCase();
+    let retainedOrders = 0;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -1546,6 +1766,16 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
         [req.user.id],
       );
       await client.query('DELETE FROM events WHERE user_id = $1', [req.user.id]);
+      /* Bestellungen (09.10.2026): nie bezahlte gehen mit, bezahlte bleiben
+       * mit Minimaldaten stehen (Aufbewahrungspflicht, Art. 17 Abs. 3 lit. b
+       * DSGVO); user_id wird über den Fremdschlüssel NULL. Was an einer
+       * bezahlten Bestellung nicht zur Rechnung gehört, kommt weg. */
+      await client.query('DELETE FROM orders WHERE user_id = $1 AND paid_at IS NULL', [req.user.id]);
+      const kept = await client.query(
+        'UPDATE orders SET checkout_url = NULL, locale = NULL WHERE user_id = $1 AND paid_at IS NOT NULL',
+        [req.user.id],
+      );
+      retainedOrders = kept.rowCount;
       await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
       await client.query('COMMIT');
     } catch (err) {
@@ -1556,7 +1786,7 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
     }
     res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
     res.json({ ok: true });
-    if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true }); sendMail({ to: info[0].email, ...m }); }
+    if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true, retainedOrders }); sendMail({ to: info[0].email, ...m }); }
   } catch (err) {
     console.error('me/delete failed:', err);
     res.status(500).json({ error: 'Löschung fehlgeschlagen.' });
@@ -1658,7 +1888,8 @@ app.post('/api/admin/access-requests/:id/reject', requireAuth, requireAdmin, asy
 
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_seen_at, u.access_until,
+    `SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_seen_at, u.access_until, u.plan_kind, u.signup_source,
+            (u.signup_source IS DISTINCT FROM 'self' OR u.email_confirmed_at IS NOT NULL) AS email_confirmed,
             (SELECT count(*)::int FROM resumes r WHERE r.user_id = u.id) AS resume_count,
             (SELECT ir.code FROM invite_redemptions ir WHERE ir.user_id = u.id ORDER BY ir.redeemed_at LIMIT 1) AS invite_code
        FROM users u ORDER BY u.created_at ASC`,
@@ -1920,6 +2151,22 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
   }
 });
 
+// ── Bezahlung (Bewerbungs-Pass über Mollie) ────────────────────────────────
+/* Rechnung und Vertragsunterlagen laufen über denselben Renderer und dieselbe
+ * Warteschlange wie /api/pdf — aus eigenem, schlichtem HTML (invoice.js),
+ * nie aus Nutzer-HTML. */
+async function renderOwnPdf(html) {
+  const release = await pdfLimiter.acquire();
+  try {
+    return await renderer.render(html, { format: 'A4', ownHost: null, timeoutMs: PDF_TIMEOUT_MS });
+  } finally {
+    release();
+  }
+}
+const BILLING = billingConfig();
+const billing = createBilling({ pool, config: BILLING, renderPdf: renderOwnPdf });
+billing.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha });
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 // Bootstrap admin account from env vars. Source of truth is Coolify env, not
@@ -2014,6 +2261,15 @@ initDb()
       startAccessNotices(pool, { base });
     }
     console.log(`pdf: Renderer löst nur diese Hosts auf: ${RENDER_HOSTS.join(', ') || '(keine)'}`);
+    // Bezahlung: was fehlt, sagt der Dienst beim Start — ohne Werte.
+    if (BILLING.enabled) {
+      if (BILLING.missing.length) console.warn(`billing: BILLING_ENABLED=1, aber es fehlt: ${BILLING.missing.join(', ')} — der Kauf bleibt aus.`);
+      else console.log(`billing: bereit (${billing.offer().priceCents} Cent, ${BILLING.days} Tage, Mollie-${/^live_/.test(BILLING.mollieKey) ? 'Live' : 'Test'}modus)`);
+      if (/^live_/.test(BILLING.mollieKey) && process.env.NODE_ENV !== 'production') console.warn('billing: Live-Schlüssel außerhalb von NODE_ENV=production.');
+      if (BILLING.priceCents > 25_000 && !BILLING.seller.taxId) console.warn('billing: Preis über 250 € — die Rechnung braucht dann SELLER_TAX_ID (Paragraf 14 Abs. 4 UStG).');
+      if (process.env.BILLING_JOBS !== '0') billing.startJobs();
+    }
+    if (OPEN_REGISTRATION && !altcha.configured) console.warn('register: OPEN_REGISTRATION=1 ohne ALTCHA_HMAC_KEY — offene Registrierung bleibt zu.');
     app.listen(port, () => console.log(`cv-api listening on :${port}`));
   })
   .catch(err => { console.error('FATAL: db init failed', err); process.exit(1); });

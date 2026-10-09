@@ -4,6 +4,13 @@ import type { UiLang } from '../ui/i18n';
 import { api } from '../data/api';
 import { track } from '../data/track';
 import './landing.css';
+import { BILLING_I18N } from '../ui/i18n/billing';
+import { PricingCards } from '../billing/PricingPage';
+import { priceOf } from '../billing/format';
+import { useOffer, salesOpen } from '../billing/hooks';
+import { PATHS, linkClick } from '../billing/route';
+import { cancelUi } from '../billing/legalTexts';
+import '../billing/billing.css';
 
 interface Props {
   onSignIn: () => void;
@@ -37,6 +44,8 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
   }, []);
 
   const t = COPY[lang] ?? DE;
+  const bt = BILLING_I18N[lang];
+  const { offer } = useOffer();
   const [requestOpen, setRequestOpen] = useState(false);
   const openRequest = () => { track('request_open'); setRequestOpen(true); };
   const goSignIn = () => { track('signin_click'); onSignIn(); };
@@ -59,6 +68,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
             <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
             <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
+            {offer && <a href={PATHS.pricing} onClick={linkClick(PATHS.pricing)}>{bt.pricing}</a>}
           </nav>
           <div className="lp-lang-row">
             {LANG_ORDER.map(l => (
@@ -67,7 +77,11 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           </div>
           <div className="lp-nav-actions">
             <button type="button" className="lp-signin" onClick={goSignIn}>{t.nav.signin}</button>
-            <button type="button" className="lp-btn" onClick={openRequest}>{t.nav.cta}</button>
+            {/* Mit offenem Verkauf führt der Knopf zu den Preisen statt zur
+                Zugangsanfrage: Ein Konto bekommt man dann selbst. */}
+            {salesOpen(offer)
+              ? <a className="lp-btn" href={PATHS.pricing} onClick={linkClick(PATHS.pricing)} style={{ textDecoration: 'none' }}>{bt.pricing}</a>
+              : <button type="button" className="lp-btn" onClick={openRequest}>{t.nav.cta}</button>}
           </div>
         </div>
       </header>
@@ -246,6 +260,26 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
 
         <hr className="lp-rule" />
 
+        {/* PREISE — nur, wenn dieser Dienst einen Pass verkauft (Angebot vom
+            Server). Selbst gehostet ohne Bezahlwege fällt der Abschnitt weg. */}
+        {offer && (
+          <section className="lp-steps" id="preise" aria-labelledby="lp-preise-h">
+            <div className="lp-wrap">
+              <div className="lp-sect-head">
+                <p className="lp-eyebrow">{bt.landingEyebrow}</p>
+                <h2 id="lp-preise-h">{bt.landingH(priceOf(offer, lang))}</h2>
+              </div>
+              <p className="lp-ats-intro">{bt.landingLede}</p>
+              <div className="ui" style={{ marginTop: '28px' }}>
+                <PricingCards lang={lang} offer={offer} onFree={startDemo} headingLevel={3} />
+                <p style={{ marginTop: '16px' }}>
+                  <a className="bl-link" href={PATHS.pricing} onClick={linkClick(PATHS.pricing)}>{bt.landingMore}</a>
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* FAQ */}
         <section className="lp-faq" id="faq">
           <div className="lp-wrap">
@@ -300,8 +334,14 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
               <button type="button" onClick={() => onLegal?.('impressum')}>Impressum</button>
               <button type="button" onClick={() => onLegal?.('privacy')}>{({ de: 'Datenschutz', en: 'Privacy', fr: 'Confidentialité', es: 'Privacidad' } as Record<UiLang, string>)[lang]}</button>
+              <a href={PATHS.terms} onClick={linkClick(PATHS.terms)}>{bt.terms}</a>
+              <a href={PATHS.withdrawalPolicy} onClick={linkClick(PATHS.withdrawalPolicy)}>{bt.withdrawalPolicy}</a>
+              <a href={PATHS.withdraw} onClick={linkClick(PATHS.withdraw)}>{bt.withdrawLink}</a>
+              <a href={PATHS.cancel} onClick={linkClick(PATHS.cancel)}>{cancelUi(lang, offer).buttonCancel}</a>
             </nav>
-            <button type="button" className="lp-btn lp-ghost" onClick={openRequest}>{t.nav.cta}</button>
+            {salesOpen(offer)
+              ? <a className="lp-btn lp-ghost" href={PATHS.pricing} onClick={linkClick(PATHS.pricing)} style={{ textDecoration: 'none' }}>{bt.pricing}</a>
+              : <button type="button" className="lp-btn lp-ghost" onClick={openRequest}>{t.nav.cta}</button>}
           </div>
           <div className="lp-footer-meta">
             <span>{APP_NAME}</span>

@@ -11,6 +11,8 @@ import { useUiLang } from '../ui/useUiLang';
 import { HOME_I18N } from '../ui/i18n/home';
 import { APP_NAME } from '../brand';
 import { FASSUNG_I18N } from '../ui/i18n/fassung';
+import { BILLING_I18N } from '../ui/i18n/billing';
+import { SiteFooter } from '../billing/BillingShell';
 
 function useViewport() {
   const [w, setW] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -40,6 +42,8 @@ interface Props {
   readOnlyNote?: string;
   /** Laufzeit-Band unter der Kopfleiste (App.tsx). */
   banner?: React.ReactNode;
+  /** „Mein Pass" öffnen (Konto mit Bezahlmodell). */
+  onOpenPass?: () => void;
 }
 
 // ── Create Profile Modal ───────────────────────────────────────────────────
@@ -354,7 +358,9 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
       onMouseLeave={() => setHover(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: featured ? '72px 1fr auto' : '64px 1fr auto',
+        /* minmax statt auto: Auf 320 px schoben „Duplizieren × Öffnen →" die
+           Zeile sonst über den Rand; jetzt bricht die Knopfgruppe um. */
+        gridTemplateColumns: featured ? '72px minmax(0, 1fr) minmax(0, auto)' : '64px minmax(0, 1fr) minmax(0, auto)',
         alignItems: 'center', gap: featured ? '32px' : '24px',
         padding: featured ? '28px 16px' : '22px 16px',
         borderBottom: B.hairline,
@@ -382,7 +388,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {onDuplicate && !confirmDelete && (
           <button type="button"
             onClick={e => { e.stopPropagation(); onDuplicate(); }}
@@ -407,7 +413,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
             ×
           </button>
         )}
-        <div style={{
+        <div className="cv-home-open-label" style={{
           fontFamily: F.ui, fontSize: '11px', fontWeight: 600,
           letterSpacing: '0.08em', textTransform: 'uppercase',
           color: hover ? C.gold : C.pencil,
@@ -422,7 +428,7 @@ function ProfileRow({ profile, index, featured, onOpen, onDelete, onDuplicate }:
 
 // ── HomeScreen ───────────────────────────────────────────────────────────
 
-export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup, onDuplicate, readOnlyNote, banner }: Props) {
+export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup, onDuplicate, readOnlyNote, banner, onOpenPass }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const { isMobile } = useViewport();
   const uiLangHome = useUiLang();
@@ -444,13 +450,22 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           {APP_NAME.toUpperCase()} · {t.topBarTagline}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-          {username && (
-            <span style={{ ...TYPE.micromono, color: C.fade, whiteSpace: 'nowrap' }}>{username}</span>
+          {/* Seit der offenen Registrierung ist der Nutzername oft die
+              E-Mail-Adresse — lang genug, um die Leiste aus dem Telefon zu
+              schieben. Auf dem Telefon entfällt er, sonst wird gekürzt. */}
+          {username && !isMobile && (
+            <span title={username} style={{ ...TYPE.micromono, color: C.fade, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px', textTransform: 'none' }}>{username}</span>
           )}
           {isAdmin && onOpenAdmin && (
             <button type="button" onClick={onOpenAdmin} title={t.ttAdmin}
               style={{ padding: '5px 11px', background: C.ink, color: C.paper, border: 'none', fontFamily: F.ui, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
               {t.admin}
+            </button>
+          )}
+          {onOpenPass && (
+            <button type="button" onClick={onOpenPass}
+              style={{ padding: '5px 12px', minHeight: '32px', background: 'transparent', border: B.hairline, borderRadius: '5px', fontFamily: F.ui, fontSize: '11px', fontWeight: 600, color: C.pencil, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {BILLING_I18N[uiLangHome].mpTitle}
             </button>
           )}
           {onOpenBackup && (
@@ -476,7 +491,11 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 7' }}>
             <div style={{ ...TYPE.overline, color: C.gold, marginBottom: '16px' }}>{t.heroOverline}</div>
             <h1 style={{
-              fontFamily: F.display, fontSize: 'clamp(56px, 7.4vw, 104px)', fontWeight: 400,
+              fontFamily: F.display,
+              /* Ab 400 px wie bisher (56 px bis 7,4 vw, höchstens 104 px);
+                 darunter kleiner, sonst läuft „Lebensläufe" bei 320 px aus
+                 dem Bild. */
+              fontSize: 'min(14vw, max(56px, 7.4vw), 104px)', fontWeight: 400,
               color: C.ink, lineHeight: 0.9, letterSpacing: '-0.028em', margin: 0,
               fontVariationSettings: '"opsz" 144',
               fontFeatureSettings: '"liga" 1, "calt" 1, "onum" 1',
@@ -569,6 +588,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           </div>
         </div>
       </main>
+      <SiteFooter lang={uiLangHome} />
 
       {showCreate && (
         <CreateModal onConfirm={handleCreate} onClose={() => setShowCreate(false)} />

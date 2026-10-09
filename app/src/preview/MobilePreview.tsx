@@ -149,7 +149,9 @@ export default function MobilePreview({ children, doneLabel, hintLabel, pageForm
         <div aria-hidden className="ui" style={{
           position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '12px', zIndex: 60,
           padding: '6px 14px', borderRadius: '999px', pointerEvents: 'none',
-          background: 'oklch(0.21 0.021 264 / 0.78)', color: '#fff',
+          // Deckender als vorher (0,78): Über hellem Untergrund lag Weiß sonst
+          // bei 3,75:1 (axecheck, Telefon · Inhalt, je nach Zeitpunkt).
+          background: 'oklch(0.21 0.021 264 / 0.92)', color: '#fff',
           fontSize: '12px', fontWeight: 560, whiteSpace: 'nowrap',
           opacity: hint ? 1 : 0, transition: 'opacity 400ms ease',
         }}>{hintLabel}</div>

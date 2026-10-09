@@ -25,6 +25,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cvhub}:${POSTGRES_PASSWORD:-cvhub}@postgres:5432/${POSTGRES_DB:-cvhub}
       NODE_ENV: production
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       JWT_SECRET: ${JWT_SECRET}
       APP_NAME: ${APP_NAME:-CV-Hub}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
@@ -41,6 +42,27 @@ services:
       # (nginx routes /oauth here); set it when a proxy strips a path prefix,
       # because then this service cannot know its own public address.
       OAUTH_PUBLIC_BASE: ${OAUTH_PUBLIC_BASE:-}
+      # Optional paid mode (application pass via Mollie). OFF unless
+      # BILLING_ENABLED=1 and every seller value is set — see .env.example.
+      BILLING_ENABLED: ${BILLING_ENABLED:-0}
+      MOLLIE_API_KEY: ${MOLLIE_API_KEY:-}
+      PASS_PRICE_CENTS: ${PASS_PRICE_CENTS:-900}
+      PASS_DAYS: ${PASS_DAYS:-90}
+      PRODUCT_NAME: ${PRODUCT_NAME:-CV-Hub}
+      INVOICE_PREFIX: ${INVOICE_PREFIX:-CV}
+      SELLER_NAME: ${SELLER_NAME:-}
+      SELLER_ADDRESS: ${SELLER_ADDRESS:-}
+      SELLER_EMAIL: ${SELLER_EMAIL:-}
+      SELLER_PHONE: ${SELLER_PHONE:-}
+      SELLER_TAX_ID: ${SELLER_TAX_ID:-}
+      TERMS_VERSION: ${TERMS_VERSION:-}
+      # BILLING_NOTIFY_EMAIL: ${BILLING_NOTIFY_EMAIL:-}
+      # PAYMENT_METHODS: ${PAYMENT_METHODS:-}
+      # Optional open registration (double opt-in) and self-hosted ALTCHA
+      # bot protection. ALTCHA_HMAC_KEY is required for both open
+      # registration and purchases.
+      OPEN_REGISTRATION: ${OPEN_REGISTRATION:-0}
+      ALTCHA_HMAC_KEY: ${ALTCHA_HMAC_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

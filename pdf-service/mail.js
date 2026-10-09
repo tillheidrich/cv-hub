@@ -7,6 +7,7 @@
 // resolves false instead of throwing, so auth flows never break in dev/demo.
 
 import nodemailer from 'nodemailer';
+import { appendFileSync } from 'node:fs';
 
 const HOST = process.env.SMTP_HOST || '';
 const PORT = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -16,7 +17,12 @@ const APP_NAME = process.env.APP_NAME || 'CV-Hub';
 const FROM = process.env.SMTP_FROM || (USER ? `${APP_NAME} <${USER}>` : '');
 export const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://cv.example.com').replace(/\/$/, '');
 
-export const mailConfigured = Boolean(HOST && USER && PASS);
+/* Nur für Tests (billing.test.mjs): statt SMTP jede Mail als JSON-Zeile in
+ * diese Datei schreiben, Anhänge als Base64. In der Produktion ignoriert —
+ * dort darf keine Kundenmail auf der Platte landen. */
+const CAPTURE = process.env.NODE_ENV !== 'production' ? (process.env.MAIL_CAPTURE_FILE || '').trim() : '';
+
+export const mailConfigured = Boolean(HOST && USER && PASS) || Boolean(CAPTURE);
 
 let transporter = null;
 function getTransport() {
@@ -32,15 +38,33 @@ function getTransport() {
   return transporter;
 }
 
-/** Send an email. Never throws — returns true on success, false otherwise. */
-export async function sendMail({ to, subject, html, text }) {
+/** Send an email. Never throws — returns true on success, false otherwise.
+ *  attachments: [{ filename, content: Buffer|string, contentType }] (nodemailer). */
+export async function sendMail({ to, subject, html, text, attachments }) {
+  if (CAPTURE) {
+    try {
+      appendFileSync(CAPTURE, JSON.stringify({
+        to, subject, html, text: text || stripHtml(html),
+        attachments: (attachments || []).map(a => ({
+          filename: a.filename, contentType: a.contentType,
+          contentBase64: Buffer.from(a.content).toString('base64'),
+        })),
+        at: new Date().toISOString(),
+      }) + '\n');
+      return true;
+    } catch (err) {
+      console.error('mail: capture failed:', err?.message || err);
+      return false;
+    }
+  }
   const tx = getTransport();
   if (!tx) {
-    console.warn(`mail: SMTP not configured — skipped "${subject}" to ${to}`);
+    // Ohne Empfängeradresse im Protokoll: das Log ist kein Adressbuch.
+    console.warn(`mail: SMTP not configured — skipped "${subject}"`);
     return false;
   }
   try {
-    await tx.sendMail({ from: FROM, to, subject, html, text: text || stripHtml(html) });
+    await tx.sendMail({ from: FROM, to, subject, html, text: text || stripHtml(html), ...(attachments?.length ? { attachments } : {}) });
     return true;
   } catch (err) {
     console.error('mail: send failed:', err?.message || err);
@@ -54,7 +78,7 @@ function stripHtml(html) {
 
 // Escaped nutzergesteuerte Werte, bevor sie in E-Mail-HTML interpoliert werden
 // (z. B. die freie Invite-Notiz). Verhindert Markup-/Link-Injektion in Mails.
-function escapeHtml(s) {
+export function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
@@ -63,7 +87,9 @@ function escapeHtml(s) {
 // (E-Mail-Clients unterstützen kein <style>-Sheet zuverlässig).
 const INK = '#1b1c22', SOFT = '#5c5e6b', ACCENT = '#3d3df0', LINE = '#e6e7ec', PAPER = '#f8f9fb';
 
-function layout(bodyHtml) {
+export const MAIL_COLORS = { INK, SOFT, ACCENT, LINE, PAPER };
+
+export function layout(bodyHtml) {
   return `<!doctype html><html><body style="margin:0;background:${PAPER};padding:32px 0;font-family:Inter,Segoe UI,Arial,sans-serif;color:${INK};">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="width:520px;max-width:92%;background:#fff;border:1px solid ${LINE};border-radius:14px;overflow:hidden;">
@@ -78,11 +104,11 @@ function layout(bodyHtml) {
     </table>
   </td></tr></table></body></html>`;
 }
-function btn(href, label) {
+export function btn(href, label) {
   return `<a href="${href}" style="display:inline-block;background:${ACCENT};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:9px;">${label}</a>`;
 }
-function h(t) { return `<div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;margin:0 0 12px;">${t}</div>`; }
-function p(t) { return `<p style="font-size:14px;line-height:1.6;color:${SOFT};margin:0 0 16px;">${t}</p>`; }
+export function h(t) { return `<div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;margin:0 0 12px;">${t}</div>`; }
+export function p(t) { return `<p style="font-size:14px;line-height:1.6;color:${SOFT};margin:0 0 16px;">${t}</p>`; }
 
 // ── Vorlagen ─────────────────────────────────────────────────────────────────
 
@@ -213,14 +239,19 @@ export function tplAccessRequest({ name, email, message, acceptUrl, rejectUrl })
   };
 }
 
-export function tplOffboarding({ username, deleted }) {
+/* retainedOrders: Zahl der bezahlten Bestellungen, die wegen der
+ * Aufbewahrungspflicht stehen bleiben. Ohne diesen Satz wäre „alle Daten
+ * gelöscht“ nicht wahr. */
+export function tplOffboarding({ username, deleted, retainedOrders = 0 }) {
   return {
     subject: deleted ? 'Dein Konto wurde gelöscht — CV-Hub' : 'Dein Konto wurde deaktiviert — CV-Hub',
     html: layout(
       h(deleted ? 'Konto gelöscht' : 'Konto deaktiviert') +
       p(deleted
-        ? `Dein Konto <strong>${username}</strong> und alle zugehörigen Daten wurden gelöscht. Danke, dass du CV-Hub genutzt hast.`
-        : `Dein Konto <strong>${username}</strong> wurde deaktiviert. Melde dich bei uns, falls das ein Versehen war.`),
+        ? (retainedOrders > 0
+          ? `Dein Konto <strong>${escapeHtml(username)}</strong> und alle Inhalte (Lebensläufe, Fotos, Links, Schlüssel) wurden gelöscht. Deine ${retainedOrders === 1 ? 'Bestellung und die Rechnung dazu' : 'Bestellungen und die Rechnungen dazu'} bewahren wir mit Name, E-Mail-Adresse, Land, Betrag, Datum und Rechnungsnummer zehn Jahre auf, weil das Steuerrecht es verlangt (§ 147 AO, § 14b UStG). Danach werden sie gelöscht. Ein Widerruf innerhalb der Frist geht weiterhin über das Widerrufsformular auf der Website.`
+          : `Dein Konto <strong>${escapeHtml(username)}</strong> und alle zugehörigen Daten wurden gelöscht. Danke, dass du CV-Hub genutzt hast.`)
+        : `Dein Konto <strong>${escapeHtml(username)}</strong> wurde deaktiviert. Melde dich bei uns, falls das ein Versehen war.`),
     ),
   };
 }

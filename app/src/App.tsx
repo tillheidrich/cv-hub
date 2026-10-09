@@ -39,6 +39,13 @@ import BackupReminder, { LocalBackupPanel } from './ui/BackupReminder';
 import AdminPanel from './screens/AdminPanel';
 import KeysPanel from './screens/KeysPanel';
 import VersionsPanel from './screens/VersionsPanel';
+import UnlockPanel from './billing/UnlockPanel';
+import { PassDialog } from './billing/PassSection';
+import { ConfirmEmailBanner } from './billing/ConfirmEmail';
+import { useOffer, salesOpen } from './billing/hooks';
+import { PATHS, navigate } from './billing/route';
+import { cancelUi } from './billing/legalTexts';
+import { BILLING_I18N, type UnlockKey } from './ui/i18n/billing';
 import { api, ApiError, photoIdOf } from './data/api';
 import type { AuthUser } from './data/api';
 import { track } from './data/track';
@@ -160,7 +167,18 @@ export default function App() {
       return localStorage.getItem('appstudio-demo-mode') === '1';
     } catch { return false; }
   });
-  const [softWall, setSoftWall] = useState<string | null>(null);
+  /** Freischalt-Moment (billing/UnlockPanel.tsx): welche Funktion gerade
+   *  einen Pass bräuchte. Ersetzt die frühere „Demo-Limit"-Wand. */
+  const [unlock, setUnlock] = useState<UnlockKey | null>(null);
+  const [passOpen, setPassOpen] = useState(false);
+  const { offer } = useOffer();
+  /** Direktlink in die Demo (/?demo=1, /demo) und auf „Mein Pass" (/?pass=1). */
+  const initialFlags = useMemo(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      return { demo: q.get('demo') === '1' || /^\/demo\/?$/.test(window.location.pathname), pass: q.get('pass') === '1' };
+    } catch { return { demo: false, pass: false }; }
+  }, []);
   /** When true, render AuthScreen instead of LandingScreen. Toggled by the
    *  "Anmelden" button on the landing page — or automatisch bei ?invite=. */
   const [showAuth, setShowAuth] = useState(!!initialInvite);
@@ -261,6 +279,22 @@ export default function App() {
     } catch { /* ignore */ }
   }, [initialInvite]);
 
+  /* /?demo=1 startet die Demo direkt (Marketing-Bericht, Bau-Liste P2): Ein
+   * Link aus einem Beitrag soll ohne Umweg über die Startseite ins Werkzeug
+   * führen. Danach verschwindet der Parameter aus der Adresszeile. */
+  const flagsDone = useRef(false);
+  useEffect(() => {
+    if (authLoading || flagsDone.current) return;
+    flagsDone.current = true;
+    if (initialFlags.demo && !authUser && !demoMode) void startDemo();
+    if (initialFlags.pass && authUser) queueMicrotask(() => setPassOpen(true));
+    if (initialFlags.demo || initialFlags.pass) {
+      try { window.history.replaceState({}, '', '/'); } catch { /* ignore */ }
+    }
+    // startDemo ist eine Funktion dieses Renders; einmal beim ersten Laden genügt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, authUser, demoMode, initialFlags]);
+
   // Auto-exit demo when a real user shows up. Without this, a user who first
   // tried the demo and then logged in keeps demoMode=true alongside their
   // authUser — and every demo gate (PDF→print, no Konto button, photo-upload
@@ -333,8 +367,19 @@ export default function App() {
   }
   // Soft-wall: shown when a demo user tries a backend-only action.
   function gateAction(reason: string): boolean {
-    if (demoMode) { setSoftWall(reason); return false; }
+    if (demoMode) { openUnlock(reason); return false; }
     return true;
+  }
+  /** Grund aus den Bereichen (ExportPanel meldet „Sharelinks", „MCP") auf
+   *  die Funktion des Freischalt-Paneels abbilden. */
+  function openUnlock(reason: string) {
+    const r = reason.toLowerCase();
+    setUnlock(r.includes('share') ? 'share' : r.includes('mcp') || r.includes('ki') ? 'mcp' : r.includes('version') ? 'versions' : r.includes('sync') ? 'sync' : 'account');
+  }
+  /** Aus der Demo zur Anmeldung bzw. zur Registrierung mit Einladung. */
+  function leaveDemoToAuth() {
+    exitDemo();
+    setShowAuth(true);
   }
 
   /* Abmelden löscht die lokalen Profile nicht mehr ungefragt (Runde 3).
@@ -369,13 +414,22 @@ export default function App() {
   /* Laufzeit des Pilot-Platzes. Der Server rechnet (access.js), hier wird nur
    * gelesen. Nach Ablauf: lesen und exportieren ja, ändern nein. */
   const access = !demoMode ? (authUser?.access ?? null) : null;
-  const readOnly = !demoMode && !!authUser && (!!access?.readOnly || accessExpiredHit);
+  /* Bewerbungs-Pass (Schnittstellenvertrag „Plan-Modell"): `none` = Konto
+   * ohne aktiven Pass, `pass` mit notice 'expired' = abgelaufen. Beides heißt
+   * wie beim Pilot: lesen, exportieren, löschen ja, schreiben nein. */
+  const plan = !demoMode ? (authUser?.plan ?? null) : null;
+  /* Ein abgelaufener Pass kommt vom Server als kind 'none' MIT Datum und
+   * notice 'expired' (access.js, planInfo); ohne Datum hat das Konto nie
+   * einen Pass gehabt. */
+  const passExpired = (plan?.kind === 'none' && !!plan.until) || (plan?.kind === 'pass' && plan.notice === 'expired');
+  const planLocked = !demoMode && !!authUser && (plan?.kind === 'none' || passExpired);
+  const readOnly = !demoMode && !!authUser && (!!access?.readOnly || accessExpiredHit || planLocked);
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   /** Ein Schreibweg wurde wegen Ablauf abgelehnt: Nur-Lese-Modus einschalten
    *  und die Laufzeit neu holen, damit das Band das Datum kennt. */
   const noteWriteError = useCallback((err: unknown): boolean => {
-    if (err instanceof ApiError && err.code === 'access_expired') {
+    if (err instanceof ApiError && (err.code === 'access_expired' || err.code === 'pass_required' || err.status === 402)) {
       setAccessExpiredHit(true);
       api.me().then(d => setAuthUser(d.user)).catch(() => {});
       return true;
@@ -908,7 +962,7 @@ export default function App() {
       return <AuthScreen onAuth={setAuthUser} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
                          initialInvite={initialInvite} initialMode={initialInvite ? 'register' : 'login'} />;
     }
-    return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange} onLegal={(p) => setScreen(p)} />;
+    return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange} onLegal={(p) => navigate(p === 'impressum' ? PATHS.imprint : PATHS.privacy)} />;
   }
   if (!dataLoaded) {
     return (
@@ -928,20 +982,40 @@ export default function App() {
 
   const Z = ZUGANG_I18N[uiLang];
   const F = FASSUNG_I18N[uiLang];
+  const B = BILLING_I18N[uiLang];
 
   /** Laufzeit-Band: 14 und 3 Tage vor Ablauf, danach dauerhaft (je Stufe in
    *  dieser Sitzung ausblendbar). */
-  const accessNoticeKey = access?.notice ? `${access.notice}|${access.until}` : (accessExpiredHit ? 'expired|?' : null);
+  /* Bei Pass und „noch kein Pass" spricht das Band vom Pass und bietet
+   * „Pass holen/verlängern"; beim Pilot bleibt es beim Hinweis auf die Person,
+   * von der der Zugang stammt. */
+  const passBand = plan && (plan.kind === 'none' || (plan.kind === 'pass' && !!plan.notice)) ? plan : null;
+  /** „noch nie ein Pass" (kein Datum) vs. „Pass abgelaufen". */
+  const neverHadPass = passBand?.kind === 'none' && !passBand.until;
+  const accessNoticeKey = passBand
+    ? `${passBand.kind}-${passBand.notice ?? 'none'}|${passBand.until ?? ''}`
+    : access?.notice ? `${access.notice}|${access.until}` : (accessExpiredHit ? 'expired|?' : null);
+  const passUntil = passBand?.until ? formatAccessDate(passBand.until, uiLang) : '…';
   const accessBanner = accessNoticeKey && accessHidden !== accessNoticeKey ? (
-    <div className="ui-access-banner ui" role="status" data-noprint data-notice={access?.notice ?? 'expired'}>
+    <div className="ui-access-banner ui" role="status" data-noprint data-notice={passBand ? `${passBand.kind}-${passBand.notice ?? 'none'}` : access?.notice ?? 'expired'}>
       <span>
-        {access?.notice === 'soon' ? Z.soon(formatAccessDate(access.until, uiLang), access.daysLeft)
+        {passBand ? (
+          neverHadPass ? Z.planNone
+            : passExpired ? Z.passExpired(passUntil)
+            : passBand.notice === 'soon' ? Z.passSoon(passUntil, passBand.daysLeft ?? 0)
+            : passBand.notice === 'final' ? Z.passFinal(passUntil, passBand.daysLeft ?? 0)
+            : Z.passExpired(passUntil)
+        ) : access?.notice === 'soon' ? Z.soon(formatAccessDate(access.until, uiLang), access.daysLeft)
           : access?.notice === 'final' ? Z.final(formatAccessDate(access.until, uiLang), access.daysLeft)
           : Z.expired(access ? formatAccessDate(access.until, uiLang) : '…')}
       </span>
-      {screen === 'editor' && (
+      {screen === 'editor' && !neverHadPass && (
         <button type="button" className="ui-btn ui-btn-soft" style={{ minHeight: '32px', fontSize: 'var(--t-xs)' }}
           onClick={() => (isMobile ? setMPanel('export') : setPanel('export'))}>{Z.exportNow}</button>
+      )}
+      {passBand && salesOpen(offer) && (
+        <button type="button" className="ui-btn ui-btn-primary" style={{ minHeight: '32px', fontSize: 'var(--t-xs)' }}
+          onClick={() => navigate(PATHS.checkout)}>{neverHadPass ? Z.getPass : Z.extendPass}</button>
       )}
       <button type="button" className="ui-btn ui-icon-btn" aria-label={Z.dismiss} title={Z.dismiss}
         style={{ minHeight: '32px', width: '32px', minWidth: '32px', color: 'inherit' }}
@@ -985,12 +1059,15 @@ export default function App() {
       <>
         <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile}
           onDuplicate={readOnly ? undefined : (id => handleDuplicateProfile(id))}
-          readOnlyNote={readOnly ? Z.readOnlyHome : undefined} banner={accessBanner}
+          readOnlyNote={readOnly ? (passExpired ? Z.passReadOnlyHome : plan?.kind === 'none' ? Z.noneReadOnlyHome : Z.readOnlyHome) : undefined}
+          banner={<>{accessBanner}<ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} /></>}
           username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={demoMode ? undefined : () => void requestLogout()} onOpenAdmin={() => setAdminOpen(true)}
-          onOpenBackup={demoMode ? () => setBackupOpen(true) : undefined} />
+          onOpenBackup={demoMode ? () => setBackupOpen(true) : undefined}
+          onOpenPass={!demoMode && (plan || salesOpen(offer)) ? () => setPassOpen(true) : undefined} />
         {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
+        {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
         {logoutDialog}
         {noticeEl}
       </>
@@ -1072,7 +1149,7 @@ export default function App() {
   const contentBody = (
     <>
       {docLangRow}
-      {readOnly && <div className="ui-readonly-note" role="note">{Z.readOnlyContent}</div>}
+      {readOnly && <div className="ui-readonly-note" role="note">{passExpired ? Z.passReadOnlyContent : plan?.kind === 'none' ? Z.noneReadOnlyContent : Z.readOnlyContent}</div>}
       <div className="ui-panel-fill" style={{ flex: 1, minHeight: 0 }}>
         {/* Nach Ablauf: Felder gesperrt (disabled), Lesen und Blättern bleibt.
             Der Lebenslauf sperrt selbst (Reiter bleiben bedienbar), das
@@ -1083,7 +1160,7 @@ export default function App() {
   );
   const designBody = (
     <>
-    {readOnly && <div className="ui-readonly-note" role="note">{Z.readOnlyDesign}</div>}
+    {readOnly && <div className="ui-readonly-note" role="note">{plan?.kind === 'none' && !passExpired ? Z.noneReadOnlyDesign : Z.readOnlyDesign}</div>}
     <DesignPanel uiLang={uiLang} settings={activeProfile?.settings ?? { template, fontScale, fontPairing, pageMode, lang }}
       onSettings={patch => {
         if (patch.template) { changeTemplate(patch.template, (nav.list.findIndex(t => t.id === resolveThemeId(patch.template!)) > nav.idx ? 1 : -1)); const { template: _t, ...rest } = patch; void _t; if (Object.keys(rest).length) updateSettings(rest); return; }
@@ -1098,7 +1175,7 @@ export default function App() {
   );
   const exportBody = (
     <div className="ui-panel-body ui-panel-fill">
-      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={setSoftWall} atsLevel={atsLevel} onAtsPdf={exportAtsPdf} onBeforeShare={flushSave} embedded />
+      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={openUnlock} shareLocked={planLocked} atsLevel={atsLevel} onAtsPdf={exportAtsPdf} onBeforeShare={flushSave} embedded />
     </div>
   );
   const tipsBody = (
@@ -1111,7 +1188,7 @@ export default function App() {
     <ExportMenu uiLang={uiLang} data={currentData} coverLetter={currentCoverLetter} exportConfig={exportConfig}
       docType={docType} demoMode={demoMode} atsLevel={atsLevel} onPrintFallback={handlePrint} onAtsPdf={exportAtsPdf}
       onOpenAll={() => (isMobile ? setMPanel('export') : setPanel('export'))}
-      onShare={() => { if (gateAction('Sharelinks')) { if (isMobile) setMPanel('export'); else setPanel('export'); } }} />
+      onShare={() => { if (planLocked) { setUnlock('share'); return; } if (gateAction('Sharelinks')) { if (isMobile) setMPanel('export'); else setPanel('export'); } }} />
   );
 
   /* Seltenes liegt hinter „⋯": Oberflächensprache, Versionen, Konto, Admin,
@@ -1130,10 +1207,21 @@ export default function App() {
       {/* Versionen gibt es seit 08.10.2026 auch ohne Konto (lokaler Verlauf). */}
       {activeId && <MenuItem onSelect={() => { close(); setVersionsOpen(true); }} sub={et.ttVersions}>{et.versions}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); setBackupOpen(true); }}>{LOCAL_I18N[uiLang].more}</MenuItem>}
+      {demoMode && salesOpen(offer) && <MenuItem onSelect={() => { close(); setUnlock('sync'); }} sub={B.productName}>{B.features.sync.title}</MenuItem>}
+      {!demoMode && (plan || salesOpen(offer)) && <MenuItem onSelect={() => { close(); setPassOpen(true); }} sub={plan?.kind === 'pass' && plan.until ? formatAccessDate(plan.until, uiLang) : undefined}>{B.mpTitle}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); setKeysOpen(true); }} sub={authUser?.username}>{et.account}</MenuItem>}
       {authUser?.role === 'admin' && <MenuItem onSelect={() => { close(); setAdminOpen(true); }}>{et.admin}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); void requestLogout(); }}>{et.signOut}</MenuItem>}
-      {demoMode && <MenuItem onSelect={() => { close(); exitDemo(); }}>{et.createAccount}</MenuItem>}
+      {demoMode && <MenuItem onSelect={() => { close(); setUnlock('account'); }}>{et.createAccount}</MenuItem>}
+      <div className="ui-menu-sep" />
+      <div className="ui-menu-label">{B.footerLabel}</div>
+      {salesOpen(offer) && <MenuItem onSelect={() => { close(); navigate(PATHS.pricing); }}>{B.pricing}</MenuItem>}
+      <MenuItem onSelect={() => { close(); navigate(PATHS.terms); }}>{B.terms}</MenuItem>
+      <MenuItem onSelect={() => { close(); navigate(PATHS.withdrawalPolicy); }}>{B.withdrawalPolicy}</MenuItem>
+      <MenuItem onSelect={() => { close(); navigate(PATHS.withdraw); }}>{B.withdrawLink}</MenuItem>
+      <MenuItem onSelect={() => { close(); navigate(PATHS.cancel); }}>{cancelUi(uiLang, offer).buttonCancel}</MenuItem>
+      <MenuItem onSelect={() => { close(); navigate(PATHS.imprint); }}>{B.imprint}</MenuItem>
+      <MenuItem onSelect={() => { close(); navigate(PATHS.privacy); }}>{B.privacy}</MenuItem>
     </>
   );
 
@@ -1169,6 +1257,10 @@ export default function App() {
           local={demoMode}
           onClose={() => setVersionsOpen(false)}
           onRestored={handleProfileUpdated}
+          footerNote={demoMode && salesOpen(offer) ? (
+            <button type="button" className="ui-btn ui-btn-accent" style={{ minHeight: '36px', whiteSpace: 'normal', textAlign: 'left' }}
+              onClick={() => { setVersionsOpen(false); setUnlock('versions'); }}>{B.unlock.versions.title}</button>
+          ) : undefined}
         />
       )}
       {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
@@ -1185,24 +1277,11 @@ export default function App() {
           <button type="button" onClick={() => { toast.undo(); setToast(null); }}>{dsT.undo}</button>
         </div>
       )}
-      {softWall && (
-        <div onClick={() => setSoftWall(null)} className="ui" style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'oklch(0.21 0.021 264 / 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div role="dialog" aria-modal="true" aria-label={`${et.swTitle} ${et.swTitleAccent}`} onClick={(e) => e.stopPropagation()} className="ui-float"
-            style={{ background: 'var(--float-solid)', width: '100%', maxWidth: '460px', padding: '28px 30px' }}>
-            <div style={{ fontSize: 'var(--t-xs)', fontWeight: 600, color: 'var(--ink-2)', marginBottom: '8px' }}>{et.swLimit}</div>
-            <div style={{ fontSize: '24px', fontWeight: 620, color: 'var(--ink)', lineHeight: 1.15, marginBottom: '12px', letterSpacing: '-0.015em' }}>
-              {et.swTitle} <span style={{ color: 'var(--accent-ink)' }}>{et.swTitleAccent}</span>
-            </div>
-            <div style={{ fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: '20px' }}>
-              {et.swBody}
-            </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button type="button" className="ui-btn ui-btn-soft" onClick={() => setSoftWall(null)} style={{ minHeight: '44px' }}>{et.swStay}</button>
-              <button type="button" className="ui-btn ui-btn-primary" onClick={() => { setSoftWall(null); exitDemo(); }} style={{ minHeight: '44px' }}>{et.createAccount}</button>
-            </div>
-          </div>
-        </div>
+      {unlock && (
+        <UnlockPanel feature={unlock} lang={uiLang} offer={offer} onClose={() => setUnlock(null)}
+          onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} />
       )}
+      {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
     </>
   );
 
@@ -1229,6 +1308,7 @@ export default function App() {
           <span className="cv-sr-only" role="status" aria-live="polite">{saveText}</span>
         </header>
         {accessBanner}
+        <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
 
         <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
           <MobilePreview doneLabel={et.zoomDone} hintLabel={et.tapToWrite} pageFormat={pageFormat} bottomInset={168}
@@ -1272,7 +1352,7 @@ export default function App() {
           <MobileSheet title={dsT.menu} closeLabel={et.close} onClose={() => setMoreOpen(false)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {demoMode && (
-                <button type="button" className="ui-btn ui-btn-accent" onClick={() => { setMoreOpen(false); exitDemo(); }}
+                <button type="button" className="ui-btn ui-btn-accent" onClick={() => { setMoreOpen(false); setUnlock('account'); }}
                   style={{ minHeight: '48px', marginBottom: '8px', justifyContent: 'center' }}>{dsT.demoPill}</button>
               )}
               <div className="ui-menu-label" style={{ paddingLeft: '4px' }}>{et.docTypeLabel}</div>
@@ -1327,7 +1407,7 @@ export default function App() {
             </button>
           </h1>
           {demoMode && (
-            <button type="button" className="ui-btn ui-btn-accent" onClick={exitDemo} title={dsT.demoPillTitle}>
+            <button type="button" className="ui-btn ui-btn-accent" onClick={() => setUnlock('account')} title={dsT.demoPillTitle}>
               {dsT.demoPill}
             </button>
           )}
@@ -1355,6 +1435,7 @@ export default function App() {
         </div>
       </header>
       {accessBanner}
+      <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
 
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '6px 16px 16px', gap: '12px' }}>
         <nav data-noprint className="ui-rail ui-float" aria-label={dsT.railLabel}>

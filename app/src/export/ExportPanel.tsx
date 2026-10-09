@@ -4,6 +4,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import type { CVData, CoverLetterData, AppProfile, Lang } from '../data/types';
 import AtsCheckModal from '../screens/AtsCheckModal';
 import { useUiLang } from '../ui/useUiLang';
+import { BILLING_I18N } from '../ui/i18n/billing';
 import { EXP_I18N, type ExportStrings } from '../ui/i18n/export';
 import { useIsMobile } from '../ui/useIsMobile';
 import { DESIGN_I18N } from '../ui/i18n/design';
@@ -92,6 +93,9 @@ interface ExportPanelProps {
   demoMode?: boolean;
   /** Called when a demo user tries to access a gated feature. */
   onDemoBlock?: (reason: string) => void;
+  /** Konto ohne aktiven Pass (Plan `none` oder abgelaufen): Sharelink anlegen
+   *  öffnet das Freischalt-Paneel statt einer Fehlermeldung des Servers. */
+  shareLocked?: boolean;
   /** Called after a successful Markdown import so the app can refresh state. */
   onProfileUpdated?: (profile: AppProfile) => void;
   /** Replace the active language's CV data (used by JSON Resume / bare-CVData import). */
@@ -293,9 +297,10 @@ function asShares(d: unknown): ShareLink[] {
   return Array.isArray(list) ? list as ShareLink[] : [];
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, onReplaceCoverLetter, atsLevel, embedded = false, onAtsPdf, onBeforeShare }: ExportPanelProps) {
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, shareLocked = false, onReplaceCoverLetter, atsLevel, embedded = false, onAtsPdf, onBeforeShare }: ExportPanelProps) {
   const uiLang = useUiLang();
   const t = EXP_I18N[uiLang];
+  const bt = BILLING_I18N[uiLang];
   const d = DESIGN_I18N[uiLang];
   const F = FASSUNG_I18N[uiLang];
   const snap = SHARE_SNAPSHOT_I18N[uiLang];
@@ -953,8 +958,15 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <button
               type="button"
               onClick={() => onDemoBlock?.('Sharelinks')}
-              style={{ width: '100%', padding: '11px', background: 'var(--ink)', color: 'oklch(0.985 0.003 264)', border: 'none', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit' }}>
+              className="ui-btn ui-btn-primary"
+              style={{ width: '100%', minHeight: '40px' }}>
               {t.demoCta}
+            </button>
+            {/* Zweiter Freischalt-Moment: KI direkt verbinden (MCP). Die
+                Markdown-Brücke oben geht weiter ohne Konto. */}
+            <button type="button" onClick={() => onDemoBlock?.('MCP')} className="ui-btn ui-btn-soft"
+              style={{ width: '100%', minHeight: '40px', marginTop: '8px' }}>
+              {bt.features.mcp.title}
             </button>
           </div>
         </>
@@ -977,10 +989,18 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               <input type="checkbox" checked={newShareIncludeCl} onChange={e => setNewShareIncludeCl(e.target.checked)} />
               {t.shareIncludeCl}
             </label>
+            {shareLocked ? (
+              <div style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--accent-wash)', marginBottom: '10px' }} data-share-locked>
+                <div style={{ fontSize: 'var(--t-sm)', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>{bt.unlock.share.title}</div>
+                <div style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: '8px' }}>{bt.unlock.share.body}</div>
+                <button type="button" className="ui-btn ui-btn-primary" onClick={() => onDemoBlock?.('Sharelinks')} style={{ minHeight: '36px' }}>{bt.getPass}</button>
+              </div>
+            ) : (
             <button type="button" onClick={createShare} disabled={shareBusy}
               style={{ width: '100%', padding: '9px', background: shareBusy ? '#666' : 'var(--accent-ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 700, cursor: shareBusy ? 'default' : 'pointer', fontFamily: 'inherit', marginBottom: '10px' }}>
               {shareBusy ? '…' : t.shareCreate}
             </button>
+            )}
             {shares.length === 0 && (
               <div style={{ fontSize: '11.5px', color: 'var(--ink-3)', fontFamily: 'inherit', fontStyle: 'italic' }}>{t.shareNone}</div>
             )}
