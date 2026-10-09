@@ -9,9 +9,11 @@ import { FASSUNG_I18N } from './i18n/fassung';
  * Vorlagenliste, im Moment des Exports nirgends (Gestaltungsbericht, Befund 2).
  *
  * Kein Punktwert, keine Prozentzahl: die Vorsicht aus `atsScore.ts` bleibt.
- * Bei „riskant" und „okay" gibt es die einspaltige ATS-Fassung auf einen
- * Klick, als Word und als PDF (Runde 3) — bei „stark" nicht, dort ist die
- * Vorlage selbst schon die sichere Form.
+ * Bei „Für Mail und Druck" und „Für Portale geeignet" stehen die Knöpfe für
+ * die einspaltige ATS-Fassung direkt daneben, als PDF und als Word (Runde 3)
+ * — bei „Gut für Portale" nicht, dort ist die Vorlage selbst schon die
+ * einspaltige Form. Seit 09.10.2026 ohne Warnton: die Marke sagt, wofür eine
+ * Vorlage gemacht ist, die Zeile daneben, wie es für Portale weitergeht.
  */
 export default function AtsLine({ level, uiLang, onLoadAts, onLoadAtsPdf, compact }: {
   level: AtsLevel; uiLang: UiLang; onLoadAts?: () => void; onLoadAtsPdf?: () => void; compact?: boolean;
@@ -26,8 +28,8 @@ export default function AtsLine({ level, uiLang, onLoadAts, onLoadAtsPdf, compac
       {onLoadAts && level !== 'high' && (
         onLoadAtsPdf ? (
           <span role="group" aria-label={d.loadAts} style={{ display: 'inline-flex', gap: '4px', flexShrink: 0 }}>
-            <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} title={F.atsWordAria} style={btn}>{F.atsWordShort}</button>
             <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAtsPdf} title={F.atsPdfAria} style={btn}>{F.atsPdfShort}</button>
+            <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} title={F.atsWordAria} style={btn}>{F.atsWordShort}</button>
           </span>
         ) : (
           <button type="button" className="ui-btn ui-btn-accent" onClick={onLoadAts} style={btn}>

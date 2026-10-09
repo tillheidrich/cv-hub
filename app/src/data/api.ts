@@ -21,6 +21,10 @@ export interface AuthUser {
   plan?: Plan | null;
   /** Bei offener Registrierung: ist die E-Mail-Adresse bestätigt? */
   emailConfirmed?: boolean;
+  /** Neue Adresse, die noch auf den Klick im Bestätigungslink wartet
+   *  (E-Mail-Wechsel, Sicherheitsbefund M2, 09.10.2026). Bis dahin gilt
+   *  `email`. */
+  pendingEmail?: string | null;
 }
 
 /** Laufzeit-Modell aus /api/me und den Login-Antworten (Schnittstellenvertrag
@@ -62,6 +66,8 @@ export function withPlan<T extends { user?: AuthUser }>(d: T & { plan?: Plan | n
   if (user.plan === undefined && d.plan !== undefined) user.plan = d.plan;
   if (user.emailConfirmed === undefined && d.emailConfirmed !== undefined) user.emailConfirmed = d.emailConfirmed;
   if (user.access === undefined && d.access !== undefined) user.access = d.access;
+  const pe = (d as { pendingEmail?: string | null }).pendingEmail;
+  if (user.pendingEmail === undefined && pe !== undefined) user.pendingEmail = pe;
   return { ...d, user };
 }
 
@@ -167,6 +173,9 @@ export class ApiError extends Error {
    *  eines vorgeschalteten Proxys ohne diesen Text heißt dagegen: der Dienst
    *  ist nicht erreichbar. Danach richtet sich der Druck-Rückfall beim PDF. */
   answered?: boolean;
+  /** Der übrige Antwortkörper (z. B. `receivedAt` bei einem schon benutzten
+   *  Bestätigungslink). Nur lesen, nie anzeigen ohne Prüfung. */
+  data?: Record<string, unknown>;
   constructor(message: string, status: number, code?: string, retryAfter?: number) {
     super(message);
     this.name = 'ApiError';
@@ -194,6 +203,7 @@ export async function apiErrorFrom(r: Response): Promise<ApiError> {
   const msg = answered ? data.error as string : `Fehler ${r.status}`;
   const err = new ApiError(msg, r.status, typeof data.code === 'string' ? data.code : undefined, parseRetryAfter(r.headers.get('Retry-After')));
   if (answered) err.answered = true;
+  if (data && typeof data === 'object') err.data = data as Record<string, unknown>;
   return err;
 }
 
@@ -269,8 +279,11 @@ export const api = {
     req<{ ok: boolean; enabled: boolean }>('/api/auth/2fa', { method: 'POST', body: JSON.stringify({ enabled }) }),
   /** E-Mail setzen/ändern/entfernen — seit 08.10.2026 nur mit dem aktuellen
    *  Passwort (N6). Ohne: 400 `password_required`, falsch: 403 `password_wrong`. */
+  /** Seit 09.10.2026 (M2): Eine neue Adresse wird nur vorgemerkt. Antwort
+   *  `{ pending: true, pendingEmail }`, Bestätigungslink an die neue Adresse;
+   *  bis zum Klick gilt die bisherige. Entfernen wirkt sofort. */
   setEmail: (email: string, currentPassword: string) =>
-    req<{ user: AuthUser }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email, currentPassword }) }),
+    req<{ ok?: boolean; user: AuthUser; pending?: boolean; pendingEmail?: string | null }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email, currentPassword }) }),
   register: (username: string, password: string, inviteCode: string, email?: string) =>
     req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email }) }),
   /** Public: request access without an account. Admin decides via e-mail link or panel. */

@@ -484,6 +484,26 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit(created_at DESC);
+
+-- ── Sicherheit Runde 6 (09.10.2026, SICHERHEIT.md) ───────────────────────
+-- M2: Eine neue Adresse wird erst vorgemerkt. Erst der Link an die neue
+-- Adresse (email_confirmations.kind = 'change') macht sie zur Adresse des
+-- Kontos. Bis dahin gilt die alte.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT;
+ALTER TABLE email_confirmations ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'signup';
+
+-- H2, M1: Öffentlicher Widerruf und öffentliche Kündigung wirken erst nach
+-- dem Klick auf den Link an die Bestelladresse. Gespeichert wird nur der
+-- Hash des Tokens, 14 Tage gültig, einmalig. request hält, was zur
+-- Ausführung gebraucht wird (Art, Zeitpunkt, Grund, eingegebener Name);
+-- received_at bleibt der Eingang und zählt für die Rechtzeitigkeit.
+-- status: zusätzlich 'pending_confirmation' (wartet auf den Klick).
+ALTER TABLE declarations ADD COLUMN IF NOT EXISTS confirm_token_hash TEXT;
+ALTER TABLE declarations ADD COLUMN IF NOT EXISTS confirm_expires_at TIMESTAMPTZ;
+ALTER TABLE declarations ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+ALTER TABLE declarations ADD COLUMN IF NOT EXISTS request JSONB;
+ALTER TABLE declarations ADD COLUMN IF NOT EXISTS result JSONB;
+CREATE UNIQUE INDEX IF NOT EXISTS declarations_confirm_token_uq ON declarations(confirm_token_hash) WHERE confirm_token_hash IS NOT NULL;
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

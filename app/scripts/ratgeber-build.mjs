@@ -64,7 +64,14 @@ function sichereUrl(href) {
   const h = String(href || '').trim();
   if (!h) return null;
   if (h.startsWith('#')) return { href: h, extern: false };
-  if (h.startsWith('/') && !h.startsWith('//')) return { href: h, extern: false };
+  /* Interner Pfad nur ohne Backslash, Leer- und Steuerzeichen (Befund N11,
+   * 09.10.2026): Browser machen aus „/<Backslash>evil.example" und „/<Tab>/evil.example"
+   * ein protokollrelatives „//evil.example" — ein fremder Host mit dem
+   * Anschein eines internen Links. */
+  if (h.startsWith('/')) {
+    if (h.startsWith('//') || /[\\\s\u0000-\u001f\u007f]/.test(h)) return null;
+    return { href: h, extern: false };
+  }
   try {
     const u = new URL(h);
     if (u.protocol === 'mailto:') return { href: h, extern: false };

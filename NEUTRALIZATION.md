@@ -3,6 +3,34 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-09, security review round 6)
+
+Mirrored diff-based like the rounds below (`git merge-file`, base = the private
+tool's previous revision).
+
+- **`security.txt` carries placeholders.** `app/public/.well-known/security.txt`
+  says `Contact: mailto:security@example.com` and
+  `Canonical: https://cv.example.com/.well-known/security.txt`. **Replace both
+  and move `Expires` forward before going live** (also noted in the README).
+- **Umami is optional and host-neutral.** The private tool proxies its own
+  analytics host through `/u/`. Here the host is set once in `app/nginx.conf`
+  (`map "" $umami_host`, placeholder `analytics.example.com`), the blocks are
+  marked optional, and the tag in `app/index.html` is commented out with a
+  `YOUR-UMAMI-WEBSITE-ID` placeholder — no website ID of the original instance.
+  The legal page names `analytics.example.com`, the browser checks block it.
+- **Deliberate divergence: `/oauth/` stays.** The private tool turned the
+  `/oauth/` shortcut into a 404 because its hosting routes the API past this
+  nginx (it answered 502 there). In the bundled `docker-compose.yml` this nginx
+  does reach `cv-api`, and an empty `OAUTH_PUBLIC_BASE` relies on the shortcut,
+  so it is kept; the comment says when to replace it. `nginxcheck.mjs` checks
+  only that `/oauth/` never falls back to the SPA.
+- **Neutralized:** `pdf-service/SICHERHEIT.md` (no private commit reference, no
+  hosting-specific section, no original domain), mail subjects of the new
+  e-mail-change mails use `PRODUCT_NAME`/`APP_NAME` (default `CV-Hub`), the
+  declaration page title uses `APP_NAME`, test fixtures use `admin1` and
+  `evil.example.com`, two code comments no longer quote the operator by name,
+  Dockerfile comments describe BuildKit secrets without the original setup.
+
 ## Done (2026-10-09, vouchers and guides)
 
 Mirrored diff-based again: files that carry neutralization were merged with

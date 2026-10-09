@@ -17,6 +17,7 @@ const CancelPage = lazy(() => import('./CancelPage'));
 const LegalTextPage = lazy(() => import('./LegalTextPage'));
 const ConfirmEmailPage = lazy(() => import('./ConfirmEmail'));
 const CodePage = lazy(() => import('./CodePage'));
+const DeclarationConfirmPage = lazy(() => import('./DeclarationConfirm'));
 
 function back() {
   if (window.history.length > 1) window.history.back();
@@ -35,6 +36,7 @@ export default function BillingRoot() {
       case 'thanks': return <ThanksPage orderId={r.orderId} />;
       case 'withdraw': return <WithdrawPage />;
       case 'cancel': return <CancelPage />;
+      case 'declarationConfirm': return <DeclarationConfirmPage kind={r.kind} token={r.token} />;
       case 'terms': return <LegalTextPage doc="agb" />;
       case 'withdrawalPolicy': return <LegalTextPage doc="widerruf" />;
       case 'confirmEmail': return <ConfirmEmailPage token={r.token} />;

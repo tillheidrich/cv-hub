@@ -57,6 +57,8 @@ async function newPage(state, { viewport = { width: 1440, height: 900 }, lang = 
       try { if (!localStorage.getItem('appstudio-ui-lang')) localStorage.setItem('appstudio-ui-lang', l); } catch { /* */ }
     }, [lang]);
     await context.route('**/analytics.example.com/**', r => r.abort());
+    // Optionales Umami über /u/ auf derselben Domain (nginx.conf).
+    await context.route(/\/u\/(script\.js|api\/send)(\?|$)/, r => r.abort());
   }
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(String(e).slice(0, 200)));

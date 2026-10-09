@@ -219,7 +219,7 @@ export function tplPassEnding({ username, until, daysLeft, base }) {
 /** Eine Erklärung braucht Handarbeit (nicht zuzuordnen, außerordentliche
  *  Kündigung, Widerruf nach Frist). Keine Zahlungsdaten, nur der Wortlaut. */
 export function tplAdminDeclaration({ type, reason, statement, receivedAt, orderNos = [] }) {
-  const what = { withdrawal: 'Widerruf', cancellation: 'Kündigung' }[type] || type;
+  const what = { withdrawal: 'Widerruf', cancellation: 'Kündigung', payment: 'Zahlung' }[type] || type;
   return fromLines({
     subject: `Handarbeit nötig: ${what} (${reason})`,
     lines: [
@@ -229,4 +229,113 @@ export function tplAdminDeclaration({ type, reason, statement, receivedAt, order
       '', 'Offene Erklärungen stehen auch in der Admin-Auswertung (GET /api/admin/billing, declarationsOpen).',
     ],
   }, { appendix: [{ title: 'Wortlaut', text: statement }] });
+}
+
+/* ── Sicherheit Runde 6 (09.10.2026): Bestätigungslinks ───────────────────
+ * TODO(Rechtstexte): eigene Fassungen des Backends, nicht aus mails.ts. */
+
+/** Eingangsbestätigung eines öffentlichen Widerrufs bzw. einer öffentlichen
+ *  Kündigung mit Link (H2, M1). Geht NUR an die Adresse der Bestellung.
+ *  Inhalt, Datum und Uhrzeit des Eingangs stehen darin (Paragraf 356a Abs. 4
+ *  bzw. 312k Abs. 4 BGB); ausgeführt wird erst nach dem Klick. */
+export function tplDeclarationConfirm({ type, orders = [], statement, receivedAt, url, expiresAt }) {
+  const L = legalLang(orders[0]?.locale);
+  const nos = orders.map(o => o.order_no).join(', ');
+  const w = type === 'withdrawal';
+  const until = expiresAt ? berlinDate(expiresAt) : '';
+  const de = [
+    'Guten Tag,', '',
+    w ? `Ihre Widerrufserklärung zur Bestellung ${nos} ist bei uns eingegangen.` : `Ihre Kündigung des Bewerbungs-Passes (Bestellung ${nos}) ist bei uns eingegangen.`,
+    `Eingang: ${berlinDateTime(receivedAt)}`, '',
+    w
+      ? 'Damit niemand in Ihrem Namen widerrufen kann, führen wir den Widerruf erst aus, wenn Sie ihn mit dem Knopf unten bestätigen. Erst dann erstatten wir den Betrag und beenden den Pass. Für die Widerrufsfrist zählt der Eingang oben, nicht der Zeitpunkt Ihres Klicks.'
+      : 'Damit niemand in Ihrem Namen kündigen kann, beenden wir den Pass erst, wenn Sie die Kündigung mit dem Knopf unten bestätigen. Maßgeblich ist der Eingang oben, nicht der Zeitpunkt Ihres Klicks.',
+    until ? `Der Link gilt bis ${until}.` : '',
+    '', 'Haben Sie das nicht selbst abgeschickt? Dann ignorieren Sie diese Mail. Ohne Bestätigung geschieht nichts; nach Ablauf des Links sehen wir uns die Erklärung von Hand an.',
+  ];
+  const en = L === 'en' ? ['', w
+    ? 'Your withdrawal has been received. To make sure nobody withdraws on your behalf, please confirm it with the button below. The time of receipt above counts for the withdrawal period.'
+    : 'Your cancellation has been received. To make sure nobody cancels on your behalf, please confirm it with the button below. The time of receipt above counts.'] : [];
+  const label = w ? 'Widerruf bestätigen' : 'Kündigung bestätigen';
+  return fromLines({
+    subject: w ? `Bitte bestätigen: Ihr Widerruf – Bestellung ${nos}` : `Bitte bestätigen: Ihre Kündigung – Bestellung ${nos}`,
+    lines: [...de, ...en].filter((l, i, a) => l !== '' || a[i - 1] !== ''),
+  }, {
+    button: url ? { href: url, label } : null,
+    appendix: statement ? [{ title: L === 'de' ? 'Ihre Erklärung im Wortlaut' : 'Your declaration (German record)', text: statement }] : [],
+  });
+}
+
+/** Erklärung, die sich nicht zuordnen ließ (M4): fester Text, KEINE Eingabe
+ *  des Absenders — weder Name noch Grund noch Bestellnummer. Sonst schickt
+ *  jeder beliebigen Text unter unserem Absender an beliebige Adressen. */
+export function tplDeclarationReceivedPlain({ type, receivedAt }) {
+  const what = type === 'withdrawal' ? 'Widerruf' : 'Kündigung';
+  return fromLines({
+    subject: `Eingangsbestätigung Ihrer Erklärung (${what})`,
+    lines: [
+      'Guten Tag,', '',
+      `wir haben eine Erklärung (${what}) erhalten, die diese E-Mail-Adresse nennt.`,
+      `Eingang: ${berlinDateTime(receivedAt)}`, '',
+      'Wir haben Ihre Erklärung erhalten und melden uns, falls wir sie einer Bestellung zuordnen können.',
+      '', 'Haben Sie nichts abgeschickt, können Sie diese Mail ignorieren.',
+    ],
+  });
+}
+
+/** Name des Angebots in Betreffzeilen, wenn der Aufrufer keinen mitgibt. */
+const defaultProductName = () => (process.env.PRODUCT_NAME || process.env.APP_NAME || 'CV-Hub').trim();
+
+/** Bestätigungslink für eine NEUE Adresse (M2). */
+export function tplConfirmEmailChange({ token, base, productName = defaultProductName() }) {
+  const b = base ? String(base).replace(/\/+$/, '') : null;
+  const url = b ? `${b}/email-bestaetigen?token=${encodeURIComponent(token)}` : '';
+  return fromLines({
+    subject: `Bitte bestätige deine neue E-Mail-Adresse für ${productName}`,
+    lines: [
+      'Für ein Konto wurde diese Adresse als neue E-Mail-Adresse angegeben.',
+      'Erst mit deinem Klick wird sie die Adresse des Kontos; bis dahin gilt die bisherige.', '',
+      'Der Link gilt 48 Stunden. Warst du das nicht, ignoriere diese Mail — dann ändert sich nichts.',
+      '', 'This address was entered as the new e-mail address of an account. It only takes effect once you confirm it (link valid for 48 hours).',
+    ],
+  }, { button: url ? { href: url, label: 'Neue Adresse bestätigen' } : null });
+}
+
+/** An die NEUE Adresse, wenn sie schon zu einem anderen Konto gehört (N5):
+ *  derselbe Ablauf von außen, aber ein Hinweis statt eines Links. */
+export function tplEmailChangeTaken({ base, productName = defaultProductName() }) {
+  const b = base ? String(base).replace(/\/+$/, '') : '';
+  return fromLines({
+    subject: `Hinweis zu deinem Konto bei ${productName}`,
+    lines: [
+      'Jemand hat versucht, diese E-Mail-Adresse für ein anderes Konto einzutragen. Zu dieser Adresse gibt es bei uns schon ein Konto — es bleibt, wie es ist.',
+      '', 'Warst du das selbst und willst die Konten zusammenlegen, melde dich einfach. Sonst musst du nichts tun.',
+      b ? `Anmelden: ${b}` : '',
+    ].filter(Boolean),
+  });
+}
+
+/** An die ALTE Adresse, wenn ein Wechsel angefordert wurde (M2). */
+export function tplEmailChangeRequested({ username, newEmail, productName = defaultProductName() }) {
+  return fromLines({
+    subject: `Neue E-Mail-Adresse für dein Konto angefordert — ${productName}`,
+    lines: [
+      `Für dein Konto ${username} wurde die neue Adresse ${newEmail} angegeben.`,
+      'Sie gilt erst, wenn sie über den Link in der Mail an die neue Adresse bestätigt ist. Bis dahin gehen alle Nachrichten weiter an diese Adresse.',
+      '', 'Warst du das nicht, ändere bitte dein Passwort und melde dich bei uns.',
+    ],
+  });
+}
+
+/** Registrierung mit einer Adresse, zu der es schon ein Konto gibt (N5). */
+export function tplRegisterExisting({ base, productName = defaultProductName() }) {
+  const b = base ? String(base).replace(/\/+$/, '') : '';
+  return fromLines({
+    subject: `Du hast schon ein Konto bei ${productName}`,
+    lines: [
+      'Mit dieser E-Mail-Adresse wollte sich gerade jemand neu registrieren. Zu der Adresse gibt es schon ein Konto.',
+      b ? `Anmelden: ${b} (Passwort vergessen? Auf der Anmeldeseite lässt es sich zurücksetzen.)` : '',
+      '', 'Warst du das nicht, musst du nichts tun. Dein Konto bleibt, wie es ist.',
+    ].filter((l, i, a) => l !== '' || a[i - 1] !== ''),
+  });
 }

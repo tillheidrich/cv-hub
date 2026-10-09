@@ -37,13 +37,13 @@ export default function PassSection({ lang, compact = false }: { lang: UiLang; c
 
   const load = useCallback(async () => {
     try { setUser((await api.me()).user); } catch { /* bleibt leer */ }
-    try { setOrders((await billingApi.orders()).orders); setLoadErr(false); }
+    try { setOrders((await billingApi.orders()).orders ?? []); setLoadErr(false); }
     catch { setOrders([]); setLoadErr(true); }
   }, []);
   useEffect(() => {
     let alive = true;
     api.me().then(d => { if (alive) setUser(d.user); }, () => {});
-    billingApi.orders().then(d => { if (alive) { setOrders(d.orders); setLoadErr(false); } }, () => { if (alive) { setOrders([]); setLoadErr(true); } });
+    billingApi.orders().then(d => { if (alive) { setOrders(d.orders ?? []); setLoadErr(false); } }, () => { if (alive) { setOrders([]); setLoadErr(true); } });
     return () => { alive = false; };
   }, []);
 

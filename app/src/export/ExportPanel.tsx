@@ -102,7 +102,7 @@ interface ExportPanelProps {
   onReplaceData?: (cv: CVData) => void;
   /** Anschreiben der aktiven Sprache ersetzen (Markdown-Import im Lokalmodus). */
   onReplaceCoverLetter?: (cl: CoverLetterData) => void;
-  /** ATS-Einstufung der gewählten Vorlage — bei „riskant" und „okay" wird die
+  /** ATS-Einstufung der gewählten Vorlage — bei „low" und „medium" (Spalte, Kopfband) wird die
    *  Word-ATS-Fassung als „empfohlen" markiert. */
   atsLevel?: AtsLevel;
   /** Im schwebenden Paneel der App: volle Breite, ohne eigenen Kopf. */

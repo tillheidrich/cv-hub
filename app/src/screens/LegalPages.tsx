@@ -400,7 +400,8 @@ function PrivacyDE({ billing, open }: { billing?: React.ReactNode; open?: boolea
             (CV-Hub liefert keine mit). */}
         Wir zählen Seitenaufrufe und einige Klicks (etwa „Demo gestartet", „PDF exportiert") mit
         <strong> Umami</strong>, das wir selbst unter <code style={code}>analytics.example.com</code> in
-        [Land] betreiben. Umami setzt keine Cookies und legt keine personenbezogenen Profile an.
+        [Land] betreiben. Skript und Zählung laufen über diese Adresse hier (Pfad <code style={code}>/u/</code>),
+        der Browser verbindet sich also mit keinem weiteren Server. Umami setzt keine Cookies und legt keine personenbezogenen Profile an.
         Erfasst werden aufgerufene Adresse, verweisende Seite, Browser, Betriebssystem, Gerätetyp,
         Bildschirmgröße, Sprache und das Land. Aus IP-Adresse und Browserkennung bildet Umami eine
         Kennung, die sich monatlich ändert; die IP-Adresse selbst wird nicht gespeichert. Was in
@@ -606,7 +607,8 @@ function PrivacyEN({ billing, open }: { billing?: React.ReactNode; open?: boolea
             (CV-Hub ships without one). */}
         We count page views and a few clicks (such as "demo started", "PDF exported") with{' '}
         <strong>Umami</strong>, which we run ourselves at <code style={code}>analytics.example.com</code> in
-        [country]. Umami sets no cookies and builds no personal profiles. It records the requested address,
+        [country]. Script and counting go through this address (path <code style={code}>/u/</code>), so your
+        browser does not connect to any other server. Umami sets no cookies and builds no personal profiles. It records the requested address,
         referring page, browser, operating system, device type, screen size, language and country. From
         IP address and browser identifier Umami derives an identifier that changes every month; the IP
         address itself is not stored. The content of your résumé is never recorded. Legal basis:

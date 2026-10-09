@@ -515,7 +515,12 @@ async function runStdio() {
 async function runHttp() {
   const { default: express } = await import('express');
   const app = express();
-  app.use(express.json({ limit: '7mb' }));   // 4 MB Bild als Base64 ≈ 5,4 MB (set_resume_photo)
+  // Live-Befund 09.10.2026: „x-powered-by: Express“ auf /mcp und den Wegweisern.
+  app.disable('x-powered-by');
+  /* N9 (09.10.2026): Der JSON-Parser lief global VOR der Anmeldung — jeder
+   * konnte ohne Token 7 MB JSON schicken, die geparst wurden. Jetzt nur
+   * noch auf POST /mcp und erst nach der Token-Prüfung (siehe unten). */
+  const jsonBody = express.json({ limit: '7mb' });   // 4 MB Bild als Base64 ≈ 5,4 MB (set_resume_photo)
 
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const CONFIGURED_URL = (process.env.MCP_PUBLIC_URL || '').replace(/\/$/, '');
@@ -594,11 +599,15 @@ async function runHttp() {
     });
   }
 
-  app.post('/mcp', async (req, res) => {
+  /* Anmeldung zuerst, Körper danach (N9). Ohne gültiges Token wird vom
+   * Körper nichts gelesen und nichts geparst. */
+  async function authFirst(req, res, next) {
     const auth = req.get('authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7).trim()
       : (typeof req.query?.k === 'string' ? req.query.k : '');
-    if (!token) return unauthorized(req, res);
+    // Schlüssel und OAuth-Token der cv-api haben eine feste Form; alles andere
+    // muss gar nicht erst bis zur API.
+    if (!token || !/^cv[km]_[A-Za-z0-9_-]{10,200}$/.test(token)) return unauthorized(req, res);
 
     // Gültigkeit einmal vorab prüfen, damit ein abgelaufenes Token als 401 mit
     // Wegweiser zurückkommt und der Client neu autorisiert — statt als
@@ -610,6 +619,12 @@ async function runHttp() {
       return unauthorized(req, res, 'Token ungültig oder abgelaufen.');
     }
     if (!me?.user) return unauthorized(req, res, 'Token ungültig oder abgelaufen.');
+    res.locals.token = token;
+    next();
+  }
+
+  app.post('/mcp', authFirst, jsonBody, async (req, res) => {
+    const token = res.locals.token;
 
     // Zustandslos: pro Anfrage frischer Server + Transport, danach aufräumen.
     // Der Schlüssel des Aufrufers hängt am Aufrufkontext, nicht am Modul.

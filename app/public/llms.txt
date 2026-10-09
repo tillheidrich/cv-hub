@@ -35,10 +35,12 @@
   Tabellen, Kopf-/Fußzeilen, Schrift ≤ 8 pt und Grafiken statt Text als
   Parsing-Fehlerursachen; Greenhouse nennt „columned layout" und Grafiken;
   Workday nennt Bilder und die Lesereihenfolge der Wörter.
-- Mehrspaltige Vorlagen bleiben wählbar und sind im Tool als „ATS-riskant"
-  gekennzeichnet — Textkernel (Parser u. a. hinter softgarden) erkennt nach
-  eigener Verbesserung rund 90 % der Spalten-Layouts korrekt; jeder zehnte
-  also nicht.
+- Einspaltige Vorlagen tragen im Tool die Marke „Gut für Portale".
+  Mehrspaltige Vorlagen sind als „Für Mail und Druck" markiert: Textkernel
+  (Parser u. a. hinter softgarden) erkennt nach eigener Verbesserung rund
+  90 % der Spalten-Layouts korrekt, jeder zehnte also nicht. Für Portale gibt
+  es zu jeder Vorlage die ATS-Fassung (derselbe Inhalt einspaltig, als PDF
+  oder Word) mit einem Klick.
 - Das Tool behauptet ausdrücklich KEINE Ablehnungsquote. Die kursierende
   „75 % werden vom ATS aussortiert"-Zahl stammt aus einem Verkaufsargument von
   2012 ohne Methodik. Parsing-Qualität ist hier ein Hygienefaktor, kein

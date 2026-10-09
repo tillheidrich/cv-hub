@@ -17,6 +17,8 @@ export type BillingRoute =
   | { page: 'thanks'; orderId: string | null }
   | { page: 'withdraw' }
   | { page: 'cancel' }
+  /** Bestätigungslink aus der Eingangsbestätigung (H2/M1, 09.10.2026). */
+  | { page: 'declarationConfirm'; kind: 'withdraw' | 'cancel'; token: string | null }
   | { page: 'terms' }
   | { page: 'withdrawalPolicy' }
   | { page: 'confirmEmail'; token: string | null }
@@ -32,6 +34,11 @@ export const PATHS = {
   withdraw: '/widerruf',
   /** Kündigungsschaltfläche nach § 312k BGB („Verträge hier kündigen"). */
   cancel: '/kuendigen',
+  /** Ziel des Bestätigungslinks einer öffentlichen Erklärung. Der Server
+   *  führt erst nach dem Klick auf dieser Seite aus (POST mit dem Token):
+   *  Ein Mail-Scanner, der den Link nur abruft, löst nichts aus. */
+  withdrawConfirm: '/widerruf/bestaetigen',
+  cancelConfirm: '/kuendigen/bestaetigen',
   terms: '/agb',
   withdrawalPolicy: '/widerrufsbelehrung',
   confirmEmail: '/email-bestaetigen',
@@ -51,6 +58,8 @@ export function matchBillingRoute(pathname: string, search: string): BillingRout
     case PATHS.thanks: return { page: 'thanks', orderId: q.get('order') };
     case PATHS.withdraw: return { page: 'withdraw' };
     case PATHS.cancel: return { page: 'cancel' };
+    case PATHS.withdrawConfirm: return { page: 'declarationConfirm', kind: 'withdraw', token: q.get('token') };
+    case PATHS.cancelConfirm: return { page: 'declarationConfirm', kind: 'cancel', token: q.get('token') };
     case PATHS.terms: return { page: 'terms' };
     case PATHS.withdrawalPolicy: return { page: 'withdrawalPolicy' };
     case PATHS.imprint: return { page: 'imprint' };

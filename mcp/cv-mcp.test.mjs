@@ -10,6 +10,7 @@ import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -20,7 +21,7 @@ const skip = kit && kit.findPgBin() ? false : 'pdf-service/testkit.mjs oder Post
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(300, 7)]).toString('base64');
 
 describe('cv-mcp', { skip }, () => {
-  let pgInst, srv, mcp, resumeId;
+  let pgInst, srv, mcp, resumeId, apiKey;
 
   before(async () => {
     pgInst = await kit.startPostgres(Number(process.env.TEST_PG_PORT || 5441));
@@ -31,6 +32,7 @@ describe('cv-mcp', { skip }, () => {
     const c = kit.client(srv.base);
     await c.post('/api/auth/register', { username: 'mcpnutzer', password: 'mcp-passwort-1' });
     const key = (await c.post('/api/keys', { name: 'test' })).data.key;
+    apiKey = key;
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [path.join(here, 'cv-mcp.mjs')],
@@ -99,5 +101,43 @@ describe('cv-mcp', { skip }, () => {
     assert.equal(bad.isError, true);
     const good = await mcp.callTool({ name: 'update_resume_settings', arguments: { id: resumeId, template: 'lueneburg' } });
     assert.ok(!good.isError, JSON.stringify(good));
+  });
+
+  /* N9 (09.10.2026): gehosteter Modus — Anmeldung vor dem JSON-Parser, kein
+   * x-powered-by. Vorher parste der Dienst bis zu 7 MB JSON von jedem, auch
+   * ohne Token. */
+  test('HTTP-Modus: ohne gültiges Token wird kein Körper gelesen; kein x-powered-by', async () => {
+    const port = Number(process.env.MCP_HTTP_TEST_PORT || 3265);
+    const child = spawn(process.execPath, [path.join(here, 'cv-mcp.mjs')], {
+      env: { ...process.env, MCP_HTTP: '1', PORT: String(port), CV_API_BASE: srv.base, MCP_PUBLIC_URL: `http://localhost:${port}`, CV_API_KEY: '' },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      const until = Date.now() + 15_000;
+      while (Date.now() < until) { try { if ((await fetch(`${base}/health`)).ok) break; } catch { /* noch nicht */ } await new Promise(r => setTimeout(r, 100)); }
+      const h = await fetch(`${base}/health`);
+      assert.equal(h.headers.get('x-powered-by'), null);
+      // Kaputtes JSON ohne Token: 401 — wäre der Parser zuerst gelaufen, käme 400.
+      const broken = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{kaputt' });
+      assert.equal(broken.status, 401);
+      assert.equal(broken.headers.get('x-powered-by'), null);
+      assert.match(broken.headers.get('www-authenticate') || '', /resource_metadata=/);
+      // Falsches Token, 6 MB Körper: 401, nicht geparst.
+      const t0 = Date.now();
+      const big = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer cvk_' + 'f'.repeat(40) }, body: JSON.stringify({ x: 'y'.repeat(6_000_000) }) }).catch(e => ({ status: 'abgebrochen', e }));
+      assert.ok(big.status === 401 || big.status === 'abgebrochen', String(big.status));
+      assert.ok(Date.now() - t0 < 5000);
+      // Gültiger Schlüssel: der Körper wird gelesen und beantwortet.
+      const ok = await fetch(`${base}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } } }),
+      });
+      assert.equal(ok.status, 200);
+      assert.match(await ok.text(), /serverInfo/);
+    } finally {
+      child.kill('SIGTERM');
+    }
   });
 });

@@ -45,6 +45,9 @@ export interface KeysStrings {
   /** E-Mail-Wechsel braucht seit 08.10.2026 das aktuelle Passwort (N6). */
   emailPasswordLabel: string; emailPasswordRequired: string; emailPasswordWrong: string;
   emailOldNotified: string;
+  /** E-Mail-Wechsel mit Bestätigung (M2, 09.10.2026). */
+  emailPending: (addr: string) => string;
+  emailPendingNote: (addr: string) => string;
   tfaTitle: string; tfaHint: string; tfaNoMailer: string; tfaNeedsEmail: string;
   // Verbundene Apps
   sectionApps: string; appsIntro: string;
@@ -96,6 +99,8 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     emailPasswordRequired: 'Bitte gib zur Bestätigung dein aktuelles Passwort ein.',
     emailPasswordWrong: 'Das aktuelle Passwort stimmt nicht. Die E-Mail-Adresse bleibt unverändert.',
     emailOldNotified: 'Die bisherige Adresse bekommt eine Nachricht über die Änderung.',
+    emailPending: a => `Bestätigungslink an ${a} gesendet. Bis du ihn anklickst, gilt deine bisherige Adresse.`,
+    emailPendingNote: a => `Wartet auf Bestätigung: ${a}. Bis dahin gilt die Adresse oben.`,
     tfaTitle: 'Zwei-Faktor-Login (E-Mail-Code)',
     tfaHint: 'Bei jeder Anmeldung schicken wir dir einen 6-stelligen Code per E-Mail.',
     tfaNoMailer: 'E-Mail-Versand ist derzeit nicht konfiguriert.',
@@ -163,6 +168,8 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     emailPasswordRequired: 'Please enter your current password to confirm.',
     emailPasswordWrong: 'The current password is not correct. Your email address has not changed.',
     emailOldNotified: 'Your previous address gets a message about the change.',
+    emailPending: a => `Confirmation link sent to ${a}. Until you click it, your current address stays in use.`,
+    emailPendingNote: a => `Waiting for confirmation: ${a}. Until then the address above applies.`,
     tfaTitle: 'Two-factor login (email code)',
     tfaHint: 'We send you a 6-digit code by email every time you sign in.',
     tfaNoMailer: 'Sending email is not configured at the moment.',
@@ -230,6 +237,8 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     emailPasswordRequired: 'Saisissez votre mot de passe actuel pour confirmer.',
     emailPasswordWrong: "Le mot de passe actuel est incorrect. L'adresse e-mail n'a pas changé.",
     emailOldNotified: "L'ancienne adresse reçoit un message signalant le changement.",
+    emailPending: a => `Lien de confirmation envoyé à ${a}. Tant que vous n’avez pas cliqué dessus, votre adresse actuelle reste valable.`,
+    emailPendingNote: a => `En attente de confirmation : ${a}. D’ici là, l’adresse ci-dessus reste valable.`,
     tfaTitle: 'Connexion à deux facteurs (code par e-mail)',
     tfaHint: 'À chaque connexion, nous vous envoyons un code à 6 chiffres par e-mail.',
     tfaNoMailer: "L'envoi d'e-mails n'est pas configuré pour le moment.",
@@ -297,6 +306,8 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     emailPasswordRequired: 'Introduce tu contraseña actual para confirmar.',
     emailPasswordWrong: 'La contraseña actual no es correcta. Tu dirección de correo no ha cambiado.',
     emailOldNotified: 'Tu dirección anterior recibe un aviso del cambio.',
+    emailPending: a => `Enlace de confirmación enviado a ${a}. Hasta que lo abras, sigue valiendo tu dirección actual.`,
+    emailPendingNote: a => `Pendiente de confirmación: ${a}. Hasta entonces vale la dirección de arriba.`,
     tfaTitle: 'Inicio de sesión en dos pasos (código por correo)',
     tfaHint: 'En cada inicio de sesión te enviamos un código de 6 dígitos por correo.',
     tfaNoMailer: 'El envío de correo no está configurado en este momento.',

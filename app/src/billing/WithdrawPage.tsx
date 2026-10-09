@@ -2,10 +2,12 @@
  * Öffentlicher Widerruf /widerruf, ohne Anmeldung (Widerrufsfunktion nach
  * § 356a BGB, seit 19.06.2026).
  *
- * Zwei Stufen: „Vertrag widerrufen" (Angaben: Name, E-Mail für die
- * Eingangsbestätigung, Bestellnummer freiwillig) und „Widerruf bestätigen".
- * Danach steht die Eingangsbestätigung mit Datum und Uhrzeit sofort auf der
- * Seite; dieselbe schickt der Server per Mail. Der Server antwortet für jeden
+ * Zwei Stufen: „Vertrag widerrufen" (Angaben: Name, E-Mail der Bestellung,
+ * Bestellnummer freiwillig) und „Widerruf bestätigen". Danach steht die
+ * Eingangsbestätigung mit Datum und Uhrzeit sofort auf der Seite. Seit
+ * 09.10.2026 (Befund M1) schickt der Server an die Adresse der BESTELLUNG
+ * einen Bestätigungslink (/widerruf/bestaetigen, DeclarationConfirm.tsx);
+ * erstattet wird erst nach dem Klick, für die Frist zählt der Eingang hier. Der Server antwortet für jeden
  * Ausgang gleich (keine Auskunft, ob es die Bestellung gibt), deshalb zeigt
  * die Seite keine „nicht gefunden"-Meldung. Darunter das
  * Muster-Widerrufsformular zum Herunterladen und Kopieren.

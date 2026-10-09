@@ -185,6 +185,66 @@ export function parseExtraSection(kind: ExtraKind, title: string, sectionLines: 
   }
 }
 
+/* ── Obergrenzen gegen ReDoS (Sicherheitsbefund H1, 09.10.2026) ────────────
+ * Die Sprachzeile wurde bis zum 09.10.2026 mit
+ * `^[-*+]\s*([^—–-]+?)\s*[—–-]\s*(.+)$` gelesen. Drei Quantoren über dieselben
+ * Leerzeichen: „- " + 3000 Leerzeichen + „a" kostet kubisch viel Zeit (am
+ * Server 8,8 s Stillstand bei 3 KB). Im Browser trifft es zwar nur den eigenen
+ * Tab, aber dieselbe Datei kommt über Sharelinks, KI-Antworten und die
+ * Zwischenablage herein. Jetzt wird ohne Rückverfolgung zerlegt
+ * (`splitLanguageLine`), Zeilen über MAX_MD_LINE Zeichen werden übersprungen
+ * (Ausnahme: der Profiltext, dort läuft kein Regex über die Zeile) und das
+ * Markdown wird auf MAX_MD_CHARS begrenzt, wie am Server
+ * (pdf-service/markdown.js). Prüfung: app/scripts/redoscheck.mjs. */
+export const MAX_MD_CHARS = 200_000;
+export const MAX_MD_LINE = 2000;
+
+function capMarkdown(md: unknown): string {
+  const s = typeof md === 'string' ? md : '';
+  return s.length > MAX_MD_CHARS ? s.slice(0, MAX_MD_CHARS) : s;
+}
+
+/** „- Deutsch — Muttersprache (5)" → Sprache und Niveau. Getrennt wird am
+ *  ersten Gedanken-, Halbgeviert- oder Bindestrich nach dem Spiegelstrich,
+ *  genau wie es der alte Ausdruck tat — nur ohne Rückverfolgung. */
+export function splitLanguageLine(t: string): { language: string; level: string } | null {
+  if (!/^[-*+]/.test(t)) return null;
+  const rest = t.slice(1);
+  const at = rest.search(/[—–-]/);
+  if (at < 1) return null;                                   // vor dem Strich mind. ein Zeichen
+  const tail = lineTail(rest.slice(at + 1));
+  if (tail === null) return null;
+  return { language: rest.slice(0, at).trim(), level: tail.trim() };
+}
+
+/** „- E-Mail: a@b.de" → Schlüssel und Wert, gleichwertig zu
+ *  `^-\s*([^:]+):\s*(.+)$` (Kontakt, Empfänger im Anschreiben). Der Ausdruck
+ *  war quadratisch (`\s*` und `[^:]+` teilen sich die Leerzeichen); bei
+ *  100 Zeilen à 2000 Zeichen ergab das eine halbe Sekunde. */
+export function splitKeyLine(t: string): { key: string; value: string } | null {
+  if (t[0] !== '-') return null;
+  const colon = t.indexOf(':', 1);
+  if (colon < 2) return null;
+  const tail = lineTail(t.slice(colon + 1));
+  if (tail === null) return null;
+  const key = t.slice(1, colon).replace(/^\s+/, '') || t.slice(colon - 1, colon);
+  return { key, value: tail.trim() };
+}
+
+/** Was `\s*(.+)$` (ohne m-Flag) übrig lässt: `.` trifft keinen Zeilen-
+ *  umbruch, `\s` schon. Vor dem letzten Umbruch darf also nur Weißraum
+ *  stehen, dahinter muss mindestens ein Zeichen kommen. */
+function lineTail(after: string): string | null {
+  let last = -1;
+  for (let k = after.length - 1; k >= 0; k--) {
+    const c = after[k];
+    if (c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029') { last = k; break; }
+  }
+  if (last >= 0 && after.slice(0, last + 1).trim() !== '') return null;
+  const tail = after.slice(last + 1);
+  return tail.length ? tail : null;
+}
+
 /** Frontmatter abtrennen. */
 function splitFrontmatter(md: string): { fm: string | null; body: string } {
   const m = md.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
@@ -197,7 +257,7 @@ function splitFrontmatter(md: string): { fm: string | null; body: string } {
  * was das Markdown nicht trägt.
  */
 export function markdownToCvData(md: string, existing: CVData): CVData {
-  const { body } = splitFrontmatter(md);
+  const { body } = splitFrontmatter(capMarkdown(md));
   const cv: CVData = {
     personal: { name: '', title: '', location: '', email: '', phone: '' },
     profile: { text: '' },
@@ -209,7 +269,8 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
     labels: existing.labels,
   };
 
-  const lines = body.split('\n').map(l => l.replace(/\r$/, ''));
+  const rawLines = body.split('\n').map(l => l.replace(/\r$/, ''));
+  const lines = rawLines.map(l => (l.length > MAX_MD_LINE ? '' : l));
   let section: CvSection = null;
   let curExp: ExperienceEntry | null = null;
   let curEdu: EducationEntry | null = null;
@@ -253,12 +314,12 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
       continue;
     }
 
-    if (section === 'profile') { profileLines.push(line); i++; continue; }
+    if (section === 'profile') { profileLines.push(rawLines[i]); i++; continue; }
 
     if (section === 'contact') {
-      const m = t.match(/^-\s*([^:]+):\s*(.+)$/);
+      const m = splitKeyLine(t);
       if (m) {
-        const k = m[1].toLowerCase(), v = clipField(m[2].trim(), 240);
+        const k = m.key.toLowerCase(), v = clipField(m.value, 240);
         if (/e[-\s]?mail/.test(k)) cv.personal.email = v;
         else if (/telefon|phone/.test(k)) cv.personal.phone = v;
         else if (/ort|location|adresse|address/.test(k)) cv.personal.location = v;
@@ -340,16 +401,16 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
     }
 
     if (section === 'languages') {
-      const m = t.match(/^[-*+]\s*([^—–-]+?)\s*[—–-]\s*(.+)$/);
+      const m = splitLanguageLine(t);
       if (m) {
-        let level = m[2].trim();
-        const dotMatch = level.match(/\s*\((\d)(?:\/5)?\)\s*$/);
+        let level = m.level;
+        const dotMatch = level.match(/\((\d)(?:\/5)?\)\s*$/);
         let dots: number | undefined;
         if (dotMatch) {
           dots = Math.max(1, Math.min(5, parseInt(dotMatch[1], 10)));
           level = level.slice(0, dotMatch.index).trim();
         }
-        const entry: LanguageEntry = { language: m[1].trim(), level };
+        const entry: LanguageEntry = { language: m.language, level };
         if (dots) entry.dots = dots;
         cv.languages.push(entry);
       }
@@ -432,7 +493,7 @@ function clSectionOf(title: string): ClSection {
 const CL_TEXT_FIELDS = new Set(['subject', 'salutation', 'intro', 'mainBody', 'companyReference', 'motivation', 'closing', 'signoff']);
 
 export function markdownToCoverLetter(md: string, existing: CoverLetterData): CoverLetterData {
-  const { fm, body } = splitFrontmatter(md);
+  const { fm, body } = splitFrontmatter(capMarkdown(md));
   const schalter: { showDateline?: boolean; showSignature?: boolean } = {};
   if (fm) {
     for (const line of fm.split('\n')) {
@@ -458,9 +519,10 @@ export function markdownToCoverLetter(md: string, existing: CoverLetterData): Co
     if (!section || !buf.length) { buf = []; return; }
     if (section === 'recipient' || section === 'header') {
       for (const line of buf) {
-        const m = line.match(/^-\s*([^:]+):\s*(.+)$/);
+        if (line.length > MAX_MD_LINE) continue;
+        const m = splitKeyLine(line);
         if (!m) continue;
-        const k = m[1].toLowerCase(), v = m[2].trim();
+        const k = m.key.toLowerCase(), v = m.value;
         if (section === 'recipient') {
           if (/firma|company/.test(k)) cl.company = v;
           else if (/ansprechpartner|contact/.test(k)) cl.contactPerson = v;

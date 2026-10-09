@@ -37,7 +37,7 @@ export function atsLevelForLayout(layout: ResumeTheme['layout']): AtsLevel {
     case 'header-band':    // Header oben, danach linear — meist OK
       return 'medium';
     case 'sidebar-left':
-    case 'sidebar-right':  // Zwei Spalten — ATS-Parser stolpern hier am häufigsten
+    case 'sidebar-right':  // Zwei Spalten — für Mail und Druck; für Portale die ATS-Fassung
       return 'low';
     default:
       return 'medium';
@@ -47,37 +47,45 @@ export function atsLevelForLayout(layout: ResumeTheme['layout']): AtsLevel {
 export type AtsLang = 'de' | 'en' | 'fr' | 'es';
 
 /* Die Marken standen bis zum 16.09.2026 nur auf Deutsch in der Liste — auch
- * wenn die Oberfläche auf Englisch, Französisch oder Spanisch lief. Das fiel
- * nicht auf, solange es drei kurze Wörter waren; mit der erklärenden Legende
- * daneben wäre es ein halber deutscher Absatz in einer englischen Oberfläche
- * geworden. Also übersetzt — Begründung und Quellenlage inklusive. */
+ * wenn die Oberfläche auf Englisch, Französisch oder Spanisch lief. Seitdem
+ * übersetzt, Begründung und Quellenlage inklusive.
+ *
+ * Wortlaut seit 09.10.2026 (Rückmeldung: Das allgegenwärtige „ATS-riskant"
+ * ließ das eigene Produkt schlecht aussehen).
+ * 15 von 26 Vorlagen trugen eine rote Marke „ATS-riskant". Der Befund bleibt
+ * richtig (Belege oben), die Darstellung war falsch herum: Für JEDE Vorlage
+ * gibt es die einspaltige ATS-Fassung als PDF und Word auf einen Klick. Die
+ * Marke sagt deshalb, wofür eine Vorlage gemacht ist, nicht, was an ihr
+ * fehlt. Regeln: nie Rot, nie „riskant/risky/risqué/arriesgado", kein Siegel
+ * mit Garantiecharakter („ATS-sicher", „ATS-safe" – § 5 UWG). „Gut für
+ * Portale" ist eine Einordnung mit Herstellerbelegen, keine Zusage. */
 const LABELS: Record<AtsLang, Record<AtsLevel, string>> = {
-  de: { high: 'ATS-stark', medium: 'ATS-okay', low: 'ATS-riskant' },
-  en: { high: 'ATS-strong', medium: 'ATS-okay', low: 'ATS-risky' },
-  fr: { high: 'ATS-solide', medium: 'ATS-correct', low: 'ATS-risqué' },
-  es: { high: 'ATS-sólido', medium: 'ATS-correcto', low: 'ATS-arriesgado' },
+  de: { high: 'Gut für Portale', medium: 'Für Portale geeignet', low: 'Für Mail und Druck' },
+  en: { high: 'Good for portals', medium: 'Suits portals', low: 'For email and print' },
+  fr: { high: 'Bien lu par les portails', medium: 'Adapté aux portails', low: 'E-mail et impression' },
+  es: { high: 'Buena para portales', medium: 'Apta para portales', low: 'Correo e impresión' },
 };
 
 const NOTES: Record<AtsLang, Record<AtsLevel, string>> = {
   de: {
-    high: 'Eine Spalte, lineare Lesereihenfolge. Das ist die Form, die Parser zuverlässig in Felder überführen.',
-    medium: 'Kopfband: liegt im normalen Textfluss der Seite (keine PDF-Kopfzeile), wird meist korrekt gelesen. Restrisiko bleibt.',
-    low: 'Zweispaltig. Personio und Greenhouse nennen mehrspaltige Layouts ausdrücklich als Parsing-Fehlerursache; selbst der Marktführer unter den Parsern liest rund jeden zehnten Spalten-Lebenslauf falsch. Sieht gut aus — kostet aber Verlässlichkeit.',
+    high: 'Eine Spalte, lineare Lesereihenfolge. Das ist die Form, die Bewerbungsportale zuverlässig in Felder überführen.',
+    medium: 'Kopfband im normalen Textfluss der Seite (keine PDF-Kopfzeile), danach eine Spalte. Portale lesen das meist richtig. Die ATS-Fassung gibt es zusätzlich mit einem Klick.',
+    low: 'Zwei Spalten, gestaltet für Menschen, die das PDF per Mail oder auf Papier lesen. Bewerbungsportale lesen Spalten nicht immer in der richtigen Reihenfolge: Personio und Greenhouse nennen mehrspaltige Layouts als Ursache für Lesefehler. Für Portale gibt es deshalb die ATS-Fassung, derselbe Inhalt einspaltig, als PDF oder Word.',
   },
   en: {
-    high: 'One column, linear reading order. This is the shape parsers turn into fields reliably.',
-    medium: 'Header band: sits in the normal text flow of the page (not a PDF header), usually read correctly. Some risk remains.',
-    low: 'Two columns. Personio and Greenhouse name multi-column layouts explicitly as a cause of parsing failure; even the leading parser misreads roughly one in ten column résumés. Looks good — costs reliability.',
+    high: 'One column, linear reading order. This is the shape applicant portals turn into fields reliably.',
+    medium: 'Header band in the normal text flow of the page (not a PDF header), then one column. Portals usually read it correctly. The ATS version is one click away as well.',
+    low: 'Two columns, designed for people who read the PDF by email or on paper. Applicant portals do not always read columns in the right order: Personio and Greenhouse name multi-column layouts as a cause of parsing errors. For portals there is the ATS version: the same content in one column, as PDF or Word.',
   },
   fr: {
-    high: 'Une colonne, ordre de lecture linéaire. C\'est la forme que les analyseurs convertissent en champs de façon fiable.',
-    medium: 'Bandeau : dans le flux normal de la page (pas un en-tête PDF), généralement bien lu. Un risque subsiste.',
-    low: 'Deux colonnes. Personio et Greenhouse citent explicitement les mises en page multi-colonnes comme cause d\'échec d\'analyse ; même le principal analyseur du marché se trompe sur environ un CV en colonnes sur dix. C\'est beau — au prix de la fiabilité.',
+    high: 'Une colonne, ordre de lecture linéaire. C\'est la forme que les portails de candidature convertissent en champs de façon fiable.',
+    medium: 'Bandeau dans le flux normal de la page (pas un en-tête PDF), puis une colonne. Les portails le lisent généralement bien. La version ATS est aussi à un clic.',
+    low: 'Deux colonnes, conçu pour les personnes qui lisent le PDF par e-mail ou sur papier. Les portails de candidature ne lisent pas toujours les colonnes dans le bon ordre : Personio et Greenhouse citent les mises en page multi-colonnes comme cause d\'erreurs de lecture. Pour les portails, il y a la version ATS : le même contenu sur une colonne, en PDF ou en Word.',
   },
   es: {
-    high: 'Una columna, orden de lectura lineal. Es la forma que los analizadores convierten en campos de manera fiable.',
-    medium: 'Banda superior: está en el flujo normal de la página (no en un encabezado del PDF) y suele leerse bien. Queda un riesgo residual.',
-    low: 'Dos columnas. Personio y Greenhouse mencionan expresamente los diseños de varias columnas como causa de fallo al analizar; incluso el analizador líder lee mal alrededor de uno de cada diez currículums a columnas. Se ve bien — cuesta fiabilidad.',
+    high: 'Una columna, orden de lectura lineal. Es la forma que los portales de empleo convierten en campos de manera fiable.',
+    medium: 'Banda superior dentro del flujo normal de la página (no un encabezado del PDF) y luego una columna. Los portales suelen leerla bien. La versión ATS también está a un clic.',
+    low: 'Dos columnas, pensada para quien lee el PDF por correo o en papel. Los portales de empleo no siempre leen las columnas en el orden correcto: Personio y Greenhouse mencionan los diseños de varias columnas como causa de errores de lectura. Para portales está la versión ATS: el mismo contenido a una columna, en PDF o Word.',
   },
 };
 
@@ -92,20 +100,20 @@ export function atsNote(level: AtsLevel, lang: AtsLang = 'de'): string {
 /** Überschrift und Einordnung der Legende. */
 export const ATS_LEGEND: Record<AtsLang, { title: string; caveat: string }> = {
   de: {
-    title: 'Was heißt ATS-stark?',
-    caveat: 'Gemeint ist, wie zuverlässig ein Bewerbungsparser die Felder trifft — nicht, ob eingeladen wird. Für Portale, die maschinell lesen, gibt es zusätzlich die einspaltige Word-ATS-Fassung im Export.',
+    title: 'Was heißt „Gut für Portale"?',
+    caveat: 'Gemeint ist, wie zuverlässig ein Bewerbungsportal die Felder trifft, nicht, ob eingeladen wird. Für Portale gibt es zu jeder Vorlage die einspaltige ATS-Fassung als PDF und Word.',
   },
   en: {
-    title: 'What does ATS-strong mean?',
-    caveat: 'It says how reliably a résumé parser hits the fields — not whether you get invited. For portals that read by machine there is also the single-column Word ATS version in the export.',
+    title: 'What does "Good for portals" mean?',
+    caveat: 'It says how reliably an applicant portal hits the fields, not whether you get invited. For portals every template comes with the single-column ATS version as PDF and Word.',
   },
   fr: {
-    title: 'Que veut dire ATS-solide ?',
-    caveat: 'Cela indique avec quelle fiabilité un analyseur de CV retrouve les champs — pas si vous serez convoqué. Pour les portails qui lisent automatiquement, l\'export contient aussi la version Word ATS sur une colonne.',
+    title: 'Que veut dire « Bien lu par les portails » ?',
+    caveat: 'Cela indique avec quelle fiabilité un portail de candidature retrouve les champs, pas si vous serez convoqué. Pour les portails, chaque modèle a sa version ATS sur une colonne, en PDF et en Word.',
   },
   es: {
-    title: '¿Qué significa ATS-sólido?',
-    caveat: 'Indica con qué fiabilidad un analizador de currículums acierta los campos — no si te invitan. Para portales que leen automáticamente, la exportación incluye además la versión Word ATS a una columna.',
+    title: '¿Qué significa «Buena para portales»?',
+    caveat: 'Indica con qué fiabilidad un portal de empleo acierta los campos, no si te invitan. Para portales, cada plantilla tiene su versión ATS a una columna, en PDF y Word.',
   },
 };
 
@@ -122,8 +130,9 @@ export function atsNoteDe(level: AtsLevel): string {
   return atsNote(level, 'de');
 }
 
+/** Farben der Marke außerhalb von surface.css: nur „high" ist getönt (dezent
+ *  grün), „medium" und „low" sind neutral. Kein Rot, kein Warnton. */
 export function atsColors(level: AtsLevel): { bg: string; border: string; ink: string } {
-  if (level === 'high')   return { bg: '#eaf3ea', border: '#a8c8a8', ink: '#2d5a2d' };
-  if (level === 'medium') return { bg: '#fbf3e2', border: '#d8c490', ink: '#7a5d1a' };
-  return { bg: '#f7eae6', border: '#d8aba0', ink: '#7a3a2a' };
+  if (level === 'high') return { bg: '#eaf3ea', border: '#a8c8a8', ink: '#2d5a2d' };
+  return { bg: '#f1f2f5', border: '#d5d8df', ink: '#3f4452' };
 }

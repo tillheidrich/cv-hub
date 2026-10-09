@@ -129,6 +129,16 @@ Open **http://localhost:8080**. The first account you register becomes the admin
 - `PUBLIC_BASE_URL=https://your.domain` — the base for links that leave the
   house (emails, share links). It is deliberately **not** derived from request
   headers; see `pdf-service/server.js`, `publicBaseUrl`.
+- `ALLOWED_ORIGINS=https://your.domain` — every origin not on the list
+  (including `null`) gets 403 before any handler runs; only the localhost dev
+  ports are allowed by default.
+
+**Before going live**, replace the placeholders in
+`app/public/.well-known/security.txt` (`Contact: mailto:security@example.com`,
+`Canonical: https://cv.example.com/...`) with your own address and domain, and
+keep `Expires` within a year. Analytics are off by default; `app/nginx.conf`
+contains an optional Umami pass-through under `/u/` (set `$umami_host`, then
+uncomment the tag in `app/index.html`), which you can also delete.
 
 ## Running the checks
 

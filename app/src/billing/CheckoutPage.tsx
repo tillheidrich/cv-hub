@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLang } from '../ui/i18n';
 import { BILLING_I18N, fmtDate } from '../ui/i18n/billing';
-import { api } from '../data/api';
+import { api, ApiError } from '../data/api';
 import type { AuthUser } from '../data/api';
 import { track } from '../data/track';
 import { billingApi, type Offer } from './api';
@@ -111,6 +111,9 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
   const busyRef = useRef(false);
   const [err, setErr] = useState<string | null>(null);
   const [invalid, setInvalid] = useState<string | null>(null);
+  /** Server lehnt den Kauf ab, solange die Adresse unbestätigt ist (N1). */
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resend, setResend] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle');
   const options = useMemo(() => countryOptions(lang), [lang]);
   /** Ist das bemängelte Feld behoben, verschwindet die Meldung sofort — sonst
    *  stünde „ab 18" neben einem gesetzten Häkchen. */
@@ -140,9 +143,17 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
       window.location.assign(r.checkoutUrl);
       // busy bleibt gesetzt: Die Seite verlässt sich gerade selbst.
     } catch (ex) {
-      setErr(errorText(ex, lang));
+      if (ex instanceof ApiError && ex.code === 'email_unconfirmed') { setUnconfirmed(true); setErr(null); }
+      else setErr(errorText(ex, lang));
       busyRef.current = false; setBusy(false);
     }
+  }
+
+  async function resendMail() {
+    if (resend === 'busy') return;
+    setResend('busy');
+    try { await billingApi.resendConfirmation(); setResend('sent'); }
+    catch { setResend('failed'); }
   }
 
   async function signOut() {
@@ -229,6 +240,17 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
             <p className="bl-summary-foot" data-k="withdrawal">{O.withdrawalHighlight}</p>
           </section>
           {err && <p className="bl-error" role="alert">{err}</p>}
+          {unconfirmed && (
+            <div className="bl-band" role="alert" data-unconfirmed style={{ margin: 0, flexDirection: 'column', alignItems: 'flex-start', padding: '12px 14px' }}>
+              <strong style={{ fontWeight: 640 }}>{t.coUnconfirmedTitle}</strong>
+              <span style={{ flex: 'none' }}>{t.coUnconfirmedBody(user.email ?? null)}{resend === 'sent' ? ` ${t.resent}` : resend === 'failed' ? ` ${t.resendFailed}` : ''}</span>
+              {resend !== 'sent' && (
+                <button type="button" className="ui-btn ui-btn-soft" onClick={resendMail} disabled={resend === 'busy'} data-resend-confirmation>
+                  {resend === 'busy' ? t.busy : t.coResend}
+                </button>
+              )}
+            </div>
+          )}
           <button type="submit" className="ui-btn ui-btn-primary bl-submit" data-order-button disabled={busy || unlimited || notAvailable} aria-busy={busy || undefined}>
             {busy ? t.orderBusy : O.button}
           </button>

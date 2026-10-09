@@ -18,12 +18,73 @@
  * weil Chrome die Weiterleitung nach dem Absenden sonst blockiert. */
 export const HTML_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+/* Runde 6 (09.10.2026):
+ * - Referrer-Policy war „no-referrer“. Damit schickt ein Browser bei einem
+ *   Formular-POST `Origin: null` — die OAuth-Zustimmung („Erlauben“) und die
+ *   Zugangsanfrage („Annehmen“) endeten so mit einer CORS-Ablehnung (M6).
+ *   „same-origin“ schickt den eigenen Ursprung nur an sich selbst und nach
+ *   außen gar nichts — die Rückleitung zum OAuth-Client erfährt also weiter
+ *   nicht, von welcher Seite sie kam.
+ * - HSTS und Permissions-Policy fehlten auf dem direkten API-Weg (Live-Befund).
+ * - Cache-Control: no-store ist die Vorgabe für alles, was dieser Dienst
+ *   ausliefert. Wer cachen darf (Fotos), setzt seinen eigenen Wert danach. */
+export const PERMISSIONS_POLICY = 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()';
+
 export function securityHeaders(_req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Content-Security-Policy', HTML_CSP);
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Permissions-Policy', PERMISSIONS_POLICY);
+  res.setHeader('Cache-Control', 'no-store');
   next();
+}
+
+/* ── Ursprungsprüfung (M6) ────────────────────────────────────────────────
+ *
+ * Vorher meldete der cors-Baustein einen fremden Ursprung als Fehler, und der
+ * landete in der Fehler-Middleware: 500 „Interner Fehler“. Jetzt eine klare
+ * Absage mit 403, BEVOR irgendein Handler läuft. Ohne Origin-Kopf (gleicher
+ * Ursprung bei GET, Server-zu-Server wie der Mollie-Webhook, curl) geht es
+ * weiter wie bisher. `null` (Sandbox-Frames, data:-Seiten, no-referrer) ist
+ * ausdrücklich KEIN erlaubter Ursprung. */
+export function originGuard(allowlist) {
+  return (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin === undefined || allowlist.has(origin)) return next();
+    res.status(403).json({ error: 'Dieser Ursprung ist nicht zugelassen.', code: 'origin_not_allowed' });
+  };
+}
+
+/* ── Schlüssel für Rate-Limits (M3) ───────────────────────────────────────
+ *
+ * Wer eine IPv6-Adresse hat, hat in aller Regel ein ganzes /64 — 2^64
+ * Adressen. Ein Eimer je einzelner Adresse war damit kein Limit. Jetzt:
+ * IPv4 je Adresse, IPv6 je /64. Für Netz-Limits (subnetOf) IPv4 je /24. */
+export function subnetOf(ip) {
+  const s = String(ip || '').replace(/^::ffff:/i, '');
+  if (s.includes('/')) return s;                          // schon ein Netz
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(s)) return s.split('.').slice(0, 3).join('.') + '.0/24';
+  if (s.includes(':')) return v6Prefix64(s);
+  return s || 'unknown';
+}
+
+function v6Prefix64(s) {
+  const full = s.split('%')[0].toLowerCase();
+  const [head, tail = ''] = full.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = full.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return groups.slice(0, 4).map(g => (g || '0').replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+
+/** Eimer-Schlüssel je Aufrufer: IPv4 einzeln, IPv6 je /64. */
+export function clientKey(ip) {
+  const s = String(ip || '').replace(/^::ffff:/i, '');
+  if (s.includes('/')) return s;
+  if (s.includes(':')) return v6Prefix64(s);
+  return s || 'unknown';
 }
 
 /** CSP der Zustimmungsseite: wie oben, aber das Formular darf zusätzlich zur

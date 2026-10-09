@@ -44,6 +44,8 @@ export async function run() {
       try { localStorage.setItem('appstudio-ui-lang', 'de'); } catch { /* */ }
     });
     await c.route('**/analytics.example.com/**', r => r.abort());
+    // Optionales Umami über /u/ auf derselben Domain (nginx.conf).
+    await c.route(/\/u\/(script\.js|api\/send)(\?|$)/, r => r.abort());
     return c;
   }
   async function page(c) {

@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UiLang } from '../ui/i18n';
 import { BILLING_I18N } from '../ui/i18n/billing';
-import type { AuthUser } from '../data/api';
+import { ApiError, type AuthUser } from '../data/api';
 import { billingApi } from './api';
 import BillingShell from './BillingShell';
 import { useTitle } from './hooks';
@@ -44,7 +44,9 @@ export default function ConfirmEmailPage({ token }: { token: string | null }) {
 function Body({ token, lang }: { token: string | null; lang: UiLang }) {
   const t = BILLING_I18N[lang];
   useTitle(`${t.confirmedTitle} · ${APP_NAME}`);
-  const [state, setState] = useState<'busy' | 'ok' | 'bad'>(token ? 'busy' : 'bad');
+  const [state, setState] = useState<'busy' | 'ok' | 'changed' | 'bad'>(token ? 'busy' : 'bad');
+  /** Bei einem Adresswechsel (kind 'change', M2): die neue Adresse. */
+  const [changedTo, setChangedTo] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const once = useRef(false);
   useEffect(() => {
@@ -52,13 +54,19 @@ function Body({ token, lang }: { token: string | null; lang: UiLang }) {
     once.current = true;
     // Den Schlüssel nicht in der Adresszeile stehen lassen.
     try { window.history.replaceState({}, '', PATHS.confirmEmail); } catch { /* ignore */ }
-    billingApi.confirmEmail(token).then(() => {
+    billingApi.confirmEmail(token).then(r => {
+      /* Derselbe Endpunkt bestätigt seit 09.10.2026 auch einen Adresswechsel
+       * (der Server unterscheidet am Token). Dann „Adresse geändert". */
+      if (r && r.kind === 'change') { setChangedTo(typeof r.email === 'string' ? r.email : ''); setState('changed'); return; }
       // Gemerkter Zugangscode (Seite /code): direkt dorthin zurück, damit die
       // Einlösung ohne erneutes Eintippen weitergeht.
       if (hasPendingCode()) { navigate(PATHS.code, { replace: true }); return; }
       setState('ok');
-    }, e => { setMsg(errorText(e, lang)); setState('bad'); });
-  }, [token, lang]);
+    }, e => {
+      setMsg(e instanceof ApiError && e.code === 'email_taken' ? t.confirmEmailTaken : errorText(e, lang));
+      setState('bad');
+    });
+  }, [token, lang, t]);
 
   return (
     <section className="bl-hero">
@@ -68,6 +76,15 @@ function Body({ token, lang }: { token: string | null; lang: UiLang }) {
           <>
             <h1 className="bl-h2">{t.confirmedTitle}</h1>
             <p className="bl-lede">{t.confirmedBody}</p>
+            <div className="bl-actions">
+              <button type="button" className="ui-btn ui-btn-primary" onClick={() => navigate('/')}>{t.continue}</button>
+            </div>
+          </>
+        )}
+        {state === 'changed' && (
+          <>
+            <h1 className="bl-h2">{t.confirmedChangeTitle}</h1>
+            {changedTo && <p className="bl-lede">{t.confirmedChangeBody(changedTo)}</p>}
             <div className="bl-actions">
               <button type="button" className="ui-btn ui-btn-primary" onClick={() => navigate('/')}>{t.continue}</button>
             </div>

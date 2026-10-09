@@ -1,0 +1,7 @@
+# PLACEHOLDERS — replace Contact and Canonical with your own before going live,
+# and move Expires forward (at most one year, RFC 9116).
+# Found a security issue? Please report it by e-mail, in German or English.
+Contact: mailto:security@example.com
+Expires: 2027-10-09T00:00:00.000Z
+Preferred-Languages: de, en
+Canonical: https://cv.example.com/.well-known/security.txt

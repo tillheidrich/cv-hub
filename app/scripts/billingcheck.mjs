@@ -54,6 +54,8 @@ async function newPage(viewport = { width: 1440, height: 900 }, lang = 'de') {
     try { localStorage.setItem('appstudio-ui-lang', l); } catch { /* */ }
   }, [lang]);
   await ctx.route('**/analytics.example.com/**', r => r.abort());
+  // Optionales Umami über /u/ auf derselben Domain (nginx.conf).
+  await ctx.route(/\/u\/(script\.js|api\/send)(\?|$)/, r => r.abort());
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(String(e).slice(0, 200)));
   await installBillingMock(page, st);
@@ -368,7 +370,9 @@ await shot(page, 'widerruf-1440');
 await page.click('[data-withdraw-confirm]');
 await page.waitForSelector('[data-withdraw-step="3"]');
 const pr = await page.locator('[data-withdraw-receipt]').innerText();
-check(/\d{1,2}:\d{2} Uhr/.test(pr) && pr.includes(EMAIL), 'Eingangsbestätigung mit Datum, Uhrzeit und Adresse', pr.slice(0, 140));
+/* Seit 09.10.2026 (Befund M1): Bestätigungslink an die Adresse der Bestellung,
+ * die Seite nennt die eingegebene Adresse nicht (keine Auskunft, ob sie passt). */
+check(/\d{1,2}:\d{2} Uhr/.test(pr) && /Bestätigungslink an die E-Mail-Adresse der Bestellung/.test(pr) && /Mein Pass/.test(pr) && !pr.includes(EMAIL), 'Eingangsbestätigung mit Datum, Uhrzeit und Bestätigungslink (ohne eingegebene Adresse)', pr.slice(0, 200));
 check(st.withdrawals.some(w => w.where === 'public' && w.matched), 'Widerruf am Server (öffentlich, zugeordnet)');
 check((await events(page)).some(([e, d]) => e === 'withdraw_done' && d.where === 'public'), 'Ereignis withdraw_done (public)');
 check(!JSON.stringify(await events(page)).includes(EMAIL), 'keine E-Mail-Adresse in Ereignissen');
@@ -388,7 +392,7 @@ await page.check('input[name="cancel-kind"] >> nth=0');
 await page.click('[data-cancel-confirm]');
 await page.waitForSelector('[data-cancel-done]');
 const cr = await page.locator('[data-cancel-receipt]').innerText();
-check(/\d{1,2}:\d{2} Uhr/.test(cr) && /Ordentliche Kündigung/.test(cr) && cr.includes(EMAIL), 'Kündigungsbestätigung mit Datum, Uhrzeit, Art und Adresse', cr.slice(0, 140));
+check(/\d{1,2}:\d{2} Uhr/.test(cr) && /Ordentliche Kündigung/.test(cr) && /Bestätigungslink an die E-Mail-Adresse der Bestellung/.test(cr) && !cr.includes(EMAIL), 'Kündigung ohne Anmeldung: Datum, Uhrzeit, Art, Bestätigungslink (ohne eingegebene Adresse)', cr.slice(0, 200));
 check(/Speichern|Drucken/.test(await text(page)), 'Hinweis zum Speichern der Erklärung (§ 312k Abs. 3)');
 check((st.cancellations || []).some(c => c.where === 'public' && c.body.when === 'now'), 'Kündigung am Server (öffentlich)');
 await shot(page, 'kuendigen-1440');
@@ -403,8 +407,50 @@ check(/widerrufen/.test(await text(page)), 'mit Konto innerhalb der Frist: Hinwe
 await page.click('[data-cancel-confirm]');
 await page.waitForSelector('[data-cancel-done]');
 check((st.cancellations || []).some(c => c.where === 'account'), 'Kündigung am Server (Konto)');
+check((await page.locator('[data-cancel-receipt]').innerText()).includes(st.user?.email || '@'), 'mit Konto: sofort wirksam, Bestätigung an die Kontoadresse');
 await page.context().close();
 st.user = null;
+
+// ── 7b. Bestätigungslink (/widerruf/bestaetigen, /kuendigen/bestaetigen) ─────
+step('Bestätigungslink öffentlicher Erklärungen');
+{
+  const TOKEN = 'T'.repeat(43);
+  const cases = [
+    ['/widerruf/bestaetigen', 200, { ok: true, kind: 'withdraw', orderNo: 'B-000099', receivedAt: '2026-10-09T09:12:00Z', effectiveAt: '2026-10-09T09:12:00Z', refund: { status: 'requested' } }, 'done', /Widerruf ist bestätigt[\s\S]*B-000099[\s\S]*11:12 Uhr[\s\S]*Erstattung/],
+    ['/kuendigen/bestaetigen', 200, { ok: true, kind: 'cancel', orderNo: 'B-000100', receivedAt: '2026-10-09T09:12:00Z', effectiveAt: '2026-10-20T00:00:00Z', orderNos: ['B-000100'] }, 'done', /Kündigung ist bestätigt[\s\S]*B-000100[\s\S]*endet am 20\. Oktober 2026/],
+    ['/widerruf/bestaetigen', 409, { error: 'x', code: 'token_used', kind: 'withdraw', orderNo: 'B-000099', receivedAt: '2026-10-09T09:12:00Z' }, 'used', /schon bestätigt[\s\S]*11:12 Uhr/],
+    ['/kuendigen/bestaetigen', 410, { error: 'x', code: 'token_expired', kind: 'cancel', receivedAt: '2026-10-01T09:12:00Z' }, 'expired', /abgelaufen[\s\S]*trotzdem bei uns eingegangen[\s\S]*Kündigung noch einmal abschicken/],
+    ['/widerruf/bestaetigen', 409, { error: 'x', code: 'not_withdrawable', kind: 'withdraw' }, 'manual', /nicht automatisch erledigen/],
+    ['/widerruf/bestaetigen', 400, { error: 'x', code: 'token_invalid' }, 'invalid', /ungültig[\s\S]*Widerruf noch einmal abschicken/],
+  ];
+  for (const [path, status, body, want, re] of cases) {
+    page = await newPage();
+    const posts = [];
+    await page.route('**/api/billing/declarations/confirm', r => { posts.push(r.request().postDataJSON()); return r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }); });
+    await page.goto(`${BASE}${path}?token=${TOKEN}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('[data-declaration-state="ready"]');
+    check(!new URL(page.url()).search.includes(TOKEN), `${path}: Schlüssel sofort aus der Adresszeile`);
+    check(posts.length === 0, `${path}: nichts ausgeführt ohne Klick (Mail-Scanner)`);
+    if (want === 'done' && status === 200 && path.startsWith('/kuendigen')) {
+      check(await page.locator('[data-declaration-confirm]').innerText() === 'jetzt kündigen', '/kuendigen/bestaetigen: Knopf „jetzt kündigen"');
+      await axe(page, path);
+    }
+    if (want === 'done' && path.startsWith('/widerruf')) check(await page.locator('[data-declaration-confirm]').innerText() === 'Widerruf bestätigen', '/widerruf/bestaetigen: Knopf „Widerruf bestätigen"');
+    await page.click('[data-declaration-confirm]');
+    await page.waitForSelector(`[data-declaration-state="${want}"]`);
+    check(posts.length === 1 && posts[0]?.token === TOKEN, `${path} ${want}: ein POST mit dem Schlüssel im Körper`);
+    const tx = await text(page);
+    check(re.test(tx), `${path} → ${want}: richtige Meldung`, tx.replace(/\s+/g, ' ').slice(0, 200));
+    if (want === 'done') await axe(page, `${path} bestätigt`);
+    await page.context().close();
+  }
+  page = await newPage({ width: 390, height: 844 });
+  await page.goto(`${BASE}/widerruf/bestaetigen`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-declaration-state="invalid"]');
+  check(/ungültig/.test(await text(page)), 'ohne Schlüssel: „ungültig", kein Knopf');
+  await noOverflow(page, 'Bestätigungsseite @390');
+  await page.context().close();
+}
 page = await newPage();
 
 // Rechtstexte

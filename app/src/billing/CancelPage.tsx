@@ -11,8 +11,10 @@
  * Server (Abs. 4).
  *
  * Mit Anmeldung: POST /api/billing/cancel (ohne Bot-Schutz, Konto ist die
- * Identifizierung). Ohne: POST /api/billing/cancel-public mit ALTCHA; der
- * Server antwortet dort für jeden Ausgang gleich.
+ * Identifizierung), sofort wirksam. Ohne: POST /api/billing/cancel-public mit
+ * ALTCHA; der Server antwortet dort für jeden Ausgang gleich und führt erst
+ * aus, wenn der Link an die Adresse der Bestellung geklickt ist
+ * (/kuendigen/bestaetigen, DeclarationConfirm.tsx; Befund H2, 09.10.2026).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLang } from '../ui/i18n';
@@ -55,12 +57,12 @@ function Cancel({ lang }: { lang: UiLang }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [done, setDone] = useState<{ r: CancelResult; email: string } | null>(null);
+  const [done, setDone] = useState<{ r: CancelResult; email: string; publicWay: boolean } | null>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     if (!user) return;
-    billingApi.orders().then(o => setOrders(o.orders), () => setOrders([]));
+    billingApi.orders().then(o => setOrders(o.orders ?? []), () => setOrders([]));
   }, [user]);
   useEffect(() => { if (done) headRef.current?.focus(); }, [done]);
 
@@ -83,7 +85,7 @@ function Cancel({ lang }: { lang: UiLang }) {
       const r = user
         ? await billingApi.cancel({ ...input, orderId: orderId || undefined })
         : await billingApi.cancelPublic({ ...input, name: name.trim(), email: email.trim(), orderNo: orderNo.trim(), altcha: altcha! });
-      setDone({ r, email: user ? (user.email ?? '') : email.trim() });
+      setDone({ r, email: user ? (user.email ?? '') : email.trim(), publicWay: !user });
       track('cancel_done', { where: user ? 'account' : 'public', kind });
     } catch (ex) {
       setErr(errorText(ex, lang));
@@ -103,7 +105,10 @@ function Cancel({ lang }: { lang: UiLang }) {
         <div className="bl-card">
           <h1 ref={headRef} tabIndex={-1} className="bl-h2">{C.doneTitle}</h1>
           <p className="bl-lede" style={{ fontSize: 'var(--t-md)' }} data-cancel-receipt>
-            {fillPlaceholders(C.doneText, {
+            {/* Ohne Anmeldung wirkt die Kündigung erst nach dem Klick im
+                Bestätigungslink (H2, 09.10.2026); die Seite nennt deshalb
+                Eingang und Art, aber kein Ende und keine Empfängeradresse. */}
+            {fillPlaceholders(done.publicWay ? C.donePublicText : C.doneText, {
               RECEIVED_AT: receivedLabel(done.r.receivedAt, lang),
               CANCEL_KIND: kind === 'extraordinary' ? C.kindExtraordinary : C.kindOrdinary,
               CANCEL_EFFECTIVE: eff,
@@ -166,7 +171,7 @@ function Cancel({ lang }: { lang: UiLang }) {
             <div className="bl-field">
               <label htmlFor="cn-email">{C.emailLabel}</label>
               <input id="cn-email" className="bl-input" type="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" aria-describedby="cn-email-hint" required />
-              <p id="cn-email-hint" className="bl-hint" style={{ marginTop: 0 }}>{C.emailHelp}</p>
+              <p id="cn-email-hint" className="bl-hint" style={{ marginTop: 0 }}>{C.emailHelpPublic}</p>
             </div>
             <div className="bl-field">
               <label htmlFor="cn-no">{C.orderLabel}</label>

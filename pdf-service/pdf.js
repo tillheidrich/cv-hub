@@ -45,9 +45,25 @@ export function rendererHosts(urls) {
 /** Chromium-Argumente. `MAP * ~NOTFOUND` lässt jede Namensauflösung
  *  scheitern, `EXCLUDE` nimmt die eigenen Hosts davon aus (Schriften unter
  *  /fonts.css und /fonts/ kommen von dort). */
-export function chromiumArgs(hosts) {
+export function chromiumArgs(hosts, { sandbox = false } = {}) {
   const rules = ['MAP * ~NOTFOUND', ...hosts.map(h => `EXCLUDE ${h}`)].join(', ');
-  return ['--no-sandbox', '--disable-dev-shm-usage', `--host-resolver-rules=${rules}`];
+  return [...(sandbox ? [] : ['--no-sandbox']), '--disable-dev-shm-usage', `--host-resolver-rules=${rules}`];
+}
+
+/* N7 (09.10.2026): Chromium läuft mit --no-sandbox.
+ *
+ * Die Namespace-Sandbox braucht unprivilegierte User-Namespaces. Das
+ * Standard-seccomp-Profil von Docker erlaubt sie ohne CAP_SYS_ADMIN nicht,
+ * und das Playwright-Image bringt keinen setuid-Helfer mit — in einem
+ * Standard-Container startet Chromium mit Sandbox deshalb in aller Regel nicht.
+ * Nachgewiesen ist dort nichts; lokal (Nicht-root, Namespaces erlaubt) läuft
+ * sie. Darum: PDF_CHROMIUM_SANDBOX=1 schaltet sie ein, und scheitert der
+ * Start, fällt der Dienst mit einer deutlichen Warnung auf --no-sandbox
+ * zurück, statt keine PDFs mehr zu liefern. Die Abwehr bis dahin: eigener
+ * Kontext je Auftrag, kein JavaScript, keine Namensauflösung außer den
+ * eigenen Hosts, unprivilegierter Benutzer (pwuser). Siehe SICHERHEIT.md. */
+export function sandboxWanted(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String(env.PDF_CHROMIUM_SANDBOX || '').trim());
 }
 
 /**
@@ -57,9 +73,15 @@ export function chromiumArgs(hosts) {
  * @param executablePath optional (Tests, lokale Läufe ohne passenden Playwright-Browser)
  * @param isAllowed      (url) => boolean — Prüfung je Anfrage; Standard ssrf.js
  */
-export function createRenderer({ hosts = [], executablePath, isAllowed } = {}) {
+export function createRenderer({ hosts = [], executablePath, isAllowed, sandbox = sandboxWanted(), log = console.warn } = {}) {
   let browserPromise = null;
-  const args = chromiumArgs(hosts);
+  let useSandbox = !!sandbox;
+  let args = chromiumArgs(hosts, { sandbox: useSandbox });
+
+  function launch() {
+    // Playwright setzt ohne chromiumSandbox: true selbst --no-sandbox — das Weglassen des Arguments allein reicht nicht.
+    return chromium.launch({ args, chromiumSandbox: useSandbox, ...(executablePath ? { executablePath } : {}) });
+  }
 
   async function getBrowser() {
     if (browserPromise) {
@@ -68,7 +90,13 @@ export function createRenderer({ hosts = [], executablePath, isAllowed } = {}) {
         if (b.isConnected()) return b;
       } catch { /* neu starten */ }
     }
-    browserPromise = chromium.launch({ args, ...(executablePath ? { executablePath } : {}) });
+    browserPromise = launch().catch((err) => {
+      if (!useSandbox) throw err;
+      log(`pdf: Chromium startet nicht mit Sandbox (${String(err?.message || err).split('\n')[0].slice(0, 160)}) — weiter mit --no-sandbox. PDF_CHROMIUM_SANDBOX entfernen oder den Container dafür einrichten (SICHERHEIT.md, N7).`);
+      useSandbox = false;
+      args = chromiumArgs(hosts, { sandbox: false });
+      return launch();
+    });
     return browserPromise;
   }
 
@@ -122,5 +150,5 @@ export function createRenderer({ hosts = [], executablePath, isAllowed } = {}) {
     browserPromise = null;
   }
 
-  return { render, close, args };
+  return { render, close, get args() { return args; }, get sandboxActive() { return useSandbox; } };
 }

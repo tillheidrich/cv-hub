@@ -159,6 +159,8 @@ Mehr dazu im Artikel [Anschreiben aufbauen](/ratgeber/anschreiben-aufbauen/). Be
 
 Ein Link mit [gefährlicher Adresse](javascript:alert(1)) bleibt nur Text. <img src=x onerror=alert(1)>
 
+Auch ein [schräger Pfad](/\\evil.example/x) und ein [Tab-Pfad](</	/evil.example/y>) bleiben Text (Befund N11).
+
 :::warning
 Kein Anbieter garantiert, dass ein Lebenslauf fehlerfrei gelesen wird.
 :::
@@ -514,6 +516,7 @@ async function main() {
     ok(skripte.every(a => /type="application\/ld\+json"/.test(a)), `${s}: kein Skript außer JSON-LD`, skripte.join(' | '));
     ok(!/\sstyle=/.test(html) && !/\son[a-z]+=/i.test(html), `${s}: keine style- und on*-Attribute`);
     ok(!/<script>alert|javascript:|onerror/.test(html), `${s}: nichts aus dem rohen HTML übrig`);
+    ok(!/href="[^"]*evil\.example/.test(html), `${s}: kein Link mit Backslash oder Tab im Pfad (N11)`);
     ok(!/https?:\/\/(?!ratgeber-test\.example|schema\.org|support\.greenhouse\.io|www\.w3\.org)/.test(html.replace(/<a [^>]*rel="noopener external"[^>]*>/g, '')), `${s}: keine eingebundenen Fremdadressen`);
   }
   const a = readFileSync(join(out, 'ratgeber', 'pdf-oder-word-ats', 'index.html'), 'utf8');

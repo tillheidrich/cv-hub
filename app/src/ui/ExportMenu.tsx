@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CVData, CoverLetterData, Lang } from '../data/types';
 import { exportHtml, exportCoverLetterHtml, exportPdf, type ExportRenderConfig } from '../export/exportHtml';
 import { exportDocx } from '../export/exportDocx';
@@ -26,7 +26,8 @@ import { FASSUNG_I18N } from './i18n/fassung';
  * Das Menü gliedert die Ausgaben nach Zweck statt nach Dateiendung
  * (Personas-Bericht, Hürde 10): PDF · Für Bewerbungsportale · Weitere Formate
  * · Für KI und Entwickler. „Word – ATS-Fassung" steht bei den Portalen oben
- * und trägt bei riskanten und mittleren Vorlagen die Marke „empfohlen".
+ * und trägt bei Vorlagen mit Spalte oder Kopfband die Marke „empfohlen"
+ * (Akzentfarbe, kein Warnton).
  * Fachbegriffe stehen höchstens klein dahinter.
  */
 export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, docType, demoMode, atsLevel, onPrintFallback, onOpenAll, onShare, onAtsPdf, compact }: {
@@ -49,14 +50,19 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   const F = FASSUNG_I18N[uiLang];
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
+  const [msg, setMsg] = useState<{ text: string; error?: boolean; ttl?: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const isCover = docType === 'cover-letter';
   const close = useCallback(() => setOpen(false), []);
-  const flash = (text: string, error?: boolean) => {
-    setMsg({ text, error });
-    window.setTimeout(() => setMsg(null), error ? 9000 : 6000);
-  };
+  /* Die Meldung räumt sich selbst ab, gebunden an genau diese Meldung: Ein
+   * älterer Zeitgeber löschte sonst eine neue vorzeitig (zweites ATS-PDF kurz
+   * nach dem ersten: „fertig" verschwand sofort). */
+  const flash = (text: string, error?: boolean) => setMsg({ text, error, ttl: error ? 9000 : 6000 });
+  useEffect(() => {
+    if (!msg?.ttl) return;
+    const id = window.setTimeout(() => setMsg(null), msg.ttl);
+    return () => window.clearTimeout(id);
+  }, [msg]);
 
   async function pdf() {
     if (busy) return;

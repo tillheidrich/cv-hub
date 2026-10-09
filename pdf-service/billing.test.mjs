@@ -144,7 +144,8 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
   let Adm, Bestand, Pilot;
   let bestandId, pilotId;
 
-  const mails = () => (existsSync(mailFile) ? readFileSync(mailFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+  // Eine Zeile, die der Dienst gerade noch schreibt, ist noch kein JSON — überspringen statt abbrechen.
+  const mails = () => (existsSync(mailFile) ? readFileSync(mailFile, 'utf8').trim().split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)]; } catch { return []; } }) : []);
   const mailsTo = to => mails().filter(m => m.to === to);
   const userRow = async id => (await db.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
   const orderRow = async id => (await db.query('SELECT * FROM orders WHERE id = $1', [id])).rows[0];
@@ -167,6 +168,14 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
       assert.equal((await C.post('/api/auth/confirm-email', { token })).status, 200);
     }
     return { C, id: r.data.user.id, email };
+  }
+
+  /** Runde 6 (H2/M1): Link aus der Eingangsbestätigung öffentlicher Erklärungen klicken. */
+  async function confirmFromMail(email, re) {
+    const m = await waitFor(() => mailsTo(email).filter(x => re.test(x.subject)).at(-1));
+    assert.ok(m, `Bestätigungsmail an ${email}`);
+    const token = /bestaetigen\?token=([A-Za-z0-9_-]+)/.exec(m.html)[1];
+    return fetch(`${srv.base}/api/billing/declarations/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
   }
 
   /** Kauf bis „bezahlt“; gibt die Bestellung zurück. */
@@ -747,6 +756,10 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     assert.equal(r.status, 200);
     answers.push(shape(await r.json()));
     for (const a of answers) assert.deepEqual(a, answers[0], 'jede Antwort sieht gleich aus');
+    // Runde 6 (M1): erst der Link aus der Mail an die Bestelladresse führt den Widerruf aus.
+    await waitFor(() => mailsTo(email).find(m => /Bitte bestätigen: Ihr Widerruf/.test(m.subject)));
+    assert.equal((await orderRow(o.id)).status, 'paid', 'vor dem Klick unverändert');
+    assert.equal((await confirmFromMail(email, /Bitte bestätigen: Ihr Widerruf/)).status, 200);
     assert.ok(await waitFor(async () => (await orderRow(o.id)).status === 'withdrawn'));
     const o2 = await orderRow(o.id);
     assert.equal(o2.withdraw_channel, 'public');
@@ -758,6 +771,7 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const o3 = await buy(C2, { billingName: 'Nora Nummerlos' });
     r = await pub({ name: 'Nora Nummerlos', email: 'ohnenummer@example.org', altcha: await solveAltcha(srv.base) });
     assert.equal(r.status, 200);
+    assert.equal((await confirmFromMail('ohnenummer@example.org', /Bitte bestätigen: Ihr Widerruf/)).status, 200);
     assert.ok(await waitFor(async () => (await orderRow(o3.id)).status === 'withdrawn'));
   });
 
@@ -798,6 +812,8 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const pubRes = await fetch(`${srv.base}/api/billing/cancel-public`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Paula', email: 'kuendigung2@example.org', kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) }) });
     assert.equal(pubRes.status, 200);
     assert.deepEqual(Object.keys(await pubRes.json()).sort(), ['ok', 'receivedAt']);
+    // Runde 6 (H2): erst der Link aus der Mail an die Bestelladresse beendet den Pass.
+    assert.equal((await confirmFromMail('kuendigung2@example.org', /Bitte bestätigen: Ihre Kündigung/)).status, 200);
     assert.ok(await waitFor(async () => Math.abs(new Date((await userRow(pid)).access_until).getTime() - Date.now()) < 120_000));
     assert.ok(await waitFor(() => mailsTo('kuendigung2@example.org').find(m => /Kündigungsbestätigung/.test(m.subject))));
     // Fremde Adresse: gleiche Antwort, nichts gekündigt, neutrale Bestätigung an die eingegebene Adresse.
@@ -848,8 +864,11 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const { C, id: uid } = await registerSelf(email);
     const paid = await buy(C);
     const open = await C.post('/api/billing/checkout', checkoutBody({ billingName: 'Offen Bleibt' }));
+    const failed = crypto.randomUUID();
+    await db.query(`INSERT INTO orders (id, order_no, user_id, email, billing_name, country, sku, amount_cents, status, pass_days)
+                    VALUES ($1, 'B-800001', $2, $3, 'Fehl Geschlagen', 'DE', 'pass90', 900, 'failed', 90)`, [failed, uid, email]);
     const dump = (await C.get('/api/me/export')).data;
-    assert.equal(dump.orders.length, 2, 'Bestellungen im Datenauszug');
+    assert.equal(dump.orders.length, 3, 'Bestellungen im Datenauszug');
     const r = await C.post('/api/me/delete', { password: 'kunden-passwort-1' });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal(await userRow(uid), undefined);
@@ -858,7 +877,11 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     assert.equal(kept.email, email);
     assert.equal(kept.invoice_no, paid.invoice_no);
     assert.equal(kept.checkout_url, null);
-    assert.equal(await orderRow(open.data.orderId), undefined, 'nie bezahlte Bestellung gelöscht');
+    // Runde 6 (N3): Die Zahlung zur offenen Bestellung kann noch eingehen — sie bleibt, ohne Konto.
+    const pending = await orderRow(open.data.orderId);
+    assert.equal(pending.user_id, null);
+    assert.equal(pending.checkout_url, null);
+    assert.equal(await orderRow(failed), undefined, 'nie bezahlte Bestellung ohne offene Zahlung gelöscht');
     const off = await waitFor(() => mailsTo(email).find(m => /gelöscht/.test(m.subject)));
     assert.match(off.html, /zehn Jahre/);
     // Außer der Bestellung steht die Adresse nirgends mehr.
@@ -874,8 +897,15 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const b = await registerSelf('alt-gekauft@example.org', { confirm: false });
     const c = await registerSelf('alt-bestaetigt@example.org', { confirm: true });
     const d = await registerSelf('frisch-unbestaetigt@example.org', { confirm: false });
+    // Runde 6 (N1): Kauf nur mit bestätigter Adresse. Altbestand (Kauf vor der Regel) nachgestellt:
+    // bestätigen, kaufen, Bestätigung zurücknehmen; die unbezahlte Bestellung direkt anlegen.
+    await db.query('UPDATE users SET email_confirmed_at = now() WHERE id = $1', [b.id]);
     await buy(b.C);
-    const unpaid = await a.C.post('/api/billing/checkout', checkoutBody());
+    await db.query('UPDATE users SET email_confirmed_at = NULL WHERE id = $1', [b.id]);
+    assert.equal((await a.C.post('/api/billing/checkout', checkoutBody())).data.code, 'email_unconfirmed');
+    const unpaid = { data: { orderId: crypto.randomUUID() } };
+    await db.query(`INSERT INTO orders (id, order_no, user_id, email, billing_name, country, sku, amount_cents, status, pass_days)
+                    VALUES ($1, 'B-800002', $2, 'alt-unbestaetigt@example.org', 'A', 'DE', 'pass90', 900, 'open', 90)`, [unpaid.data.orderId, a.id]);
     await db.query(`UPDATE users SET created_at = now() - interval '49 hours' WHERE id = ANY($1)`, [[a.id, b.id, c.id]]);
     await db.query(`UPDATE email_confirmations SET expires_at = now() - interval '1 hour' WHERE user_id = ANY($1)`, [[a.id, b.id, c.id]]);
     // Bestellungen: eine nie bezahlte von vor 31 Tagen, eine bezahlte von vor elf Jahren.

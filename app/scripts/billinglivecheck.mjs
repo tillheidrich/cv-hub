@@ -36,6 +36,8 @@ async function newCtx() {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'de-DE', acceptDownloads: true });
   await ctx.addInitScript(() => { window.__ev = []; window.umami = { track: (e, d) => window.__ev.push([e, d || {}]) }; });
   await ctx.route('**/analytics.example.com/**', r => r.abort());
+  // Optionales Umami über /u/ auf derselben Domain (nginx.conf).
+  await ctx.route(/\/u\/(script\.js|api\/send)(\?|$)/, r => r.abort());
   /* „Mollie": die Bezahlseite setzt die Zahlung auf bezahlt (oder was
      MOLLIE_OUTCOME sagt) und leitet auf die redirectUrl zurück — wie Mollie. */
   await ctx.route('https://www.mollie.com/**', async route => {

@@ -53,6 +53,19 @@ export interface CheckoutResult { orderId: string; orderNo: string; checkoutUrl:
 export interface CancelInput { kind: 'ordinary' | 'extraordinary'; reason?: string; when: 'now' | 'end' | 'date'; date?: string }
 export interface CancelResult { ok: boolean; receivedAt: string; effectiveAt?: string | null; kind?: string; orders?: string[] }
 export interface WithdrawResult { ok: boolean; receivedAt: string; refund: { status: string } | null }
+/** Antwort auf POST /api/billing/declarations/confirm (Schnittstelle
+ *  „Sicherheitsfixes" 09.10.2026). Fehler: 400 `token_invalid`, 409
+ *  `token_used` (mit kind, orderNo, receivedAt), 410 `token_expired`, 409
+ *  `not_withdrawable` (Widerruf eingegangen, Ausführung von Hand). */
+export interface DeclarationConfirmResult {
+  ok: boolean;
+  kind: 'withdraw' | 'cancel';
+  orderNo: string | null;
+  receivedAt: string;
+  effectiveAt?: string | null;
+  refund?: { status: string } | null;
+  orderNos?: string[];
+}
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + path, {
@@ -86,8 +99,9 @@ export const billingApi = {
   altchaChallengeUrl: () => `${BASE}/api/altcha/challenge`,
   register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string }) =>
     req<RegisterResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(p) }),
+  /** Bestätigt Registrierung oder (kind 'change', M2) eine neue Adresse. */
   confirmEmail: (token: string) =>
-    req<{ ok: boolean }>('/api/auth/confirm-email', { method: 'POST', body: JSON.stringify({ token }) }),
+    req<{ ok: boolean; kind?: 'change' | string; email?: string }>('/api/auth/confirm-email', { method: 'POST', body: JSON.stringify({ token }) }),
   resendConfirmation: () =>
     req<{ ok: boolean }>('/api/auth/resend-confirmation', { method: 'POST' }),
   checkout: (p: { sku: string; country: string; billingName: string; acceptTerms: true; ageConfirmed18: true }) =>
@@ -105,6 +119,10 @@ export const billingApi = {
     req<CancelResult>('/api/billing/cancel', { method: 'POST', body: JSON.stringify(p) }),
   cancelPublic: (p: CancelInput & { name: string; email: string; orderNo: string; altcha: string }) =>
     req<CancelResult>('/api/billing/cancel-public', { method: 'POST', body: JSON.stringify(p) }),
+  /** Öffentliche Erklärung über den Link aus der Mail bestätigen. Der Token
+   *  geht nur im Anfragekörper an den Server. */
+  confirmDeclaration: (token: string) =>
+    req<DeclarationConfirmResult>('/api/billing/declarations/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
 };
 
 /* ── Gutscheine (Schnittstellenvertrag „Gutscheine", 09.10.2026) ─────────────

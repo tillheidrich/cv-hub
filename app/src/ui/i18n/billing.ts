@@ -114,6 +114,36 @@ export interface BillingStrings {
   confirmedTitle: string;
   confirmedBody: string;
   confirmInvalid: string;
+  /** E-Mail-Wechsel bestätigt (Sicherheitsbefund M2, 09.10.2026). */
+  confirmedChangeTitle: string;
+  confirmedChangeBody: (email: string) => string;
+  confirmEmailTaken: string;
+  /** Kauf ohne bestätigte Adresse: 403 `email_unconfirmed` (N1). */
+  coUnconfirmedTitle: string;
+  coUnconfirmedBody: (email: string | null) => string;
+  coResend: string;
+  /** Bestätigungslink für öffentlichen Widerruf und öffentliche Kündigung
+   *  (/widerruf/bestaetigen, /kuendigen/bestaetigen; H2/M1). */
+  dcTitleWithdraw: string;
+  dcTitleCancel: string;
+  dcIntroWithdraw: string;
+  dcIntroCancel: string;
+  dcWhy: string;
+  dcDoneWithdrawTitle: string;
+  dcDoneWithdrawBody: (orderNo: string, received: string, confirmed: string) => string;
+  dcDoneCancelTitle: string;
+  dcDoneCancelBody: (orderNo: string, received: string, effective: string) => string;
+  dcMail: string;
+  dcUsedTitle: string;
+  dcUsedBody: (received: string | null) => string;
+  dcExpiredTitle: string;
+  dcExpiredBody: (received: string | null) => string;
+  dcInvalidTitle: string;
+  dcInvalidBody: string;
+  dcManualTitle: string;
+  dcManualBody: string;
+  dcAgainWithdraw: string;
+  dcAgainCancel: string;
   continue: string;
   // Bestellübersicht
   coTitle: string;
@@ -306,7 +336,7 @@ const de: BillingStrings = {
     { q: `Was passiert nach ${d} Tagen?`, a: 'Der Pass endet, und dein Konto wechselt auf Nur-Lesen. Du kannst weiter alles lesen, exportieren (PDF, Word, JSON, Datenexport) und löschen. Ändern und neue Sharelinks gehen erst wieder mit einem neuen Pass. Wir löschen nichts, ohne es dir vorher per E-Mail anzukündigen.' },
     { q: 'Ist das ein Abo?', a: `Nein. Du zahlst einmal ${price}. Es gibt keine Testphase, die in ein Abo übergeht, und keine gespeicherte Zahlungsart für spätere Abbuchungen.` },
     { q: 'Kann ich verlängern?', a: `Ja, mit einem neuen Kauf, auch vor dem Ende. Die neuen ${d} Tage hängen sich an das bisherige Ende an, es geht kein Tag verloren.` },
-    { q: 'Wie widerrufe ich?', a: `Innerhalb von 14 Tagen nach dem Kauf: im Konto unter „Mein Pass" mit „Vertrag widerrufen" oder ohne Anmeldung über den Link „Vertrag widerrufen" unten auf jeder Seite. Du bekommst die vollen ${price} zurück, auch wenn du den Pass schon genutzt hast.` },
+    { q: 'Wie widerrufe ich?', a: `Innerhalb von 14 Tagen nach dem Kauf: im Konto unter „Mein Pass" mit „Vertrag widerrufen" oder ohne Anmeldung über den Link „Vertrag widerrufen" unten auf jeder Seite; dann bestätigst du den Widerruf noch über einen Link, den wir an die E-Mail-Adresse der Bestellung schicken. Du bekommst die vollen ${price} zurück, auch wenn du den Pass schon genutzt hast.` },
     { q: 'Brauche ich den Pass für PDF oder Word?', a: 'Nein. Export ist nie Teil des Passes. Ohne Konto bekommst du alle Vorlagen, PDF, beide Word-Fassungen und die übrigen Formate, und deine Daten bleiben in deinem Browser.' },
     { q: 'Wie bezahle ich?', a: 'Über Mollie, einen Zahlungsdienstleister aus den Niederlanden. Die Zahlungsart wählst du auf der Bezahlseite von Mollie. Karten- oder Kontodaten sehen wir nicht.' },
     { q: 'Bekomme ich eine Rechnung?', a: 'Ja. Sie kommt als PDF mit der Bestellbestätigung per E-Mail und liegt in deinem Konto unter „Mein Pass".' },
@@ -365,6 +395,32 @@ const de: BillingStrings = {
   confirmedTitle: 'E-Mail-Adresse bestätigt.',
   confirmedBody: 'Danke. Dein Konto ist vollständig eingerichtet.',
   confirmInvalid: 'Der Link ist ungültig oder abgelaufen. Melde dich an und lass dir einen neuen schicken.',
+  confirmedChangeTitle: 'E-Mail-Adresse geändert.',
+  confirmedChangeBody: e => `Ab jetzt gilt ${e}. Die bisherige Adresse bekommt eine Nachricht über die Änderung.`,
+  confirmEmailTaken: 'Diese Adresse gehört inzwischen zu einem anderen Konto. Bitte wähle in den Einstellungen eine andere.',
+  coUnconfirmedTitle: 'Bitte bestätige zuerst deine E-Mail-Adresse.',
+  coUnconfirmedBody: e => `Dorthin schicken wir Rechnung, Bestellbestätigung und Widerrufsbelehrung. ${e ? `Den Link haben wir an ${e} geschickt.` : 'Den Link findest du in unserer Mail.'} Danach kannst du hier direkt weiter bestellen.`,
+  coResend: 'Bestätigungsmail erneut senden',
+  dcTitleWithdraw: 'Widerruf bestätigen',
+  dcTitleCancel: 'Kündigung bestätigen',
+  dcIntroWithdraw: 'Du hast über unser Formular einen Widerruf abgeschickt. Mit dem Knopf bestätigst du ihn: Dann erstatten wir den Preis und der Pass endet. Für die Frist zählt der Eingang deiner Erklärung, nicht dieser Klick.',
+  dcIntroCancel: 'Du hast über unser Formular eine Kündigung abgeschickt. Mit dem Knopf bestätigst du sie: Dann endet der Pass zum gewählten Zeitpunkt. Es zählt der Eingang deiner Erklärung, nicht dieser Klick.',
+  dcWhy: 'Warum dieser Schritt: Das Formular ist ohne Anmeldung erreichbar. Der Link in der Mail an die Adresse der Bestellung stellt sicher, dass nur du deinen Pass beenden kannst.',
+  dcDoneWithdrawTitle: 'Dein Widerruf ist bestätigt.',
+  dcDoneWithdrawBody: (no, r, c) => `Bestellung ${no}. Eingegangen am ${r}, bestätigt am ${c}.`,
+  dcDoneCancelTitle: 'Deine Kündigung ist bestätigt.',
+  dcDoneCancelBody: (no, r, e) => `Bestellung ${no}. Eingegangen am ${r}. Der Pass endet am ${e}.`,
+  dcMail: 'Die Bestätigung kommt zusätzlich per E-Mail.',
+  dcUsedTitle: 'Diese Erklärung ist schon bestätigt.',
+  dcUsedBody: r => `${r ? `Eingegangen am ${r}. ` : ''}Du musst nichts mehr tun.`,
+  dcExpiredTitle: 'Dieser Bestätigungslink ist abgelaufen.',
+  dcExpiredBody: r => `Deine Erklärung ist trotzdem bei uns eingegangen${r ? ` (am ${r})` : ''}. Wir melden uns per E-Mail. Du kannst sie auch noch einmal abschicken.`,
+  dcInvalidTitle: 'Dieser Bestätigungslink ist ungültig.',
+  dcInvalidBody: 'Nimm bitte den vollständigen Link aus unserer letzten Mail. Du kannst die Erklärung auch noch einmal abschicken.',
+  dcManualTitle: 'Das ließ sich nicht automatisch erledigen.',
+  dcManualBody: 'Deine Erklärung ist bei uns eingegangen. Wir melden uns innerhalb von zwei Werktagen per E-Mail.',
+  dcAgainWithdraw: 'Widerruf noch einmal abschicken',
+  dcAgainCancel: 'Kündigung noch einmal abschicken',
   continue: 'Weiter',
   coTitle: 'Bestellung prüfen',
   coSteps: ['Konto', 'Bestellung', 'Bezahlen'],
@@ -553,7 +609,7 @@ const en: BillingStrings = {
     { q: `What happens after ${d} days?`, a: 'The pass ends and your account switches to read-only. You can still read, export (PDF, Word, JSON, data export) and delete everything. Editing and new share links need a new pass. We never delete anything without telling you by e-mail first.' },
     { q: 'Is this a subscription?', a: `No. You pay ${price} once. There is no trial that turns into a subscription and no stored payment method for later charges.` },
     { q: 'Can I extend it?', a: `Yes, with another purchase, also before it ends. The new ${d} days are added to the current end date, so you lose no days.` },
-    { q: 'How do I withdraw?', a: `Within 14 days of buying: in your account under "My pass" with "Withdraw from contract", or without signing in via the "Withdraw from contract" link at the bottom of every page. You get the full ${price} back, even if you have already used the pass.` },
+    { q: 'How do I withdraw?', a: `Within 14 days of buying: in your account under "My pass" with "Withdraw from contract", or without signing in via the "Withdraw from contract" link at the bottom of every page; then you confirm the withdrawal via a link we send to the e-mail address of the order. You get the full ${price} back, even if you have already used the pass.` },
     { q: 'Do I need the pass for PDF or Word?', a: 'No. Export is never part of the pass. Without an account you get every template, PDF, both Word versions and the other formats, and your data stays in your browser.' },
     { q: 'How do I pay?', a: 'Through Mollie, a payment provider based in the Netherlands. You choose the payment method on the Mollie checkout page. We never see card or bank details.' },
     { q: 'Do I get an invoice?', a: 'Yes. It comes as a PDF with the order confirmation by e-mail and is in your account under "My pass".' },
@@ -612,6 +668,32 @@ const en: BillingStrings = {
   confirmedTitle: 'E-mail address confirmed.',
   confirmedBody: 'Thank you. Your account is fully set up.',
   confirmInvalid: 'This link is invalid or has expired. Sign in and request a new one.',
+  confirmedChangeTitle: 'E-mail address changed.',
+  confirmedChangeBody: e => `From now on ${e} applies. Your previous address gets a message about the change.`,
+  confirmEmailTaken: 'This address now belongs to another account. Please choose a different one in the settings.',
+  coUnconfirmedTitle: 'Please confirm your e-mail address first.',
+  coUnconfirmedBody: e => `That is where we send the invoice, order confirmation and withdrawal information. ${e ? `We sent the link to ${e}.` : 'You will find the link in our e-mail.'} Afterwards you can continue your order right here.`,
+  coResend: 'Send confirmation e-mail again',
+  dcTitleWithdraw: 'Confirm withdrawal',
+  dcTitleCancel: 'Confirm cancellation',
+  dcIntroWithdraw: 'You sent a withdrawal through our form. The button confirms it: then we refund the price and the pass ends. The time your declaration was received counts for the deadline, not this click.',
+  dcIntroCancel: 'You sent a cancellation through our form. The button confirms it: then the pass ends at the time you chose. The time your declaration was received counts, not this click.',
+  dcWhy: 'Why this step: the form works without signing in. The link in the e-mail to the address of the order makes sure only you can end your pass.',
+  dcDoneWithdrawTitle: 'Your withdrawal is confirmed.',
+  dcDoneWithdrawBody: (no, r, c) => `Order ${no}. Received on ${r}, confirmed on ${c}.`,
+  dcDoneCancelTitle: 'Your cancellation is confirmed.',
+  dcDoneCancelBody: (no, r, e) => `Order ${no}. Received on ${r}. The pass ends on ${e}.`,
+  dcMail: 'The confirmation also comes by e-mail.',
+  dcUsedTitle: 'This declaration is already confirmed.',
+  dcUsedBody: r => `${r ? `Received on ${r}. ` : ''}There is nothing more you need to do.`,
+  dcExpiredTitle: 'This confirmation link has expired.',
+  dcExpiredBody: r => `Your declaration has still reached us${r ? ` (on ${r})` : ''}. We will get back to you by e-mail. You can also send it again.`,
+  dcInvalidTitle: 'This confirmation link is not valid.',
+  dcInvalidBody: 'Please use the complete link from our latest e-mail. You can also send the declaration again.',
+  dcManualTitle: 'This could not be done automatically.',
+  dcManualBody: 'Your declaration has reached us. We will get back to you by e-mail within two working days.',
+  dcAgainWithdraw: 'Send the withdrawal again',
+  dcAgainCancel: 'Send the cancellation again',
   continue: 'Continue',
   coTitle: 'Review your order',
   coSteps: ['Account', 'Order', 'Payment'],
@@ -800,7 +882,7 @@ const fr: BillingStrings = {
     { q: `Que se passe-t-il après ${d} jours ?`, a: 'Le pass prend fin et votre compte passe en lecture seule. Vous pouvez toujours tout lire, exporter (PDF, Word, JSON, export des données) et supprimer. Modifier et créer de nouveaux liens de partage demandent un nouveau pass. Nous ne supprimons rien sans vous prévenir d’abord par e-mail.' },
     { q: 'Est-ce un abonnement ?', a: `Non. Vous payez ${price} une seule fois. Pas de période d’essai qui devient un abonnement, pas de moyen de paiement enregistré pour des prélèvements ultérieurs.` },
     { q: 'Puis-je prolonger ?', a: `Oui, avec un nouvel achat, aussi avant la fin. Les ${d} nouveaux jours s’ajoutent à la date de fin actuelle, vous ne perdez aucun jour.` },
-    { q: 'Comment me rétracter ?', a: `Dans les 14 jours suivant l’achat : dans votre compte sous « Mon pass » avec « Se rétracter du contrat », ou sans connexion via le lien « Se rétracter du contrat » en bas de chaque page. Vous récupérez les ${price}, même si vous avez déjà utilisé le pass.` },
+    { q: 'Comment me rétracter ?', a: `Dans les 14 jours suivant l’achat : dans votre compte sous « Mon pass » avec « Se rétracter du contrat », ou sans connexion via le lien « Se rétracter du contrat » en bas de chaque page ; vous confirmez alors la rétractation via un lien envoyé à l’adresse e-mail de la commande. Vous récupérez les ${price}, même si vous avez déjà utilisé le pass.` },
     { q: 'Ai-je besoin du pass pour le PDF ou Word ?', a: 'Non. L’export ne fait jamais partie du pass. Sans compte, vous avez tous les modèles, le PDF, les deux versions Word et les autres formats, et vos données restent dans votre navigateur.' },
     { q: 'Comment payer ?', a: 'Via Mollie, un prestataire de paiement basé aux Pays-Bas. Vous choisissez le moyen de paiement sur la page de Mollie. Nous ne voyons ni carte ni coordonnées bancaires.' },
     { q: 'Est-ce que je reçois une facture ?', a: 'Oui. Elle arrive en PDF avec la confirmation de commande par e-mail et se trouve dans votre compte sous « Mon pass ».' },
@@ -859,6 +941,32 @@ const fr: BillingStrings = {
   confirmedTitle: 'Adresse e-mail confirmée.',
   confirmedBody: 'Merci. Votre compte est entièrement configuré.',
   confirmInvalid: 'Ce lien n’est pas valide ou a expiré. Connectez-vous et demandez-en un nouveau.',
+  confirmedChangeTitle: 'Adresse e-mail modifiée.',
+  confirmedChangeBody: e => `Désormais, c’est ${e} qui compte. L’ancienne adresse reçoit un message signalant le changement.`,
+  confirmEmailTaken: 'Cette adresse appartient désormais à un autre compte. Choisissez-en une autre dans les paramètres.',
+  coUnconfirmedTitle: 'Veuillez d’abord confirmer votre adresse e-mail.',
+  coUnconfirmedBody: e => `C’est là que nous envoyons la facture, la confirmation de commande et les informations sur la rétractation. ${e ? `Nous avons envoyé le lien à ${e}.` : 'Le lien se trouve dans notre e-mail.'} Ensuite, vous pouvez continuer votre commande ici.`,
+  coResend: 'Renvoyer l’e-mail de confirmation',
+  dcTitleWithdraw: 'Confirmer la rétractation',
+  dcTitleCancel: 'Confirmer la résiliation',
+  dcIntroWithdraw: 'Vous avez envoyé une rétractation via notre formulaire. Le bouton la confirme : nous remboursons alors le prix et le pass prend fin. Pour le délai, c’est la réception de votre déclaration qui compte, pas ce clic.',
+  dcIntroCancel: 'Vous avez envoyé une résiliation via notre formulaire. Le bouton la confirme : le pass prend alors fin au moment choisi. C’est la réception de votre déclaration qui compte, pas ce clic.',
+  dcWhy: 'Pourquoi cette étape : le formulaire fonctionne sans connexion. Le lien envoyé à l’adresse de la commande garantit que vous seul pouvez mettre fin à votre pass.',
+  dcDoneWithdrawTitle: 'Votre rétractation est confirmée.',
+  dcDoneWithdrawBody: (no, r, c) => `Commande ${no}. Reçue le ${r}, confirmée le ${c}.`,
+  dcDoneCancelTitle: 'Votre résiliation est confirmée.',
+  dcDoneCancelBody: (no, r, e) => `Commande ${no}. Reçue le ${r}. Le pass prend fin le ${e}.`,
+  dcMail: 'La confirmation arrive aussi par e-mail.',
+  dcUsedTitle: 'Cette déclaration est déjà confirmée.',
+  dcUsedBody: r => `${r ? `Reçue le ${r}. ` : ''}Vous n’avez plus rien à faire.`,
+  dcExpiredTitle: 'Ce lien de confirmation a expiré.',
+  dcExpiredBody: r => `Votre déclaration nous est quand même parvenue${r ? ` (le ${r})` : ''}. Nous vous répondons par e-mail. Vous pouvez aussi l’envoyer à nouveau.`,
+  dcInvalidTitle: 'Ce lien de confirmation n’est pas valide.',
+  dcInvalidBody: 'Utilisez le lien complet de notre dernier e-mail. Vous pouvez aussi envoyer la déclaration à nouveau.',
+  dcManualTitle: 'Cela n’a pas pu se faire automatiquement.',
+  dcManualBody: 'Votre déclaration nous est parvenue. Nous vous répondons par e-mail sous deux jours ouvrés.',
+  dcAgainWithdraw: 'Envoyer à nouveau la rétractation',
+  dcAgainCancel: 'Envoyer à nouveau la résiliation',
   continue: 'Continuer',
   coTitle: 'Vérifier la commande',
   coSteps: ['Compte', 'Commande', 'Paiement'],
@@ -1047,7 +1155,7 @@ const es: BillingStrings = {
     { q: `¿Qué pasa después de ${d} días?`, a: 'El pase termina y tu cuenta pasa a solo lectura. Puedes seguir leyendo, exportando (PDF, Word, JSON, exportación de datos) y borrando todo. Editar y crear enlaces nuevos requiere un pase nuevo. No borramos nada sin avisarte antes por correo.' },
     { q: '¿Es una suscripción?', a: `No. Pagas ${price} una vez. No hay periodo de prueba que se convierta en suscripción ni un medio de pago guardado para cargos posteriores.` },
     { q: '¿Puedo ampliarlo?', a: `Sí, con otra compra, también antes de que termine. Los ${d} días nuevos se suman a la fecha de fin actual, no pierdes ningún día.` },
-    { q: '¿Cómo desisto?', a: `En los 14 días siguientes a la compra: en tu cuenta en «Mi pase» con «Desistir del contrato», o sin iniciar sesión con el enlace «Desistir del contrato» al pie de cada página. Recibes los ${price} completos, aunque ya hayas usado el pase.` },
+    { q: '¿Cómo desisto?', a: `En los 14 días siguientes a la compra: en tu cuenta en «Mi pase» con «Desistir del contrato», o sin iniciar sesión con el enlace «Desistir del contrato» al pie de cada página; entonces confirmas el desistimiento con un enlace que enviamos al correo del pedido. Recibes los ${price} completos, aunque ya hayas usado el pase.` },
     { q: '¿Necesito el pase para el PDF o Word?', a: 'No. La exportación nunca forma parte del pase. Sin cuenta tienes todas las plantillas, el PDF, las dos versiones de Word y los demás formatos, y tus datos se quedan en tu navegador.' },
     { q: '¿Cómo pago?', a: 'Con Mollie, un proveedor de pagos de los Países Bajos. Eliges el medio de pago en la página de Mollie. Nunca vemos datos de tarjeta ni de cuenta.' },
     { q: '¿Recibo una factura?', a: 'Sí. Llega en PDF con la confirmación del pedido por correo y está en tu cuenta en «Mi pase».' },
@@ -1106,6 +1214,32 @@ const es: BillingStrings = {
   confirmedTitle: 'Correo electrónico confirmado.',
   confirmedBody: 'Gracias. Tu cuenta está completamente configurada.',
   confirmInvalid: 'El enlace no es válido o ha caducado. Inicia sesión y pide uno nuevo.',
+  confirmedChangeTitle: 'Correo electrónico cambiado.',
+  confirmedChangeBody: e => `A partir de ahora vale ${e}. Tu dirección anterior recibe un aviso del cambio.`,
+  confirmEmailTaken: 'Esta dirección pertenece ahora a otra cuenta. Elige otra en los ajustes.',
+  coUnconfirmedTitle: 'Primero confirma tu correo electrónico.',
+  coUnconfirmedBody: e => `Allí enviamos la factura, la confirmación del pedido y la información sobre el desistimiento. ${e ? `Te enviamos el enlace a ${e}.` : 'El enlace está en nuestro correo.'} Después puedes seguir con el pedido aquí mismo.`,
+  coResend: 'Reenviar el correo de confirmación',
+  dcTitleWithdraw: 'Confirmar desistimiento',
+  dcTitleCancel: 'Confirmar cancelación',
+  dcIntroWithdraw: 'Enviaste un desistimiento con nuestro formulario. El botón lo confirma: entonces devolvemos el precio y el pase termina. Para el plazo cuenta la recepción de tu declaración, no este clic.',
+  dcIntroCancel: 'Enviaste una cancelación con nuestro formulario. El botón la confirma: entonces el pase termina en el momento que elegiste. Cuenta la recepción de tu declaración, no este clic.',
+  dcWhy: 'Por qué este paso: el formulario funciona sin iniciar sesión. El enlace enviado al correo del pedido garantiza que solo tú puedes terminar tu pase.',
+  dcDoneWithdrawTitle: 'Tu desistimiento está confirmado.',
+  dcDoneWithdrawBody: (no, r, c) => `Pedido ${no}. Recibido el ${r}, confirmado el ${c}.`,
+  dcDoneCancelTitle: 'Tu cancelación está confirmada.',
+  dcDoneCancelBody: (no, r, e) => `Pedido ${no}. Recibida el ${r}. El pase termina el ${e}.`,
+  dcMail: 'La confirmación llega también por correo.',
+  dcUsedTitle: 'Esta declaración ya está confirmada.',
+  dcUsedBody: r => `${r ? `Recibida el ${r}. ` : ''}No tienes que hacer nada más.`,
+  dcExpiredTitle: 'Este enlace de confirmación ha caducado.',
+  dcExpiredBody: r => `Tu declaración nos ha llegado igualmente${r ? ` (el ${r})` : ''}. Te escribimos por correo. También puedes enviarla de nuevo.`,
+  dcInvalidTitle: 'Este enlace de confirmación no es válido.',
+  dcInvalidBody: 'Usa el enlace completo de nuestro último correo. También puedes enviar la declaración de nuevo.',
+  dcManualTitle: 'No se pudo hacer automáticamente.',
+  dcManualBody: 'Tu declaración nos ha llegado. Te escribimos por correo en dos días laborables.',
+  dcAgainWithdraw: 'Enviar de nuevo el desistimiento',
+  dcAgainCancel: 'Enviar de nuevo la cancelación',
   continue: 'Continuar',
   coTitle: 'Revisar el pedido',
   coSteps: ['Cuenta', 'Pedido', 'Pago'],

@@ -155,5 +155,9 @@ export function sharePhotoPath(originalPhotoUrl, token) {
   let prefix = i >= 0 ? s.slice(0, i) : '/pdfapi';
   // Nur den Pfad übernehmen; Host und Schema kommen aus der Konfiguration.
   try { if (/^https?:\/\//i.test(prefix)) prefix = new URL(prefix).pathname.replace(/\/+$/, ''); } catch { prefix = '/pdfapi'; }
+  /* N2 (09.10.2026): „//tracker.example“ oder „/\tracker.example“ ist kein
+   * Pfad, sondern für den Browser ein fremder Host — das Link-Foto wäre ein
+   * Zählpixel bei jedem Aufruf. Nur ein schlichter eigener Pfad bleibt. */
+  if (prefix !== '' && !/^\/(?![/\\])[\w/-]*$/.test(prefix)) prefix = '/pdfapi';
   return `${prefix}/api/share/${token}/photo`;
 }

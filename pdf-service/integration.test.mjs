@@ -106,7 +106,11 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(r.headers.get('x-frame-options'), 'DENY');
     assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-    assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+    // Runde 6 (M6): same-origin statt no-referrer — sonst schickt der Browser bei Formular-POSTs Origin: null.
+    assert.equal(r.headers.get('referrer-policy'), 'same-origin');
+    assert.match(r.headers.get('strict-transport-security') || '', /max-age=\d+/);
+    assert.match(r.headers.get('permissions-policy') || '', /camera=\(\)/);
+    assert.equal(r.headers.get('cache-control'), 'no-store');
   });
 
   test('Befund 4: X-Forwarded-For ohne TRUST_PROXY erzeugt eine Startwarnung', async () => {
@@ -362,7 +366,10 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
     const key = (await C.post('/api/keys', {})).data.key;
     const uid = (await C.get('/api/auth/me')).data.user.id;
     const token = crypto.randomBytes(32).toString('hex');
-    await db.query(`INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')`, [token, uid]);
+    // N6 (Runde 6): in der Datenbank steht nur noch der SHA-256 des Tokens.
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    await db.query(`INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')`, [hash, uid]);
+    assert.equal((await client(srv.base).post('/api/auth/reset-password', { token: hash, newPassword: 'emil-passwort-2' })).status, 400, 'der Hash selbst ist kein Token');
     assert.equal((await client(srv.base).post('/api/auth/reset-password', { token, newPassword: 'emil-passwort-2' })).status, 200);
     assert.equal((await fetch(`${srv.base}/api/auth/me`, { headers: { Authorization: `Bearer ${key}` } })).status, 401);
     assert.equal((await C.get('/api/auth/me')).status, 401, 'alte Sitzung auch');
@@ -388,7 +395,21 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
     assert.equal(r.status, 403);
     r = await A.post('/api/auth/email', { email: 'anna2@example.org', currentPassword: 'anna-passwort-1' });
     assert.equal(r.status, 200);
-    assert.equal(r.data.user.email, 'anna2@example.org');
+    // M2 (Runde 6): vorgemerkt, nicht übernommen — bis zum Klick gilt die alte Adresse.
+    assert.equal(r.data.pending, true);
+    assert.equal(r.data.pendingEmail, 'anna2@example.org');
+    assert.equal(r.data.user.email, 'anna@example.org');
+    // Ohne SMTP geht hier keine Mail hinaus; der Link wird nachgebaut (nur sein Hash liegt in der Datenbank).
+    const uid = (await A.get('/api/me')).data.user.id;
+    const token = crypto.randomBytes(32).toString('base64url');
+    await db.query(`UPDATE email_confirmations SET used = true WHERE user_id = $1`, [uid]);
+    await db.query(`INSERT INTO email_confirmations (token_hash, user_id, email, expires_at, kind) VALUES ($1, $2, 'anna2@example.org', now() + interval '1 hour', 'change')`,
+      [crypto.createHash('sha256').update(token).digest('hex'), uid]);
+    r = await client(srv.base).post('/api/auth/confirm-email', { token });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const me = (await A.get('/api/me')).data;
+    assert.equal(me.user.email, 'anna2@example.org');
+    assert.equal(me.pendingEmail, null);
   });
 
   test('N10: Adressen mit Kommentaren/Gruppen werden abgewiesen', async () => {
@@ -509,7 +530,9 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
       // PDF_MAX_PARALLEL=1, PDF_MAX_QUEUE=1, PDF_TIMEOUT_MS=8000 (siehe before)
       const schwer = '<html><body>' + '<p style="break-after:page">x</p>'.repeat(30000) + '</body></html>';
       const t = Date.now();
-      const results = await Promise.all([pdf(schwer), pdf(schwer), pdf(schwer)]);
+      // Runde 6 (M5): ohne Konto nur ein Auftrag je Netz — die Warteschlange füllen deshalb drei angemeldete Konten.
+      // Angemeldet zählt die Grenze je Netz nicht; A und Adm sind hier noch gültig angemeldet.
+      const results = await Promise.all([A, Adm, Adm].map(c => pdf(schwer, { Cookie: c.cookie })));
       const bodies = await Promise.all(results.map(r => r.json().catch(() => ({}))));
       const codes = results.map(r => r.status);
       assert.ok(codes.filter(c => c === 503).length >= 1, JSON.stringify(codes));

@@ -2,6 +2,69 @@
 // cvToMarkdown(profile) → string for an AI to read
 // markdownToCV(md, existingProfile) → updated profile to write back
 
+/* H1 (09.10.2026, ReDoS): Grenzen für den Import. Ein Profil hat höchstens
+ * 200 KB (guards.js), mehr Markdown ergibt kein sinnvolles Profil. Zeilen
+ * über 2000 Zeichen sind keine Listenzeile — sie werden in den Listen-
+ * Abschnitten übersprungen, statt in einen regulären Ausdruck zu laufen. */
+export const MAX_MARKDOWN_CHARS = 200_000;
+export const MAX_LINE_CHARS = 2000;
+
+/**
+ * Sprachzeile „- Deutsch – Muttersprache (5/5)“ zerlegen, OHNE Backtracking.
+ *
+ * Ersetzt /^[-*+]\s*([^—–-]+?)\s*[—–-]\s*(.+)$/ — der lief kubisch: Eine Zeile
+ * „- “ + 3000 Leerzeichen + „a“ hielt die Event-Loop sekundenlang an
+ * (3 KB → /health 8,8 s). Ergebnis ist für jede Eingabe dasselbe wie beim
+ * alten Ausdruck (Sprache und Stufe getrimmt), nur in linearer Zeit:
+ * - Aufzählungszeichen - * + am Anfang, danach mindestens ein Zeichen vor
+ *   dem ersten Strich (— – -); der erste Strich trennt.
+ * - Nach dem Strich muss etwas stehen; führender Leerraum zählt nicht mit,
+ *   ein Zeilenumbruch (\n \r \u2028 \u2029) im Rest lässt die Zeile fallen.
+ * Gibt { language, level } zurück oder null.
+ */
+export function splitLanguageLine(t) {
+  if (typeof t !== 'string' || t.length > MAX_LINE_CHARS) return null;
+  const c = t.charAt(0);
+  if (c !== '-' && c !== '*' && c !== '+') return null;
+  const rest = t.slice(1);
+  const k = rest.search(/[—–-]/);
+  if (k < 1) return null;
+  const tail = lineTail(rest.slice(k + 1));
+  if (tail === null) return null;
+  return { language: rest.slice(0, k).trim(), level: tail.trim() };
+}
+
+/**
+ * Was `\s*(.+)$` (ohne m-Flag) von `after` übrig lässt, oder null: führender
+ * Leerraum fällt weg, danach mindestens ein Zeichen und kein Zeilenumbruch
+ * (\n \r \u2028 \u2029 — die trifft `.` nicht). Linear.
+ */
+function lineTail(after) {
+  if (!after.length) return null;
+  const lead = after.length - after.trimStart().length;
+  const tail = after.slice(Math.min(lead, after.length - 1));
+  return /[\n\r\u2028\u2029]/.test(tail) ? null : tail;
+}
+
+/**
+ * Schlüsselzeile „- E-Mail: a@b.de“ (Kontakt, Empfänger, Kopf des
+ * Anschreibens), OHNE Backtracking. Ersetzt /^-\s*([^:]+):\s*(.+)$/ — der lief
+ * quadratisch: eine Zeile „- “ + 40.000 Tabs + „x“ hielt den Dienst 1,9 s an,
+ * 200 KB rund 45 s (Nachprüfung Runde 6, über H1 hinaus). Ergebnis wie beim
+ * alten Ausdruck: key = Text zwischen „-“ und dem ersten Doppelpunkt ohne
+ * führenden Leerraum (besteht er nur aus Leerraum: dessen letztes Zeichen),
+ * value = Rest nach dem Doppelpunkt (ungetrimmt wie m[2]; Aufrufer trimmen).
+ */
+export function splitKeyLine(t) {
+  if (typeof t !== 'string' || t.charAt(0) !== '-') return null;
+  const colon = t.indexOf(':', 1);
+  if (colon < 2) return null;
+  const tail = lineTail(t.slice(colon + 1));
+  if (tail === null) return null;
+  const seg = t.slice(1, colon);
+  return { key: seg.replace(/^\s+/, '') || seg.slice(-1), value: tail };
+}
+
 function val(s) { return (s ?? '').toString().trim(); }
 function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
 /** Bounds an incoming string to N chars after trimming. Protects every parsed
@@ -284,6 +347,9 @@ const FIELDS_IN = {
   volunteering: [],
 };
 function splitPeriod(v) {
+  // Eingabe ist das Feld „Zeitraum:“, schon auf 240 Zeichen gekürzt (clipField) —
+  // der lazy-Ausdruck unten ist quadratisch, die Kürzung hält ihn klein (Runde 6).
+  v = val(v).slice(0, 240);
   const m = val(v).match(/^(.*?)\s*(?:[–—]|\s-\s)\s*(.*)$/) || val(v).match(/^(.*?)\s*[–—-]\s*$/);
   if (!m) return { start: val(v), end: '' };
   return { start: val(m[1]), end: val(m[2] ?? '') };
@@ -318,7 +384,7 @@ export function parseExtraSection(kind, title, sectionLines, cv, uid) {
       if (!cur) { if (kind === 'custom') items.push(b); continue; }
       /* Wo der Eintrag keine Stichpunkte kennt, gehört die Zeile zum Text —
        * so, wie sie dasteht. */
-      if (kind === 'custom' || kind === 'publications') cur.textLines.push(sectionLines[i].replace(/\s+$/, ''));
+      if (kind === 'custom' || kind === 'publications') cur.textLines.push(sectionLines[i].trimEnd());
       else cur.bullets.push(b);
       continue;
     }
@@ -326,7 +392,7 @@ export function parseExtraSection(kind, title, sectionLines, cv, uid) {
     const f = t.match(FIELD_RE);
     const key = f ? FIELD_KEY[f[1].toLowerCase().replace(/\s+/g, ' ')] : null;
     if (f && key && FIELDS_IN[kind].includes(key) && !cur.textLines.length) { cur.fields[key] = clipField(f[2], SHORT); continue; }
-    if (cur.textLines.length || t) cur.textLines.push(sectionLines[i].replace(/\s+$/, ''));
+    if (cur.textLines.length || t) cur.textLines.push(sectionLines[i].trimEnd());
   }
   flush();
   if (kind === 'projects') {
@@ -391,6 +457,7 @@ function sectionOf(title) {
 }
 
 export function markdownToCV(md, existing, targetLang) {
+  if (String(md ?? '').length > MAX_MARKDOWN_CHARS) throw new Error(`Markdown zu groß (höchstens ${MAX_MARKDOWN_CHARS / 1000} KB)`);
   const out = JSON.parse(JSON.stringify(existing));
   // Ein Profil ohne `settings` gibt es im Normalbetrieb nicht — aber ein
   // Import darf an einem fehlenden Feld nicht mit einem 500er enden.
@@ -434,7 +501,10 @@ export function markdownToCV(md, existing, targetLang) {
     labels: existingCv.labels, // preserve labels (i18n)
   };
 
-  const lines = body.split('\n').map(l => l.replace(/\r$/, ''));
+  /* H1: Zeilen über MAX_LINE_CHARS sind keine Markdown-Struktur — leer statt
+   * in die Ausdrücke. Ausnahme: der Profiltext, dort läuft keiner (rawLines). */
+  const rawLines = body.split('\n').map(l => l.replace(/\r$/, ''));
+  const lines = rawLines.map(l => (l.length > MAX_LINE_CHARS ? '' : l));
   let section = null;
   let curExp = null, curEdu = null, curSkill = null;
   let profileLines = [];
@@ -478,12 +548,12 @@ export function markdownToCV(md, existing, targetLang) {
       continue;
     }
 
-    if (section === 'profile') { profileLines.push(line); i++; continue; }
+    if (section === 'profile') { profileLines.push(rawLines[i]); i++; continue; }
 
     if (section === 'contact') {
-      const m = t.match(/^-\s*([^:]+):\s*(.+)$/);
+      const m = splitKeyLine(t);   // ohne Backtracking (Runde 6)
       if (m) {
-        const k = m[1].toLowerCase(), v = clipField(m[2].trim(), 240);
+        const k = m.key.toLowerCase(), v = clipField(m.value.trim(), 240);
         if (/e[-\s]?mail/.test(k)) cv.personal.email = v;
         else if (/telefon|phone/.test(k)) cv.personal.phone = v;
         else if (/ort|location|adresse|address/.test(k)) cv.personal.location = v;
@@ -570,19 +640,20 @@ export function markdownToCV(md, existing, targetLang) {
     }
 
     if (section === 'languages') {
-      // CommonMark: erlaubt - * + als Bullet. Anchor das pattern entsprechend.
-      const m = t.match(/^[-*+]\s*([^—–-]+?)\s*[—–-]\s*(.+)$/);
+      // CommonMark: erlaubt - * + als Bullet. Ohne Backtracking (H1), siehe splitLanguageLine.
+      const m = splitLanguageLine(t);
       if (m) {
-        let level = m[2].trim();
+        let level = m.level;
         // Strip trailing "(N/5)" or "(N)" — that's our dot rating, not
         // part of the human-readable level label.
-        const dotMatch = level.match(/\s*\((\d)(?:\/5)?\)\s*$/);
+        // Ohne führendes \s* (quadratisch auf Leerraum); level ist schon getrimmt, das Ergebnis gleich.
+        const dotMatch = level.match(/\((\d)(?:\/5)?\)\s*$/);
         let dots;
         if (dotMatch) {
           dots = Math.max(1, Math.min(5, parseInt(dotMatch[1], 10)));
           level = level.slice(0, dotMatch.index).trim();
         }
-        const entry = { language: m[1].trim(), level };
+        const entry = { language: m.language, level };
         if (dots) entry.dots = dots;
         cv.languages.push(entry);
       }
@@ -668,6 +739,7 @@ function clSectionOf(title) {
 }
 
 export function markdownToCl(md, existing, targetLang) {
+  if (String(md ?? '').length > MAX_MARKDOWN_CHARS) throw new Error(`Markdown zu groß (höchstens ${MAX_MARKDOWN_CHARS / 1000} KB)`);
   const out = JSON.parse(JSON.stringify(existing));
   const lang = targetLang || out.settings?.lang || 'de';
 
@@ -713,9 +785,10 @@ export function markdownToCl(md, existing, targetLang) {
     if (!section || !buf.length) { buf = []; return; }
     if (section === 'recipient' || section === 'header') {
       for (const line of buf) {
-        const m = line.match(/^-\s*([^:]+):\s*(.+)$/);
+        if (line.length > MAX_LINE_CHARS) continue;   // H1: keine Schlüsselzeile
+        const m = splitKeyLine(line);   // ohne Backtracking (Runde 6)
         if (!m) continue;
-        const k = m[1].toLowerCase(), v = m[2].trim();
+        const k = m.key.toLowerCase(), v = m.value.trim();
         if (section === 'recipient') {
           if (/firma|company/.test(k)) cl.company = v;
           else if (/ansprechpartner|contact/.test(k)) cl.contactPerson = v;

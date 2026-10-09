@@ -27,6 +27,7 @@ import { buildInvoiceHtml, buildTermsHtml, buildWithdrawalHtml } from './invoice
 import {
   tplOrderConfirmation, tplWithdrawalReceipt, tplWithdrawalLate, tplDeclarationUnmatched, tplRefundDone,
   tplCancellationReceipt, tplAdminDeclaration, berlinDate, berlinDateTime, legalValues,
+  tplDeclarationConfirm, tplDeclarationReceivedPlain,
 } from './mailtexts/index.js';
 import { attachmentNames, legalLang } from './mailtexts/legal.js';
 import { sendMail as defaultSend } from './mail.js';
@@ -49,6 +50,10 @@ export const THRESHOLDS = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORDER_NO_RE = /^B-\d{6,9}$/;
+/* Name im öffentlichen Formular: Er steht im Wortlaut, und der geht an die
+ * Bestelladresse. Ein Name braucht weder Adressen noch Markup — wer dort
+ * einen Link unterbringen will, verschickt Phishing unter unserem Absender. */
+const plainName = n => !/[<>]|:\/\/|www\./i.test(n) && ![...n].some(ch => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127);
 /* Wie EMAIL_RE in server.js: keine Klammern, Kommas, spitzen Klammern —
  * das sind die Zeichen, mit denen sich Adressparser umlenken lassen (N10). */
 const EMAIL_SHAPE = /^[^\s@()<>",;:\\[\]]+@[^\s@()<>",;:\\[\]]+\.[^\s@()<>",;:\\[\]]+$/;
@@ -165,7 +170,13 @@ export function withdrawableUntil(paidAt) {
  * @param send      sendMail
  * @param log       Protokollfunktion (nur IDs und Status)
  */
-export function createBilling({ pool, config = billingConfig(), mollie, renderPdf, send = defaultSend, log = console.log }) {
+/** Wie emailConfirmed in server.js: nur selbst registrierte Konten brauchen den Klick. */
+const defaultEmailConfirmed = u => u?.signup_source !== 'self' || !!u?.email_confirmed_at;
+
+/** Gültigkeit des Bestätigungslinks für öffentliche Erklärungen (H2, M1). */
+export const DECLARATION_CONFIRM_DAYS = 14;
+
+export function createBilling({ pool, config = billingConfig(), mollie, renderPdf, send = defaultSend, log = console.log, emailConfirmed = defaultEmailConfirmed }) {
   const cfg = config;
   const pay = mollie || createMollie({ apiKey: cfg.mollieKey, base: cfg.mollieBase });
 
@@ -363,6 +374,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
      * 15 Sekunden auf die Antwort des Webhooks, und das Rendern hängt an der
      * PDF-Warteschlange. Scheitert sie, holt der Hintergrundlauf sie nach. */
     if (newlyPaid) sendConfirmation(order.id).catch(err => log(`billing: Bestellbestätigung ${order.id} fehlgeschlagen (${err?.message || err})`));
+    /* N3: Zahlung zu einer Bestellung, deren Konto inzwischen gelöscht ist.
+     * Bezahlt ist bezahlt (Rechnung, Bestätigung gehen raus) — aber niemand
+     * kann den Pass nutzen. Der Betreiber erstattet von Hand. */
+    if (newlyPaid && !order.user_id) {
+      await notifyAdmin({ type: 'payment', reason: 'Zahlung für ein gelöschtes Konto eingegangen — bitte erstatten', statement: `Bestellung ${order.order_no}: Zahlung eingegangen, das Konto wurde vorher gelöscht.`, receivedAt: new Date(), orderNos: [order.order_no] });
+    }
     return { changed, status: st, newlyPaid };
   }
 
@@ -383,6 +400,10 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     if (body?.acceptTerms !== true) return { status: 400, body: { error: 'Bitte AGB und Widerrufsbelehrung bestätigen.', code: 'terms_required' } };
     if (body?.ageConfirmed18 !== true) return { status: 400, body: { error: 'Der Kauf ist erst ab 18 Jahren möglich. Bitte bestätige dein Alter.', code: 'age18_required' } };
     if (!user.email) return { status: 400, body: { error: 'Bitte hinterlege zuerst eine E-Mail-Adresse im Konto — dorthin gehen Rechnung und Bestätigung.', code: 'email_required' } };
+    /* N1 (09.10.2026): Kauf nur mit bestätigter Adresse. Sonst gehen Rechnung,
+     * Widerrufsbelehrung und später der Bestätigungslink für einen Widerruf an
+     * ein Postfach, von dem niemand weiß, wem es gehört. */
+    if (!emailConfirmed(user)) return { status: 403, body: { error: 'Bitte bestätige zuerst deine E-Mail-Adresse. Den Link haben wir dir geschickt; dorthin gehen auch Rechnung und Bestätigung.', code: 'email_unconfirmed' } };
     const plan = planInfo(user);
     if (plan?.kind === 'unlimited') {
       return { status: 409, body: { error: 'Dein Konto ist unbegrenzt freigeschaltet. Du brauchst keinen Pass.', code: 'plan_unlimited' } };
@@ -490,14 +511,48 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
    * Anspruch DIESER Bestellung fällt weg bzw. endet früher; andere Pässe,
    * Pilot-Laufzeit und Gutscheine bleiben. */
 
-  async function recordDeclaration({ type, channel, name, email, orderNo, userId, orderIds = [], receivedAt, statement, status, note }) {
+  async function recordDeclaration({ type, channel, name, email, orderNo, userId, orderIds = [], receivedAt, statement, status, note, confirmTokenHash = null, confirmExpiresAt = null, request = null }) {
     const id = crypto.randomUUID();
     await pool.query(
-      `INSERT INTO declarations (id, type, channel, name, email, order_no, user_id, order_ids, received_at, statement, status, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11, $12)`,
-      [id, type, channel, name || null, email ? String(email).toLowerCase() : null, orderNo || null, userId || null, orderIds, receivedAt, statement, status, note || null],
+      `INSERT INTO declarations (id, type, channel, name, email, order_no, user_id, order_ids, received_at, statement, status, note,
+                                 confirm_token_hash, confirm_expires_at, request)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11, $12, $13, $14, $15)`,
+      [id, type, channel, name || null, email ? String(email).toLowerCase() : null, orderNo || null, userId || null, orderIds, receivedAt, statement, status, note || null,
+        confirmTokenHash, confirmExpiresAt, request ? JSON.stringify(request) : null],
     );
     return id;
+  }
+
+  /* ── Bestätigungslink für öffentliche Erklärungen (H2, M1, M4) ──────────
+   *
+   * Befund vom 09.10.2026: Der öffentliche Widerruf und die öffentliche
+   * Kündigung brauchten nur die E-Mail-Adresse der Bestellung. Wer sie kannte,
+   * beendete fremde bezahlte Pässe (Kündigung „sofort“) oder löste Erstattung
+   * und Pass-Ende aus (Widerruf). Bestellnummern sind fortlaufend, also kein
+   * Geheimnis.
+   *
+   * Jetzt: Der Eingang wird sofort gespeichert und an die Bestelladresse
+   * bestätigt — mit Inhalt, Datum, Uhrzeit (Eingangsbestätigung) und einem
+   * Link. Ausgeführt wird erst nach dem Klick. Für die Rechtzeitigkeit zählt
+   * der Eingang. Unbestätigte Erklärungen meldet der Hintergrundlauf nach 14
+   * Tagen dem Betreiber; automatisch ausgeführt wird nichts.
+   *
+   * Nicht zuzuordnende Erklärungen bekommen höchstens einen festen Text ohne
+   * jede Eingabe des Absenders (M4: sonst ein Mail-Relay für beliebigen Text
+   * an beliebige Adressen). Den Wortlaut sieht nur der Betreiber. */
+  const tokenHash = tk => crypto.createHash('sha256').update(String(tk)).digest('hex');
+  function newConfirmToken() {
+    const token = crypto.randomBytes(32).toString('base64url');   // 256 Bit
+    return { token, hash: tokenHash(token), expiresAt: new Date(Date.now() + DECLARATION_CONFIRM_DAYS * DAY_MS) };
+  }
+  function confirmUrl(type, token) {
+    if (!cfg.base) return null;
+    const path = type === 'withdrawal' ? '/widerruf/bestaetigen' : '/kuendigen/bestaetigen';
+    return `${cfg.base}${path}?token=${encodeURIComponent(token)}`;
+  }
+
+  async function sendPlainReceipt(type, email, receivedAt) {
+    await send({ to: String(email).trim(), ...tplDeclarationReceivedPlain({ type, receivedAt }) }).catch(() => false);
   }
 
   async function notifyAdmin(args) {
@@ -522,7 +577,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
    * @param declared  was der Kunde eingegeben hat (öffentlicher Weg) — fließt in den Wortlaut
    * @returns { result: 'done'|'already'|'late'|'not_paid'|'missing', order, receivedAt, refundStatus }
    */
-  async function withdraw(orderId, { channel, declared = {} }) {
+  async function withdraw(orderId, { channel, declared = {}, receivedAt: givenReceivedAt = null, statement: givenStatement = null, declarationId = null }) {
     const client = await pool.connect();
     let o, receivedAt, statement;
     try {
@@ -535,19 +590,22 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         return { result: 'already', order: o, receivedAt: o.withdrawn_at, refundStatus: o.refund_status };
       }
       if (o.status !== 'paid') { await client.query('ROLLBACK'); return { result: 'not_paid', order: o }; }
-      receivedAt = new Date();
+      /* Für die Frist zählt der Eingang der Erklärung (H2/M1: beim öffentlichen
+       * Weg der Eingang des Formulars, nicht der spätere Klick auf den Link). */
+      receivedAt = givenReceivedAt ? new Date(givenReceivedAt) : new Date();
       if (receivedAt.getTime() >= withdrawableUntil(o.paid_at).getTime()) {
         await client.query('ROLLBACK');
         return { result: 'late', order: o, receivedAt };
       }
-      statement = withdrawalStatement({ o, name: declared.name, email: declared.email, receivedAt, channel });
+      statement = givenStatement || withdrawalStatement({ o, name: declared.name, email: declared.email, receivedAt, channel });
       await client.query(
         `UPDATE orders SET status = 'withdrawn', withdrawn_at = $2, withdraw_channel = $3, withdraw_statement = $4,
                 refund_status = 'requested', updated_at = now()
           WHERE id = $1`,
         [o.id, receivedAt, channel, statement],
       );
-      await revokeOrderGrant(client, o, { at: receivedAt, reason: 'withdrawal', log });
+      // Laufzeit endet jetzt (nicht rückwirkend zum Eingang): bis zum Klick durfte der Pass laufen.
+      await revokeOrderGrant(client, o, { at: givenReceivedAt ? new Date() : receivedAt, reason: 'withdrawal', log });
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -556,10 +614,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       client.release();
     }
     log(`billing: Bestellung ${o.id} widerrufen (${channel})`);
-    await recordDeclaration({
-      type: 'withdrawal', channel, name: declared.name || o.billing_name, email: declared.email || o.email, orderNo: o.order_no,
-      userId: o.user_id, orderIds: [o.id], receivedAt, statement, status: 'processed',
-    }).catch(err => log(`billing: Erklärung nicht gespeichert (${err?.message || err})`));
+    if (!declarationId) {
+      await recordDeclaration({
+        type: 'withdrawal', channel, name: declared.name || o.billing_name, email: declared.email || o.email, orderNo: o.order_no,
+        userId: o.user_id, orderIds: [o.id], receivedAt, statement, status: 'processed',
+      }).catch(err => log(`billing: Erklärung nicht gespeichert (${err?.message || err})`));
+    }
     // Eingangsbestätigung sofort, vor der Erstattung — sie hängt nicht davon
     // ab, ob Mollie gerade antwortet.
     await send({ to: o.email, ...tplWithdrawalReceipt({ order: o, statement, receivedAt, refundStatus: 'requested', seller: cfg.seller, productName: cfg.productName, base: cfg.base }) })
@@ -572,19 +632,22 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
 
   /**
    * Öffentlicher Widerruf (ohne Anmeldung). Die Antwort an den Aufrufer ist
-   * für jeden Ausgang gleich; Mails gehen nur an die eingegebene Adresse, und
-   * zugeordnet wird nur, wenn diese Adresse die der Bestellung ist. So erfährt
-   * niemand etwas über Bestellungen, deren Postfach er nicht hat.
+   * für jeden Ausgang gleich. Zugeordnet wird nur, wenn die eingegebene
+   * Adresse die der Bestellung ist; nur dann gibt es eine Mail mit Inhalt —
+   * an die Bestelladresse — und einen Bestätigungslink. Ausgeführt wird erst
+   * mit confirmDeclaration().
    *
    * Zuordnung: Bestellnummer + Adresse; ohne Nummer die eine bezahlte, noch
-   * widerrufbare Bestellung dieser Adresse. Alles andere (mehrere Treffer,
-   * keine Treffer, abweichende Adresse) wird gespeichert, an die eingegebene
-   * Adresse bestätigt und dem Betreiber gemeldet — eine Widerrufserklärung
-   * ist auch ohne Abgleich wirksam.
+   * widerrufbare Bestellung dieser Adresse. Mehrere Treffer, keine Treffer
+   * oder eine abweichende Adresse: gespeichert und dem Betreiber gemeldet —
+   * eine Widerrufserklärung ist auch ohne Abgleich wirksam.
+   *
+   * @returns { matched, pending?, result? }
    */
-  async function withdrawPublic({ name, email, orderNo }) {
+  async function withdrawPublic({ name, email, orderNo, receivedAt: at = null }) {
     const no = String(orderNo || '').trim().toUpperCase();
     const mail = norm(email);
+    const receivedAt = at ? new Date(at) : new Date();
     let candidates = [];
     if (no) {
       if (ORDER_NO_RE.test(no)) {
@@ -593,24 +656,43 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       }
     } else {
       const { rows } = await pool.query(`SELECT * FROM orders WHERE lower(email) = $1 AND status = 'paid' ORDER BY paid_at DESC`, [mail]);
-      candidates = rows.filter(o => Date.now() < withdrawableUntil(o.paid_at).getTime());
+      candidates = rows.filter(o => receivedAt.getTime() < withdrawableUntil(o.paid_at).getTime());
     }
-    if (candidates.length === 1) {
+    if (candidates.length === 1 && candidates[0].status === 'paid') {
       const o = candidates[0];
-      const r = await withdraw(o.id, { channel: 'public', declared: { name, email } });
-      if (r.result === 'late') {
-        const statement = withdrawalStatement({ o, name, email, receivedAt: r.receivedAt, channel: 'public' });
-        await recordDeclaration({ type: 'withdrawal', channel: 'public', name, email, orderNo: o.order_no, userId: o.user_id, orderIds: [o.id], receivedAt: r.receivedAt, statement, status: 'manual', note: 'nach Fristende' });
-        await send({ to: o.email, ...tplWithdrawalLate({ order: o, statement, receivedAt: r.receivedAt, base: cfg.base }) }).catch(() => false);
-        await notifyAdmin({ type: 'withdrawal', reason: 'Widerruf nach Fristende', statement, receivedAt: r.receivedAt, orderNos: [o.order_no] });
+      const statement = withdrawalStatement({ o, name, email, receivedAt, channel: 'public' });
+      if (receivedAt.getTime() >= withdrawableUntil(o.paid_at).getTime()) {
+        // Nach Fristende: nichts auszuführen, also kein Link. Eingang an die Bestelladresse, Betreiber entscheidet.
+        await recordDeclaration({ type: 'withdrawal', channel: 'public', name, email, orderNo: o.order_no, userId: o.user_id, orderIds: [o.id], receivedAt, statement, status: 'manual', note: 'nach Fristende' });
+        await send({ to: o.email, ...tplWithdrawalLate({ order: o, statement, receivedAt, base: cfg.base }) }).catch(() => false);
+        await notifyAdmin({ type: 'withdrawal', reason: 'Widerruf nach Fristende', statement, receivedAt, orderNos: [o.order_no] });
+        return { matched: true, result: 'late' };
       }
-      return { matched: true, result: r.result };
+      const t = newConfirmToken();
+      await recordDeclaration({
+        type: 'withdrawal', channel: 'public', name, email, orderNo: o.order_no, userId: o.user_id, orderIds: [o.id], receivedAt, statement,
+        status: 'pending_confirmation', confirmTokenHash: t.hash, confirmExpiresAt: t.expiresAt, request: { name, email },
+      });
+      const url = confirmUrl('withdrawal', t.token);
+      if (!url) {
+        log('billing: öffentlicher Widerruf ohne PUBLIC_BASE_URL — kein Bestätigungslink, Betreiber informiert');
+        await notifyAdmin({ type: 'withdrawal', reason: 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)', statement, receivedAt, orderNos: [o.order_no] });
+      }
+      // An die Adresse der Bestellung, nicht an die eingegebene (sie sind gleich — aber so steht es im Code).
+      await send({ to: o.email, ...tplDeclarationConfirm({ type: 'withdrawal', orders: [o], statement, receivedAt, url, expiresAt: t.expiresAt }) }).catch(() => false);
+      log(`billing: öffentlicher Widerruf für ${o.id} eingegangen, wartet auf Bestätigung`);
+      return { matched: true, pending: true };
     }
-    const receivedAt = new Date();
     const statement = withdrawalStatement({ o: null, name, email, orderNo: no, receivedAt, channel: 'public' });
-    await recordDeclaration({ type: 'withdrawal', channel: 'public', name, email, orderNo: no || null, receivedAt, statement, status: 'manual', note: candidates.length > 1 ? 'mehrere Bestellungen' : 'nicht zugeordnet' });
-    await send({ to: String(email).trim(), ...tplDeclarationUnmatched({ type: 'withdrawal', statement, receivedAt }) }).catch(() => false);
-    await notifyAdmin({ type: 'withdrawal', reason: candidates.length > 1 ? 'mehrere passende Bestellungen' : 'keine Bestellung zuzuordnen', statement, receivedAt });
+    const already = candidates.length === 1 && ['withdrawn', 'refunded'].includes(candidates[0].status);
+    const note = already ? 'Bestellung schon widerrufen' : candidates.length > 1 ? 'mehrere Bestellungen' : candidates.length === 1 ? `Bestellung nicht widerrufbar (${candidates[0].status})` : 'nicht zugeordnet';
+    await recordDeclaration({
+      type: 'withdrawal', channel: 'public', name, email, orderNo: no || null, userId: candidates.length === 1 ? candidates[0].user_id : null,
+      orderIds: candidates.map(o => o.id), receivedAt, statement, status: already ? 'done' : 'manual', note,
+    });
+    // Fester Text ohne jede Eingabe des Absenders (M4). Der Wortlaut geht nur an den Betreiber.
+    await sendPlainReceipt('withdrawal', email, receivedAt);
+    if (!already) await notifyAdmin({ type: 'withdrawal', reason: candidates.length > 1 ? 'mehrere passende Bestellungen' : candidates.length === 1 ? note : 'keine Bestellung zuzuordnen', statement, receivedAt, orderNos: candidates.map(o => o.order_no) });
     return { matched: false };
   }
 
@@ -693,17 +775,26 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return { kind, reason, when, date };
   }
 
-  async function finishCancellation({ orders, done, input, name, email, channel, receivedAt, userId, orderNo }) {
+  async function finishCancellation({ orders, done, input, name, email, channel, receivedAt, userId, orderNo, declarationId = null, statement: givenStatement = null }) {
     const effectiveAt = done.length ? new Date(Math.max(...done.map(d => new Date(d.effectiveAt).getTime()))) : null;
-    const statement = cancellationStatement({ orders, name, email, ...input, effectiveAt, receivedAt, channel, orderNo });
+    const statement = givenStatement || cancellationStatement({ orders, name, email, ...input, effectiveAt, receivedAt, channel, orderNo });
     const manual = input.kind === 'extraordinary' || !done.length;
-    await recordDeclaration({
-      type: 'cancellation', channel, name, email, orderNo: orders.map(o => o.order_no).join(',') || orderNo || null, userId,
-      orderIds: orders.map(o => o.id), receivedAt, statement,
-      status: manual ? 'manual' : 'processed', note: !done.length ? 'nicht zugeordnet' : input.kind === 'extraordinary' ? 'außerordentlich: Erstattung prüfen' : null,
-    });
+    const status = manual ? 'manual' : 'processed';
+    const note = !done.length ? 'nicht zugeordnet' : input.kind === 'extraordinary' ? 'außerordentlich: Erstattung prüfen' : null;
+    if (declarationId) {
+      await pool.query(`UPDATE declarations SET status = $2, note = coalesce($3, note) WHERE id = $1`, [declarationId, status, note]);
+    } else {
+      await recordDeclaration({
+        type: 'cancellation', channel, name, email, orderNo: orders.map(o => o.order_no).join(',') || orderNo || null, userId,
+        orderIds: orders.map(o => o.id), receivedAt, statement, status, note,
+      });
+    }
     if (done.length) {
-      await send({ to: email, ...tplCancellationReceipt({ order: done[0].order, receivedAt, kind: input.kind, reason: input.reason, effectiveAt, email, seller: cfg.seller, productName: cfg.productName, base: cfg.base, statement }) }).catch(() => false);
+      // Bestätigung an die Adresse der Bestellung (beim öffentlichen Weg ist es dieselbe wie eingegeben).
+      const to = channel === 'public' ? done[0].order.email : email;
+      await send({ to, ...tplCancellationReceipt({ order: done[0].order, receivedAt, kind: input.kind, reason: input.reason, effectiveAt, email: to, seller: cfg.seller, productName: cfg.productName, base: cfg.base, statement }) }).catch(() => false);
+    } else if (channel === 'public') {
+      await sendPlainReceipt('cancellation', email, receivedAt);
     } else {
       await send({ to: email, ...tplDeclarationUnmatched({ type: 'cancellation', statement, receivedAt }) }).catch(() => false);
     }
@@ -733,26 +824,114 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return { status: 200, body: { ok: true, receivedAt, effectiveAt, kind: input.kind, orders: done.map(d => d.order.order_no) } };
   }
 
-  /** Kündigung ohne Anmeldung. Gleiche Antwort für jeden Ausgang; Mails nur
-   *  an die eingegebene Adresse, zugeordnet nur, wenn sie die der Bestellung ist. */
-  async function cancelPublic({ name, email, orderNo, body }) {
+  /** Kündigung ohne Anmeldung. Gleiche Antwort für jeden Ausgang. Zugeordnet
+   *  nur, wenn die eingegebene Adresse die der Bestellung ist; dann geht an
+   *  diese Adresse die Eingangsbestätigung mit Bestätigungslink, und erst der
+   *  Klick beendet den Pass (H2). */
+  async function cancelPublic({ name, email, orderNo, body, receivedAt: at = null }) {
     const input = cancelInput(body);
-    const receivedAt = new Date();
+    const receivedAt = at ? new Date(at) : new Date();
     const mail = norm(email);
     const no = String(orderNo || '').trim().toUpperCase();
     let orders = [];
     if (no) {
       if (ORDER_NO_RE.test(no)) {
-        const { rows } = await pool.query(`SELECT * FROM orders WHERE order_no = $1 AND status = 'paid'`, [no]);
+        const { rows } = await pool.query(`SELECT * FROM orders WHERE order_no = $1 AND status = 'paid' AND cancelled_at IS NULL`, [no]);
         orders = rows.filter(o => norm(o.email) === mail);
       }
     } else {
       const { rows } = await pool.query(`SELECT * FROM orders WHERE lower(email) = $1 AND status = 'paid' AND cancelled_at IS NULL AND pass_until > now()`, [mail]);
       orders = rows;
     }
-    const done = orders.length ? await applyCancellation(orders.map(o => o.id), { ...input, channel: 'public', receivedAt }) : [];
-    await finishCancellation({ orders, done, input, name, email: String(email).trim(), channel: 'public', receivedAt, userId: orders[0]?.user_id, orderNo: no });
-    return { matched: done.length > 0 };
+    if (!orders.length) {
+      await finishCancellation({ orders, done: [], input, name, email: String(email).trim(), channel: 'public', receivedAt, userId: null, orderNo: no });
+      return { matched: false };
+    }
+    // Vorschau des Beendigungszeitpunkts für den Wortlaut — gerechnet ab dem Eingang, wie später bei der Ausführung.
+    const preview = new Date(Math.max(...orders.map(o => cancelEffective(o, input.when, input.date, receivedAt.getTime()).getTime())));
+    const statement = cancellationStatement({ orders, name, email, ...input, effectiveAt: preview, receivedAt, channel: 'public', orderNo: no });
+    const t = newConfirmToken();
+    await recordDeclaration({
+      type: 'cancellation', channel: 'public', name, email, orderNo: orders.map(o => o.order_no).join(','), userId: orders[0].user_id,
+      orderIds: orders.map(o => o.id), receivedAt, statement, status: 'pending_confirmation',
+      confirmTokenHash: t.hash, confirmExpiresAt: t.expiresAt,
+      request: { name, email, kind: input.kind, reason: input.reason, when: input.when, date: input.date },
+    });
+    const url = confirmUrl('cancellation', t.token);
+    if (!url) await notifyAdmin({ type: 'cancellation', reason: 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)', statement, receivedAt, orderNos: orders.map(o => o.order_no) });
+    await send({ to: orders[0].email, ...tplDeclarationConfirm({ type: 'cancellation', orders, statement, receivedAt, url, expiresAt: t.expiresAt }) }).catch(() => false);
+    log(`billing: öffentliche Kündigung für ${orders.length} Bestellung(en) eingegangen, wartet auf Bestätigung`);
+    return { matched: true, pending: true };
+  }
+
+  /**
+   * Klick auf den Link aus der Eingangsbestätigung: führt die Erklärung aus.
+   * Einmalig, 14 Tage gültig. Für Frist und Wirkzeitpunkt zählt der Eingang.
+   * @returns { status, body }
+   */
+  async function confirmDeclaration(token) {
+    const tk = String(token || '').trim();
+    const invalid = { status: 400, body: { error: 'Dieser Bestätigungslink ist ungültig.', code: 'token_invalid' } };
+    if (!/^[A-Za-z0-9_-]{40,100}$/.test(tk)) return invalid;
+    const hash = tokenHash(tk);
+    // Den Link genau einmal verbrauchen — zwei gleichzeitige Klicks führen nicht zweimal aus.
+    const { rows } = await pool.query(
+      `UPDATE declarations SET confirmed_at = now()
+        WHERE confirm_token_hash = $1 AND confirmed_at IS NULL AND status = 'pending_confirmation' AND confirm_expires_at > now()
+        RETURNING *`,
+      [hash],
+    );
+    const d = rows[0];
+    if (!d) {
+      const { rows: any } = await pool.query('SELECT * FROM declarations WHERE confirm_token_hash = $1', [hash]);
+      const x = any[0];
+      if (!x) return invalid;
+      const kind = x.type === 'withdrawal' ? 'withdraw' : 'cancel';
+      if (x.confirmed_at) {
+        return { status: 409, body: { error: 'Diese Erklärung ist schon bestätigt.', code: 'token_used', kind, orderNo: firstNo(x.order_no), receivedAt: x.received_at, ...(x.result || {}) } };
+      }
+      return { status: 410, body: { error: 'Dieser Bestätigungslink ist abgelaufen. Deine Erklärung ist trotzdem bei uns eingegangen; wir melden uns. Du kannst sie auch noch einmal abschicken.', code: 'token_expired', kind, orderNo: firstNo(x.order_no), receivedAt: x.received_at } };
+    }
+    const req = d.request || {};
+    const receivedAt = new Date(d.received_at);
+    if (d.type === 'withdrawal') {
+      const orderId = d.order_ids?.[0];
+      const r = orderId ? await withdraw(orderId, { channel: 'public', declared: { name: req.name, email: req.email }, receivedAt, statement: d.statement, declarationId: d.id }) : { result: 'missing' };
+      if (r.result === 'done' || r.result === 'already') {
+        const result = { effectiveAt: r.receivedAt || receivedAt, refund: { status: r.refundStatus || 'requested' }, ...(r.result === 'already' ? { already: true } : {}) };
+        await pool.query(`UPDATE declarations SET status = 'processed', result = $2 WHERE id = $1`, [d.id, JSON.stringify(result)]);
+        return { status: 200, body: { ok: true, kind: 'withdraw', orderNo: r.order?.order_no || firstNo(d.order_no), receivedAt, ...result } };
+      }
+      const why = r.result === 'late' ? 'nach Fristende' : r.result === 'not_paid' ? 'Bestellung nicht mehr bezahlt' : 'Bestellung nicht gefunden';
+      await pool.query(`UPDATE declarations SET status = 'manual', note = $2 WHERE id = $1`, [d.id, `bestätigt, aber nicht ausführbar: ${why}`]);
+      await notifyAdmin({ type: 'withdrawal', reason: `bestätigter Widerruf nicht ausführbar (${why})`, statement: d.statement, receivedAt, orderNos: [firstNo(d.order_no)].filter(Boolean) });
+      return { status: 409, body: { error: 'Der Widerruf lässt sich nicht automatisch ausführen. Er ist bei uns eingegangen; wir melden uns innerhalb von zwei Werktagen.', code: 'not_withdrawable', kind: 'withdraw', orderNo: firstNo(d.order_no), receivedAt } };
+    }
+    // Kündigung
+    const input = cancelInput(req);
+    if (input.error) return invalid;   // kann nicht vorkommen: beim Eingang geprüft
+    const { rows: orders } = await pool.query('SELECT * FROM orders WHERE id = ANY($1::uuid[])', [d.order_ids || []]);
+    const paid = orders.filter(o => o.status === 'paid');
+    const done = paid.length ? await applyCancellation(paid.map(o => o.id), { ...input, channel: 'public', receivedAt }) : [];
+    const { effectiveAt } = await finishCancellation({ orders: paid, done, input, name: req.name, email: req.email, channel: 'public', receivedAt, userId: d.user_id, declarationId: d.id, statement: d.statement });
+    const result = { effectiveAt, orderNos: done.map(x => x.order.order_no) };
+    await pool.query('UPDATE declarations SET result = $2 WHERE id = $1', [d.id, JSON.stringify(result)]);
+    return { status: 200, body: { ok: true, kind: 'cancel', orderNo: done[0]?.order.order_no || firstNo(d.order_no), receivedAt, ...result } };
+  }
+  const firstNo = s => String(s || '').split(',')[0] || null;
+
+  /** Öffentliche Erklärungen, deren Link nach 14 Tagen nicht geklickt wurde:
+   *  an den Betreiber, nicht ausführen. */
+  async function escalateUnconfirmed() {
+    const { rows } = await pool.query(
+      `UPDATE declarations SET status = 'manual', note = 'nicht bestätigt (Link 14 Tage ungeklickt)'
+        WHERE status = 'pending_confirmation' AND confirm_expires_at <= now()
+        RETURNING id, type, order_no, received_at, statement`,
+    );
+    for (const d of rows) {
+      await notifyAdmin({ type: d.type, reason: 'öffentliche Erklärung 14 Tage unbestätigt — nicht ausgeführt, bitte entscheiden', statement: d.statement, receivedAt: d.received_at, orderNos: String(d.order_no || '').split(',').filter(Boolean) });
+    }
+    return rows.length;
   }
 
   /* ── Auswertung ────────────────────────────────────────────────────── */
@@ -794,6 +973,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     const { rows: decl } = await pool.query(
       `SELECT id, type, channel, order_no, received_at, note, statement FROM declarations WHERE status = 'manual' ORDER BY received_at LIMIT 100`,
     );
+    const { rows: awaiting } = await pool.query(`SELECT count(*)::int AS n FROM declarations WHERE status = 'pending_confirmation'`);
     const warnings = [];
     if (euMax >= THRESHOLDS.euAbroadCents) warnings.push({ code: 'eu_threshold_exceeded', text: 'Umsätze an Privatkunden im EU-Ausland über 10.000 € (Vorjahr oder laufendes Jahr): Ab dem überschreitenden Umsatz gilt die Umsatzsteuer des Kundenlands (§ 3a Abs. 5 UStG), § 19 UStG schützt dort nicht. OSS-Registrierung beim BZSt prüfen, Steuerberatung einschalten.' });
     else if (euMax >= THRESHOLDS.euAbroadWarnCents) warnings.push({ code: 'eu_threshold_near', text: 'Umsätze an Privatkunden im EU-Ausland über 8.000 €: Die Schwelle von 10.000 € (§ 3a Abs. 5 UStG, Vorjahr und laufendes Jahr) rückt näher.' });
@@ -829,6 +1009,8 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       // (nicht zuzuordnen, nach Frist, außerordentlich). Mit Wortlaut, weil
       // der Betreiber sonst nicht entscheiden kann.
       declarationsOpen: decl.map(d => ({ id: d.id, type: d.type, channel: d.channel, orderNo: d.order_no, receivedAt: d.received_at, note: d.note, statement: d.statement })),
+      // Öffentliche Erklärungen, deren Bestätigungslink noch nicht geklickt wurde (H2/M1).
+      declarationsAwaitingConfirmation: awaiting[0].n,
       warnings,
       testMode: !!pay.isTestMode,
       config: { ready: cfg.ready, missing: cfg.missing },
@@ -839,8 +1021,10 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
 
   /** Holt nach, was beim ersten Mal nicht ging: Bestellbestätigungen,
    *  Erstattungen, Erstattungsstände, offene Zahlungen ohne Webhook. */
-  async function runJobs() {
-    const out = { confirmations: 0, refunds: 0, refundChecks: 0, syncs: 0 };
+  async function runJobs({ onlyDeclarations = false } = {}) {
+    const out = { confirmations: 0, refunds: 0, refundChecks: 0, syncs: 0, unconfirmedDeclarations: 0 };
+    out.unconfirmedDeclarations = await escalateUnconfirmed();
+    if (onlyDeclarations) return out;
     const { rows: unsent } = await pool.query(
       `SELECT id FROM orders WHERE invoice_no IS NOT NULL AND confirmation_sent_at IS NULL
           AND paid_at > now() - interval '7 days' ORDER BY paid_at LIMIT 20`,
@@ -863,8 +1047,8 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return out;
   }
 
-  function startJobs({ everyMs = 10 * 60 * 1000 } = {}) {
-    const tick = () => runJobs()
+  function startJobs({ everyMs = 10 * 60 * 1000, onlyDeclarations = false } = {}) {
+    const tick = () => runJobs({ onlyDeclarations })
       .then(r => { const s = Object.entries(r).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' '); if (s) log(`billing-jobs: ${s}`); })
       .catch(err => console.error('billing-jobs failed:', err?.message || err));
     const t = setInterval(tick, everyMs);
@@ -972,7 +1156,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         const email = String(req.body?.email || '').trim().slice(0, 200);
         // Bestellnummer ist freiwillig (widerruf.ts): ohne sie ordnen wir über die Adresse zu.
         const orderNo = String(req.body?.orderNo || '').trim().slice(0, 20);
-        if (name.length < 2 || !EMAIL_SHAPE.test(email)) {
+        if (name.length < 2 || !EMAIL_SHAPE.test(email) || !plainName(name)) {
           return res.status(400).json({ error: 'Bitte Name und E-Mail-Adresse angeben.', code: 'fields_required' });
         }
         if (altcha?.configured) {
@@ -983,7 +1167,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         // Gleiche Antwort für jeden Ausgang. Die Bestätigung geht nur an die
         // Adresse, die an der Bestellung hinterlegt ist.
         res.json({ ok: true, receivedAt, refund: { status: 'requested' } });
-        withdrawPublic({ name, email, orderNo })
+        withdrawPublic({ name, email, orderNo, receivedAt })
           .then(r => { if (!r.matched) log('billing: öffentlicher Widerruf ohne passende Bestellung (gespeichert, Handarbeit)'); })
           .catch(err => console.error('billing: öffentlicher Widerruf fehlgeschlagen:', err?.message || err));
       });
@@ -1002,7 +1186,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         const name = String(req.body?.name || '').trim().slice(0, 160);
         const email = String(req.body?.email || '').trim().slice(0, 200);
         const orderNo = String(req.body?.orderNo || '').trim().slice(0, 20);
-        if (name.length < 2 || !EMAIL_SHAPE.test(email)) {
+        if (name.length < 2 || !EMAIL_SHAPE.test(email) || !plainName(name)) {
           return res.status(400).json({ error: 'Bitte Name und E-Mail-Adresse angeben.', code: 'fields_required' });
         }
         const input = cancelInput(req.body || {});
@@ -1013,9 +1197,18 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         }
         const receivedAt = new Date();
         res.json({ ok: true, receivedAt });
-        cancelPublic({ name, email, orderNo, body: req.body || {} })
+        cancelPublic({ name, email, orderNo, body: req.body || {}, receivedAt })
           .catch(err => console.error('billing: öffentliche Kündigung fehlgeschlagen:', err?.message || err));
       });
+
+    /* Klick auf den Link aus der Eingangsbestätigung (H2, M1). Ohne Anmeldung —
+     * der Token ist die Berechtigung. Die Seite dazu liegt in der App unter
+     * /widerruf/bestaetigen bzw. /kuendigen/bestaetigen und schickt nur den
+     * Token hierher: Ein Mail-Scanner, der den Link abruft, löst nichts aus. */
+    app.post('/api/billing/declarations/confirm', rateLimit({ route: 'declaration-confirm', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+      const r = await confirmDeclaration(req.body?.token);
+      res.status(r.status).json(r.body);
+    });
 
     /* Erklärungen, die Handarbeit brauchen, als erledigt markieren. */
     app.post('/api/admin/billing/declarations/:id/resolve', requireAuth, requireAdmin, async (req, res) => {
@@ -1036,7 +1229,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
 
   return {
-    config: cfg, offer, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic,
+    config: cfg, offer, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
     sendConfirmation, report, runJobs, startJobs, mount, orderSummary,
   };
 }

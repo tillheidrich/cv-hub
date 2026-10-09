@@ -39,6 +39,8 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
   const [email, setEmail] = useState('');
   /** Die gespeicherte Adresse — um zu wissen, ob die alte benachrichtigt wird. */
   const [savedEmail, setSavedEmail] = useState('');
+  /** Neue Adresse, die auf den Klick im Bestätigungslink wartet (M2). */
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   /* Seit 08.10.2026 verlangt der Server für jeden E-Mail-Wechsel das aktuelle
    * Passwort (Technik-Bericht N6): Wer eine Sitzung gekapert hatte, konnte
    * sonst seine Adresse eintragen, 2FA einschalten und den Inhaber aussperren. */
@@ -72,6 +74,7 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
         const [{ user }, status] = await Promise.all([api.me(), api.twofaStatus()]);
         setEmail(user.email ?? '');
         setSavedEmail(user.email ?? '');
+        setPendingEmail(user.pendingEmail ?? null);
         setTfa(status);
       } catch { /* Panel bleibt nutzbar, Sicherheits-Sektion zeigt dann nichts */ }
       try {
@@ -107,11 +110,24 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
     setEmailBusy(true);
     try {
       const before = savedEmail.trim().toLowerCase();
-      const { user } = await api.setEmail(email.trim(), emailPw);
+      const r = await api.setEmail(email.trim(), emailPw);
+      const { user } = r;
+      setEmailPw('');
+      /* Seit 09.10.2026 (M2) gilt eine neue Adresse erst nach dem Klick im
+       * Bestätigungslink. Bis dahin bleibt die alte im Feld und die neue
+       * steht als „wartet auf Bestätigung" darunter. */
+      if (r.pending) {
+        const next = r.pendingEmail ?? user.pendingEmail ?? email.trim();
+        setEmail(user.email ?? '');
+        setSavedEmail(user.email ?? '');
+        setPendingEmail(next);
+        setEmailMsg({ kind: 'ok', text: t.emailPending(next) });
+        return;
+      }
       const now = (user.email ?? '').toLowerCase();
       setEmail(user.email ?? '');
       setSavedEmail(user.email ?? '');
-      setEmailPw('');
+      setPendingEmail(r.pendingEmail ?? user.pendingEmail ?? null);
       setTfa(await api.twofaStatus());
       const base = user.email ? t.emailSaved : t.emailRemoved;
       setEmailMsg({ kind: 'ok', text: before && before !== now ? `${base} ${t.emailOldNotified}` : base });
@@ -221,8 +237,13 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
                 {emailBusy ? '…' : t.save}
               </button>
             </div>
+            {pendingEmail && !(emailMsg && emailMsg.kind === 'ok') && (
+              <div data-pending-email style={{ marginTop: '9px', fontSize: '12px', padding: '7px 10px', borderRadius: '7px', fontFamily: UI, background: 'oklch(0.97 0.02 85)', color: 'oklch(0.40 0.08 70)', border: '1px solid oklch(0.88 0.05 85)' }}>
+                {t.emailPendingNote(pendingEmail)}
+              </div>
+            )}
             {emailMsg && (
-              <div style={{ marginTop: '9px', fontSize: '12px', padding: '7px 10px', borderRadius: '7px', fontFamily: UI,
+              <div role="status" style={{ marginTop: '9px', fontSize: '12px', padding: '7px 10px', borderRadius: '7px', fontFamily: UI,
                 background: emailMsg.kind === 'ok' ? '#f0f7f0' : '#fff0f0',
                 color: emailMsg.kind === 'ok' ? '#2e7d32' : '#c0392b',
                 border: emailMsg.kind === 'ok' ? '1px solid #bcd9bc' : '1px solid #f0c0c0' }}>{emailMsg.text}</div>

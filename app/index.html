@@ -144,7 +144,7 @@
             {
               "@type": "Question",
               "name": "Sind die Vorlagen ATS-tauglich?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Jede Vorlage trägt ein Etikett, wie zuverlässig Bewerbungsparser sie lesen: einspaltige Vorlagen gelten als ATS-stark, Vorlagen mit Seitenspalte als ATS-riskant, weil Personio und Greenhouse mehrspaltige Layouts als Ursache für Lesefehler nennen. Für Portale gibt es zusätzlich eine einspaltige Word-Fassung ohne Tabellen. Das PDF hat eine echte Textebene, deren Reihenfolge Prüfskripte gegen die Vorschau vergleichen. Ob ein bestimmtes System einen Lebenslauf richtig liest, hängt auch von dessen Parser ab." }
+              "acceptedAnswer": { "@type": "Answer", "text": "Jede Vorlage sagt, wofür sie gemacht ist: einspaltige Vorlagen sind als „Gut für Portale“ markiert, Vorlagen mit Seitenspalte sind für Mail und Druck gestaltet, weil Personio und Greenhouse mehrspaltige Layouts als Ursache für Lesefehler nennen. Für Portale gibt es zu jeder Vorlage die ATS-Fassung: derselbe Inhalt einspaltig, als PDF oder Word ohne Tabellen. Das PDF hat eine echte Textebene, deren Reihenfolge Prüfskripte gegen die Vorschau vergleichen. Ob ein bestimmtes System einen Lebenslauf richtig liest, hängt auch von dessen Parser ab." }
             },
             {
               "@type": "Question",
@@ -170,7 +170,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Analytics bewusst nicht eingebaut. Wer welche möchte, trägt sie hier ein
-         und ergänzt den Host in der Content-Security-Policy in nginx.conf. -->
+    <!-- Analytics bewusst nicht eingeschaltet. Optional: Umami (cookie-frei)
+         über diese Domain ausliefern, damit der Browser mit keinem fremden
+         Host spricht und die CSP keinen braucht. Dazu in nginx.conf
+         $umami_host auf den eigenen Umami-Host setzen (Platzhalter
+         analytics.example.com, location /u/) und das Tag unten mit der
+         eigenen Website-ID einkommentieren. Wer kein Analytics will, lässt
+         beides so; die /u/-Blöcke in nginx.conf können dann auch entfallen.
+    <script defer src="/u/script.js" data-host-url="/u" data-website-id="YOUR-UMAMI-WEBSITE-ID"></script>
+    -->
   </body>
 </html>

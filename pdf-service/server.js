@@ -10,9 +10,9 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { readFileSync } from 'node:fs';
 import { pool, initDb, logEvent } from './db.js';
-import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl } from './markdown.js';
+import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl, MAX_MARKDOWN_CHARS } from './markdown.js';
 import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplPasswordResetByAdmin, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
-import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError } from './guards.js';
+import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError, originGuard, subnetOf, clientKey } from './guards.js';
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
 import { prunePhotos, startJanitor } from './janitor.js';
@@ -21,7 +21,7 @@ import { createBilling, billingConfig } from './billing.js';
 import { addGrant, planDetails } from './grants.js';
 import { createVouchers } from './vouchers.js';
 import { createAltcha } from './altcha.js';
-import { tplConfirmEmail } from './mailtexts/index.js';
+import { tplConfirmEmail, tplConfirmEmailChange, tplEmailChangeTaken, tplEmailChangeRequested, tplRegisterExisting } from './mailtexts/index.js';
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -90,7 +90,8 @@ function rateLimit({ route, max: baseMax, windowMs }) {
     // vertrauten Proxy gesetzter Hop) und ist NICHT client-spoofbar. Den rohen
     // X-Forwarded-For-Header direkt zu lesen (linker Wert) hebelte das Rate-
     // Limiting komplett aus. (Security-Review-Finding #1.)
-    const ip = (req.ip || 'unknown').toString();
+    // M3 (09.10.2026): IPv6 je /64, nicht je einzelner Adresse (guards.js).
+    const ip = clientKey(req.ip);
     const key = `${route}:${ip}`;
     const now = Date.now();
     const b = rateBuckets.get(key);
@@ -107,22 +108,25 @@ function rateLimit({ route, max: baseMax, windowMs }) {
     next();
   };
 }
-/* Dasselbe je Netz statt je Adresse (offene Registrierung, öffentlicher
- * Widerruf): IPv4 je /24, IPv6 je /64. Wer viele Adressen eines Netzes hat,
- * teilt sich einen Eimer. */
-function subnetOf(ip) {
-  const s = String(ip || '').replace(/^::ffff:/i, '');
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(s)) return s.split('.').slice(0, 3).join('.') + '.0/24';
-  if (s.includes(':')) {
-    const full = s.split('%')[0];
-    const [head, tail = ''] = full.split('::');
-    const h = head ? head.split(':') : [];
-    const t = tail ? tail.split(':') : [];
-    const groups = full.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
-    return groups.slice(0, 4).map(g => g || '0').join(':') + '::/64';
-  }
-  return s || 'unknown';
+/* Zähler, die nicht an der Adresse hängen, sondern an einem Ziel (Konto,
+ * Mailadresse). bucketBlocked prüft nur, bucketHit zählt. So zählt der
+ * Login je Konto nur Fehlversuche, und die Reset-Mail je Adresse nur
+ * verschickte Mails. */
+function bucketBlocked(key, baseMax) {
+  const b = rateBuckets.get(key);
+  if (!b || b.reset < Date.now()) return 0;
+  return b.count >= baseMax * RATE_FACTOR ? Math.ceil((b.reset - Date.now()) / 1000) : 0;
 }
+function bucketHit(key, windowMs) {
+  const now = Date.now();
+  const b = rateBuckets.get(key);
+  if (!b || b.reset < now) rateBuckets.set(key, { count: 1, reset: now + windowMs });
+  else b.count += 1;
+}
+/* Dasselbe je Netz statt je Adresse (offene Registrierung, öffentlicher
+ * Widerruf, Login, anonymes PDF): IPv4 je /24, IPv6 je /64. Wer viele
+ * Adressen eines Netzes hat, teilt sich einen Eimer. subnetOf steht in
+ * guards.js (mit Test). */
 function subnetLimit({ route, max, windowMs }) {
   const inner = rateLimit({ route: `${route}/net`, max, windowMs });
   return (req, res, next) => inner({ ip: subnetOf(req.ip) }, res, next);
@@ -179,14 +183,24 @@ const DEFAULT_ALLOWED = [
 ];
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const ALLOWLIST = new Set([...DEFAULT_ALLOWED, ...ALLOWED_ORIGINS]);
+/* M6 (09.10.2026): Fremder Ursprung → 403 vor jedem Handler (guards.js),
+ * nicht mehr 500 aus der Fehler-Middleware. Ausgenommen sind nur die
+ * OAuth-Endpunkte ohne Cookie, die ausdrücklich für Browser-Clients gedacht
+ * sind (Access-Control-Allow-Origin: *, siehe oauth.js) — dort schützt PKCE,
+ * nicht der Ursprung. */
+const PUBLIC_CORS_PATHS = new Set([
+  '/api/oauth/token', '/api/oauth/register', '/api/oauth/revoke',
+  '/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp',
+  '/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/mcp',
+]);
+const guardOrigin = originGuard(ALLOWLIST);
+app.use((req, res, next) => (PUBLIC_CORS_PATHS.has(req.path) ? next() : guardOrigin(req, res, next)));
 app.use(cors({
-  origin: (origin, cb) => {
-    // Same-origin requests (no Origin header) always pass — they're either
-    // server-to-server, curl, or the SPA itself hitting its own backend.
-    if (!origin) return cb(null, true);
-    if (ALLOWLIST.has(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin "${origin}" not allowed`));
-  },
+  // Same-origin requests (no Origin header) always pass — they're either
+  // server-to-server, curl, or the SPA itself hitting its own backend. Ein
+  // fremder Ursprung kommt hier nur noch auf den öffentlichen OAuth-Wegen an:
+  // keine CORS-Freigabe mit Cookies, die Handler setzen selbst „*“.
+  origin: (origin, cb) => cb(null, !origin || ALLOWLIST.has(origin)),
   credentials: true,
 }));
 app.use(cookieParser());
@@ -257,6 +271,8 @@ function publicUser(u) {
     // Bezahlmodell (09.10.2026): unlimited | pilot | pass | none.
     plan: planInfo(u),
     emailConfirmed: emailConfirmed(u),
+    // M2: angeforderte neue Adresse, bis sie bestätigt ist. Bis dahin gilt `email`.
+    pendingEmail: u.pending_email ?? null,
   };
 }
 
@@ -585,18 +601,24 @@ const OPEN_REGISTRATION = /^(1|true|yes|on)$/i.test(String(process.env.OPEN_REGI
 const altcha = createAltcha({ pool });
 const CONFIRM_HOURS = 48;
 
-async function issueEmailConfirmation(user, base, lang = 'de') {
+/* kind 'signup': bestätigt die Adresse des Kontos (Double-Opt-in).
+ * kind 'change' (M2, 09.10.2026): bestätigt eine NEUE Adresse; erst der Klick
+ * macht sie zur Adresse des Kontos. Ein neuer Link entwertet alle älteren. */
+async function issueEmailConfirmation(user, base, lang = 'de', { kind = 'signup', email = user.email } = {}) {
   const token = crypto.randomBytes(32).toString('base64url');
+  const to = String(email).toLowerCase();
   await pool.query('UPDATE email_confirmations SET used = true WHERE user_id = $1 AND NOT used', [user.id]);
   await pool.query(
-    `INSERT INTO email_confirmations (token_hash, user_id, email, expires_at) VALUES ($1, $2, $3, now() + make_interval(hours => $4))`,
-    [sha256(token), user.id, String(user.email).toLowerCase(), CONFIRM_HOURS],
+    `INSERT INTO email_confirmations (token_hash, user_id, email, expires_at, kind) VALUES ($1, $2, $3, now() + make_interval(hours => $4), $5)`,
+    [sha256(token), user.id, to, CONFIRM_HOURS, kind],
   );
   if (!base) {
     console.error('confirm-email: keine Basis-URL bekannt (PUBLIC_BASE_URL setzen) — Bestätigungsmail nicht verschickt.');
     return false;
   }
-  return sendMail({ to: user.email, ...tplConfirmEmail({ token, base, lang, productName: (process.env.PRODUCT_NAME || 'CV-Hub').trim() }) });
+  const productName = (process.env.PRODUCT_NAME || 'CV-Hub').trim();
+  const tpl = kind === 'change' ? tplConfirmEmailChange({ token, base, lang, productName }) : tplConfirmEmail({ token, base, lang, productName });
+  return sendMail({ to, ...tpl });
 }
 
 /** Nutzername aus der Mailadresse, wenn keiner angegeben ist: lokaler Teil,
@@ -635,6 +657,15 @@ async function registerOpen(req, res) {
     const dupE = await client.query('SELECT 1 FROM users WHERE lower(email) = $1', [email]);
     if (dupE.rowCount) {
       await client.query('ROLLBACK');
+      /* N5: Die Antwort bleibt (die Oberfläche meldet direkt an, ein
+       * einheitliches „Mail ist unterwegs“ braucht einen anderen Ablauf,
+       * siehe SICHERHEIT.md). Dafür erfährt der Inhaber der Adresse davon —
+       * höchstens einmal am Tag, sonst wäre das ein Mailwerfer. */
+      const k = `register-existing:${email}`;
+      if (!bucketBlocked(k, 1)) {
+        bucketHit(k, 24 * 60 * 60 * 1000);
+        sendMail({ to: email, ...tplRegisterExisting({ base: publicBaseUrl(req) }) }).catch(() => {});
+      }
       return res.status(409).json({ error: 'Für diese E-Mail-Adresse gibt es schon ein Konto. Melde dich an oder setze das Passwort zurück.', code: 'email_taken' });
     }
     if (wanted) {
@@ -779,7 +810,14 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
 // Login: 5/15min/IP — brute-force on a single account would require ~96 days
 // at this rate to try a 6-character lowercase password, with the bcrypt cost
 // on top. That's enough deterrent for the X-shared-link drive-by scenario.
-app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 60 * 1000 }), async (req, res) => {
+/* M3 (09.10.2026): Das Limit je Adresse allein half nicht gegen Proxy-Pools
+ * mit wechselnden Adressen. Dazu jetzt: je Netz (/24 bzw. /64) 20 in 15
+ * Minuten und je Konto 10 Fehlversuche in der Stunde. Das Konto-Limit kann
+ * ein Angreifer bewusst auslösen (Anmeldung eine Stunde gesperrt) — das ist
+ * der Preis dafür, dass verteiltes Raten nicht mehr geht. */
+const LOGIN_ACCOUNT_FAILS = 10;
+const LOGIN_ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
+app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 60 * 1000 }), subnetLimit({ route: 'login', max: 20, windowMs: 15 * 60 * 1000 }), async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   try {
@@ -790,10 +828,18 @@ app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 6
       ? await pool.query('SELECT * FROM users WHERE lower(email) = lower($1)', [username])
       : await pool.query('SELECT * FROM users WHERE lower(username) = lower($1)', [username]);
     const user = rows[0];
+    // Je Konto, nicht je Schreibweise: Name und Adresse teilen sich den Zähler.
+    const acctKey = user ? `login:acct:id:${user.id}` : `login:acct:name:${username.toLowerCase().slice(0, 200)}`;
+    const blockedFor = bucketBlocked(acctKey, LOGIN_ACCOUNT_FAILS);
+    if (blockedFor) {
+      res.setHeader('Retry-After', blockedFor);
+      return res.status(429).json({ error: `Zu viele Fehlversuche für dieses Konto. Bitte ${blockedFor}s warten oder das Passwort zurücksetzen.`, code: 'account_locked' });
+    }
     // Immer einen bcrypt-Vergleich ausführen (Dummy-Hash bei fehlendem Nutzer),
     // damit die Antwortzeit keine gültigen Nutzernamen verrät. (Finding #5.)
     const passOk = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
     if (!user || !passOk) {
+      bucketHit(acctKey, LOGIN_ACCOUNT_WINDOW_MS);
       return res.status(401).json({ error: 'Nutzername oder Passwort falsch.' });
     }
     if (user.disabled) return res.status(403).json({ error: 'Konto gesperrt.' });
@@ -903,7 +949,7 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 app.get('/api/me', requireAuth, async (req, res) => {
   const user = publicUser(req.user);
   user.plan = await planDetails(pool, req.user);
-  res.json({ user, access: user.access, plan: user.plan, emailConfirmed: user.emailConfirmed });
+  res.json({ user, access: user.access, plan: user.plan, emailConfirmed: user.emailConfirmed, pendingEmail: user.pendingEmail });
 });
 
 /* Double-Opt-in: Token aus der Mail (nur sein Hash liegt in der Datenbank).
@@ -921,10 +967,30 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
       [sha256(token)],
     );
     const c = rows[0];
-    if (!c || c.used || new Date(c.expires_at) < new Date() || String(c.current_email || '').toLowerCase() !== c.email) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Der Bestätigungslink ist ungültig oder abgelaufen.', code: 'token_invalid' });
+    const invalid = () => res.status(400).json({ error: 'Der Bestätigungslink ist ungültig oder abgelaufen.', code: 'token_invalid' });
+    if (!c || c.used || new Date(c.expires_at) < new Date()) { await client.query('ROLLBACK'); return invalid(); }
+    if (c.kind === 'change') {
+      /* M2: Erst hier wird die neue Adresse die des Kontos — und zwar nur,
+       * wenn sie noch die angeforderte ist und kein anderes Konto sie
+       * inzwischen hat. Bestätigt ist sie damit auch. */
+      const { rows: u } = await client.query('SELECT id, username, email, pending_email FROM users WHERE id = $1 FOR UPDATE', [c.user_id]);
+      if (!u[0] || String(u[0].pending_email || '').toLowerCase() !== c.email) { await client.query('ROLLBACK'); return invalid(); }
+      const taken = await client.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [c.email, c.user_id]);
+      if (taken.rowCount) {
+        await client.query('UPDATE users SET pending_email = NULL WHERE id = $1', [c.user_id]);
+        await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
+        await client.query('COMMIT');
+        return res.status(409).json({ error: 'Diese Adresse gehört inzwischen zu einem anderen Konto. Bitte eine andere wählen.', code: 'email_taken' });
+      }
+      await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
+      await client.query('UPDATE users SET email = $2, pending_email = NULL, email_confirmed_at = now() WHERE id = $1', [c.user_id, c.email]);
+      await client.query('COMMIT');
+      logEvent(c.user_id, 'email_changed');
+      const old = u[0].email;
+      if (old && old.toLowerCase() !== c.email) sendMail({ to: old, ...tplEmailChanged({ username: u[0].username, newEmail: c.email }) });
+      return res.json({ ok: true, emailConfirmed: true, kind: 'change', email: c.email });
     }
+    if (String(c.current_email || '').toLowerCase() !== c.email) { await client.query('ROLLBACK'); return invalid(); }
     await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
     await client.query('UPDATE users SET email_confirmed_at = coalesce(email_confirmed_at, now()) WHERE id = $1', [c.user_id]);
     await client.query('COMMIT');
@@ -940,6 +1006,13 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
 });
 
 app.post('/api/auth/resend-confirmation', rateLimit({ route: 'resend-confirm', max: 3, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+  // Offener Adresswechsel (M2): dessen Link noch einmal schicken.
+  if (req.user.pending_email) {
+    const taken = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [String(req.user.pending_email).toLowerCase(), req.user.id]);
+    // Gleiche Antwort, auch wenn die Adresse vergeben ist (N5) — dann geht nichts hinaus.
+    const sent = taken.rowCount ? true : await issueEmailConfirmation(req.user, publicBaseUrl(req), 'de', { kind: 'change', email: req.user.pending_email });
+    return res.json({ ok: true, sent: !!sent, pending: true });
+  }
   if (emailConfirmed(req.user)) return res.json({ ok: true, alreadyConfirmed: true });
   if (!req.user.email) return res.status(400).json({ error: 'Im Konto ist keine E-Mail-Adresse hinterlegt.' });
   const sent = await issueEmailConfirmation(req.user, publicBaseUrl(req));
@@ -1021,20 +1094,46 @@ app.post('/api/auth/email', rateLimit({ route: 'setemail', max: 12, windowMs: 30
     return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.', code: 'password_wrong' });
   }
   const oldEmail = req.user.email || null;
-  if (email) {
-    const dupE = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
-    if (dupE.rowCount) return res.status(409).json({ error: 'E-Mail-Adresse ist bereits registriert.' });
-    await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, req.user.id]);
-  } else {
-    // E-Mail entfernt → 2FA kann nicht mehr greifen, also abschalten.
-    await pool.query('UPDATE users SET email = NULL, twofa_enabled = false WHERE id = $1', [req.user.id]);
+  /* M2 (09.10.2026): Die neue Adresse wird nur vorgemerkt (pending_email).
+   * Vorher wurde sie sofort übernommen, und email_confirmed_at blieb stehen —
+   * eine nie bestätigte Adresse galt als bestätigt (Gutschein-Limits ließen
+   * sich so mit einem einzigen Postfach leeren). Jetzt gilt bis zum Klick in
+   * der Mail an die NEUE Adresse die alte.
+   * N5: Die Antwort ist dieselbe, ob die Adresse frei ist oder nicht. Ist sie
+   * vergeben, bekommt ihr Inhaber einen Hinweis statt eines Links. */
+  if (email && email === String(oldEmail || '').toLowerCase()) {
+    await pool.query('UPDATE users SET pending_email = NULL WHERE id = $1', [req.user.id]);
+    await pool.query('UPDATE email_confirmations SET used = true WHERE user_id = $1 AND kind = $2 AND NOT used', [req.user.id, 'change']);
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    return res.json({ ok: true, pending: false, pendingEmail: null, user: publicUser(rows[0]) });
   }
+  if (email) {
+    await pool.query('UPDATE users SET pending_email = $1 WHERE id = $2', [email, req.user.id]);
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const dupE = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
+    const base = publicBaseUrl(req);
+    const lang = String(req.body?.lang || req.get('accept-language') || 'de').slice(0, 2).toLowerCase();
+    if (dupE.rowCount) {
+      const k = `email-change-taken:${email}`;
+      if (!bucketBlocked(k, 1)) {
+        bucketHit(k, 24 * 60 * 60 * 1000);
+        sendMail({ to: email, ...tplEmailChangeTaken({ base }) }).catch(() => {});
+      }
+    } else {
+      issueEmailConfirmation(rows[0], base, lang, { kind: 'change', email })
+        .catch(err => console.error('email-change confirm failed:', err?.message || err));
+    }
+    logEvent(req.user.id, 'email_change_requested');
+    if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChangeRequested({ username: rows[0].username, newEmail: email }) });
+    return res.json({ ok: true, pending: true, pendingEmail: email, user: publicUser(rows[0]) });
+  }
+  // E-Mail entfernt → 2FA kann nicht mehr greifen, also abschalten. Sofort
+  // wirksam: dafür braucht es keinen Nachweis über ein Postfach.
+  await pool.query('UPDATE users SET email = NULL, pending_email = NULL, twofa_enabled = false WHERE id = $1', [req.user.id]);
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
   logEvent(req.user.id, 'email_changed');
-  if (oldEmail && oldEmail.toLowerCase() !== email) {
-    sendMail({ to: oldEmail, ...tplEmailChanged({ username: rows[0].username, newEmail: email || null }) });
-  }
-  res.json({ user: publicUser(rows[0]) });
+  if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChanged({ username: rows[0].username, newEmail: null }) });
+  res.json({ ok: true, pending: false, pendingEmail: null, user: publicUser(rows[0]) });
 });
 
 // ── Zwei-Faktor-Authentifizierung (E-Mail-Code) ─────────────────────────────
@@ -1093,11 +1192,20 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
     // Offene Registrierung: Reset erst, wenn die Adresse bestätigt ist —
     // sonst wäre ein Konto mit fremder Adresse über deren Postfach übernehmbar.
     if (!emailConfirmed(user)) return;
+    /* M3: höchstens drei Reset-Mails je Adresse und Stunde — unabhängig
+     * davon, von wie vielen Adressen die Anfragen kommen. */
+    const toKey = `forgot:to:${String(user.email).toLowerCase()}`;
+    if (bucketBlocked(toKey, 3)) return;
+    bucketHit(toKey, 60 * 60 * 1000);
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 60 min
+    /* N6: gespeichert wird nur der SHA-256 des Tokens (wie bei Bestätigung,
+     * API-Schlüssel und OAuth). Ein Datenbankauszug enthält damit keinen
+     * benutzbaren Reset-Link mehr. Alte Klartext-Token sind nach dem Deploy
+     * wertlos — sie gelten ohnehin nur 60 Minuten. */
     await pool.query(
       'INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)',
-      [token, user.id, expires],
+      [sha256(token), user.id, expires],
     );
     logEvent(user.id, 'password_reset_requested');
     const m = tplPasswordReset({ token, base });
@@ -1116,7 +1224,7 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query('SELECT * FROM password_resets WHERE token = $1 FOR UPDATE', [token]);
+    const { rows } = await client.query('SELECT * FROM password_resets WHERE token = $1 FOR UPDATE', [sha256(token)]);
     const pr = rows[0];
     if (!pr || pr.used || new Date(pr.expires_at) < new Date()) {
       await client.query('ROLLBACK');
@@ -1126,12 +1234,14 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
     // password_changed_at bump entwertet alle Alt-Sessions — wichtig, wenn der
     // Reset der Wiederherstellung nach einer Kompromittierung dient. (Finding #7.)
     await client.query('UPDATE users SET password_hash = $1, password_changed_at = now() WHERE id = $2', [hash, pr.user_id]);
-    await client.query('UPDATE password_resets SET used = true WHERE token = $1', [token]);
+    await client.query('UPDATE password_resets SET used = true WHERE token = $1', [sha256(token)]);
     // Alle anderen offenen Tokens dieses Nutzers entwerten.
     await client.query('UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false', [pr.user_id]);
     await revokeAllCredentials(client, pr.user_id);
     await client.query('COMMIT');
     logEvent(pr.user_id, 'password_reset_done');
+    // Wer sein Passwort über die Mail neu gesetzt hat, ist nicht mehr gesperrt (M3, Konto-Limit).
+    rateBuckets.delete(`login:acct:id:${pr.user_id}`);
     const { rows: u } = await pool.query('SELECT username, email FROM users WHERE id = $1', [pr.user_id]);
     if (u[0]?.email) { const m = tplPasswordChanged({ username: u[0].username }); sendMail({ to: u[0].email, ...m }); }
     res.json({ ok: true });
@@ -1190,6 +1300,8 @@ function imageMagicMatches(buf, mime) {
   return false;
 }
 
+const MAX_PHOTOS_PER_USER = 50;
+const MAX_PHOTO_BYTES_PER_USER = 100 * 1024 * 1024;
 app.post('/api/photos', requireAuth, requireWritable, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   const mime = String(req.body?.mime || '');
   const b64 = String(req.body?.dataBase64 || '');
@@ -1199,6 +1311,12 @@ app.post('/api/photos', requireAuth, requireWritable, rateLimit({ route: 'photos
   if (buf.length < 100) return res.status(400).json({ error: 'Datei zu klein.' });
   if (buf.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Maximal 4 MB.' });
   if (!imageMagicMatches(buf, mime)) return res.status(400).json({ error: 'Dateiformat passt nicht zum angegebenen MIME-Typ.' });
+  /* N4: Obergrenze je Konto. Fotos ohne Verweis räumt prunePhotos nach der
+   * Schonfrist ab; wer trotzdem hier ankommt, lädt in Serie hoch. */
+  const { rows: q } = await pool.query('SELECT count(*)::int AS n, coalesce(sum(size_bytes), 0)::bigint AS bytes FROM photos WHERE user_id = $1', [req.user.id]);
+  if (q[0].n >= MAX_PHOTOS_PER_USER || Number(q[0].bytes) + buf.length > MAX_PHOTO_BYTES_PER_USER) {
+    return res.status(413).json({ error: `Höchstens ${MAX_PHOTOS_PER_USER} Fotos bzw. ${Math.round(MAX_PHOTO_BYTES_PER_USER / 1024 / 1024)} MB je Konto. Bitte nicht mehr benutzte Fotos entfernen.`, code: 'photo_quota' });
+  }
   const id = crypto.randomBytes(12).toString('hex');
   await pool.query('INSERT INTO photos (id, user_id, mime, data, size_bytes) VALUES ($1, $2, $3, $4, $5)', [id, req.user.id, mime, buf, buf.length]);
   // Absolute URL so exported HTML/PDF works outside the app too.
@@ -1502,6 +1620,8 @@ app.post('/api/resumes/:id/import-md', requireAuth, requireWritable, async (req,
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 20) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
+  // H1: Obergrenze vor dem Parser (ein Profil hat höchstens 200 KB, siehe guards.js).
+  if (md.length > MAX_MARKDOWN_CHARS) return res.status(413).json({ error: `Markdown zu groß (höchstens ${Math.round(MAX_MARKDOWN_CHARS / 1000)} KB).`, code: 'markdown_too_large' });
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
   let updated;
@@ -1529,6 +1649,7 @@ app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 10) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
+  if (md.length > MAX_MARKDOWN_CHARS) return res.status(413).json({ error: `Markdown zu groß (höchstens ${Math.round(MAX_MARKDOWN_CHARS / 1000)} KB).`, code: 'markdown_too_large' });
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
   let updated;
@@ -1700,8 +1821,8 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
  */
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
-    const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions] = await Promise.all([
-      pool.query('SELECT id, username, email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at FROM users WHERE id = $1', [req.user.id]),
+    const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions, declarations] = await Promise.all([
+      pool.query('SELECT id, username, email, pending_email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
                     FROM resume_versions v JOIN resumes r ON r.id = v.resume_id
@@ -1713,13 +1834,21 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       pool.query('SELECT id, name, prefix, created_at, last_used_at, revoked FROM api_keys WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT order_no, email, billing_name, country, sku, amount_cents, currency, status, created_at, paid_at,
                          terms_version, withdrawal_version, age_confirmed_18, pass_days, pass_from, pass_until, invoice_no,
-                         refund_status, withdrawn_at, withdraw_channel, withdraw_statement
+                         refund_status, withdrawn_at, withdraw_channel, withdraw_statement,
+                         cancelled_at, cancel_kind, cancel_reason, cancel_effective_at, cancel_channel
                     FROM orders WHERE user_id = $1 ORDER BY created_at`, [req.user.id]),
       // Berechtigungen und Gutschein-Einlösungen (09.10.2026) — ohne Codes.
       pool.query(`SELECT source, kind, days, until_at, ends_at, granted_at, revoked_at, revoke_reason, effective_from, effective_until
                     FROM access_grants WHERE user_id = $1 ORDER BY granted_at, id`, [req.user.id]),
       pool.query(`SELECT redeemed_at, kind, days, granted_from, granted_until, origin
                     FROM voucher_redemptions WHERE user_id = $1 ORDER BY redeemed_at`, [req.user.id]),
+      /* N8: Widerrufs- und Kündigungserklärungen gehören zum Datenauszug —
+       * die des Kontos und die zu seinen Bestellungen (auch öffentlich
+       * eingereichte). Ohne Bestätigungs-Token. */
+      pool.query(`SELECT type, channel, name, email, order_no, received_at, statement, status, note, confirmed_at, resolved_at
+                    FROM declarations
+                   WHERE user_id = $1 OR order_ids && coalesce((SELECT array_agg(id) FROM orders WHERE user_id = $1), '{}'::uuid[])
+                   ORDER BY received_at`, [req.user.id]),
     ]);
 
     const dump = {
@@ -1737,6 +1866,7 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       orders: orders.rows,
       accessGrants: grants.rows,
       voucherRedemptions: redemptions.rows,
+      declarations: declarations.rows,
     };
 
     logEvent(req.user.id, 'dsgvo_export');
@@ -1798,7 +1928,21 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
        * mit Minimaldaten stehen (Aufbewahrungspflicht, Art. 17 Abs. 3 lit. b
        * DSGVO); user_id wird über den Fremdschlüssel NULL. Was an einer
        * bezahlten Bestellung nicht zur Rechnung gehört, kommt weg. */
-      await client.query('DELETE FROM orders WHERE user_id = $1 AND paid_at IS NULL', [req.user.id]);
+      /* N3: Eine Zahlung, die bei Mollie noch offen ist, kann nach der
+       * Löschung noch eingehen. Ihre Bestellung bleibt deshalb stehen (ohne
+       * Konto, user_id wird NULL); kommt die Zahlung, meldet billing.js das
+       * dem Betreiber zur Erstattung. Den Rest räumt der Aufräumjob nach 30
+       * Tagen ab. Gelöscht werden sofort nur Bestellungen ohne Zahlung oder
+       * mit Endstatus. */
+      await client.query(
+        `DELETE FROM orders WHERE user_id = $1 AND paid_at IS NULL
+            AND NOT (mollie_payment_id IS NOT NULL AND status IN ('open', 'pending', 'authorized'))`,
+        [req.user.id],
+      );
+      await client.query(
+        `UPDATE orders SET checkout_url = NULL WHERE user_id = $1 AND paid_at IS NULL`,
+        [req.user.id],
+      );
       const kept = await client.query(
         'UPDATE orders SET checkout_url = NULL, locale = NULL WHERE user_id = $1 AND paid_at IS NOT NULL',
         [req.user.id],
@@ -2121,7 +2265,36 @@ async function optionalAuth(req, _res, next) {
   next();
 }
 
-app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+/* M5 (09.10.2026): Ohne Konto (Demo) höchstens EIN Auftrag gleichzeitig je
+ * Netz (/24 bzw. /64) und 60 je Stunde und Netz. Vorher konnte jeder ohne
+ * Konto mit wenigen Adressen die ganze Warteschlange belegen — und damit
+ * auch Rechnung und Bestellbestätigung aufhalten (die haben jetzt eine
+ * eigene Warteschlange, siehe renderOwnPdf). */
+const anonPdfActive = new Map();
+const anonPdfNetLimit = subnetLimit({ route: 'pdf-anon', max: 60, windowMs: 60 * 60 * 1000 });
+function anonPdfGate(req, res, next) {
+  if (req.user) return next();
+  anonPdfNetLimit(req, res, () => {
+    const net = subnetOf(req.ip);
+    if ((anonPdfActive.get(net) || 0) >= 1) {
+      res.setHeader('Retry-After', '10');
+      return res.status(429).json({ error: 'Aus deinem Netz läuft gerade schon ein PDF-Auftrag ohne Anmeldung. Bitte in 10 Sekunden noch einmal versuchen.', code: 'pdf_busy_anon' });
+    }
+    anonPdfActive.set(net, (anonPdfActive.get(net) || 0) + 1);
+    let done = false;
+    const free = () => {
+      if (done) return;
+      done = true;
+      const n = (anonPdfActive.get(net) || 1) - 1;
+      if (n <= 0) anonPdfActive.delete(net); else anonPdfActive.set(net, n);
+    };
+    res.on('finish', free);
+    res.on('close', free);
+    next();
+  });
+}
+
+app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 60 * 60 * 1000 }), anonPdfGate, async (req, res) => {
   const { html, filename, pageFormat } = req.body || {};
   if (typeof html !== 'string' || html.length < 30) {
     return res.status(400).json({ error: 'Field "html" is required.' });
@@ -2195,11 +2368,13 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
 });
 
 // ── Bezahlung (Bewerbungs-Pass über Mollie) ────────────────────────────────
-/* Rechnung und Vertragsunterlagen laufen über denselben Renderer und dieselbe
- * Warteschlange wie /api/pdf — aus eigenem, schlichtem HTML (invoice.js),
- * nie aus Nutzer-HTML. */
+/* Rechnung und Vertragsunterlagen laufen über denselben Renderer, aber seit
+ * dem 09.10.2026 über eine EIGENE Warteschlange (M5): Eine volle
+ * /api/pdf-Schlange hielt sonst Bestellbestätigung und Rechnung auf. Eigenes,
+ * schlichtes HTML (invoice.js), nie Nutzer-HTML. */
+const ownPdfLimiter = createLimiter({ maxParallel: 1, maxQueue: 50, queueTimeoutMs: 120_000 });
 async function renderOwnPdf(html) {
-  const release = await pdfLimiter.acquire();
+  const release = await ownPdfLimiter.acquire();
   try {
     return await renderer.render(html, { format: 'A4', ownHost: null, timeoutMs: PDF_TIMEOUT_MS });
   } finally {
@@ -2207,7 +2382,7 @@ async function renderOwnPdf(html) {
   }
 }
 const BILLING = billingConfig();
-const billing = createBilling({ pool, config: BILLING, renderPdf: renderOwnPdf });
+const billing = createBilling({ pool, config: BILLING, renderPdf: renderOwnPdf, emailConfirmed });
 billing.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha });
 
 // ── Gutscheine (09.10.2026, vouchers.js) ───────────────────────────────────
@@ -2280,6 +2455,12 @@ async function bootstrapAdmin() {
 /* Seit Express 5 (08.10.2026) landen auch Fehler aus async-Handlern hier.
  * Unter Express 4 blieb eine solche Anfrage bis zum Proxy-Timeout (120 s)
  * hängen (N4), der Kommentar oben versprach mehr, als der Code hielt. */
+/* Live-Befund 09.10.2026: Unbekannte Pfade bekamen die Express-Standardseite
+ * „Cannot GET …“ (HTML, verrät das Framework). Jetzt JSON wie überall. */
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Nicht gefunden.', code: 'not_found' });
+});
+
 app.use((err, req, res, _next) => {
   const status = err && err.status && Number.isInteger(err.status) ? err.status : 500;
   // Postgres meldet eine unbrauchbare Eingabe mit 22P02/22003 — das ist ein
@@ -2321,6 +2502,9 @@ initDb()
       if (/^live_/.test(BILLING.mollieKey) && process.env.NODE_ENV !== 'production') console.warn('billing: Live-Schlüssel außerhalb von NODE_ENV=production.');
       if (BILLING.priceCents > 25_000 && !BILLING.seller.taxId) console.warn('billing: Preis über 250 € — die Rechnung braucht dann SELLER_TAX_ID (Paragraf 14 Abs. 4 UStG).');
       if (process.env.BILLING_JOBS !== '0') billing.startJobs();
+    } else if (process.env.BILLING_JOBS !== '0') {
+      // Auch ohne Kauf: unbestätigte öffentliche Erklärungen nach 14 Tagen melden.
+      billing.startJobs({ onlyDeclarations: true });
     }
     if (OPEN_REGISTRATION && !altcha.configured) console.warn('register: OPEN_REGISTRATION=1 ohne ALTCHA_HMAC_KEY — offene Registrierung bleibt zu.');
     app.listen(port, () => console.log(`cv-api listening on :${port}`));
