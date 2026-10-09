@@ -207,3 +207,23 @@ select.bl-input { appearance: none; background-image: linear-gradient(45deg, tra
 .bl-legal-embed .bl-legal p { margin: 0 0 14px; }
 .bl-legal-embed .bl-legal ul { margin: 0 0 14px; padding-left: 20px; }
 .bl-summary-foot { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--hair); font-size: var(--t-sm); line-height: 1.5; color: var(--ink); }
+
+/* Zugangscodes (Gutscheine, 09.10.2026): Codefeld in Monoschrift, daneben
+   der Knopf; auf dem Telefon untereinander. Die Bedingungen als ruhige Liste,
+   der geprüfte Code als kleiner Abriss wie auf einem Ticket. */
+.bl-code-row { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 560px) { .bl-code-row { flex-direction: row; align-items: stretch; } .bl-code-row .bl-input { flex: 1 1 auto; } }
+.bl-code-input { font-family: var(--ui-mono); font-size: 17px; letter-spacing: 0.08em; text-transform: uppercase; }
+.bl-code-input::placeholder { text-transform: none; letter-spacing: 0; }
+.bl-code-btn { min-height: 46px !important; padding: 0 18px !important; font-size: var(--t-md) !important; justify-content: center; }
+.bl-code-chip { display: inline-flex; align-items: center; margin: 4px 0 12px; padding: 6px 12px; border-radius: 10px; background: var(--accent-wash); color: var(--accent-ink); font-family: var(--ui-mono); font-size: var(--t-sm); font-weight: 600; letter-spacing: 0.08em; border: 1px dashed oklch(0.55 0.12 264 / 0.45); word-break: break-all; }
+.bl-terms { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.bl-terms li { position: relative; padding-left: 20px; font-size: var(--t-md); line-height: 1.5; color: var(--ink); }
+.bl-terms li::before { content: ''; position: absolute; left: 4px; top: 0.6em; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.bl-terms strong { font-weight: 640; }
+.bl-voucher { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.bl-grants { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); color: var(--ink-2); }
+.bl-grants li { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.bl-grants b { color: var(--ink); font-weight: 600; }
+.bl-quiet-link { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--t-sm); color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.bl-quiet-link:hover { color: var(--ink); }

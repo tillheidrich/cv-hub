@@ -1,5 +1,6 @@
 // Postgres connection + schema bootstrap for cv-api.
 import pg from 'pg';
+import { migrateGrants } from './grants.js';
 
 const { Pool } = pg;
 
@@ -354,6 +355,135 @@ CREATE TABLE IF NOT EXISTS invoice_counters (
   year  INTEGER PRIMARY KEY,
   last  INTEGER NOT NULL
 );
+
+-- ── Gutscheine und Herkunft je Berechtigung (09.10.2026) ──────────────────
+-- Einmalige Datenmigrationen (z. B. Grants für den Altbestand) merken sich
+-- hier, dass sie gelaufen sind.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  name    TEXT PRIMARY KEY,
+  ran_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Jede Berechtigung eine Zeile. users.access_until und plan_kind sind nur
+-- noch der Spiegel der Neuberechnung aus diesen Zeilen (grants.js).
+--   source: order (bezahlte Bestellung), voucher (Gutschein), pilot
+--           (Einladung mit Laufzeit), admin (Freischaltung von Hand),
+--           legacy (übernommener Altwert, siehe grants.js ensureBaseline)
+--   kind:   days, lifetime, set (nur admin/legacy: Ende = until_at, NULL = unbegrenzt)
+--   ends_at: Kündigung — der Abschnitt endet spätestens hier
+--   effective_from/effective_until: zuletzt berechneter Abschnitt (Anzeige,
+--           Auswertung); bei widerrufenen Zeilen der Stand zum Widerruf
+CREATE TABLE IF NOT EXISTS access_grants (
+  id               SERIAL PRIMARY KEY,
+  user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source           TEXT NOT NULL CHECK (source IN ('order', 'voucher', 'pilot', 'admin', 'legacy')),
+  source_id        TEXT,
+  kind             TEXT NOT NULL CHECK (kind IN ('days', 'lifetime', 'set')),
+  days             INTEGER CHECK (days IS NULL OR (days >= 1 AND days <= 3650)),
+  until_at         TIMESTAMPTZ,
+  ends_at          TIMESTAMPTZ,
+  granted_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  revoked_at       TIMESTAMPTZ,
+  revoke_reason    TEXT,
+  effective_from   TIMESTAMPTZ,
+  effective_until  TIMESTAMPTZ,
+  created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK ((kind = 'days' AND days IS NOT NULL) OR (kind <> 'days' AND days IS NULL)),
+  CHECK (kind <> 'set' OR source IN ('admin', 'legacy'))
+);
+CREATE INDEX IF NOT EXISTS access_grants_user_idx ON access_grants(user_id, granted_at, id);
+-- Eine Bestellung gewährt höchstens einmal Laufzeit (Webhook-Wiederholungen).
+CREATE UNIQUE INDEX IF NOT EXISTS access_grants_order_uq ON access_grants(source_id) WHERE source = 'order';
+
+-- Kampagnen bündeln Codes (z. B. LinkedIn + Newsletter): höchstens eine
+-- Einlösung je Konto und Kampagne.
+CREATE TABLE IF NOT EXISTS voucher_campaigns (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  name_key    TEXT UNIQUE NOT NULL,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Gutscheine. Gespeichert wird nur der SHA-256 der Normalform; öffentliche
+-- Codes zusätzlich im Klartext (sie sind nicht geheim), persönliche nur mit
+-- den letzten vier Zeichen als Hinweis.
+CREATE TABLE IF NOT EXISTS vouchers (
+  id               SERIAL PRIMARY KEY,
+  name             TEXT NOT NULL,
+  campaign_id      INTEGER REFERENCES voucher_campaigns(id) ON DELETE RESTRICT,
+  distribution     TEXT NOT NULL CHECK (distribution IN ('personal', 'public')),
+  code_hash        TEXT UNIQUE NOT NULL,
+  code_plain       TEXT,
+  code_hint        TEXT,
+  kind             TEXT NOT NULL CHECK (kind IN ('days', 'lifetime')),
+  days             INTEGER,
+  max_redemptions  INTEGER CHECK (max_redemptions IS NULL OR max_redemptions >= 1),
+  redemptions      INTEGER NOT NULL DEFAULT 0 CHECK (redemptions >= 0),
+  redeem_until     TIMESTAMPTZ,
+  active           BOOLEAN NOT NULL DEFAULT true,
+  batch_id         TEXT,
+  deactivated_at   TIMESTAMPTZ,
+  deactivated_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  deactivate_note  TEXT,
+  created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK ((kind = 'days' AND days BETWEEN 1 AND 3650) OR (kind = 'lifetime' AND days IS NULL)),
+  CHECK (distribution = 'personal' OR redeem_until IS NOT NULL),
+  CHECK (distribution = 'personal' OR code_plain IS NOT NULL),
+  CHECK (max_redemptions IS NULL OR redemptions <= max_redemptions)
+);
+CREATE INDEX IF NOT EXISTS vouchers_campaign_idx ON vouchers(campaign_id);
+
+-- Typ, Dauer, Kampagne und Code sind nach der ersten Einlösung fest. Es gibt
+-- dafür ohnehin keinen Bearbeiten-Weg; die Sperre steht trotzdem in der
+-- Datenbank, damit ihn auch kein späterer Code aus Versehen baut.
+CREATE OR REPLACE FUNCTION vouchers_guard() RETURNS trigger AS $$
+BEGIN
+  IF OLD.redemptions > 0 AND (
+       NEW.kind IS DISTINCT FROM OLD.kind OR NEW.days IS DISTINCT FROM OLD.days
+    OR NEW.campaign_id IS DISTINCT FROM OLD.campaign_id OR NEW.distribution IS DISTINCT FROM OLD.distribution
+    OR NEW.code_hash IS DISTINCT FROM OLD.code_hash) THEN
+    RAISE EXCEPTION 'voucher % ist schon eingelöst: Typ, Dauer, Kampagne und Code sind fest', OLD.id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS vouchers_guard ON vouchers;
+CREATE TRIGGER vouchers_guard BEFORE UPDATE ON vouchers FOR EACH ROW EXECUTE FUNCTION vouchers_guard();
+
+-- Einlösungen. Bleiben nach einer Kontolöschung ohne Personenbezug stehen
+-- (user_id NULL), damit Zähler und Auswertung stimmen.
+CREATE TABLE IF NOT EXISTS voucher_redemptions (
+  id             SERIAL PRIMARY KEY,
+  voucher_id     INTEGER NOT NULL REFERENCES vouchers(id) ON DELETE RESTRICT,
+  campaign_id    INTEGER REFERENCES voucher_campaigns(id) ON DELETE RESTRICT,
+  user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  grant_id       INTEGER REFERENCES access_grants(id) ON DELETE SET NULL,
+  redeemed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  kind           TEXT NOT NULL,
+  days           INTEGER,
+  granted_from   TIMESTAMPTZ,
+  granted_until  TIMESTAMPTZ,
+  origin         TEXT NOT NULL DEFAULT 'account'
+);
+-- Doppeleinlösung je Konto+Code und Konto+Kampagne verhindert die Datenbank.
+CREATE UNIQUE INDEX IF NOT EXISTS voucher_redemptions_voucher_user_uq ON voucher_redemptions(voucher_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS voucher_redemptions_campaign_user_uq ON voucher_redemptions(campaign_id, user_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS voucher_redemptions_user_idx ON voucher_redemptions(user_id);
+
+-- Protokoll der Admin-Aktionen (Gutscheine anlegen und deaktivieren,
+-- Laufzeiten ändern). Keine vollständigen persönlichen Codes.
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id          SERIAL PRIMARY KEY,
+  admin_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action      TEXT NOT NULL,
+  target      TEXT,
+  details     JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit(created_at DESC);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */
@@ -363,6 +493,9 @@ export async function initDb(retries = 12) {
       await pool.query('SELECT 1');
       await pool.query(SCHEMA);
       console.log('db: schema ready');
+      // Einmalig: Berechtigungen für den Altbestand nachtragen, ohne eine
+      // gespeicherte Laufzeit zu ändern (Abweichungen stehen im Log).
+      await migrateGrants(pool);
       return;
     } catch (err) {
       if (attempt === retries) throw err;

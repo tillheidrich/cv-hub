@@ -31,6 +31,7 @@ import {
 import { attachmentNames, legalLang } from './mailtexts/legal.js';
 import { sendMail as defaultSend } from './mail.js';
 import { planInfo, MAX_ACCESS_DAYS } from './access.js';
+import { addGrant, revokeOrderGrant, capOrderGrant, planDetails } from './grants.js';
 
 const DAY_MS = 86_400_000;
 export const WITHDRAWAL_DAYS = 14;
@@ -219,24 +220,29 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       const o = rows[0];
       if (!o || ['paid', 'withdrawn', 'refunded'].includes(o.status)) { await client.query('ROLLBACK'); return false; }
       const paidAt = payment?.paidAt && !Number.isNaN(Date.parse(payment.paidAt)) ? new Date(payment.paidAt) : new Date();
-      const now = Date.now();
+      const { rows: nowRow } = await client.query('SELECT now() AS now');
+      const now = nowRow[0].now;
       let passFrom = new Date(now);
+      let passUntil = new Date(passFrom.getTime() + o.pass_days * DAY_MS);
       if (o.user_id) {
-        const { rows: u } = await client.query('SELECT id, role, access_until FROM users WHERE id = $1 FOR UPDATE', [o.user_id]);
+        const { rows: u } = await client.query('SELECT id, role, access_until, plan_kind FROM users WHERE id = $1 FOR UPDATE', [o.user_id]);
         const user = u[0];
-        if (user && user.role !== 'admin' && user.access_until) {
-          // Laufzeit addiert sich ab dem späteren von heute und bisherigem Ende.
-          passFrom = new Date(Math.max(now, new Date(user.access_until).getTime()));
-          const until = new Date(passFrom.getTime() + o.pass_days * DAY_MS);
-          await client.query(
-            `UPDATE users SET access_until = $2, plan_kind = 'pass', access_notice14_at = NULL, access_notice3_at = NULL WHERE id = $1`,
-            [user.id, until],
-          );
+        /* Die Bestellung wird eine Berechtigung (grants.js); die Laufzeit
+         * entsteht aus der Neuberechnung: Sie schließt an alles an, was
+         * schon läuft — bezahlt, Pilot oder Gutschein.
+         * Unbegrenzte Konten (Bestand, Admin) bleiben unbegrenzt — der
+         * Checkout lässt sie gar nicht erst kaufen; kommt doch eine Zahlung,
+         * wird nichts begrenzt. Ein dauerhafter Gratiszugang bleibt
+         * dauerhaft; die Zahlung wird trotzdem als Berechtigung vermerkt. */
+        const unlimited = !user || user.role === 'admin' || (!user.access_until && user.plan_kind !== 'lifetime');
+        if (!unlimited) {
+          const { grant } = await addGrant(client, user.id, { source: 'order', sourceId: o.id, kind: 'days', days: o.pass_days }, { now, log });
+          if (grant.effective_from && grant.effective_until) {
+            passFrom = new Date(grant.effective_from);
+            passUntil = new Date(grant.effective_until);
+          }
         }
-        // Unbegrenzte Konten (Bestand, Admin) bleiben unbegrenzt — der Checkout
-        // lässt sie gar nicht erst kaufen; kommt doch eine Zahlung, wird nichts begrenzt.
       }
-      const passUntil = new Date(passFrom.getTime() + o.pass_days * DAY_MS);
       const year = berlinYear(paidAt);
       const { rows: c } = await client.query(
         `INSERT INTO invoice_counters (year, last) VALUES ($1, 1)
@@ -381,6 +387,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     if (plan?.kind === 'unlimited') {
       return { status: 409, body: { error: 'Dein Konto ist unbegrenzt freigeschaltet. Du brauchst keinen Pass.', code: 'plan_unlimited' } };
     }
+    if (plan?.kind === 'lifetime') {
+      return { status: 409, body: { error: 'Dein dauerhafter Gratiszugang ist aktiv. Du musst keinen Bewerbungs-Pass kaufen.', code: 'plan_lifetime' } };
+    }
 
     const client = await pool.connect();
     try {
@@ -476,26 +485,10 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     }
   }
 
-  /** Wie viel Laufzeit gehört dieser Bestellung noch? Ende der Bestellung
-   *  (bzw. Kündigungszeitpunkt) minus dem späteren von jetzt und Beginn. */
-  function remainingMs(o, at = Date.now()) {
-    if (!o.pass_from || !o.pass_until) return 0;
-    const end = Math.min(new Date(o.pass_until).getTime(), o.cancel_effective_at ? new Date(o.cancel_effective_at).getTime() : Infinity);
-    return Math.max(0, end - Math.max(at, new Date(o.pass_from).getTime()));
-  }
-
-  /** Laufzeit am Konto kürzen, nie unter jetzt. Andere Pässe und eine
-   *  Pilot-Laufzeit bleiben stehen, weil nur der Rest DIESER Bestellung
-   *  abgezogen wird. */
-  async function shortenPass(client, userId, ms) {
-    if (!userId || ms <= 0) return;
-    await client.query(
-      `UPDATE users SET access_until = greatest(now(), access_until - make_interval(secs => $2::double precision)),
-                        access_notice14_at = NULL, access_notice3_at = NULL
-        WHERE id = $1 AND access_until IS NOT NULL AND role <> 'admin'`,
-      [userId, ms / 1000],
-    );
-  }
+  /* Laufzeit nach Widerruf und Kündigung: nicht mehr hier abgezogen, sondern
+   * in grants.js neu berechnet (revokeOrderGrant, capOrderGrant). Nur der
+   * Anspruch DIESER Bestellung fällt weg bzw. endet früher; andere Pässe,
+   * Pilot-Laufzeit und Gutscheine bleiben. */
 
   async function recordDeclaration({ type, channel, name, email, orderNo, userId, orderIds = [], receivedAt, statement, status, note }) {
     const id = crypto.randomUUID();
@@ -554,7 +547,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
           WHERE id = $1`,
         [o.id, receivedAt, channel, statement],
       );
-      await shortenPass(client, o.user_id, remainingMs(o, receivedAt.getTime()));
+      await revokeOrderGrant(client, o, { at: receivedAt, reason: 'withdrawal', log });
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -672,14 +665,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         const o = rows[0];
         if (!o || o.status !== 'paid' || o.cancelled_at) { await client.query('ROLLBACK'); if (o?.cancelled_at) done.push({ order: o, effectiveAt: o.cancel_effective_at, already: true }); continue; }
         const effectiveAt = cancelEffective(o, when, date, receivedAt.getTime());
-        const before = remainingMs(o, receivedAt.getTime());
-        const after = remainingMs({ ...o, cancel_effective_at: effectiveAt }, receivedAt.getTime());
         await client.query(
           `UPDATE orders SET cancelled_at = $2, cancel_kind = $3, cancel_reason = $4, cancel_effective_at = $5, cancel_channel = $6, updated_at = now()
             WHERE id = $1`,
           [o.id, receivedAt, kind, reason || null, effectiveAt, channel],
         );
-        await shortenPass(client, o.user_id, before - after);
+        await capOrderGrant(client, o, effectiveAt, { at: receivedAt, log });
         await client.query('COMMIT');
         done.push({ order: { ...o, cancelled_at: receivedAt, cancel_effective_at: effectiveAt }, effectiveAt });
       } catch (err) {
@@ -942,7 +933,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     app.get('/api/billing/orders', requireAuth, async (req, res) => {
       const { rows } = await pool.query('SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100', [req.user.id]);
       res.setHeader('Cache-Control', 'no-store');
-      res.json({ orders: rows.map(orderSummary), plan: planInfo(req.user) });
+      res.json({ orders: rows.map(orderSummary), plan: await planDetails(pool, req.user) });
     });
 
     app.get('/api/billing/orders/:id/invoice.pdf', rateLimit({ route: 'invoice', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {

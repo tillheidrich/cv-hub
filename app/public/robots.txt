@@ -4,5 +4,7 @@ Disallow: /share/
 Disallow: /pdfapi/
 
 # Sitemap is the canonical entry — /share/* tokens are personal and must
-# never end up in a public index.
-Sitemap: https://example.org/sitemap.xml
+# never end up in a public index. The ratgeber guides under /ratgeber/ are
+# listed there. On `npm run build` scripts/ratgeber-build.mjs rewrites the
+# Sitemap line below from PUBLIC_BASE_URL and regenerates sitemap.xml.
+Sitemap: https://cv.example.com/sitemap.xml

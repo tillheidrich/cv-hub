@@ -18,6 +18,8 @@ import { buildShareSnapshot, shareResponse } from './share.js';
 import { prunePhotos, startJanitor } from './janitor.js';
 import { accessInfo, requireWritable, isAccessExpired, startAccessNotices, MAX_ACCESS_DAYS, planInfo, passRequiredMessage } from './access.js';
 import { createBilling, billingConfig } from './billing.js';
+import { addGrant, planDetails } from './grants.js';
+import { createVouchers } from './vouchers.js';
 import { createAltcha } from './altcha.js';
 import { tplConfirmEmail } from './mailtexts/index.js';
 
@@ -282,6 +284,14 @@ const DUMMY_HASH = bcrypt.hashSync('cv-timing-equalizer-not-a-real-password', 10
 
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 
+/* Woher die Anmeldung kommt (Sitzung, API-Schlüssel, OAuth/MCP). Nicht
+ * aufzählbar, damit es in keiner JSON-Antwort landet. Gebraucht vom
+ * Gutschein-Einlösen, das nur mit Sitzung geht. */
+function markAuth(u, via) {
+  Object.defineProperty(u, 'authVia', { value: via, enumerable: false });
+  return u;
+}
+
 async function loadUser(req) {
   // 1. API-key auth (MCP / programmatic access). On hit we return immediately.
   // On miss / DB-error we *fall through* to cookie auth — earlier this used
@@ -299,7 +309,7 @@ async function loadUser(req) {
       );
       if (rows[0]) {
         pool.query('UPDATE api_keys SET last_used_at = now() WHERE key_hash = $1', [hash]).catch(() => {});
-        return rows[0];
+        return markAuth(rows[0], 'apikey');
       }
     } catch { /* fall through to cookie */ }
   }
@@ -308,7 +318,7 @@ async function loadUser(req) {
   if (auth && auth.startsWith('Bearer cvm_')) {
     try {
       const u = await userForAccessToken(pool, auth.slice(7).trim());
-      if (u) return u;
+      if (u) return markAuth(u, 'oauth');
     } catch { /* fall through to cookie */ }
   }
   // 2. cookie session (browser)
@@ -333,7 +343,7 @@ async function loadUser(req) {
     if (decoded.pcm !== undefined) {
       if (decoded.pcm !== pwdVersionMs(u)) return null;
     } else if ((decoded.pcat ?? 0) !== pwdVersion(u)) return null;
-    return u;
+    return markAuth(u, 'session');
   } catch {
     return null;
   }
@@ -735,10 +745,17 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
     const hash = await bcrypt.hash(password, 10);
     const { rows: created } = await client.query(
       `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until)
-       VALUES ($1, $2, $3, $4, now(), now() + make_interval(days => $5::int)) RETURNING *`,
-      [username, hash, role, email || null, accessDays],
+       VALUES ($1, $2, $3, $4, now(), NULL) RETURNING *`,
+      [username, hash, role, email || null],
     );
-    const user = created[0];
+    let user = created[0];
+    /* Laufzeit aus dem Code als Berechtigung (grants.js); die Neuberechnung
+     * setzt access_until = jetzt + access_days. Ohne Laufzeit bleibt das
+     * Konto unbegrenzt (keine Zeile). */
+    if (accessDays) {
+      await addGrant(client, user.id, { source: 'pilot', sourceId: inviteCode, kind: 'days', days: accessDays });
+      ({ rows: [user] } = await client.query('SELECT * FROM users WHERE id = $1', [user.id]));
+    }
 
     if (!firstUser) {
       await client.query('UPDATE invite_codes SET uses = uses + 1 WHERE code = $1', [inviteCode]);
@@ -873,15 +890,19 @@ app.post('/api/auth/logout', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user) });
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const user = publicUser(req.user);
+  // Plan mit Herkunft (grants, freeUntil, hasPaid) — siehe grants.js planDetails.
+  user.plan = await planDetails(pool, req.user);
+  res.json({ user });
 });
 
 /* Dasselbe unter dem kürzeren Pfad, mit der Laufzeit zusätzlich oben.
  * access: null = unbegrenzt; sonst { until, expired, daysLeft, notice,
  * readOnly } — notice 'soon' ab 14 Tagen, 'final' ab 3 Tagen, 'expired'. */
-app.get('/api/me', requireAuth, (req, res) => {
+app.get('/api/me', requireAuth, async (req, res) => {
   const user = publicUser(req.user);
+  user.plan = await planDetails(pool, req.user);
   res.json({ user, access: user.access, plan: user.plan, emailConfirmed: user.emailConfirmed });
 });
 
@@ -1679,7 +1700,7 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
  */
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
-    const [user, resumes, versions, shares, photos, events, apiKeys, orders] = await Promise.all([
+    const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions] = await Promise.all([
       pool.query('SELECT id, username, email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
@@ -1694,6 +1715,11 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
                          terms_version, withdrawal_version, age_confirmed_18, pass_days, pass_from, pass_until, invoice_no,
                          refund_status, withdrawn_at, withdraw_channel, withdraw_statement
                     FROM orders WHERE user_id = $1 ORDER BY created_at`, [req.user.id]),
+      // Berechtigungen und Gutschein-Einlösungen (09.10.2026) — ohne Codes.
+      pool.query(`SELECT source, kind, days, until_at, ends_at, granted_at, revoked_at, revoke_reason, effective_from, effective_until
+                    FROM access_grants WHERE user_id = $1 ORDER BY granted_at, id`, [req.user.id]),
+      pool.query(`SELECT redeemed_at, kind, days, granted_from, granted_until, origin
+                    FROM voucher_redemptions WHERE user_id = $1 ORDER BY redeemed_at`, [req.user.id]),
     ]);
 
     const dump = {
@@ -1709,6 +1735,8 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       events: events.rows,
       apiKeys: apiKeys.rows,
       orders: orders.rows,
+      accessGrants: grants.rows,
+      voucherRedemptions: redemptions.rows,
     };
 
     logEvent(req.user.id, 'dsgvo_export');
@@ -1955,23 +1983,23 @@ app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async
 app.post('/api/admin/users/:id/access', requireAuth, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Ungültige Nutzer-ID.' });
-  const { rows: cur } = await pool.query('SELECT id, role, access_until FROM users WHERE id = $1', [id]);
+  const { rows: cur } = await pool.query('SELECT id, role, access_until, plan_kind FROM users WHERE id = $1', [id]);
   if (!cur[0]) return res.status(404).json({ error: 'Nutzer nicht gefunden.' });
   if (cur[0].role === 'admin') return res.status(400).json({ error: 'Admin-Konten haben keine Laufzeit.' });
   const body = req.body || {};
-  let rows;
+  /* Seit 09.10.2026 als Berechtigung (grants.js, source 'admin'): { days } ist
+   * ein Abschnitt ab dem späteren von jetzt und bisherigem Ende, { until }
+   * setzt das Ende (kind 'set'). Die Laufzeit entsteht aus der Neuberechnung,
+   * Gutscheine und Bestellungen bleiben dabei erhalten. */
+  let grant;
   if (body.days !== undefined) {
     const days = parseInt(body.days, 10);
     if (!Number.isInteger(days) || days < 1 || days > MAX_ACCESS_DAYS) {
       return res.status(400).json({ error: `Verlängerung: 1 bis ${MAX_ACCESS_DAYS} Tage.` });
     }
+    if (cur[0].plan_kind === 'lifetime') return res.status(409).json({ error: 'Dieses Konto hat einen dauerhaften Gratiszugang.' });
     if (!cur[0].access_until) return res.status(409).json({ error: 'Dieses Konto ist unbegrenzt. Für eine Begrenzung ein Enddatum setzen.' });
-    ({ rows } = await pool.query(
-      `UPDATE users SET access_until = greatest(access_until, now()) + make_interval(days => $2::int),
-                        access_notice14_at = NULL, access_notice3_at = NULL
-        WHERE id = $1 RETURNING access_until`,
-      [id, days],
-    ));
+    grant = { source: 'admin', kind: 'days', days, createdBy: req.user.id };
   } else if (Object.prototype.hasOwnProperty.call(body, 'until')) {
     let until = null;
     if (body.until !== null && body.until !== '') {
@@ -1980,15 +2008,30 @@ app.post('/api/admin/users/:id/access', requireAuth, requireAdmin, async (req, r
       if (!d || Number.isNaN(d.getTime())) return res.status(400).json({ error: 'Enddatum im Format JJJJ-MM-TT.' });
       until = d;
     }
-    ({ rows } = await pool.query(
-      'UPDATE users SET access_until = $2, access_notice14_at = NULL, access_notice3_at = NULL WHERE id = $1 RETURNING access_until',
-      [id, until],
-    ));
+    grant = { source: 'admin', kind: 'set', untilAt: until, createdBy: req.user.id };
   } else {
     return res.status(400).json({ error: 'Erwartet: { days } oder { until }.' });
   }
+  const client = await pool.connect();
+  let accessUntil;
+  try {
+    await client.query('BEGIN');
+    await addGrant(client, id, grant);
+    const { rows } = await client.query('SELECT access_until FROM users WHERE id = $1', [id]);
+    accessUntil = rows[0].access_until;
+    await client.query(
+      'INSERT INTO admin_audit (admin_id, action, target, details) VALUES ($1, $2, $3, $4)',
+      [req.user.id, 'user_access', String(id), JSON.stringify({ days: grant.days ?? null, until: grant.kind === 'set' ? grant.untilAt : undefined, accessUntil })],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
   logEvent(req.user.id, 'admin_access_change');
-  res.json({ ok: true, accessUntil: rows[0].access_until });
+  res.json({ ok: true, accessUntil });
 });
 
 /* Auswertung je Einladungscode — der Messpunkt des Pilots (Startup-Bericht,
@@ -2166,6 +2209,16 @@ async function renderOwnPdf(html) {
 const BILLING = billingConfig();
 const billing = createBilling({ pool, config: BILLING, renderPdf: renderOwnPdf });
 billing.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha });
+
+// ── Gutscheine (09.10.2026, vouchers.js) ───────────────────────────────────
+const vouchers = createVouchers({
+  pool,
+  // Wirklich offen nur mit Bot-Schutz; sonst weist die Registrierung ab.
+  registrationOpen: () => OPEN_REGISTRATION && altcha.configured,
+  emailConfirmed,
+  baseUrl: BILLING.base,
+});
+vouchers.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, loadUser });
 
 // ── Start ───────────────────────────────────────────────────────────────────
 

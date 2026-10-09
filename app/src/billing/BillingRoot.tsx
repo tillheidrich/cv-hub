@@ -1,7 +1,7 @@
 /**
  * Wurzel der App: die öffentlichen Seiten mit eigener Adresse (Preise, Kauf,
  * Danke, Widerruf, AGB, Widerrufsbelehrung, Impressum, Datenschutz,
- * E-Mail-Bestätigung) — alles andere ist wie bisher `App`.
+ * E-Mail-Bestätigung, Zugangscode) — alles andere ist wie bisher `App`.
  */
 import { lazy, Suspense } from 'react';
 import { ImpressumPage, PrivacyPage } from '../screens/LegalPages';
@@ -16,6 +16,7 @@ const WithdrawPage = lazy(() => import('./WithdrawPage'));
 const CancelPage = lazy(() => import('./CancelPage'));
 const LegalTextPage = lazy(() => import('./LegalTextPage'));
 const ConfirmEmailPage = lazy(() => import('./ConfirmEmail'));
+const CodePage = lazy(() => import('./CodePage'));
 
 function back() {
   if (window.history.length > 1) window.history.back();
@@ -37,6 +38,7 @@ export default function BillingRoot() {
       case 'terms': return <LegalTextPage doc="agb" />;
       case 'withdrawalPolicy': return <LegalTextPage doc="widerruf" />;
       case 'confirmEmail': return <ConfirmEmailPage token={r.token} />;
+      case 'code': return <CodePage />;
       case 'imprint': return <ImpressumPage onBack={back} lang={lang} />;
       case 'privacy': return <PrivacyPage onBack={back} lang={lang} />;
     }

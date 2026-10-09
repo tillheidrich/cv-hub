@@ -32,7 +32,7 @@ export const MAX_ACCESS_DAYS = 3650;
 
 /** Ist die Laufzeit dieses Kontos vorbei? Admins: nie. */
 export function isAccessExpired(user, now = Date.now()) {
-  if (!user || user.role === 'admin' || !user.access_until) return false;
+  if (!user || user.role === 'admin' || user.plan_kind === 'lifetime' || !user.access_until) return false;
   return new Date(user.access_until).getTime() <= now;
 }
 
@@ -42,7 +42,7 @@ export function isAccessExpired(user, now = Date.now()) {
  * Das Banner im Editor liest nur dieses Feld; es rechnet nichts selbst.
  */
 export function accessInfo(user, now = Date.now()) {
-  if (!user || user.role === 'admin' || !user.access_until) return null;
+  if (!user || user.role === 'admin' || user.plan_kind === 'lifetime' || !user.access_until) return null;
   const until = new Date(user.access_until);
   const ms = until.getTime() - now;
   const expired = ms <= 0;
@@ -73,6 +73,8 @@ export function expiredMessage(user) {
  *
  * plan.kind:
  *   unlimited  Admin oder access_until NULL (Bestand, Einladung ohne Laufzeit)
+ *   lifetime   dauerhafter Gratiszugang aus einem Gutschein (grants.js);
+ *              wie unlimited ohne Ablauf, aber ausdrücklich so gewährt
  *   pilot      Laufzeit aus einem Einladungscode oder vom Admin gesetzt
  *   pass       aktiver, bezahlter Bewerbungs-Pass
  *   none       registriert ohne aktiven Pass (offene Registrierung, oder der
@@ -80,10 +82,17 @@ export function expiredMessage(user) {
  *
  * Abgeleitet nur aus der Zeile in users (access_until, plan_kind, role) —
  * keine zusätzliche Abfrage je Anfrage. plan_kind setzt die Registrierung
- * ('none') und die erste Zahlung ('pass'). Ein abgelaufener Pilot bleibt
- * 'pilot' mit notice 'expired' und der bisherigen Sperre access_expired. */
+ * ('none'); seit den Gutscheinen (09.10.2026) schreibt es nur noch die
+ * Neuberechnung in grants.js ('pass' sobald eine Bestellung oder ein
+ * Zeitgutschein dazukam, 'lifetime' bei dauerhaftem Gratiszugang). Ein
+ * abgelaufener Pilot bleibt 'pilot' mit notice 'expired' und der bisherigen
+ * Sperre access_expired. Herkunft und Gratis-Ende liefert planDetails
+ * (grants.js) für /api/me. */
 export function planInfo(user, now = Date.now()) {
   if (!user) return null;
+  if (user.role !== 'admin' && user.plan_kind === 'lifetime') {
+    return { kind: 'lifetime', until: null, daysLeft: null, notice: null, readOnly: false };
+  }
   if (user.role === 'admin' || !user.access_until) {
     return { kind: 'unlimited', until: null, daysLeft: null, notice: null, readOnly: false };
   }

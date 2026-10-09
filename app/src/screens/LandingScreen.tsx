@@ -68,6 +68,9 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
             <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
             <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
+            {/* Statische Seiten außerhalb der SPA (scripts/ratgeber-build.mjs):
+                normaler Link mit Seitenwechsel, kein navigate(). */}
+            <a href="/ratgeber/">{RATGEBER_LABEL[lang]}</a>
             {offer && <a href={PATHS.pricing} onClick={linkClick(PATHS.pricing)}>{bt.pricing}</a>}
           </nav>
           <div className="lp-lang-row">
@@ -332,6 +335,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <button type="button" onClick={scrollTo('vorlagen')}>{t.nav.templates}</button>
               <button type="button" onClick={scrollTo('funktion')}>{t.nav.howItWorks}</button>
               <button type="button" onClick={scrollTo('faq')}>{t.nav.faq}</button>
+              <a href="/ratgeber/">{RATGEBER_LABEL[lang]}</a>
               <button type="button" onClick={() => onLegal?.('impressum')}>Impressum</button>
               <button type="button" onClick={() => onLegal?.('privacy')}>{({ de: 'Datenschutz', en: 'Privacy', fr: 'Confidentialité', es: 'Privacidad' } as Record<UiLang, string>)[lang]}</button>
               <a href={PATHS.terms} onClick={linkClick(PATHS.terms)}>{bt.terms}</a>
@@ -1039,3 +1043,5 @@ const ES: typeof DE = {
 
 const COPY: Record<UiLang, typeof DE> = { de: DE, en: EN, fr: FR, es: ES };
 const LANG_ORDER: UiLang[] = ['de', 'en', 'fr', 'es'];
+/** Ratgeber unter /ratgeber/ – Bezeichnung wie auf den statischen Seiten (ratgeber-template/texte.mjs). */
+const RATGEBER_LABEL: Record<UiLang, string> = { de: 'Ratgeber', en: 'Guides', fr: 'Guides', es: 'Guías' };

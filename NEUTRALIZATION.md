@@ -3,6 +3,37 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-09, vouchers and guides)
+
+Mirrored diff-based again: files that carry neutralization were merged with
+`git merge-file` (base = the private tool's previous revision), never copied.
+
+- **Guides (`/ratgeber/`): the original operator's articles are not mirrored.**
+  `app/content/ratgeber/` holds the neutralized `README.md` (generic wiki host
+  `https://wiki.example.com`, no collection of the original instance) and one
+  English sample, `example-guide.md`, without `outlineId`. The build also runs
+  with zero articles (empty overview).
+- **No built-in Outline collection.** The private sync script fell back to the
+  original operator's collection ID; here `OUTLINE_RATGEBER_COLLECTION` is
+  required and the sync skips cleanly without it (covered by
+  `ratgebercheck.mjs`, 173/173).
+- **Defaults:** `PUBLIC_BASE_URL` falls back to `https://cv.example.com`
+  (build, block list, robots.txt, Dockerfile); `docker-compose.yml` passes
+  `APP_BASE_URL` as build argument. Site name follows `VITE_APP_NAME`
+  (default `CV-Hub`), publisher defaults to the site name; the guide overview
+  defaults to English.
+- **Vouchers:** the redemption address comes from `PUBLIC_BASE_URL` (server)
+  or the window's origin; no fixed domain in code. The `/code` page title uses
+  `APP_NAME`. `pdf-service/GUTSCHEINE.md` and code comments refer to "the
+  operator" instead of a person; references to private planning notes are
+  removed. UI checks block `analytics.example.com` instead of the original
+  analytics host.
+- **The guard only sees tracked files.** `neutralcheck.sh` uses `git grep`, so
+  before the first `git add` it reported "sauber" while two new files still
+  held credential-shaped literals (a GitHub-token regex in the block list, a
+  PEM header in a test). Both are written so they no longer look like a key.
+  Run the guard after staging.
+
 ## Done (2026-10-09)
 
 - **Operator details in one file.** `app/src/data/operator.ts` holds name,

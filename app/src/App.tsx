@@ -44,6 +44,10 @@ import { PassDialog } from './billing/PassSection';
 import { ConfirmEmailBanner } from './billing/ConfirmEmail';
 import { useOffer, salesOpen } from './billing/hooks';
 import { PATHS, navigate } from './billing/route';
+import { freeOnly, priceOf } from './billing/format';
+import { hasPendingCode } from './billing/pendingCode';
+import { PLAN_EVENT } from './billing/planEvents';
+import { GUTSCHEIN_I18N } from './ui/i18n/gutschein';
 import { cancelUi } from './billing/legalTexts';
 import { BILLING_I18N, type UnlockKey } from './ui/i18n/billing';
 import { api, ApiError, photoIdOf } from './data/api';
@@ -244,6 +248,25 @@ export default function App() {
 
   useEffect(() => {
     api.me().then(d => setAuthUser(d.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false));
+  }, []);
+
+  /* Gutschein in „Mein Pass" eingelöst (billing/planEvents.ts): Plan sofort
+   * neu holen, damit Bänder und Nur-Lese-Modus ohne Neuanmeldung stimmen. */
+  useEffect(() => {
+    const on = () => {
+      setAccessExpiredHit(false);
+      api.me().then(d => setAuthUser(d.user)).catch(() => {});
+    };
+    window.addEventListener(PLAN_EVENT, on);
+    return () => window.removeEventListener(PLAN_EVENT, on);
+  }, []);
+
+  /** Anmeldung oder Registrierung über die Startseite. Liegt ein gemerkter
+   *  Zugangscode bereit (Seite /code), geht es dorthin zurück — der Code muss
+   *  nicht noch einmal eingetippt werden. */
+  const handleAuth = useCallback((u: AuthUser) => {
+    setAuthUser(u);
+    if (hasPendingCode()) navigate(PATHS.code);
   }, []);
 
   /* Rücksprung nach dem Anmelden.
@@ -959,7 +982,7 @@ export default function App() {
 
   if (!authUser && !demoMode) {
     if (showAuth) {
-      return <AuthScreen onAuth={setAuthUser} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
+      return <AuthScreen onAuth={handleAuth} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
                          initialInvite={initialInvite} initialMode={initialInvite ? 'register' : 'login'} />;
     }
     return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange} onLegal={(p) => navigate(p === 'impressum' ? PATHS.imprint : PATHS.privacy)} />;
@@ -996,11 +1019,20 @@ export default function App() {
     ? `${passBand.kind}-${passBand.notice ?? 'none'}|${passBand.until ?? ''}`
     : access?.notice ? `${access.notice}|${access.until}` : (accessExpiredHit ? 'expired|?' : null);
   const passUntil = passBand?.until ? formatAccessDate(passBand.until, uiLang) : '…';
+  /* Laufzeit nur aus Gutscheinen: Das Band spricht vom Gratiszugang, nennt
+   * „es wird nichts abgebucht" und bietet erst nach Ablauf den freiwilligen
+   * Kauf an („90 Tage für 9 € freischalten"). */
+  const G = GUTSCHEIN_I18N[uiLang];
+  const freeBand = !!passBand && !neverHadPass && freeOnly(passBand);
+  const passBuyLabel = freeBand && passExpired && offer
+    ? G.unlock(offer.days, priceOf(offer, uiLang))
+    : neverHadPass ? Z.getPass : Z.extendPass;
   const accessBanner = accessNoticeKey && accessHidden !== accessNoticeKey ? (
     <div className="ui-access-banner ui" role="status" data-noprint data-notice={passBand ? `${passBand.kind}-${passBand.notice ?? 'none'}` : access?.notice ?? 'expired'}>
       <span>
         {passBand ? (
           neverHadPass ? Z.planNone
+            : freeBand ? (passExpired ? G.freeExpired(passUntil) : G.freeSoon(passUntil))
             : passExpired ? Z.passExpired(passUntil)
             : passBand.notice === 'soon' ? Z.passSoon(passUntil, passBand.daysLeft ?? 0)
             : passBand.notice === 'final' ? Z.passFinal(passUntil, passBand.daysLeft ?? 0)
@@ -1013,9 +1045,9 @@ export default function App() {
         <button type="button" className="ui-btn ui-btn-soft" style={{ minHeight: '32px', fontSize: 'var(--t-xs)' }}
           onClick={() => (isMobile ? setMPanel('export') : setPanel('export'))}>{Z.exportNow}</button>
       )}
-      {passBand && salesOpen(offer) && (
+      {passBand && salesOpen(offer) && (!freeBand || passExpired) && (
         <button type="button" className="ui-btn ui-btn-primary" style={{ minHeight: '32px', fontSize: 'var(--t-xs)' }}
-          onClick={() => navigate(PATHS.checkout)}>{neverHadPass ? Z.getPass : Z.extendPass}</button>
+          onClick={() => navigate(PATHS.checkout)}>{passBuyLabel}</button>
       )}
       <button type="button" className="ui-btn ui-icon-btn" aria-label={Z.dismiss} title={Z.dismiss}
         style={{ minHeight: '32px', width: '32px', minWidth: '32px', color: 'inherit' }}

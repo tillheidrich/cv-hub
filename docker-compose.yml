@@ -91,7 +91,12 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./app
+    build:
+      context: ./app
+      args:
+        # Base for canonical, og:url and the sitemap of the static guides
+        # under /ratgeber/ (scripts/ratgeber-build.mjs).
+        PUBLIC_BASE_URL: ${APP_BASE_URL:-}
     ports:
       - "8080:80"
     depends_on:

@@ -33,6 +33,8 @@ export function SiteFooter({ lang, showPricing = true }: { lang: UiLang; showPri
           {links.map(([href, label, strong]) => (
             <a key={href} href={href} onClick={linkClick(href)} data-strong={strong ? 'true' : undefined}>{label}</a>
           ))}
+          {/* Statische Seiten außerhalb der SPA (scripts/ratgeber-build.mjs) – normaler Link, kein SPA-Routing. */}
+          <a href="/ratgeber/">{({ de: 'Ratgeber', en: 'Guides', fr: 'Guides', es: 'Guías' } as Record<UiLang, string>)[lang]}</a>
         </nav>
         <div className="bl-footer-meta">{APP_NAME}</div>
       </div>

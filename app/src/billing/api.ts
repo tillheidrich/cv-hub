@@ -12,7 +12,7 @@
  */
 import { apiErrorFrom } from '../data/api';
 import type { AuthUser, Plan } from '../data/api';
-export type { Plan, PlanKind } from '../data/api';
+export type { Plan, PlanKind, PlanGrant } from '../data/api';
 
 const BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined) || '/pdfapi';
@@ -105,6 +105,126 @@ export const billingApi = {
     req<CancelResult>('/api/billing/cancel', { method: 'POST', body: JSON.stringify(p) }),
   cancelPublic: (p: CancelInput & { name: string; email: string; orderNo: string; altcha: string }) =>
     req<CancelResult>('/api/billing/cancel-public', { method: 'POST', body: JSON.stringify(p) }),
+};
+
+/* ── Gutscheine (Schnittstellenvertrag „Gutscheine", 09.10.2026) ─────────────
+ * Die Vorschau reserviert nichts; erst `redeem` verbraucht einen Platz. Der
+ * Code geht nur im Anfragekörper an den Server, nie in eine Adresse. */
+
+/** Fehlergründe aus Vorschau und Einlösung. */
+export type VoucherReason =
+  | 'invalid' | 'expired' | 'exhausted' | 'inactive' | 'already_redeemed'
+  | 'campaign_redeemed' | 'already_lifetime' | 'email_unconfirmed' | 'auth_required';
+export const VOUCHER_REASONS: readonly VoucherReason[] = [
+  'invalid', 'expired', 'exhausted', 'inactive', 'already_redeemed',
+  'campaign_redeemed', 'already_lifetime', 'email_unconfirmed', 'auth_required',
+];
+
+export type VoucherPreview =
+  | {
+    ok: true;
+    kind: 'days' | 'lifetime';
+    days: number | null;
+    redeemUntil: string | null;
+    limited: boolean;
+    limitTotal: number | null;
+    alreadyLifetime?: boolean;
+    registrationOpen: boolean;
+  }
+  | { ok: false; reason: VoucherReason; registrationOpen?: boolean };
+
+export interface RedeemResult {
+  ok: true;
+  plan: Plan;
+  grant: { kind: 'days' | 'lifetime'; days: number | null; from: string; until: string | null };
+}
+
+/** Admin: ein Gutschein, wie GET /api/admin/vouchers ihn liefert
+ *  (pdf-service/vouchers.js, publicView). Persönliche Codes stehen hier nie
+ *  im Klartext, nur `codeHint` („…ABCD"). */
+export interface AdminVoucher {
+  id: string | number;
+  name: string;
+  distribution: 'personal' | 'public';
+  code?: string | null;
+  codeHint?: string | null;
+  campaign?: string | null;
+  campaignId?: string | number | null;
+  kind: 'days' | 'lifetime';
+  days: number | null;
+  maxRedemptions: number | null;
+  redemptions: number;
+  redeemUntil: string | null;
+  active: boolean;
+  /** active | inactive | expired | exhausted (Server rechnet). */
+  status?: 'active' | 'inactive' | 'expired' | 'exhausted';
+  createdAt: string;
+  /** Satz wie „100 Zugänge für je 30 Tage, einlösbar bis …". */
+  summary?: string | null;
+  /** Kopierbarer Aktionshinweis (nur öffentlich), ohne Adresse. */
+  announcement?: string | null;
+  /** Öffentliche Einlöseadresse <PUBLIC_BASE_URL>/code. */
+  redeemUrl?: string | null;
+}
+export interface AdminRedemption {
+  redeemedAt: string;
+  account: string | null;
+  accountDeleted?: boolean;
+  kind: 'days' | 'lifetime';
+  days?: number | null;
+  grantedFrom?: string | null;
+  grantedUntil?: string | null;
+}
+/** Eine Zeile der Auswertung (je Kampagne bzw. Gutschein ohne Kampagne, je
+ *  Zugangsart). Käufe sind bei dauerhaften Zugängen null. */
+export interface VoucherStatsRow {
+  campaign: string | null;
+  campaignId?: string | number | null;
+  voucherId?: string | number | null;
+  kind: 'days' | 'lifetime';
+  redemptions: number;
+  usedPassFeature: number;
+  buyers: number | null;
+  purchases: number | null;
+  refundedPurchases: number | null;
+  conversionPercent?: number | null;
+}
+export interface VoucherStats {
+  campaigns: VoucherStatsRow[];
+  byKind?: Record<'days' | 'lifetime', Omit<VoucherStatsRow, 'campaign' | 'kind'>>;
+  vouchers?: (Omit<VoucherStatsRow, 'campaign'> & { id: string | number; name: string; campaign: string | null })[];
+  notes?: string[];
+}
+export interface CreateVoucherInput {
+  name: string;
+  distribution: 'personal' | 'public';
+  code?: string;
+  campaign?: string;
+  kind: 'days' | 'lifetime';
+  days?: number;
+  maxRedemptions: number | null;
+  confirmUnlimited?: true;
+  redeemUntil?: string;
+  count?: number;
+}
+export interface CreateVoucherResult { codes?: string[]; voucher?: AdminVoucher; vouchers?: AdminVoucher[] }
+
+export const voucherApi = {
+  preview: (code: string) =>
+    req<VoucherPreview>('/api/vouchers/preview', { method: 'POST', body: JSON.stringify({ code }) }),
+  /** Einlösen. Fehler kommen als ApiError mit `code` aus VoucherReason.
+   *  `origin` nur zur Auswertung (Seite /code oder „Mein Pass"). */
+  redeem: (code: string, origin: 'code_page' | 'account' = 'account') =>
+    req<RedeemResult>('/api/vouchers/redeem', { method: 'POST', body: JSON.stringify({ code, origin }) }),
+  // Verwaltung (nur role=admin, serverseitig geprüft)
+  list: () => req<{ vouchers: AdminVoucher[]; redeemUrl?: string }>('/api/admin/vouchers'),
+  create: (p: CreateVoucherInput) =>
+    req<CreateVoucherResult>('/api/admin/vouchers', { method: 'POST', body: JSON.stringify(p) }),
+  deactivate: (id: string | number) =>
+    req<{ ok: boolean }>(`/api/admin/vouchers/${encodeURIComponent(String(id))}/deactivate`, { method: 'POST' }),
+  redemptions: (id: string | number) =>
+    req<{ redemptions: AdminRedemption[] }>(`/api/admin/vouchers/${encodeURIComponent(String(id))}/redemptions`),
+  stats: () => req<VoucherStats>('/api/admin/voucher-stats'),
 };
 
 /** Preis als Endpreis in der Oberflächensprache, z. B. „9 €" / „€9". Ganze

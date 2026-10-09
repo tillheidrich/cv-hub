@@ -20,6 +20,7 @@ export type BillingRoute =
   | { page: 'terms' }
   | { page: 'withdrawalPolicy' }
   | { page: 'confirmEmail'; token: string | null }
+  | { page: 'code' }
   | { page: 'imprint' }
   | { page: 'privacy' };
 
@@ -34,6 +35,9 @@ export const PATHS = {
   terms: '/agb',
   withdrawalPolicy: '/widerrufsbelehrung',
   confirmEmail: '/email-bestaetigen',
+  /** Zugangscode einlösen (Gutscheine). Bewusst ohne Code-Parameter: Codes
+   *  stehen nie in einer Adresse. */
+  code: '/code',
   imprint: '/impressum',
   privacy: '/datenschutz',
 } as const;
@@ -52,6 +56,7 @@ export function matchBillingRoute(pathname: string, search: string): BillingRout
     case PATHS.imprint: return { page: 'imprint' };
     case PATHS.privacy: return { page: 'privacy' };
     case PATHS.confirmEmail: return { page: 'confirmEmail', token: q.get('token') };
+    case PATHS.code: return { page: 'code' };
   }
   // Bestätigungslink auch als Pfad: /email-bestaetigen/<token>
   const m = /^\/email-bestaetigen\/([A-Za-z0-9_-]{8,200})$/.exec(p);

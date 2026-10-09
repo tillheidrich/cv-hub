@@ -26,12 +26,31 @@ export interface AuthUser {
 /** Laufzeit-Modell aus /api/me und den Login-Antworten (Schnittstellenvertrag
  *  Bezahlung, „Plan-Modell"). `none` = Konto ohne aktiven Pass: lesen,
  *  exportieren, löschen ja, schreiben nein. */
-export type PlanKind = 'unlimited' | 'pilot' | 'pass' | 'none';
+export type PlanKind = 'unlimited' | 'lifetime' | 'pilot' | 'pass' | 'none';
+/** Herkunft einer Berechtigung (Gutscheine, 09.10.2026): bezahlte Bestellung,
+ *  Gutschein oder Pilot-Platz. Nur die eigenen, ohne Kampagnennamen. */
+export interface PlanGrant {
+  source: 'order' | 'voucher' | 'pilot' | 'admin';
+  kind: 'days' | 'lifetime';
+  days: number | null;
+  grantedAt: string;
+  from?: string | null;
+  until?: string | null;
+  label?: string;
+}
 export interface Plan {
+  /** `lifetime` = dauerhafter Gratiszugang aus einem Gutschein: kein Ablauf,
+   *  nie eine Kaufaufforderung. */
   kind: PlanKind;
   until: string | null;
   daysLeft: number | null;
   notice: 'soon' | 'final' | 'expired' | null;
+  /** Alle nicht widerrufenen Berechtigungen (seit den Gutscheinen). */
+  grants?: PlanGrant[];
+  /** Ende inklusive Gratiszeit (Server rechnet). */
+  freeUntil?: string | null;
+  /** Gibt es mindestens eine bezahlte Bestellung? */
+  hasPaid?: boolean;
 }
 
 /** Plan und Bestätigungsstand stehen je nach Route am Nutzer oder daneben —

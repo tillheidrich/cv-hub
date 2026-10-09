@@ -19,7 +19,8 @@ import { track } from '../data/track';
 import { billingApi, type Offer } from './api';
 import BillingShell from './BillingShell';
 import AccountStep from './AccountStep';
-import { errorText, priceOf } from './format';
+import { errorText, isLifetime, priceOf } from './format';
+import { GUTSCHEIN_I18N } from '../ui/i18n/gutschein';
 import { ConfirmEmailBanner } from './ConfirmEmail';
 import { useMe, useOffer, useTitle, salesOpen } from './hooks';
 import { orderUi } from './legalTexts';
@@ -58,6 +59,22 @@ function Checkout({ lang }: { lang: UiLang }) {
         <div className="bl-card">
           <h1 className="bl-h2">{t.errClosed}</h1>
           <p className="bl-lede">{t.pricingSoon}</p>
+          <div className="bl-actions">
+            <button type="button" className="ui-btn ui-btn-primary" onClick={() => navigate('/')}>{t.toTool}</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  // Dauerhafter Gratiszugang (Gutschein): kein Kauf, keine Bestellübersicht.
+  // Der Server lehnt einen Kauf in diesem Fall ohnehin ab (409 plan_lifetime).
+  if (user && isLifetime(user.plan)) {
+    const g = GUTSCHEIN_I18N[lang];
+    return (
+      <section className="bl-hero">
+        <div className="bl-card" data-checkout-lifetime>
+          <h1 className="bl-h2">{g.coLifetimeTitle}</h1>
+          <p className="bl-lede">{g.coLifetimeBody}</p>
           <div className="bl-actions">
             <button type="button" className="ui-btn ui-btn-primary" onClick={() => navigate('/')}>{t.toTool}</button>
           </div>

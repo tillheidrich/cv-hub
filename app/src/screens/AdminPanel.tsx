@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../data/api';
 import type { InviteCode, AdminUser, AccessRequest } from '../data/api';
+import AdminVouchers from './AdminVouchers';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -49,7 +50,7 @@ type Stats = {
 };
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<'invites' | 'users' | 'requests'>('invites');
+  const [tab, setTab] = useState<'invites' | 'users' | 'requests' | 'vouchers'>('invites');
   const [stats, setStats] = useState<Stats | null>(null);
   const [invites, setInvites] = useState<InviteCodeX[]>([]);
   const [users, setUsers] = useState<AdminUserX[]>([]);
@@ -159,17 +160,17 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <div data-modal-backdrop="true" style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={onClose}>
+    <div data-modal-backdrop="true" style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(8px, 3vw, 24px)' }} onClick={onClose}>
       <div data-modal="true" style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '760px', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '22px 26px 16px', borderBottom: '1px solid oklch(0.91 0.005 264)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '22px clamp(14px, 4vw, 26px) 16px', borderBottom: '1px solid oklch(0.91 0.005 264)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontFamily: SERIF, fontSize: '21px', fontWeight: 700, color: 'oklch(0.21 0.021 264)' }}>Admin</div>
-            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>Einladungscodes & Nutzerverwaltung</div>
+            <div style={{ fontSize: '12px', color: 'oklch(0.52 0.012 264)', fontFamily: UI }}>Einladungscodes, Gutscheine & Nutzerverwaltung</div>
           </div>
           <button type="button" onClick={onClose} aria-label="Schließen" style={{ background: 'none', border: 'none', fontSize: '22px', color: '#767676', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
 
-        <div style={{ padding: '20px 26px' }}>
+        <div style={{ padding: '20px clamp(14px, 4vw, 26px)' }}>
           {/* Stats */}
           {stats && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginBottom: '20px' }}>
@@ -185,14 +186,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-            <button type="button" style={tabBtn(tab === 'invites')} onClick={() => setTab('invites')}>Einladungscodes</button>
-            <button type="button" style={tabBtn(tab === 'requests')} onClick={() => setTab('requests')}>
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <button type="button" style={tabBtn(tab === 'invites')} aria-pressed={tab === 'invites'} onClick={() => setTab('invites')}>Einladungscodes</button>
+            <button type="button" style={tabBtn(tab === 'vouchers')} aria-pressed={tab === 'vouchers'} onClick={() => setTab('vouchers')} data-tab="vouchers">Gutscheine</button>
+            <button type="button" style={tabBtn(tab === 'requests')} aria-pressed={tab === 'requests'} onClick={() => setTab('requests')}>
               Anfragen{pendingCount > 0 && (
                 <span style={{ marginLeft: '6px', background: tab === 'requests' ? '#fff' : 'oklch(0.55 0.216 264)', color: tab === 'requests' ? 'oklch(0.21 0.021 264)' : '#fff', borderRadius: '999px', padding: '1px 6px', fontSize: '10.5px', fontWeight: 700 }}>{pendingCount}</span>
               )}
             </button>
-            <button type="button" style={tabBtn(tab === 'users')} onClick={() => setTab('users')}>Nutzer ({users.length})</button>
+            <button type="button" style={tabBtn(tab === 'users')} aria-pressed={tab === 'users'} onClick={() => setTab('users')}>Nutzer ({users.length})</button>
           </div>
 
           {err && <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '8px', padding: '8px 11px', fontSize: '12px', color: '#c0392b', marginBottom: '14px', fontFamily: UI }}>{err}</div>}
@@ -314,6 +316,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
               ))}
             </>
           )}
+
+          {tab === 'vouchers' && <AdminVouchers />}
 
           {tab === 'users' && (
             <>

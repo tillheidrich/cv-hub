@@ -19,6 +19,7 @@ import { useOffer, useTitle, salesOpen } from './hooks';
 import { PATHS, navigate, linkClick } from './route';
 import { orderUi } from './legalTexts';
 import { APP_NAME } from '../brand';
+import { GUTSCHEIN_I18N } from '../ui/i18n/gutschein';
 
 /** Die beiden Karten „Ohne Konto" und „Bewerbungs-Pass" — auf /preise und
  *  als Abschnitt der Startseite. */
@@ -108,6 +109,10 @@ function PricingBody({ lang, offer }: { lang: UiLang; offer: Offer | null }) {
 
       <div className="bl-section" style={{ marginTop: 'clamp(24px, 4vw, 40px)' }}>
         <PricingCards lang={lang} offer={offer} onFree={goFree} />
+        {/* Zurückhaltend, nicht als zweiter Kaufknopf. */}
+        <p style={{ margin: '10px 2px 0' }}>
+          <a className="bl-quiet-link" href={PATHS.code} onClick={linkClick(PATHS.code)} data-code-link>{GUTSCHEIN_I18N[lang].haveCode}</a>
+        </p>
       </div>
 
       <section className="bl-section" aria-labelledby="bl-table-h">

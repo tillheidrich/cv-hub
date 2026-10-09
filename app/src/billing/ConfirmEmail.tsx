@@ -11,6 +11,7 @@ import BillingShell from './BillingShell';
 import { useTitle } from './hooks';
 import { PATHS, navigate } from './route';
 import { errorText } from './format';
+import { hasPendingCode } from './pendingCode';
 import './billing.css';
 import { APP_NAME } from '../brand';
 
@@ -51,7 +52,12 @@ function Body({ token, lang }: { token: string | null; lang: UiLang }) {
     once.current = true;
     // Den Schlüssel nicht in der Adresszeile stehen lassen.
     try { window.history.replaceState({}, '', PATHS.confirmEmail); } catch { /* ignore */ }
-    billingApi.confirmEmail(token).then(() => setState('ok'), e => { setMsg(errorText(e, lang)); setState('bad'); });
+    billingApi.confirmEmail(token).then(() => {
+      // Gemerkter Zugangscode (Seite /code): direkt dorthin zurück, damit die
+      // Einlösung ohne erneutes Eintippen weitergeht.
+      if (hasPendingCode()) { navigate(PATHS.code, { replace: true }); return; }
+      setState('ok');
+    }, e => { setMsg(errorText(e, lang)); setState('bad'); });
   }, [token, lang]);
 
   return (
