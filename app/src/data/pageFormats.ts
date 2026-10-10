@@ -47,3 +47,33 @@ export function getPageFormat(id?: PageFormat | string): PageFormatSpec {
   if (id && id in PAGE_FORMATS) return PAGE_FORMATS[id as PageFormat];
   return PAGE_FORMATS.a4;
 }
+
+// ── Seitenzahl ──────────────────────────────────────────────────────────────
+//
+// Frage vom 10.10.2026: „wollen wir von Max. 3 Seiten auf 4 oder so gehen?"
+// Entscheidung: bis vier Seiten als Ziel wählbar. Begründung: Für die
+// Maschine ist die Seitenzahl kein Kriterium (Personio nennt keine, Textkernel
+// deckelt die Texterkennung erst bei zehn Seiten). Für den Menschen gilt in
+// Deutschland eine bis zwei Seiten (Bundesagentur für Arbeit), in Wissenschaft
+// und Technik mit Publikationen oder Projektlisten auch mehr. Ab Seite drei
+// sagt das Prüfen-Paneel das dazu (LONG_CV_HINT).
+//
+// Was über vier Seiten hinausgeht, wird nie still abgeschnitten: Die Vorschau
+// setzt weiter bis zur Grenze des PDF-Dienstes (pdf-service/pdf.js, MAX_PAGES)
+// und meldet den Überlauf. Bis zum 10.10.2026 schnitt der Seitenmodus „Auto"
+// bei drei Seiten ab, ohne etwas zu sagen.
+
+/** Größte Seitenzahl, die das Werkzeug ohne Überlaufmeldung setzt. */
+export const MAX_CV_PAGES = 4;
+/** Grenze des PDF-Dienstes (pdf-service/pdf.js, MAX_PAGES). Bis hierhin
+ *  wird gesetzt, auch wenn MAX_CV_PAGES überschritten ist — damit nichts
+ *  fehlt, sondern nur gemeldet wird. */
+export const PDF_MAX_PAGES = 6;
+
+/** Hinweis ab der dritten Seite, für das Prüfen-Paneel. */
+export const LONG_CV_HINT: Record<'de' | 'en' | 'fr' | 'es', (pages: number) => string> = {
+  de: n => `${n} Seiten. In Deutschland sind ein bis zwei Seiten üblich, in Wissenschaft und Technik auch mehr, etwa mit Publikationen oder einer Projektliste.${n > MAX_CV_PAGES ? ` Über ${MAX_CV_PAGES} Seiten liest das kaum noch jemand ganz: kürzen oder eine Kurzfassung beilegen.` : ''}`,
+  en: n => `${n} pages. In Germany one to two pages are usual; in academia and engineering more is fine, for example with publications or a project list.${n > MAX_CV_PAGES ? ` Beyond ${MAX_CV_PAGES} pages hardly anyone reads it all: shorten it or add a short version.` : ''}`,
+  fr: n => `${n} pages. En Allemagne, une à deux pages sont l’usage ; dans la recherche et la technique, davantage est courant, par exemple avec des publications ou une liste de projets.${n > MAX_CV_PAGES ? ` Au-delà de ${MAX_CV_PAGES} pages, presque personne ne lit tout : raccourcissez ou joignez une version courte.` : ''}`,
+  es: n => `${n} páginas. En Alemania lo habitual son una o dos páginas; en ciencia y tecnología también más, por ejemplo con publicaciones o una lista de proyectos.${n > MAX_CV_PAGES ? ` Más de ${MAX_CV_PAGES} páginas casi nadie las lee enteras: acorta o añade una versión breve.` : ''}`,
+};

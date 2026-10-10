@@ -86,9 +86,10 @@ async function closeUnlock(page) {
 }
 const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(250); await page.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 /* `skip`: Regeln mit vorhandenem, nicht von der Gratis-Grenze verursachtem
- * Befund. Die Startseite der Profile meldet nested-interactive an der
- * Profilzeile (div role=button mit Knöpfen darin) — mit und ohne Grenze
- * gleich, siehe „Startseite ohne Grenze (Vergleich)". */
+ * Befund. Bis Runde 7 meldete die Profilübersicht nested-interactive (div
+ * role=button mit Knöpfen darin); seit Runde 8 (10.10.2026) öffnet die Karte
+ * über eine Fläche des Öffnen-Knopfs, der Befund ist weg und wird hier
+ * ausdrücklich mitgeprüft. */
 async function axe(page, name, skip = []) {
   await page.evaluate(AXE);
   const r = await page.evaluate(async sk => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } })).violations
@@ -181,7 +182,7 @@ await shot(page, 'export-menue-gesperrt-1440');
 await wAts.click();
 check(await unlockOpen(page) === 'docx', 'Word ATS → Freischalt-Paneel „docx" statt Datei');
 const unlockText = await page.locator('[data-unlock]').innerText().catch(() => '');
-check(/Word gibt es mit dem Pass/.test(unlockText) && /9 €/.test(norm(unlockText)) && /PDF deines Lebenslaufs bleibt ohne Konto kostenlos/.test(unlockText), 'Paneel nennt Word, Preis und dass das PDF frei bleibt');
+check(/Word( und LaTeX)? gibt es mit dem Pass/.test(unlockText) && /9 €/.test(norm(unlockText)) && /PDF deines Lebenslaufs bleibt ohne Konto kostenlos/.test(unlockText), 'Paneel nennt Word, Preis und dass das PDF frei bleibt');
 await shot(page, 'freischalt-docx-1440');
 await closeUnlock(page);
 await openMenu(page);
@@ -192,6 +193,24 @@ await page.waitForTimeout(600);
 check(downloads(page, '.docx') === 0, 'keine .docx-Datei entstanden');
 const ev = await page.evaluate(() => window.__ev.filter(e => e[0] === 'unlock_panel_view').map(e => e[1].feature));
 check(ev.includes('docx'), 'Messung unlock_panel_view mit feature=docx', ev.join(','));
+
+// LaTeX (seit 10.10.2026) im Pass wie Word, RenderCV-YAML frei.
+await openMenu(page);
+const wTex = menuItem(page, 'LaTeX (.tex)');
+check(await wTex.locator('[data-lock]').count() > 0 && hasPrice(await wTex.innerText()), 'Menü: LaTeX mit Schloss und Preiszeile');
+await wTex.click();
+check(await unlockOpen(page) === 'docx', 'LaTeX → Freischalt-Paneel statt Datei');
+await closeUnlock(page);
+await page.waitForTimeout(400);
+check(downloads(page, '.tex') === 0, 'keine .tex-Datei entstanden');
+{
+  const before = downloads(page, '.yaml');
+  await openMenu(page);
+  await menuItem(page, 'RenderCV (YAML)').click();
+  await page.waitForTimeout(1800);
+  check(downloads(page, '.yaml') === before + 1 && await page.locator('[data-unlock]').count() === 0, 'Menü: RenderCV (YAML) lädt, kein Paneel');
+  await closeUnlock(page);
+}
 
 // PDF bleibt frei und prominent.
 const pdfBefore = page.__pdf;
@@ -316,7 +335,7 @@ await dupBtn.click();
 check(await unlockOpen(page) === 'profiles', 'Duplizieren → Paneel');
 await closeUnlock(page);
 check((await localProfiles(page)).length === 1, 'weiterhin genau eine Fassung');
-await axe(page, 'Startseite mit Grenze', ['nested-interactive']);
+await axe(page, 'Startseite mit Grenze');
 await ctx.close();
 
 /* ═══ B. Grenze aus: alles frei, Bestand anlegen ═════════════════════════ */
@@ -352,8 +371,8 @@ await goHome(page);
 check(await page.locator('[data-locked]').count() === 0, 'Startseite ohne Schloss');
 // Vergleich: derselbe Befund ohne Grenze → vorhanden, nicht neu.
 const homeCmp = await page.evaluate(AXE).then(() => page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'rule', values: ['nested-interactive'] } })).violations.length));
-check(homeCmp === 1, 'nested-interactive auf der Profilübersicht schon ohne Grenze vorhanden (nicht neu)', String(homeCmp));
-await axe(page, 'Startseite ohne Grenze', ['nested-interactive']);
+check(homeCmp === 0, 'nested-interactive auf der Profilübersicht behoben (Runde 8)', String(homeCmp));
+await axe(page, 'Startseite ohne Grenze');
 await page.locator('button', { hasText: 'Neuer Lebenslauf' }).first().click();
 await page.locator('input[placeholder="z. B. Bewerbung Stadtwerke"]').fill('Zweite Fassung');
 await page.getByRole('button', { name: /Profil anlegen/ }).click();
@@ -368,7 +387,8 @@ stB.offer = OFFER(true);
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(1500);
 await goHome(page).catch(() => {});
-const rows = await page.locator('[role=button][aria-label]').allInnerTexts();
+// Seit Runde 8 ist jede Fassung eine Karte mit Öffnen-Knopf (aria-label „Lebenslauf „…" öffnen").
+const rows = await page.locator('button[aria-label$="öffnen"]').evaluateAll(els => els.map(e => e.getAttribute('aria-label') || ''));
 check(rows.some(r => r.includes('Zweite Fassung')) && rows.some(r => r.includes('Lena Brandt')), 'beide Fassungen sichtbar');
 check(await page.locator('button[data-locked]', { hasText: 'Neuer Lebenslauf' }).count() === 1, 'nur „Neuer Lebenslauf" gesperrt');
 await openProfile(page, 'Zweite Fassung');
@@ -503,8 +523,8 @@ for (const lang of ['de', 'en', 'fr', 'es']) {
     if (lang === 'de') await shot(page, 'export-paneel-gesperrt-390');
     await w.click();
     const t = await page.locator('[data-unlock]').innerText().catch(() => '');
-    const expect = { de: /Word gibt es mit dem Pass/, en: /Word comes with the pass/, fr: /Word est inclus dans le pass/, es: /Word viene con el pase/ }[lang];
-    check(expect.test(t), `Paneel ${lang}: Text in der Oberflächensprache`, t.split('\n').slice(0, 2).join(' / '));
+    const expect = { de: /Word und LaTeX gibt es mit dem Pass/, en: /Word and LaTeX come with the pass/, fr: /Word et LaTeX sont inclus dans le pass/, es: /Word y LaTeX vienen con el pase/ }[lang];
+    check(expect.test(t), `Paneel ${lang}: Text in der Oberflächensprache`, t.split('\n').filter(Boolean).slice(0, 3).join(' / '));
     if (lang === 'de') { await shot(page, 'freischalt-docx-390'); await axe(page, 'Freischalt-Paneel 390'); }
     await closeUnlock(page);
   } else check(false, `Telefon ${lang}: gesperrter Word-Knopf im Export-Paneel`);

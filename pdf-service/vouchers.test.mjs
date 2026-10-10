@@ -27,6 +27,9 @@ import {
   normalizeCode, isCodeShape, generatePersonalCode, CROCKFORD, parseRedeemUntil, voucherSummary, announcement, createVouchers,
 } from './vouchers.js';
 import { planInfo, isAccessExpired, accessInfo } from './access.js';
+import { ART9_VERSION } from './consent.js';
+// Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
+const ART9 = { version: ART9_VERSION };
 
 const PG_PORT = Number(process.env.VOUCHER_PG_PORT || 5501);
 const API_PORT = Number(process.env.VOUCHER_API_PORT || 3201);
@@ -237,7 +240,7 @@ describe('Gutscheine gegen die laufende API', { skip: PG_MISSING }, () => {
   async function registerSelf({ confirmed = true } = {}) {
     const email = `kunde${++n}-${crypto.randomBytes(3).toString('hex')}@example.org`;
     const C = client(srv.base);
-    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true });
+    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     if (confirmed) await confirm(C, email);
     return { C, id: r.data.user.id, email };
@@ -301,11 +304,11 @@ describe('Gutscheine gegen die laufende API', { skip: PG_MISSING }, () => {
     }, { port: API_PORT });
     db = new pg.Pool({ connectionString: pgInst.url, max: 6 });
     Adm = client(srv.base);
-    let r = await Adm.post('/api/auth/register', { username: 'admin', password: 'admin-passwort-1', email: 'admin@example.org' });
+    let r = await Adm.post('/api/auth/register', { username: 'admin', password: 'admin-passwort-1', email: 'admin@example.org', art9Consent: ART9 });
     assert.equal(r.status, 200);
     const plain = (await Adm.post('/api/admin/invites', {})).data.code;
     Bestand = client(srv.base);
-    r = await Bestand.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: plain });
+    r = await Bestand.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: plain, art9Consent: ART9 });
     assert.equal(r.status, 200);
     bestandId = r.data.user.id;
   });

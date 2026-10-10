@@ -100,7 +100,7 @@ export function atsNote(level: AtsLevel, lang: AtsLang = 'de'): string {
 /** Überschrift und Einordnung der Legende. */
 export const ATS_LEGEND: Record<AtsLang, { title: string; caveat: string }> = {
   de: {
-    title: 'Was heißt „Gut für Portale"?',
+    title: 'Was heißt „Gut für Portale“?',
     caveat: 'Gemeint ist, wie zuverlässig ein Bewerbungsportal die Felder trifft, nicht, ob eingeladen wird. Für Portale gibt es zu jeder Vorlage die einspaltige ATS-Fassung als PDF und Word.',
   },
   en: {
@@ -116,6 +116,38 @@ export const ATS_LEGEND: Record<AtsLang, { title: string; caveat: string }> = {
     caveat: 'Indica con qué fiabilidad un portal de empleo acierta los campos, no si te invitan. Para portales, cada plantilla tiene su versión ATS a una columna, en PDF y Word.',
   },
 };
+
+/* Die drei Stufen in einem Satz, positiv formuliert: wofür die Vorlage gut
+ * ist, nicht, was ihr fehlt. Steht im „Was heißt das?" an jeder Marke
+ * (ui/AtsExplain.tsx, Runde 8, 10.10.2026). Alle drei Stufen haben dieselbe
+ * echte Textebene in Lesereihenfolge; sie unterscheiden sich nur im Aufbau
+ * der Seite. */
+const LEVEL_EXPLAIN: Record<AtsLang, Record<AtsLevel, string>> = {
+  de: {
+    high: 'Eine Spalte, von oben nach unten. Diese Form lesen Bewerbungsportale zuverlässig in ihre Felder ein, du kannst sie ohne Umweg hochladen.',
+    medium: 'Oben ein Kopfband, danach eine Spalte. Portale lesen das meist richtig. Zusätzlich gibt es die einspaltige ATS-Fassung mit einem Klick.',
+    low: 'Zwei Spalten, gestaltet für Menschen, die dein PDF per Mail oder auf Papier lesen. Für ein Portal gibt es mit einem Klick die ATS-Fassung: derselbe Inhalt in einer Spalte, als PDF oder Word.',
+  },
+  en: {
+    high: 'One column, top to bottom. Applicant portals read this shape into their fields reliably, so you can upload it as it is.',
+    medium: 'A header band at the top, then one column. Portals usually read this correctly. The one-column ATS version is one click away as well.',
+    low: 'Two columns, designed for people who read your PDF by email or on paper. For a portal there is the one-click ATS version: the same content in one column, as PDF or Word.',
+  },
+  fr: {
+    high: 'Une colonne, de haut en bas. Les portails convertissent cette forme en champs de façon fiable : vous pouvez la déposer telle quelle.',
+    medium: 'Un bandeau en haut, puis une colonne. Les portails la lisent en général correctement. La version ATS sur une colonne est aussi à un clic.',
+    low: 'Deux colonnes, conçues pour les personnes qui lisent votre PDF par e-mail ou sur papier. Pour un portail, la version ATS est à un clic : le même contenu sur une colonne, en PDF ou en Word.',
+  },
+  es: {
+    high: 'Una columna, de arriba abajo. Los portales pasan esta forma a sus campos de manera fiable: puedes subirla tal cual.',
+    medium: 'Una banda arriba y luego una columna. Los portales suelen leerla bien. La versión ATS a una columna también está a un clic.',
+    low: 'Dos columnas, pensadas para quien lee tu PDF por correo o en papel. Para un portal tienes la versión ATS con un clic: el mismo contenido a una columna, en PDF o Word.',
+  },
+};
+
+export function atsLevelExplain(level: AtsLevel, lang: AtsLang = 'de'): string {
+  return (LEVEL_EXPLAIN[lang] || LEVEL_EXPLAIN.de)[level];
+}
 
 /** @deprecated — nutze `atsLabel(level, lang)`. */
 export function atsLabelDe(level: AtsLevel): string {

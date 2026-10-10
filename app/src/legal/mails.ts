@@ -40,7 +40,7 @@ export interface MailTexts {
 }
 
 export const MAILS: Bilingual<MailTexts> = {
-  version: '2026-10-09.2',
+  version: '2026-10-10',
   de: {
     orderConfirmation: {
       subject: 'Bestellbestätigung {{ORDER_NO}} – Ihr Bewerbungs-Pass für {{PRODUCT_NAME}}',
@@ -52,7 +52,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Bestellnummer: {{ORDER_NO}}',
         'Vertragsschluss: {{ORDER_DATE}}',
         'Produkt: {{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
-        'Leistungen: Word-Export (gestaltet und als ATS-Fassung), Anschreiben, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
+        'Leistungen: Word-Export (gestaltet und als ATS-Fassung) und LaTeX-Quelltext, Anschreiben, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
         'Preis: {{PRICE}} einmalig (Endpreis; gemäß § 19 UStG wird keine Umsatzsteuer berechnet)',
         'Pass gültig bis: {{PASS_UNTIL}}',
         'Ende: automatisch, kein Abo, keine Verlängerung, keine weitere Abbuchung',
@@ -135,6 +135,8 @@ export const MAILS: Bilingual<MailTexts> = {
         'Sie haben kein Konto angelegt? Dann hat jemand Ihre Adresse eingetragen. Sie müssen nichts tun; das Konto verschwindet nach 48 Stunden von selbst.',
         '',
         'Das Konto ist kostenlos. Es entstehen keine Kosten, solange Sie nicht ausdrücklich einen Pass kaufen.',
+        '',
+        'Für das Konto gelten unsere AGB ({{BASE_URL}}/agb). Wie wir mit Ihren Daten umgehen, steht in der Datenschutzerklärung ({{BASE_URL}}/datenschutz).',
       ],
     },
     disputeUnresolved: {
@@ -166,7 +168,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Order number: {{ORDER_NO}}',
         'Contract concluded: {{ORDER_DATE}}',
         'Product: {{PRODUCT_NAME}} – application pass, {{DAYS}} days',
-        'Features: Word export (designed and as the ATS version), cover letters, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
+        'Features: Word export (designed and as the ATS version) and LaTeX source, cover letters, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
         'Price: {{PRICE}} once (final price; no VAT charged under § 19 UStG)',
         'Pass valid until: {{PASS_UNTIL}}',
         'End: automatic, no subscription, no renewal, no further charge',
@@ -251,6 +253,8 @@ export const MAILS: Bilingual<MailTexts> = {
         'You did not create an account? Then someone entered your address. You do not need to do anything; the account disappears by itself after 48 hours.',
         '',
         'The account is free. There are no costs unless you expressly buy a pass.',
+        '',
+        'Our Terms apply to the account ({{BASE_URL}}/agb). How we handle your data is described in the privacy policy ({{BASE_URL}}/datenschutz).',
       ],
     },
     disputeUnresolved: {

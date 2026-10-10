@@ -29,17 +29,22 @@ import { PATHS, linkClick, navigate } from './route';
 import { APP_NAME } from '../brand';
 
 /** Länder: Verkauft wird an Verbraucher in der EU und an Unternehmen in
- *  Deutschland (legal/bestellung.ts → start.restriction). Alles andere
- *  steht als „anderes Land" da und erklärt, warum es dort nicht geht. */
-const EU = ['DE', 'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'];
+ *  Deutschland (legal/bestellung.ts → start.restriction). Die Liste kommt
+ *  vom Server (offer.countries, Quelle billing.js EU_COUNTRIES; P1, Prüfteam
+ *  10.10.2026), damit Oberfläche und Prüfung am Server nie auseinanderlaufen.
+ *  Ruht der Verkauf ins EU-Ausland (Umsatzschwelle, P7), steht dort nur DE.
+ *  Alles andere steht als „anderes Land" da und erklärt, warum es dort nicht
+ *  geht. */
 const OTHER = 'XX';
 
-function countryOptions(lang: UiLang): { code: string; name: string }[] {
+function countryOptions(lang: UiLang, countries: string[] | undefined): { code: string; name: string }[] {
   let dn: Intl.DisplayNames | null = null;
   try { dn = new Intl.DisplayNames([BILLING_I18N[lang].locale], { type: 'region' }); } catch { /* alter Browser */ }
-  const list = EU.map(code => ({ code, name: dn?.of(code) ?? code }));
-  const [first, ...rest] = list;
-  return [first, ...rest.sort((a, b) => a.name.localeCompare(b.name, BILLING_I18N[lang].locale))];
+  const codes = countries?.length ? countries.filter(c => /^[A-Z]{2}$/.test(c)) : ['DE'];
+  const list = codes.map(code => ({ code, name: dn?.of(code) ?? code }));
+  const first = list.find(c => c.code === 'DE');
+  const rest = list.filter(c => c.code !== 'DE').sort((a, b) => a.name.localeCompare(b.name, BILLING_I18N[lang].locale));
+  return first ? [first, ...rest] : rest;
 }
 
 export default function CheckoutPage() {
@@ -114,7 +119,7 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
   /** Server lehnt den Kauf ab, solange die Adresse unbestätigt ist (N1). */
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [resend, setResend] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle');
-  const options = useMemo(() => countryOptions(lang), [lang]);
+  const options = useMemo(() => countryOptions(lang, offer.countries), [lang, offer.countries]);
   /** Ist das bemängelte Feld behoben, verschwindet die Meldung sofort — sonst
    *  stünde „ab 18" neben einem gesetzten Häkchen. */
   const fixed = (field: string) => { if (invalid === field) { setInvalid(null); setErr(null); } };
@@ -138,7 +143,7 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
     busyRef.current = true; setBusy(true);
     track('checkout_submit', { country });
     try {
-      const r = await billingApi.checkout({ sku: offer.sku, country, billingName: name.trim(), acceptTerms: true, ageConfirmed18: true });
+      const r = await billingApi.checkout({ sku: offer.sku, country, billingName: name.trim(), acceptTerms: true, ageConfirmed18: true, consumer: abroad ? consumer : false });
       if (!r.checkoutUrl || (!/^https:\/\//.test(r.checkoutUrl) && !/^\//.test(r.checkoutUrl))) throw new Error('checkoutUrl');
       window.location.assign(r.checkoutUrl);
       // busy bleibt gesetzt: Die Seite verlässt sich gerade selbst.

@@ -80,92 +80,17 @@
         }
       }
     </style>
-    <title>CV-Hub — editoriale Lebensläufe & Anschreiben</title>
-    <meta name="description" content="Selbst gehostetes Tool für Lebenslauf & Anschreiben: 32 Vorlagen, saubere Seitenumbrüche, vier Sprachen (DE/EN/FR/ES), Markdown-Brücke & MCP-Server für KI-Lektorat statt eingebauter KI. Demo-Modus ohne Konto." />
-    <meta name="keywords" content="Lebenslauf, Anschreiben, Bewerbung, Editor, ATS, Markdown, MCP, Self-Hosted, mehrsprachig, CV-Hub" />
-    <meta property="og:title" content="CV-Hub — Lebensläufe & Anschreiben, self-hosted" />
-    <meta property="og:description" content="32 Vorlagen, vier Sprachen, saubere Seitenumbrüche. Markdown-Brücke & MCP statt eingebauter KI. Demo-Modus ohne Konto." />
-    <meta property="og:type" content="website" />
-    <meta name="robots" content="index, follow" />
-    <!-- Schriften werden self-hosted via @fontsource geladen (src/fonts.ts),
-         NICHT vom Google-Fonts-CDN — DSGVO-Baseline: keine Google-Fonts-Calls. -->
-
-    <!-- JSON-LD: WebSite, SoftwareApplication, FAQPage. Crawler can pull these
-         directly without rendering React. Same content as the FAQ section. -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebSite",
-          "name": "CV-Hub",
-          "url": "https://example.org/",
-          "inLanguage": ["de", "en", "fr", "es"],
-          "description": "Werkzeug für Lebenslauf & Anschreiben mit 32 Vorlagen, vier Sprachen, sauberen Seitenumbrüchen und Markdown-Brücke für KI-Lektorat."
-        },
-        {
-          "@type": "SoftwareApplication",
-          "name": "CV-Hub",
-          "applicationCategory": "BusinessApplication",
-          "operatingSystem": "Web",
-          "description": "Selbst gehostetes Tool zum Erstellen editorialer Lebensläufe und Anschreiben.",
-          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
-          "featureList": [
-            "32 Lebenslauf-Vorlagen in mehreren Layout-Archetypen",
-            "Automatische Schriftgrößen-Anpassung an A4",
-            "Markdown-Export und -Import für KI-Lektorat (ChatGPT, Claude, Perplexity)",
-            "MCP-Server für registrierte Nutzer (programmatischer KI-Zugriff, kein Vendor-Lock)",
-            "Versionshistorie mit Diff-Vorschau",
-            "Public Sharelinks mit optionalem Anschreiben-Toggle",
-            "Konten per Einladung, optional Zwei-Faktor-Login per E-Mail-Code",
-            "Ohne Registrierung nutzbar: Daten und Fotos bleiben im Browser (IndexedDB), mit Sicherungsdatei zum Mitnehmen",
-            "Single-Column-Vorlagen für ATS-Tauglichkeit",
-            "Vier Sprachvarianten: Deutsch, Englisch, Französisch, Spanisch"
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-            {
-              "@type": "Question",
-              "name": "Was ist CV-Hub?",
-              "acceptedAnswer": { "@type": "Answer", "text": "CV-Hub ist ein selbst gehostetes Tool zum Erstellen von Lebensläufen und Anschreiben. Es erzeugt druckfertige PDFs mit 32 editorialen Vorlagen in vier Sprachen, passt die Schriftgröße automatisch an A4 an und erlaubt KI-Lektorat über eine Markdown-Brücke bzw. einen MCP-Server zu ChatGPT, Claude und ähnlichen Modellen — ohne eingebaute KI." }
-            },
-            {
-              "@type": "Question",
-              "name": "Brauche ich ein Konto?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Nein. Ohne Konto speichert das Werkzeug lokal im Browser, und das PDF deines Lebenslaufs ist kostenlos. Was ohne Konto sonst noch geht und was zum Bewerbungs-Pass gehört, steht auf der Preisseite. Sharelinks, Versionshistorie und Cloud-Speicherung kommen mit einem Konto. Registrierung ist nur per Einladungscode möglich." }
-            },
-            {
-              "@type": "Question",
-              "name": "Welche Lebenslauf-Vorlagen sind enthalten?",
-              "acceptedAnswer": { "@type": "Answer", "text": "32 wählbare Vorlagen in mehreren Layout-Archetypen: Single-Column, Sidebar links, Sidebar rechts, Header-Band, Top-Centered (klassisch deutsch DIN) und Timeline. Jede Vorlage hat eigene Farben und Schriftpaarungen." }
-            },
-            {
-              "@type": "Question",
-              "name": "Sind die Vorlagen ATS-tauglich?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Jede Vorlage sagt, wofür sie gemacht ist: einspaltige Vorlagen sind als „Gut für Portale“ markiert, Vorlagen mit Seitenspalte sind für Mail und Druck gestaltet, weil Personio und Greenhouse mehrspaltige Layouts als Ursache für Lesefehler nennen. Für Portale gibt es zu jeder Vorlage die ATS-Fassung: derselbe Inhalt einspaltig, als PDF oder Word ohne Tabellen. Das PDF hat eine echte Textebene, deren Reihenfolge Prüfskripte gegen die Vorschau vergleichen. Ob ein bestimmtes System einen Lebenslauf richtig liest, hängt auch von dessen Parser ab." }
-            },
-            {
-              "@type": "Question",
-              "name": "Wie funktioniert das KI-Lektorat?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Du erzeugst einen Sharelink, hängst .md ans Ende der URL und gibst diese Adresse einem Sprachmodell. Das Modell liest den Lebenslauf als Markdown, schlägt Änderungen vor, gibt eine überarbeitete Markdown-Fassung zurück, die du im Tool importierst. Die Diff-Vorschau zeigt vorher, was sich ändert." }
-            },
-            {
-              "@type": "Question",
-              "name": "Welche Sprachen werden unterstützt?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Lebensläufe und Anschreiben gibt es in vier Sprachen: Deutsch, Englisch, Französisch und Spanisch. Alle vier leben parallel im selben Profil; Sektionsüberschriften, Datums- und Feldbezeichnungen passen sich automatisch an." }
-            },
-            {
-              "@type": "Question",
-              "name": "Wer hostet die Daten?",
-              "acceptedAnswer": { "@type": "Answer", "text": "Du. Das Projekt läuft auf dem Server des Betreibers (Docker Compose, Postgres-Datenbank). Profile bleiben im Konto des jeweiligen Users, externe KI-Provider sind nicht eingebunden." }
-            }
-          ]
-        }
-      ]
-    }
-    </script>
+    <!--cv:head:start-->
+    <!-- Seitenkopf der App-Hülle. Beim Bau ersetzt scripts/landing-prerender.mjs
+         alles zwischen cv:head:start und cv:head:end: für /, /en/, /fr/, /es/
+         und /preise durch Titel, Beschreibung, Canonical, hreflang,
+         Vorschaubild und strukturierte Daten der jeweiligen Seite, für die
+         übrigen Pfade (app.html) durch diesen allgemeinen Kopf. -->
+    <title>CV-Hub · Lebenslauf und Anschreiben</title>
+    <meta name="description" content="Lebenslauf und Anschreiben im Browser schreiben: PDF mit echter Textebene, ATS-Fassung als PDF oder Word, vier Sprachen, ohne Konto." />
+    <!--cv:head:end-->
+    <!-- Schriften werden selbst ausgeliefert (src/fonts.ts, @fontsource),
+         nicht vom Google-Fonts-CDN: keine Aufrufe an fremde Server. -->
   </head>
   <body>
     <div id="root"></div>
@@ -174,10 +99,13 @@
          über diese Domain ausliefern, damit der Browser mit keinem fremden
          Host spricht und die CSP keinen braucht. Dazu in nginx.conf
          $umami_host auf den eigenen Umami-Host setzen (Platzhalter
-         analytics.example.com, location /u/) und das Tag unten mit der
-         eigenen Website-ID einkommentieren. Wer kein Analytics will, lässt
-         beides so; die /u/-Blöcke in nginx.conf können dann auch entfallen.
-    <script defer src="/u/script.js" data-host-url="/u" data-website-id="YOUR-UMAMI-WEBSITE-ID"></script>
+         analytics.example.com, location /u/) und die beiden Tags unten mit
+         der eigenen Website-ID einkommentieren. umami-filter-v1.js entfernt
+         Token aus den gemeldeten Adressen (/share/…, /reset/…),
+         bevor Umami sie sendet. Wer kein Analytics will, lässt beides so;
+         die /u/-Blöcke in nginx.conf können dann auch entfallen.
+    <script defer src="/umami-filter-v1.js"></script>
+    <script defer src="/u/script.js" data-host-url="/u" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true" data-before-send="cvUmamiBeforeSend" data-website-id="YOUR-UMAMI-WEBSITE-ID"></script>
     -->
   </body>
 </html>

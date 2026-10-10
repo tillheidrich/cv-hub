@@ -15,7 +15,6 @@ import { PICKABLE_THEMES, ACCENTS, getTheme, resolvePairing, resolveThemeId } fr
 import EditorPanel from './editor/EditorPanel';
 import CoverLetterEditor from './editor/CoverLetterEditor';
 import ExportPanel from './export/ExportPanel';
-import { exportDocx } from './export/exportDocx';
 import { exportPdf, type ExportRenderConfig } from './export/exportHtml';
 import { AtsPdfRunner, type AtsPdfJob } from './export/AtsPdfRunner';
 import { atsPdfTemplateFor } from './export/atsPdfTemplate';
@@ -36,12 +35,12 @@ import CheckPanel from './ui/CheckPanel';
 import ExportMenu from './ui/ExportMenu';
 import { Menu, MenuItem, MobileSheet } from './ui/Overlay';
 import BackupReminder, { LocalBackupPanel } from './ui/BackupReminder';
-import AdminPanel from './screens/AdminPanel';
 import KeysPanel from './screens/KeysPanel';
 import VersionsPanel from './screens/VersionsPanel';
 import UnlockPanel from './billing/UnlockPanel';
 import { PassDialog } from './billing/PassSection';
 import { ConfirmEmailBanner } from './billing/ConfirmEmail';
+import { Art9ConsentGate } from './screens/Art9Consent';
 import { useOffer, salesOpen } from './billing/hooks';
 import { PATHS, navigate } from './billing/route';
 import { freeOnly, priceOf, freeTierPriceLine } from './billing/format';
@@ -64,6 +63,7 @@ import {
   saveProfilesAsync as saveProfilesLocalAsync, clearLocalStore,
   createDemoProfile, duplicateProfile, withAllLangs, carryContactToLang,
 } from './data/storage';
+import { upgradeDemoPhotos } from './data/demoUpgrade';
 import { useIsMobile } from './ui/useIsMobile';
 import { ALL_LANGS, LANG_NAMES } from './data/labels';
 import type { CVData, CoverLetterData, AppProfile, Lang, FontPairingId, PageMode, SectionKey, PageFormat, AccentId, PaperId } from './data/types';
@@ -191,8 +191,13 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(!!initialInvite);
   const [uiLang, setUiLangState] = useState<UiLang>(() => detectInitialUiLang());
   function handleLangChange(l: UiLang) { setUiLang(l); setUiLangState(l); }
-  const [adminOpen, setAdminOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  /* Runde 8b (10.10.2026): Die Verwaltung liegt nicht mehr in der App,
+   * sondern im eigenen Admin-Bereich (src/admin/, pdf-service/admin.js). Hier
+   * bleibt nur ein Link dorthin, und nur, wenn der Server ihn nennt. */
+  const adminUrlRaw = authUser?.role === 'admin' ? (authUser as { adminUrl?: string }).adminUrl : undefined;
+  const adminUrl = adminUrlRaw && /^(https:\/\/|\/)/.test(adminUrlRaw) && !adminUrlRaw.startsWith('//') ? adminUrlRaw : undefined;
+  const openAdmin = () => { if (adminUrl) window.open(adminUrl, '_blank', 'noopener'); };
   const [versionsOpen, setVersionsOpen] = useState(false);
   /** Rückfrage beim Abmelden: Zahl der lokalen Profile in diesem Browser. */
   const [logoutAsk, setLogoutAsk] = useState<number | null>(null);
@@ -341,7 +346,10 @@ export default function App() {
     // Seed a Lena-Brandt demo profile if there isn't one yet. The demo opens
     // in the user's detected UI language so EN visitors see the EN CV directly.
     // Asynchron: der lokale Speicher liegt seit dem 08.10.2026 in IndexedDB.
-    const existing = await loadProfilesLocalAsync();
+    /* Alte Demo ohne Foto bekommt beim Laden das Demo-Foto (data/demoUpgrade.ts). */
+    const up = upgradeDemoPhotos(await loadProfilesLocalAsync());
+    const existing = up.profiles;
+    if (up.changed) saveProfilesLocal(existing);
     if (existing.length === 0) {
       const demo = createDemoProfile(uiLang === 'en' ? 'Demo · Lena Brandt' : 'Demo · Lena Brandt');
       demo.settings.lang = uiLang;
@@ -365,8 +373,11 @@ export default function App() {
   useEffect(() => {
     if (!demoMode || dataLoaded || authUser || demoBooting.current) return;
     let cancelled = false;
-    loadProfilesLocalAsync().then(existing => {
+    loadProfilesLocalAsync().then(loaded => {
       if (cancelled) return;
+      const up = upgradeDemoPhotos(loaded);
+      let existing = up.profiles;
+      if (up.changed) saveProfilesLocal(existing);
       if (!existing.length) {
         const demo = createDemoProfile('Demo · Lena Brandt');
         demo.settings.lang = uiLang;
@@ -716,6 +727,27 @@ export default function App() {
   }
   const handleDeleteProfileRef = useRef<((id: string) => void) | null>(null);
   handleDeleteProfileRef.current = handleDeleteProfile;
+  /** Titel einer Fassung ändern (Profilübersicht, Runde 8). Gespeichert wird
+   *  sofort und für genau diese Fassung — das automatische Speichern hört
+   *  nur auf die aktive. */
+  function handleRenameProfile(id: string, displayName: string) {
+    if (readOnly) return;
+    const next = profiles.map(p => (p.id === id ? { ...p, displayName } : p));
+    const p = next.find(x => x.id === id);
+    if (!p) return;
+    setProfiles(next);
+    if (demoMode) saveProfilesLocalAsync(next).then(ok => { if (!ok) setSaveStatus('error'); });
+    else api.saveResume(p).catch(err => { if (!noteWriteError(err)) console.error('rename failed:', err); });
+  }
+  /* „PDF" auf der Profilübersicht (Runde 8): Fassung öffnen und, sobald die
+   * Vorschau für SIE gemessen ist (neues fit-Objekt), das PDF laden wie über
+   * den PDF-Knopf. Vorher gemessene Werte gehören zur vorigen Fassung. */
+  const [pdfFor, setPdfFor] = useState<{ id: string; fit0: FitInfo | null } | null>(null);
+  function handleHomePdf(id: string) {
+    setDocType('resume');
+    setPdfFor({ id, fit0: fit });
+    handleSelectProfile(id);
+  }
 
   useEffect(() => {
     const handler = () => setPrinting(false);
@@ -890,6 +922,15 @@ export default function App() {
     metrics: fit?.metrics ?? metricsFor(0, fontScale), pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap,
     hiddenSections, sectionOrder, pageFormat, forcedBreaks,
   }), [template, accent, paper, fontPairing, fit, fontScale, hiddenSections, sectionOrder, pageFormat, forcedBreaks]);
+  useEffect(() => {
+    if (!pdfFor || screen !== 'editor' || activeId !== pdfFor.id || !fit || fit === pdfFor.fit0 || docType !== 'resume') return;
+    setPdfFor(null);
+    showNotice(dsT.pdfBusy);
+    exportPdf({ data: currentData, cfg: exportConfig, isCover: false }).then(
+      r => { track('export_pdf', { docType: 'resume', demo: demoMode }); showNotice(dsT.pdfDone(r.pages, Math.max(1, Math.round(r.bytes / 1024)))); },
+      err => showNotice(dsT.pdfFailed(err instanceof Error ? err.message : '?'), true),
+    );
+  }, [pdfFor, screen, activeId, fit, docType, currentData, exportConfig, showNotice, dsT, demoMode]);
   const atsLevel = atsLevelForLayout(theme.layout);
   const nav = useTemplateNav(template);
   const closeMore = useCallback(() => setMoreOpen(false), []);
@@ -904,7 +945,8 @@ export default function App() {
     if (!ft.docx) { setUnlock('docx'); return; }
     track('export_docx_ats');
     if (!demoMode) void api.event('docx');
-    void exportDocx(currentData, exportConfig, 'ats');
+    // Word lädt erst bei Bedarf (Audit 10.10.2026, S15).
+    void import('./export/exportDocx').then(m => m.exportDocx(currentData, exportConfig, 'ats'));
   }
 
   /* ATS-Fassung als PDF (export/AtsPdfRunner.tsx): derselbe Inhalt in einer
@@ -1117,11 +1159,14 @@ export default function App() {
         <HomeScreen profiles={profiles} onSelect={handleSelectProfile} onCreate={handleCreateProfile} onDelete={handleDeleteProfile}
           onDuplicate={readOnly ? undefined : (id => handleDuplicateProfile(id))}
           readOnlyNote={readOnly ? (passExpired ? Z.passReadOnlyHome : plan?.kind === 'none' ? Z.noneReadOnlyHome : Z.readOnlyHome) : undefined}
-          banner={<>{accessBanner}<ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} /></>}
-          username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={demoMode ? undefined : () => void requestLogout()} onOpenAdmin={() => setAdminOpen(true)}
+          banner={<>{accessBanner}<ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} /><Art9ConsentGate user={demoMode ? null : authUser} lang={uiLang} onUser={setAuthUser} /></>}
+          username={authUser?.username} isAdmin={authUser?.role === 'admin'} onLogout={demoMode ? undefined : () => void requestLogout()} onOpenAdmin={adminUrl ? openAdmin : undefined}
           onOpenBackup={demoMode ? () => setBackupOpen(true) : undefined}
-          onOpenPass={!demoMode && (plan || salesOpen(offer)) ? () => setPassOpen(true) : undefined} />
-        {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
+          onOpenPass={!demoMode && (plan || salesOpen(offer)) ? () => setPassOpen(true) : undefined}
+          onRename={readOnly ? undefined : handleRenameProfile}
+          onExportPdf={handleHomePdf}
+          plan={demoMode ? null : (authUser?.plan ?? null)}
+          localMode={demoMode} />
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
         {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
@@ -1252,7 +1297,7 @@ export default function App() {
   );
   const checkBody = (withTips: boolean) => (
     <CheckPanel uiLang={uiLang} fit={fit} pageMode={pageMode} data={currentData} coverLetter={currentCoverLetter}
-      exportConfig={exportConfig} atsLevel={atsLevel} onJump={handlePreviewEdit} onLoadAts={loadAts} onLoadAtsPdf={loadAtsPdf} withTips={withTips} />
+      exportConfig={exportConfig} atsLevel={atsLevel} onJump={handlePreviewEdit} onLoadAts={loadAts} onLoadAtsPdf={loadAtsPdf} withTips={withTips} docType={docType} />
   );
   const exportBody = (
     <div className="ui-panel-body ui-panel-fill">
@@ -1260,7 +1305,7 @@ export default function App() {
     </div>
   );
   const tipsBody = (
-    <div className="ui-panel-body ui-panel-fill"><KnowledgePanel /></div>
+    <div className="ui-panel-body ui-panel-fill"><KnowledgePanel data={currentData} coverLetter={currentCoverLetter} docType={docType} /></div>
   );
   const bodyFor = (p: PanelId, mobile: boolean) =>
     p === 'content' ? contentBody : p === 'design' ? designBody : p === 'check' ? checkBody(mobile) : p === 'tips' ? tipsBody : exportBody;
@@ -1297,7 +1342,7 @@ export default function App() {
       {demoMode && salesOpen(offer) && <MenuItem onSelect={() => { close(); setUnlock('sync'); }} sub={B.productName}>{B.features.sync.title}</MenuItem>}
       {!demoMode && (plan || salesOpen(offer)) && <MenuItem onSelect={() => { close(); setPassOpen(true); }} sub={plan?.kind === 'pass' && plan.until ? formatAccessDate(plan.until, uiLang) : undefined}>{B.mpTitle}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); setKeysOpen(true); }} sub={authUser?.username}>{et.account}</MenuItem>}
-      {authUser?.role === 'admin' && <MenuItem onSelect={() => { close(); setAdminOpen(true); }}>{et.admin}</MenuItem>}
+      {adminUrl && <MenuItem onSelect={() => { close(); openAdmin(); }}>{et.admin}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); void requestLogout(); }}>{et.signOut}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); setUnlock('account'); }}>{et.createAccount}</MenuItem>}
       <div className="ui-menu-sep" />
@@ -1314,7 +1359,6 @@ export default function App() {
 
   const overlays = (
     <>
-      {adminOpen && <AdminPanel onClose={() => setAdminOpen(false)} />}
       {keysOpen && (
         <KeysPanel
           onClose={() => setKeysOpen(false)}
@@ -1396,6 +1440,7 @@ export default function App() {
         </header>
         {accessBanner}
         <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
+        <Art9ConsentGate user={demoMode ? null : authUser} lang={uiLang} onUser={setAuthUser} />
         {clLocked && mPanel === null && (
           <div className="ft-mobile-bar" data-noprint><PassNote feature="coverLetter" label={et.coverLetter} /></div>
         )}
@@ -1526,6 +1571,7 @@ export default function App() {
       </header>
       {accessBanner}
       <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
+      <Art9ConsentGate user={demoMode ? null : authUser} lang={uiLang} onUser={setAuthUser} />
 
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '6px 16px 16px', gap: '12px' }}>
         <nav data-noprint className="ui-rail ui-float" aria-label={dsT.railLabel}>

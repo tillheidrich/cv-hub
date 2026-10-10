@@ -5,6 +5,17 @@
 // Keine Schrift von außen, keine Bilder: Der Renderer löst ohnehin nur die
 // eigenen Hosts auf, das Dokument braucht keinen.
 //
+// Prüfteam J1 (10.10.2026): Pflichtangaben gegen § 33 und § 34a UStDV
+// (gesetze.legal, abgerufen 10.10.2026) geprüft — vollständig. „Die §§ 33 und
+// 34 bleiben unberührt" (§ 34a Satz 2): Bei Beträgen bis 250 € reicht § 33,
+// Steuernummer und Empfängeranschrift sind dann nicht Pflicht.
+//
+// P6 (B4, 10.10.2026, GoBD/§ 14b UStG): billing.js rendert die Rechnung EINMAL
+// und speichert das PDF (invoice_documents); danach wird nur noch dieses
+// Dokument ausgeliefert. Die Rechnung trägt deshalb keinen Widerrufsvermerk
+// mehr — ein Widerruf bekommt einen eigenen Stornobeleg (buildCreditNoteHtml)
+// mit eigener Nummer (Rechnungsnummer + „-S“) und Bezug auf die Rechnung.
+//
 // Pflichtangaben einer Kleinbetragsrechnung (Paragraf 33 UStDV, bis 250 €
 // brutto): vollständiger Name und Anschrift des Leistenden, Ausstellungsdatum,
 // Menge und Art der Leistung, Entgelt in einer Summe, Hinweis auf die
@@ -57,7 +68,6 @@ export function buildInvoiceHtml({ order, seller, productName }) {
     : `${order.pass_days} Tage`;
   const amount = euro(order.amount_cents, order.currency);
   const contact = [seller.email ? `E-Mail: ${seller.email}` : '', seller.phone ? `Telefon: ${seller.phone}` : ''].filter(Boolean).join(' · ');
-  const refunded = order.status === 'withdrawn' || order.status === 'refunded';
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Rechnung ${escapeHtml(order.invoice_no)}</title><style>${CSS}</style></head><body>
   <div class="head">
     <div>
@@ -88,14 +98,72 @@ ${escapeHtml(seller.address || '')}</div>
   <table>
     <thead><tr><th style="width:12mm">Menge</th><th>Leistung</th><th class="num">Betrag</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td>${escapeHtml(productName)} Bewerbungs-Pass, Nutzungszeitraum ${escapeHtml(period)}<br><span class="small muted">Zugang zu den Kontofunktionen (Speichern über Geräte, Sharelinks, Versionen, KI-Verbindung), einmalig, kein Abonnement</span></td><td class="num">${escapeHtml(amount)}</td></tr>
+      <tr><td>1</td><td>${escapeHtml(productName)} Bewerbungs-Pass, Nutzungszeitraum ${escapeHtml(period)}<br><span class="small muted">Word- und LaTeX-Export, Anschreiben, weitere Fassungen und Sprachen, Speichern über Geräte, Sharelinks, Versionen, KI-Verbindung; einmalig, kein Abonnement</span></td><td class="num">${escapeHtml(amount)}</td></tr>
       <tr class="total"><td></td><td>Gesamtbetrag (Endpreis)</td><td class="num">${escapeHtml(amount)}</td></tr>
     </tbody>
   </table>
 
   <p>${escapeHtml(VAT_NOTE)}</p>
-  ${refunded ? `<div class="box">Diese Bestellung wurde am ${escapeHtml(berlinDate(order.withdrawn_at))} widerrufen. Der Betrag von ${escapeHtml(amount)} wird bzw. wurde vollständig erstattet${order.refund_status === 'refunded' ? '' : ' (Erstattung beauftragt)'}.</div>` : ''}
   <p class="small muted" style="margin-top:14mm">Vielen Dank. Diese Rechnung wurde maschinell erstellt und ist ohne Unterschrift gültig.</p>
+</body></html>`;
+}
+
+/**
+ * Stornobeleg (Rechnungskorrektur) nach Widerruf. Eigener Beleg mit eigener
+ * Nummer und Ausstellungsdatum, Bezug auf Nummer und Datum der Rechnung,
+ * negativer Betrag, Grund. Die Rechnung selbst bleibt unverändert (GoBD:
+ * Unveränderbarkeit; § 14 Abs. 4 UStG-Angaben wie bei der Rechnung, soweit
+ * sie bei einer Kleinbetragsrechnung nach § 33 UStDV gelten).
+ *
+ * @param order         Zeile aus orders (withdrawn/refunded, mit invoice_no)
+ * @param creditNoteNo  Nummer des Belegs (billing.js: Rechnungsnummer + „-S“)
+ * @param issuedAt      Ausstellungszeitpunkt des Belegs
+ */
+export function buildCreditNoteHtml({ order, seller, productName, creditNoteNo, issuedAt }) {
+  const issued = berlinDate(issuedAt || new Date());
+  const invoiceDate = berlinDate(order.paid_at);
+  const amount = euro(order.amount_cents, order.currency);
+  const minus = `-${euro(Math.abs(Number(order.amount_cents) || 0), order.currency)}`;
+  const contact = [seller.email ? `E-Mail: ${seller.email}` : '', seller.phone ? `Telefon: ${seller.phone}` : ''].filter(Boolean).join(' · ');
+  const refundState = order.refund_status === 'refunded' ? 'erstattet' : 'Erstattung beauftragt';
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Stornobeleg ${escapeHtml(creditNoteNo)}</title><style>${CSS}</style></head><body>
+  <div class="head">
+    <div>
+      <div class="seller"><strong>${escapeHtml(seller.name)}</strong>
+${escapeHtml(seller.address || '')}</div>
+      ${contact ? `<div class="small muted">${escapeHtml(contact)}</div>` : ''}
+      ${seller.taxId ? `<div class="small muted">Steuernummer/W-IdNr.: ${escapeHtml(seller.taxId)}</div>` : ''}
+    </div>
+    <div class="small muted" style="text-align:right">Stornobeleg<br>Credit note</div>
+  </div>
+
+  <div style="margin-bottom:8mm">
+    <div class="small muted">Empfänger</div>
+    <div><strong>${escapeHtml(order.billing_name)}</strong></div>
+    <div>${escapeHtml(order.email)}</div>
+    <div>Land: ${escapeHtml(order.country)}</div>
+  </div>
+
+  <h1>Stornobeleg ${escapeHtml(creditNoteNo)}</h1>
+  <table class="meta">
+    <tr><td>Belegnummer</td><td>${escapeHtml(creditNoteNo)}</td></tr>
+    <tr><td>Belegdatum</td><td>${escapeHtml(issued)}</td></tr>
+    <tr><td>Bezug</td><td>Rechnung ${escapeHtml(order.invoice_no)} vom ${escapeHtml(invoiceDate)}</td></tr>
+    <tr><td>Bestellnummer</td><td>${escapeHtml(order.order_no)}</td></tr>
+    <tr><td>Grund</td><td>Widerruf des Vertrags, eingegangen am ${escapeHtml(berlinDate(order.withdrawn_at))}</td></tr>
+  </table>
+
+  <table>
+    <thead><tr><th style="width:12mm">Menge</th><th>Leistung</th><th class="num">Betrag</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Storno: ${escapeHtml(productName)} Bewerbungs-Pass laut Rechnung ${escapeHtml(order.invoice_no)}</td><td class="num">${escapeHtml(minus)}</td></tr>
+      <tr class="total"><td></td><td>Gutschrift gesamt</td><td class="num">${escapeHtml(minus)}</td></tr>
+    </tbody>
+  </table>
+
+  <p>${escapeHtml(VAT_NOTE)}</p>
+  <div class="box">Der Rechnungsbetrag von ${escapeHtml(amount)} wird vollständig auf das ursprüngliche Zahlungsmittel erstattet (Stand bei Ausstellung: ${escapeHtml(refundState)}). Die Rechnung ${escapeHtml(order.invoice_no)} bleibt unverändert; dieser Beleg hebt sie auf.</div>
+  <p class="small muted" style="margin-top:14mm">Dieser Beleg wurde maschinell erstellt und ist ohne Unterschrift gültig.</p>
 </body></html>`;
 }
 

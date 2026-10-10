@@ -84,7 +84,9 @@ export interface AccessInfo {
 /** Ereignisse, die nur im Browser entstehen (DOCX, Druck-PDF, Sharelink) —
  *  der Server zählt sie je Konto für die Auswertung je Einladungscode
  *  (POST /api/events, pdf-service/server.js). */
-export type ClientEvent = 'docx' | 'pdf_local' | 'share_create';
+export type ClientEvent = 'docx' | 'pdf_local' | 'share_create' | 'latex';
+/** Merkmale für die Tageszähler (ohne Personenbezug, pdf-service/stats.js). */
+export interface ClientEventMeta { template?: string; lang?: string; format?: string; variant?: 'standard' | 'ats' }
 
 /** Login may succeed directly ({ user }) or require a 2FA e-mail code
  *  ({ twofa: true, challenge }). */
@@ -268,8 +270,8 @@ export const api = {
   me: () => req<{ user: AuthUser; plan?: Plan | null; emailConfirmed?: boolean }>('/api/auth/me').then(withPlan),
   /** Ereignis melden — nur mit Konto aufrufen (ohne Konto antwortet der
    *  Server 401). Schlägt still fehl: Zählen darf nie einen Export stören. */
-  event: (kind: ClientEvent): Promise<void> =>
-    req<unknown>('/api/events', { method: 'POST', body: JSON.stringify({ kind }) }).then(() => undefined, () => undefined),
+  event: (kind: ClientEvent, meta: ClientEventMeta = {}): Promise<void> =>
+    req<unknown>('/api/events', { method: 'POST', body: JSON.stringify({ kind, ...meta }) }).then(() => undefined, () => undefined),
   login: (username: string, password: string) =>
     req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }).then(withPlan),
   verify2fa: (challenge: string, code: string) =>
@@ -437,3 +439,30 @@ export interface ShareLink {
   created_at: string;
 }
 
+
+/* ── Einwilligung Art. 9 DSGVO (Bau-Agent B4, 10.10.2026) ──────────────────
+ * Der Server liefert am Nutzer `art9` mit (publicUser in server.js). Fehlt das
+ * Feld (älterer oder selbst gehosteter Dienst ohne diese Prüfung), gilt die
+ * Einwilligung als nicht nötig. Ohne gültige Einwilligung lehnt der Server
+ * jedes Speichern im Konto mit 403 `art9_consent_required` ab. */
+export interface Art9Info {
+  /** Muss das Konto einwilligen, bevor es speichert? */
+  required: boolean;
+  /** Gilt eine Einwilligung in der aktuellen Fassung? */
+  ok: boolean;
+  /** Aktuelle Fassung des Einwilligungstexts am Server. */
+  version: string;
+  givenAt: string | null;
+  givenVersion: string | null;
+  withdrawnAt: string | null;
+}
+export function art9Of(u: AuthUser | null | undefined): Art9Info | null {
+  const a = (u as (AuthUser & { art9?: Art9Info }) | null | undefined)?.art9;
+  return a && typeof a === 'object' && typeof a.ok === 'boolean' ? a : null;
+}
+export const consentApi = {
+  /** Einwilligung erteilen (consent: true, mit der Fassung, die der Dialog
+   *  gezeigt hat) oder widerrufen (consent: false). */
+  art9: (consent: boolean, version: string) =>
+    req<{ ok: boolean; user: AuthUser }>('/api/me/consent/art9', { method: 'POST', body: JSON.stringify({ consent, version }) }),
+};

@@ -480,9 +480,10 @@ export function markdownToCV(md, existing, targetLang) {
       const k = m[1], v = m[2].trim();
       if (k === 'template') out.settings.template = v;
       else if (k === 'lang' && ['de', 'en', 'fr', 'es'].includes(v)) out.settings.lang = v;
-      else if (k === 'fontScale') out.settings.fontScale = parseFloat(v) || 1.0;
-      else if (k === 'fontPairing') out.settings.fontPairing = v;
-      else if (k === 'pageMode' && ['one', 'two', 'three', 'auto'].includes(v)) out.settings.pageMode = v;
+      // Grenzen wie bei update_resume_settings (Audit 10.10.2026, S9).
+      else if (k === 'fontScale') { const f = parseFloat(v); out.settings.fontScale = Number.isFinite(f) ? Math.min(1.4, Math.max(0.6, f)) : 1.0; }
+      else if (k === 'fontPairing') { if (/^[a-z0-9-]{1,40}$/.test(v)) out.settings.fontPairing = v; }
+      else if (k === 'pageMode' && ['one', 'two', 'three', 'four', 'auto'].includes(v)) out.settings.pageMode = v;
       else if (k === 'pageFormat' && ['a4', 'letter', 'legal', 'a5'].includes(v)) out.settings.pageFormat = v;
     }
   }

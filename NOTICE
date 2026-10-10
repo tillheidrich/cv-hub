@@ -17,7 +17,11 @@ notices are retained in the respective node_modules packages and apply to the
 bundled font files. Font families include (non-exhaustive): Inter, Space
 Grotesk, IBM Plex (Mono/Sans/Serif), Playfair Display, Fraunces, JetBrains Mono,
 Lora, Source Sans 3, Source Serif 4, Merriweather, EB Garamond, Archivo, Libre
-Baskerville.
+Baskerville, Geist and Geist Mono (start page and magazine; OFL texts in
+app/public/licenses/).
+
+The demo photo in app/public/demo/ is by Phạm Duy Quang on Unsplash, used under
+the Unsplash License (see app/public/demo/CREDITS.txt).
 
 Some résumé template layouts are inspired by the open-source project
 Reactive Resume (MIT-licensed). Any MIT-covered portions retain their original

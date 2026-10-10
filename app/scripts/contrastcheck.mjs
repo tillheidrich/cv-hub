@@ -43,6 +43,11 @@ const rows = await page.evaluate(async () => {
         weichAufFlaeche: +ratio(c.panelInkSoft, c.panelBg).toFixed(2),
         fliesstext: +ratio(c.inkMid, c.pageBg).toFixed(2),
         leise: +ratio(c.inkSoft, c.pageBg).toFixed(2),
+        /* Getönte Kästen (seit 10.10.2026: Profil im Kasten bei Freiburg,
+         * Kenntnis-Kästen bei Linz): Fließtext und Akzent auf der Tönung.
+         * Bei Vorlagen ohne Kästen bleibt der Wert neutral. */
+        aufKachel: t.profileStyle === 'box' || t.skillsStyle === 'panels'
+          ? +Math.min(ratio(c.inkMid, c.chipBg), ratio(c.accent, c.chipBg)).toFixed(2) : 99,
       });
     }
     }
@@ -53,7 +58,7 @@ await browser.close();
 
 // 4.5:1 für normalen Text, 3:1 für große/fette Beschriftung. Die Akzentfarbe
 // trägt hier Fließtextgrößen (Firmenname, Label), deshalb 4.5.
-const LIMIT = { aufPapier: 4.5, aufFlaeche: 4.5, weissDarauf: 4.5, textAufFlaeche: 4.5, weichAufFlaeche: 4.5, fliesstext: 4.5, leise: 4.5 };
+const LIMIT = { aufPapier: 4.5, aufFlaeche: 4.5, weissDarauf: 4.5, textAufFlaeche: 4.5, weichAufFlaeche: 4.5, fliesstext: 4.5, leise: 4.5, aufKachel: 4.5 };
 const bad = [];
 for (const r of rows) {
   for (const [k, min] of Object.entries(LIMIT)) {

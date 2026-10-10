@@ -248,6 +248,8 @@ for (const [w, h, tag] of [[1440, 900, '1440'], [390, 844, '390']]) {
   await page.fill('#bl-email', `neu${tag}@example.org`);
   await page.fill('#bl-pw', 'Sicheres-Passwort-1');
   await page.locator('label.bl-check', { hasText: '16' }).locator('input').check();
+  // Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Pflicht, damit das Konto speichert.
+  await page.locator('[data-art9-fields] input[type="checkbox"]').check();
   await solveAltcha(page);
   await page.locator('form[aria-labelledby="bl-acc-h"] button[type="submit"]').click();
   await page.waitForSelector('[data-voucher-unconfirmed]');
@@ -459,9 +461,8 @@ for (const [w, h, tag] of [[1440, 900, '1440'], [390, 844, '390']]) {
   st.user = userWith({ kind: 'unlimited', until: null, daysLeft: null, notice: null }, { role: 'admin', username: 'admin' });
   const page = await newPage(st, { viewport: { width: w, height: h } });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
-  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: 'Admin', exact: true }).click();
-  await page.locator('[data-tab="vouchers"]').click();
+  // Seit Runde 8b (10.10.2026) im eigenen Admin-Bereich (admin.html), nicht mehr in der App.
+  await page.goto(`${BASE}/admin.html#/gutscheine`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-admin-vouchers] [data-voucher-form]');
   // persönlich (Standard)
   check(await page.locator('input[name="adm-v-dist"]').first().isChecked(), 'Standard: persönlich');

@@ -184,6 +184,9 @@ export interface UILabels {
     certificates?: string;   // "Zertifikate" / "Certifications"
     volunteering?: string;   // "Ehrenamt" / "Volunteering"
     publications?: string;   // "Publikationen" / "Publications"
+    /** Überschrift über allen Kenntnissen — nur in Vorlagen, die eine
+     *  brauchen (Tallinn). Fehlt sie, gilt die Vorgabe der Sprache. */
+    skills?: string;         // "Kenntnisse" / "Skills"
   };
   fields: {
     email: string;
@@ -268,8 +271,11 @@ export type TemplateName = string;
 
 export type Lang = 'de' | 'en' | 'fr' | 'es';
 
-/** How many A4 pages the document should be fitted to. */
-export type PageMode = 'one' | 'two' | 'three' | 'auto';
+/** How many A4 pages the document should be fitted to.
+ *  `four` seit 10.10.2026 (Wissenschaft, lange Projektlisten). `auto` setzt
+ *  so viele Seiten wie nötig, meldet ab der fünften einen Überlauf und
+ *  schneidet nie etwas ab (data/pageFormats.ts, MAX_CV_PAGES). */
+export type PageMode = 'one' | 'two' | 'three' | 'four' | 'auto';
 
 /** Curated font-pairing id, or 'auto' to use the template's default. */
 export type FontPairingId =
@@ -339,7 +345,7 @@ export interface ProfileSettings {
   sectionOrder?: SectionKey[];
   /** Sections the user has explicitly hidden from rendering. */
   hiddenSections?: SectionKey[];
-  /** Manual page assignment per section — used in pageMode='two' / 'three' so
+  /** Manual page assignment per section — used in pageMode='two' / 'three' / 'four' so
    *  the user can pin a section to page 2 instead of relying on the auto-flow
    *  algorithm. Missing keys default to page 1. Page numbers above the chosen
    *  pageMode count are clamped to 1. */

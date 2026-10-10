@@ -114,7 +114,7 @@ export interface OrderTexts {
 }
 
 export const BESTELLUNG: Bilingual<OrderTexts> = {
-  version: '2026-10-09.2',
+  version: '2026-10-10',
   de: {
     start: {
       restriction: 'Den Pass können Privatpersonen aus Deutschland und den anderen Ländern der Europäischen Union kaufen, Unternehmen nur mit Sitz in Deutschland.',
@@ -135,10 +135,10 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
       featuresTitle: 'Das schaltet der Pass frei:',
       features: [
-        'Word-Export (DOCX), gestaltet und als ATS-Fassung',
+        'Word-Export (DOCX), gestaltet und als ATS-Fassung, dazu LaTeX-Quelltext',
         'Anschreiben erstellen, bearbeiten und exportieren',
         'Mehrere Fassungen und alle vier Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch)',
-        'Lebensläufe, Anschreiben und Fotos auf unserem Server in Deutschland speichern und von mehreren Geräten aus bearbeiten',
+        'Lebensläufe, Anschreiben und Fotos auf unserem Server speichern und von mehreren Geräten aus bearbeiten',
         'Sharelinks zum Teilen eines Lebenslaufs, jederzeit widerrufbar',
         'Frühere Versionen am Server wiederherstellen',
         'KI-Programme per MCP verbinden',
@@ -155,7 +155,7 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
     },
     withdrawalHighlight: '14 Tage Widerrufsrecht mit voller Erstattung: Wenn Sie den Kauf innerhalb von 14 Tagen widerrufen, erhalten Sie den ganzen Preis zurück, auch wenn Sie den Pass schon genutzt haben.',
     checkboxes: {
-      terms: 'Ich habe die AGB gelesen und bin mit ihrer Geltung einverstanden.',
+      terms: 'Ich bin mit der Geltung der AGB einverstanden.',
       adult: 'Ich bin mindestens 18 Jahre alt.',
     },
     withdrawalNotice: 'Lesen Sie vor der Bestellung die Widerrufsbelehrung mit dem Muster-Widerrufsformular. Wir schicken Ihnen beides mit der Bestellbestätigung zu.',
@@ -224,10 +224,10 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – application pass, {{DAYS}} days',
       featuresTitle: 'The pass unlocks:',
       features: [
-        'Word export (DOCX), designed and as the ATS version',
+        'Word export (DOCX), designed and as the ATS version, plus LaTeX source',
         'Create, edit and export cover letters',
         'Several versions and all four document languages (German, English, French, Spanish)',
-        'Save CVs, cover letters and photos on our server in Germany and edit them from several devices',
+        'Save CVs, cover letters and photos on our server and edit them from several devices',
         'Share links to share a CV, revocable at any time',
         'Restore earlier versions from the server',
         'Connect AI programs via MCP',
@@ -244,7 +244,7 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
     },
     withdrawalHighlight: '14-day right of withdrawal with a full refund: if you withdraw within 14 days, you get the whole price back, even if you have already used the pass.',
     checkboxes: {
-      terms: 'I have read the Terms and agree to them.',
+      terms: 'I agree to the Terms applying.',
       adult: 'I am at least 18 years old.',
     },
     withdrawalNotice: 'Before ordering, please read the withdrawal information and the model withdrawal form. We send both with the order confirmation.',

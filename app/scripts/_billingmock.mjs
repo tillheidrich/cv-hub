@@ -12,9 +12,13 @@ import { createChallenge, verifySolution, sha } from 'altcha/lib';
 
 const HMAC = 'billingcheck-hmac';
 
+/** Wie GET /api/billing/offer → countries (pdf-service/billing.js, EU_COUNTRIES,
+ *  DE zuerst; P1, 10.10.2026). Die Bestellübersicht hat keine eigene Liste mehr. */
+export const EU_SALE_COUNTRIES = ['DE', 'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'];
+
 export function createBillingState(overrides = {}) {
   return {
-    offer: { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, vatNote: 'gemäß § 19 UStG keine Umsatzsteuer', productName: '', features: ['sync', 'share', 'versions', 'mcp', 'apiKeys'] },
+    offer: { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, vatNote: 'gemäß § 19 UStG keine Umsatzsteuer', productName: '', features: ['sync', 'share', 'versions', 'mcp', 'apiKeys'], countries: EU_SALE_COUNTRIES, euAbroadPaused: false },
     user: null,
     orders: [],
     calls: [],
@@ -67,6 +71,8 @@ export async function installBillingMock(page, state) {
       if (body.ageConfirmed16 !== true) return json(route, 400, { error: 'Alter fehlt.' });
       if (!/@/.test(body.email || '') || String(body.password || '').length < 8) return json(route, 400, { error: 'Eingaben ungültig.' });
       state.user = { id: 7, username: body.email, email: body.email, role: 'user', createdAt: new Date().toISOString(), plan: { kind: 'none', until: null, daysLeft: null, notice: null }, emailConfirmed: false };
+      // Einwilligung Art. 9 (P9): wie der Server — nur mit Fassung gespeichert.
+      if (typeof body.art9Consent?.version === 'string') state.user.art9 = { required: true, ok: true, version: body.art9Consent.version, givenAt: new Date().toISOString(), givenVersion: body.art9Consent.version, withdrawnAt: null };
       return json(route, 200, { user: state.user, emailConfirmed: false });
     }
     if (path === '/api/auth/login' && method === 'POST') {
@@ -83,6 +89,9 @@ export async function installBillingMock(page, state) {
     if (path === '/api/billing/checkout' && method === 'POST') {
       if (!state.user) return json(route, 401, { error: 'Nicht angemeldet.' });
       if (body.acceptTerms !== true || body.ageConfirmed18 !== true || !body.country || !body.billingName) return json(route, 400, { error: 'Pflichtangaben fehlen.' });
+      // P1 wie am Server: nur EU-27, außerhalb DE nur mit consumer: true.
+      if (!(state.offer?.countries || EU_SALE_COUNTRIES).includes(body.country)) return json(route, 400, { error: 'Aus diesem Land können wir den Pass derzeit nicht verkaufen.', code: 'country_not_available' });
+      if (body.country !== 'DE' && body.consumer !== true) return json(route, 400, { error: 'Aus dem Ausland verkaufen wir nur an Privatpersonen.', code: 'consumer_required' });
       const n = state.orders.length + 1;
       const order = { id: `ord_${n}`, orderNo: `B-${String(n).padStart(6, '0')}`, status: state.nextStatus, createdAt: new Date().toISOString(), amountCents: 900, invoiceNo: null, withdrawableUntil: new Date(Date.now() + 14 * 86_400_000).toISOString(), refund: null, body };
       state.orders.push(order);

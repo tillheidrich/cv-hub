@@ -55,7 +55,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
   de: {
     locale: 'de-DE',
     title: 'Versionen',
-    subtitle: 'Automatische Sicherungen vor MD-/JSON-Importen und KI-Bearbeitungen — letzte 25.',
+    subtitle: 'Automatische Sicherungen vor MD-/JSON-Importen und KI-Bearbeitungen, die letzten 25.',
     close: 'Schließen',
     loading: 'Lade…',
     empty: 'Noch keine Versionen. Beim nächsten MD- oder JSON-Import landet hier ein automatischer Snapshot.',
@@ -92,7 +92,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
   en: {
     locale: 'en-US',
     title: 'Versions',
-    subtitle: 'Automatic backups before MD/JSON imports and AI edits — the last 25.',
+    subtitle: 'Automatic backups before MD/JSON imports and AI edits, the last 25.',
     close: 'Close',
     loading: 'Loading…',
     empty: 'No versions yet. The next MD or JSON import will leave an automatic snapshot here.',
@@ -129,7 +129,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
   fr: {
     locale: 'fr-FR',
     title: 'Versions',
-    subtitle: 'Sauvegardes automatiques avant les imports MD/JSON et les modifications par IA — les 25 dernières.',
+    subtitle: 'Sauvegardes automatiques avant les imports MD/JSON et les modifications par IA, les 25 dernières.',
     close: 'Fermer',
     loading: 'Chargement…',
     empty: "Pas encore de versions. Le prochain import MD ou JSON déposera ici un instantané automatique.",
@@ -166,7 +166,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
   es: {
     locale: 'es-ES',
     title: 'Versiones',
-    subtitle: 'Copias automáticas antes de importaciones MD/JSON y ediciones con IA — las últimas 25.',
+    subtitle: 'Copias automáticas antes de importaciones MD/JSON y ediciones con IA, las últimas 25.',
     close: 'Cerrar',
     loading: 'Cargando…',
     empty: 'Todavía no hay versiones. La próxima importación MD o JSON dejará aquí una instantánea automática.',

@@ -23,7 +23,8 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { createMollie, isPaymentId, parseAmount, mollieLocale } from './mollie.js';
-import { buildInvoiceHtml, buildTermsHtml, buildWithdrawalHtml } from './invoice.js';
+import { buildInvoiceHtml, buildCreditNoteHtml, buildTermsHtml, buildWithdrawalHtml } from './invoice.js';
+import { legalVersions } from './consent.js';
 import {
   tplOrderConfirmation, tplWithdrawalReceipt, tplWithdrawalLate, tplDeclarationUnmatched, tplRefundDone,
   tplCancellationReceipt, tplAdminDeclaration, berlinDate, berlinDateTime, legalValues,
@@ -38,7 +39,10 @@ const DAY_MS = 86_400_000;
 export const WITHDRAWAL_DAYS = 14;
 export const CHECKOUT_REUSE_MINUTES = 10;
 
-/** EU-Mitgliedstaaten (ISO 3166-1 alpha-2; Griechenland hier GR, nicht EL). */
+/** EU-Mitgliedstaaten (ISO 3166-1 alpha-2; Griechenland hier GR, nicht EL).
+ *  Einzige Quelle für Server und Oberfläche: Die Bestellübersicht liest die
+ *  Liste aus GET /api/billing/offer (countries), der Checkout prüft dagegen
+ *  (P1, Prüfteam 10.10.2026). */
 export const EU_COUNTRIES = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']);
 /** Schwellen in Cent. */
 export const THRESHOLDS = {
@@ -47,9 +51,25 @@ export const THRESHOLDS = {
   smallBusinessPrevYearCents: 2_500_000,    // 25.000 € Vorjahr (Paragraf 19 UStG)
   smallBusinessCurrYearCents: 10_000_000,   // 100.000 € laufendes Jahr
 };
+/** P7: Standard für die automatische Sperre des Verkaufs ins EU-Ausland
+ *  (9.000 €, mit 1.000 € Abstand zur gesetzlichen Schwelle). */
+export const EU_B2C_STOP_DEFAULT_CENTS = 900_000;
+
+/** P6: Nummer des Stornobelegs zu einer Rechnung. Eigener Kreis über das
+ *  Suffix: Der Rechnungskreis bleibt lückenlos, jede Rechnung hat höchstens
+ *  einen Storno. */
+export const creditNoteNo = o => `${o.invoice_no}-S`;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ORDER_NO_RE = /^B-\d{6,9}$/;
+// Bestellnummer: fortlaufender Teil plus fünf Zufallszeichen (Audit
+// 10.10.2026, S3). Der Zufallsteil macht Nummern unratbar, damit die sofort
+// wirksame öffentliche Kündigung (P4) nicht per Durchprobieren fremder
+// Nummern auslösbar ist. Ältere Nummern ohne Zusatz bleiben gültig, laufen
+// bei der öffentlichen Kündigung aber über den Bestätigungslink.
+const ORDER_NO_RE = /^B-\d{6,9}(?:-[A-HJ-NP-Z2-9]{5})?$/;
+const SUFFIX_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const orderSuffix = () => Array.from(crypto.randomBytes(5), b => SUFFIX_ABC[b & 31]).join('');
+const unguessableOrderNo = no => /-[A-HJ-NP-Z2-9]{5}$/.test(no);
 /* Name im öffentlichen Formular: Er steht im Wortlaut, und der geht an die
  * Bestelladresse. Ein Name braucht weder Adressen noch Markup — wer dort
  * einen Link unterbringen will, verschickt Phishing unter unserem Absender. */
@@ -81,7 +101,8 @@ const truthy = v => /^(1|true|yes|on)$/i.test(String(v || '').trim());
 
 /** Konfiguration aus der Umgebung. Fehlt etwas Pflichtiges, ist der Checkout
  *  aus (missing listet, was fehlt) — Widerruf und Webhook laufen trotzdem. */
-export function billingConfig(env = process.env) {
+/** @param legal  Inhalt von legal-texts.json (Tests: null = keine Datei). */
+export function billingConfig(env = process.env, legal = undefined) {
   const days = envInt(env, 'PASS_DAYS', 90, 1, MAX_ACCESS_DAYS);
   const base = String(env.PUBLIC_BASE_URL || env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null;
   const seller = {
@@ -92,6 +113,7 @@ export function billingConfig(env = process.env) {
     phone: String(env.SELLER_PHONE || '').trim(),
     taxId: String(env.SELLER_TAX_ID || '').trim(),
   };
+  const lv = legal === undefined ? legalVersions(env) : legalVersions(env, legal);
   const cfg = {
     enabled: truthy(env.BILLING_ENABLED),
     openRegistration: truthy(env.OPEN_REGISTRATION),
@@ -106,14 +128,22 @@ export function billingConfig(env = process.env) {
     sku: `pass${days}`,
     productName: String(env.PRODUCT_NAME || 'CV-Hub').trim().slice(0, 60),
     invoicePrefix: (String(env.INVOICE_PREFIX || 'CV').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12)) || 'CV',
-    termsVersion: String(env.TERMS_VERSION || '').trim().slice(0, 40) || null,
-    withdrawalVersion: String(env.WITHDRAWAL_VERSION || env.TERMS_VERSION || '').trim().slice(0, 40) || null,
+    // P5: Fassung aus mailtexts/legal-texts.json; die Umgebung übersteuert nur.
+    termsVersion: lv.terms,
+    withdrawalVersion: lv.withdrawal,
+    legalVersions: lv,
+    // P7: Ab dieser Summe (Cent, Privatkunden im EU-Ausland, laufendes ODER
+    // voriges Jahr) verkauft der Dienst nur noch nach Deutschland.
+    euB2cStopCents: envInt(env, env.EU_B2C_STOP_CENTS !== undefined ? 'EU_B2C_STOP_CENTS' : 'EU_ABROAD_STOP_CENTS', EU_B2C_STOP_DEFAULT_CENTS, 0, THRESHOLDS.euAbroadCents),
     seller,
     base,
     webhookUrl: String(env.BILLING_WEBHOOK_URL || '').trim() || (base ? `${base}/pdfapi/api/billing/webhook` : null),
-    mollieKey: String(env.MOLLIE_API_KEY || '').trim(),
+    // Nur echte Mollie-Schlüssel zählen (test_… / live_…). Ein Platzhalter wie
+    // „HIER_EINTRAGEN“ in der Umgebung gilt als nicht gesetzt.
+    mollieKey: /^(test|live)_[A-Za-z0-9]{20,}$/.test(String(env.MOLLIE_API_KEY || '').trim()) ? String(env.MOLLIE_API_KEY).trim() : '',
     mollieBase: String(env.MOLLIE_API_BASE || '').trim() || undefined,
-    altchaKey: String(env.ALTCHA_HMAC_KEY || '').trim(),
+    // Mindestens 32 Zeichen, sonst gilt der Schlüssel als nicht gesetzt (Platzhalter).
+    altchaKey: String(env.ALTCHA_HMAC_KEY || '').trim().length >= 32 ? String(env.ALTCHA_HMAC_KEY).trim() : '',
     // Wohin Erklärungen gehen, die Handarbeit brauchen.
     notifyEmail: String(env.BILLING_NOTIFY_EMAIL || env.ACCESS_NOTIFY_EMAIL || env.SELLER_EMAIL || '').trim() || null,
   };
@@ -178,12 +208,65 @@ export function withdrawableUntil(paidAt) {
 /** Wie emailConfirmed in server.js: nur selbst registrierte Konten brauchen den Klick. */
 const defaultEmailConfirmed = u => u?.signup_source !== 'self' || !!u?.email_confirmed_at;
 
-/** Gültigkeit des Bestätigungslinks für öffentliche Erklärungen (H2, M1). */
+/** Gültigkeit des Bestätigungslinks für öffentliche Erklärungen (H2, M1).
+ *  Kündigung 14 Tage; Widerruf 5 Tage (P3, Prüfteam 10.10.2026): Danach
+ *  bleiben dem Betreiber noch 9 Tage, um innerhalb der gesetzlichen 14 Tage ab
+ *  Eingang zu erstatten (Paragraf 357 Abs. 1 BGB) — auch ohne Klick. */
 export const DECLARATION_CONFIRM_DAYS = 14;
+export const DECLARATION_CONFIRM_DAYS_WITHDRAWAL = 5;
+export const confirmDaysFor = type => (type === 'withdrawal' ? DECLARATION_CONFIRM_DAYS_WITHDRAWAL : DECLARATION_CONFIRM_DAYS);
+
+/**
+ * Umsätze an Privatkunden im EU-Ausland (Land in der EU, nicht DE), netto
+ * ohne Widerrufe, je Kalenderjahr in Berliner Zeit: laufendes und voriges
+ * Jahr (Paragraf 3a Abs. 5 UStG). Gleiche Rechnung wie in report().
+ */
+export async function euAbroadTotals(pool, now = new Date()) {
+  const curr = berlinYear(now);
+  const prev = curr - 1;
+  const { rows } = await pool.query(
+    `SELECT extract(year FROM paid_at AT TIME ZONE 'Europe/Berlin')::int AS y,
+            coalesce(sum(amount_cents) FILTER (WHERE status NOT IN ('withdrawn', 'refunded')), 0)::bigint AS cents
+       FROM orders
+      WHERE paid_at IS NOT NULL AND country <> 'DE' AND country = ANY($1::text[])
+        AND paid_at >= make_timestamptz($2, 1, 1, 0, 0, 0, 'Europe/Berlin')
+      GROUP BY 1`,
+    [[...EU_COUNTRIES], prev],
+  );
+  const by = Object.fromEntries(rows.map(r => [r.y, Number(r.cents)]));
+  return { currentYear: curr, previousYear: prev, currentYearCents: by[curr] || 0, previousYearCents: by[prev] || 0 };
+}
 
 export function createBilling({ pool, config = billingConfig(), mollie, renderPdf, send = defaultSend, log = console.log, emailConfirmed = defaultEmailConfirmed }) {
   const cfg = config;
   const pay = mollie || createMollie({ apiKey: cfg.mollieKey, base: cfg.mollieBase });
+
+  /* ── P7: Verkaufssperre EU-Ausland ─────────────────────────────────────
+   * Ab cfg.euB2cStopCents (Standard 9.000 €) im laufenden ODER vorigen Jahr
+   * verkauft der Dienst nur noch nach Deutschland — 1.000 € vor der
+   * gesetzlichen Schwelle von 10.000 €, ab der § 19 UStG im Ausland nicht mehr
+   * schützt. Der Checkout rechnet jedes Mal neu; das Angebot (Länderliste der
+   * Oberfläche) nutzt einen Stand von höchstens einer Minute. */
+  let euCache = { at: 0, status: null };
+  async function euAbroadStatus({ fresh = false } = {}) {
+    if (!fresh && euCache.status && Date.now() - euCache.at < 60_000) return euCache.status;
+    const t = await euAbroadTotals(pool);
+    const max = Math.max(t.currentYearCents, t.previousYearCents);
+    const status = {
+      ...t,
+      stopAtCents: cfg.euB2cStopCents,
+      thresholdCents: THRESHOLDS.euAbroadCents,
+      warnAtCents: THRESHOLDS.euAbroadWarnCents,
+      paused: max >= cfg.euB2cStopCents,
+      remainingToStopCents: Math.max(0, cfg.euB2cStopCents - max),
+      remainingToThresholdCents: Math.max(0, THRESHOLDS.euAbroadCents - max),
+    };
+    euCache = { at: Date.now(), status };
+    return status;
+  }
+  function saleCountries(paused) {
+    return paused ? ['DE'] : ['DE', ...[...EU_COUNTRIES].filter(c => c !== 'DE').sort()];
+  }
 
   function offer() {
     return {
@@ -204,7 +287,15 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       // Bestellvorgangs. Muss zu den im Mollie-Profil aktivierten Arten passen.
       paymentMethods: (process.env.PAYMENT_METHODS || 'Kreditkarte (auch Apple Pay und Google Pay)|PayPal')
         .split('|').map((x) => x.trim()).filter(Boolean),
+      // P1/P7: Länder, in die gerade verkauft wird — die Oberfläche hat keine eigene Liste.
+      countries: saleCountries(!!euCache.status?.paused),
+      euAbroadPaused: !!euCache.status?.paused,
     };
+  }
+  /** Angebot mit frischem Stand der EU-Sperre (höchstens eine Minute alt). */
+  async function offerFresh() {
+    try { await euAbroadStatus(); } catch (err) { log(`billing: EU-Auslandsumsatz nicht gelesen (${err?.message || err})`); }
+    return offer();
   }
 
   function orderSummary(o) {
@@ -225,6 +316,8 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       refund: o.refund_status ? { status: o.refund_status } : null,
       cancelledAt: o.cancelled_at,
       cancelEffectiveAt: o.cancel_effective_at,
+      // P6: Nach einem Widerruf gibt es einen eigenen Stornobeleg (Nummer = Rechnungsnummer + „-S“).
+      creditNoteNo: (o.status === 'withdrawn' || o.status === 'refunded') && o.invoice_no ? creditNoteNo(o) : null,
     };
   }
 
@@ -291,8 +384,51 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return rows[0] || null;
   }
 
+  /* ── P6: Rechnung einfrieren, Storno als eigener Beleg (GoBD, § 14b UStG) ──
+   * Das PDF entsteht einmal — bei der Bestellbestätigung, bei Bestand beim
+   * ersten Abruf — und liegt dann unverändert in invoice_documents. Jeder
+   * spätere Abruf liefert genau diese Bytes, auch wenn sich SELLER_* oder der
+   * Status der Bestellung ändern. Beim Einfrieren nach einem Widerruf wird die
+   * Rechnung so erzeugt, wie sie ausgestellt war (ohne Widerrufsvermerk); der
+   * Widerruf steht im Stornobeleg. */
+  const sha256Hex = buf => crypto.createHash('sha256').update(buf).digest('hex');
+  async function storedDoc(orderId, kind) {
+    const { rows } = await pool.query('SELECT doc_no, issued_at, pdf, sha256 FROM invoice_documents WHERE order_id = $1 AND kind = $2', [orderId, kind]);
+    return rows[0] || null;
+  }
+  async function storeDoc(order, kind, docNo, issuedAt, html) {
+    const pdf = Buffer.from(await renderPdf(html));
+    const { rowCount } = await pool.query(
+      `INSERT INTO invoice_documents (id, order_id, kind, doc_no, issued_at, pdf, sha256)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (order_id, kind) DO NOTHING`,
+      [crypto.randomUUID(), order.id, kind, docNo, issuedAt, pdf, sha256Hex(pdf)],
+    );
+    if (rowCount) log(`billing: ${kind === 'storno' ? 'Stornobeleg' : 'Rechnung'} ${docNo} gespeichert`);
+    // Bei gleichzeitigem Erzeugen gewinnt der erste; alle liefern dessen Bytes.
+    return storedDoc(order.id, kind);
+  }
+  /** Rechnungs-PDF, wie es ausgestellt wurde. Wirft, wenn es keine Rechnung gibt. */
   async function invoicePdf(order) {
-    return renderPdf(buildInvoiceHtml({ order, seller: cfg.seller, productName: cfg.productName }));
+    if (!order?.invoice_no) throw new Error('keine Rechnung');
+    const have = await storedDoc(order.id, 'invoice');
+    if (have) return Buffer.from(have.pdf);
+    const asIssued = { ...order, status: 'paid' };
+    const doc = await storeDoc(order, 'invoice', order.invoice_no, order.paid_at,
+      buildInvoiceHtml({ order: asIssued, seller: cfg.seller, productName: cfg.productName }));
+    return Buffer.from(doc.pdf);
+  }
+  /** Stornobeleg nach Widerruf (null, wenn die Bestellung nicht widerrufen ist). */
+  async function creditNotePdf(order) {
+    if (!order?.invoice_no || !['withdrawn', 'refunded'].includes(order.status)) return null;
+    const have = await storedDoc(order.id, 'storno');
+    if (have) return Buffer.from(have.pdf);
+    // Erst die Rechnung einfrieren (falls noch nicht geschehen), dann den Storno dazu.
+    await invoicePdf(order);
+    const no = creditNoteNo(order);
+    const issuedAt = new Date();
+    const doc = await storeDoc(order, 'storno', no, issuedAt,
+      buildCreditNoteHtml({ order, seller: cfg.seller, productName: cfg.productName, creditNoteNo: no, issuedAt }));
+    return Buffer.from(doc.pdf);
   }
 
   /** Bestellbestätigung mit Rechnung und Vertragsunterlagen. Merkt sich den
@@ -341,7 +477,15 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     );
     if (rows[0]) {
       log(`billing: Erstattung ${o.id} → ${st}`);
-      if (st === 'refunded') await send({ to: rows[0].email, ...tplRefundDone({ order: rows[0], seller: cfg.seller, productName: cfg.productName, base: cfg.base }) }).catch(() => false);
+      if (st === 'refunded') {
+        // P6: Stornobeleg als Anhang, wenn er sich erzeugen lässt (sonst ohne).
+        let attachments;
+        try {
+          const pdf = await creditNotePdf(rows[0]);
+          if (pdf) attachments = [{ filename: `Stornobeleg-${creditNoteNo(rows[0])}.pdf`, content: pdf, contentType: 'application/pdf' }];
+        } catch (err) { log(`billing: Stornobeleg ${o.id} nicht erstellt (${err?.message || err})`); }
+        await send({ to: rows[0].email, ...tplRefundDone({ order: rows[0], seller: cfg.seller, productName: cfg.productName, base: cfg.base }), ...(attachments ? { attachments } : {}) }).catch(() => false);
+      }
     }
   }
 
@@ -405,6 +549,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     const billingName = [...String(body?.billingName || '')].map(ch => (ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127 ? ' ' : ch)).join('').replace(/\s+/g, ' ').trim();
     if (sku !== cfg.sku) return { status: 400, body: { error: 'Unbekanntes Produkt.', code: 'sku_invalid' } };
     if (!isCountryCode(country)) return { status: 400, body: { error: 'Bitte ein Land auswählen.', code: 'country_invalid' } };
+    /* P1 (Prüfteam 10.10.2026, Befund S1): Verkauft wird nur in die EU-27 —
+     * an Privatkunden in der EU und an Unternehmen in Deutschland. Bisher
+     * begrenzte nur die Oberfläche; ein Aufruf der API aus dem Vereinigten
+     * Königreich oder der Schweiz hätte dort Umsatzsteuerpflichten ausgelöst. */
+    if (!EU_COUNTRIES.has(country)) return { status: 400, body: { error: 'Aus diesem Land können wir den Pass derzeit nicht verkaufen.', code: 'country_not_available' } };
+    if (country !== 'DE' && body?.consumer !== true) return { status: 400, body: { error: 'Aus dem Ausland verkaufen wir nur an Privatpersonen. Bitte bestätige, dass du privat kaufst.', code: 'consumer_required' } };
     if (billingName.length < 2 || billingName.length > 120) return { status: 400, body: { error: 'Bitte den Namen für die Rechnung angeben (2 bis 120 Zeichen).', code: 'name_invalid' } };
     if (body?.acceptTerms !== true) return { status: 400, body: { error: 'Bitte AGB und Widerrufsbelehrung bestätigen.', code: 'terms_required' } };
     if (body?.ageConfirmed18 !== true) return { status: 400, body: { error: 'Der Kauf ist erst ab 18 Jahren möglich. Bitte bestätige dein Alter.', code: 'age18_required' } };
@@ -420,6 +570,16 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     if (plan?.kind === 'lifetime') {
       return { status: 409, body: { error: 'Dein dauerhafter Gratiszugang ist aktiv. Du musst keinen Bewerbungs-Pass kaufen.', code: 'plan_lifetime' } };
     }
+    /* P7: Verkauf ins EU-Ausland ruht ab der Schwelle (frisch gerechnet). */
+    if (country !== 'DE') {
+      const eu = await euAbroadStatus({ fresh: true });
+      if (eu.paused) {
+        log('billing: Kauf aus dem EU-Ausland abgelehnt (Umsatzschwelle erreicht)');
+        return { status: 400, body: { error: 'Aus diesem Land können wir den Pass derzeit nicht verkaufen.', code: 'country_not_available', reason: 'eu_abroad_paused' } };
+      }
+    }
+    // Häkchen „Kauf als Privatperson“ (P1): mit der Bestellung gespeichert.
+    const consumerConfirmed = body?.consumer === true;
 
     const client = await pool.connect();
     try {
@@ -439,14 +599,14 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       }
       const id = crypto.randomUUID();
       const { rows: nr } = await client.query(`SELECT 'B-' || lpad(nextval('order_no_seq')::text, 6, '0') AS no`);
-      const orderNo = nr[0].no;
+      const orderNo = `${nr[0].no}-${orderSuffix()}`;
       const locale = mollieLocale(lang);
       await client.query(
         `INSERT INTO orders (id, order_no, user_id, email, billing_name, country, sku, amount_cents, currency, status,
-                             locale, terms_version, withdrawal_version, age_confirmed_18, pass_days)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', $10, $11, $12, true, $13)`,
+                             locale, terms_version, withdrawal_version, age_confirmed_18, pass_days, consumer_confirmed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', $10, $11, $12, true, $13, $14)`,
         [id, orderNo, user.id, String(user.email).toLowerCase(), billingName, country, cfg.sku, cfg.priceCents, cfg.currency,
-          locale, cfg.termsVersion, cfg.withdrawalVersion, cfg.days],
+          locale, cfg.termsVersion, cfg.withdrawalVersion, cfg.days, consumerConfirmed],
       );
       let payment;
       try {
@@ -550,9 +710,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
    * jede Eingabe des Absenders (M4: sonst ein Mail-Relay für beliebigen Text
    * an beliebige Adressen). Den Wortlaut sieht nur der Betreiber. */
   const tokenHash = tk => crypto.createHash('sha256').update(String(tk)).digest('hex');
-  function newConfirmToken() {
+  function newConfirmToken(type) {
     const token = crypto.randomBytes(32).toString('base64url');   // 256 Bit
-    return { token, hash: tokenHash(token), expiresAt: new Date(Date.now() + DECLARATION_CONFIRM_DAYS * DAY_MS) };
+    return { token, hash: tokenHash(token), expiresAt: new Date(Date.now() + confirmDaysFor(type) * DAY_MS) };
   }
   function confirmUrl(type, token) {
     if (!cfg.base) return null;
@@ -560,8 +720,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return `${cfg.base}${path}?token=${encodeURIComponent(token)}`;
   }
 
-  async function sendPlainReceipt(type, email, receivedAt) {
-    await send({ to: String(email).trim(), ...tplDeclarationReceivedPlain({ type, receivedAt }) }).catch(() => false);
+  /* P2 (§ 356a Abs. 4 BGB): Die Eingangsbestätigung nennt den Inhalt der
+   * Erklärung — Name, angegebene Bestellnummer, Adresse. Die Vorlage prüft
+   * und filtert die Angaben selbst (M4: kein freier Text an fremde Adressen). */
+  async function sendPlainReceipt(type, email, receivedAt, extra = {}) {
+    const to = String(email).trim();
+    await send({ to, ...tplDeclarationReceivedPlain({ type, receivedAt, email: to, name: extra.name ?? null, orderNo: extra.orderNo ?? null }) }).catch(() => false);
   }
 
   async function notifyAdmin(args) {
@@ -623,6 +787,8 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       client.release();
     }
     log(`billing: Bestellung ${o.id} widerrufen (${channel})`);
+    // P6: Stornobeleg gleich ausstellen (nebenher; scheitert es, entsteht er beim ersten Abruf).
+    loadOrder(o.id).then(cur => creditNotePdf(cur)).catch(err => log(`billing: Stornobeleg ${o.id} nicht erstellt (${err?.message || err})`));
     if (!declarationId) {
       await recordDeclaration({
         type: 'withdrawal', channel, name: declared.name || o.billing_name, email: declared.email || o.email, orderNo: o.order_no,
@@ -677,16 +843,22 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         await notifyAdmin({ type: 'withdrawal', reason: 'Widerruf nach Fristende', statement, receivedAt, orderNos: [o.order_no] });
         return { matched: true, result: 'late' };
       }
-      const t = newConfirmToken();
+      const t = newConfirmToken('withdrawal');
       await recordDeclaration({
         type: 'withdrawal', channel: 'public', name, email, orderNo: o.order_no, userId: o.user_id, orderIds: [o.id], receivedAt, statement,
         status: 'pending_confirmation', confirmTokenHash: t.hash, confirmExpiresAt: t.expiresAt, request: { name, email },
       });
       const url = confirmUrl('withdrawal', t.token);
-      if (!url) {
-        log('billing: öffentlicher Widerruf ohne PUBLIC_BASE_URL — kein Bestätigungslink, Betreiber informiert');
-        await notifyAdmin({ type: 'withdrawal', reason: 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)', statement, receivedAt, orderNos: [o.order_no] });
-      }
+      /* P3: Der Betreiber erfährt sofort davon, auch wenn niemand klickt —
+       * die Erstattungsfrist läuft ab Eingang. */
+      await notifyAdmin({
+        type: 'withdrawal',
+        reason: url
+          ? `öffentlicher Widerruf eingegangen, offen und unbestätigt (Link ${DECLARATION_CONFIRM_DAYS_WITHDRAWAL} Tage); Erstattung spätestens 14 Tage nach Eingang, auch ohne Klick`
+          : 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)',
+        statement, receivedAt, orderNos: [o.order_no],
+      });
+      if (!url) log('billing: öffentlicher Widerruf ohne PUBLIC_BASE_URL — kein Bestätigungslink, Betreiber informiert');
       // An die Adresse der Bestellung, nicht an die eingegebene (sie sind gleich — aber so steht es im Code).
       await send({ to: o.email, ...tplDeclarationConfirm({ type: 'withdrawal', orders: [o], statement, receivedAt, url, expiresAt: t.expiresAt }) }).catch(() => false);
       log(`billing: öffentlicher Widerruf für ${o.id} eingegangen, wartet auf Bestätigung`);
@@ -699,9 +871,10 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       type: 'withdrawal', channel: 'public', name, email, orderNo: no || null, userId: candidates.length === 1 ? candidates[0].user_id : null,
       orderIds: candidates.map(o => o.id), receivedAt, statement, status: already ? 'done' : 'manual', note,
     });
-    // Fester Text ohne jede Eingabe des Absenders (M4). Der Wortlaut geht nur an den Betreiber.
-    await sendPlainReceipt('withdrawal', email, receivedAt);
-    if (!already) await notifyAdmin({ type: 'withdrawal', reason: candidates.length > 1 ? 'mehrere passende Bestellungen' : candidates.length === 1 ? note : 'keine Bestellung zuzuordnen', statement, receivedAt, orderNos: candidates.map(o => o.order_no) });
+    // Feste Vorlage, Angaben nur geprüft (M4, P2). Der Wortlaut geht nur an den Betreiber.
+    await sendPlainReceipt('withdrawal', email, receivedAt, { name, orderNo: no || null });
+    if (already) await notifyAdmin({ type: 'withdrawal', reason: 'öffentlicher Widerruf zu einer schon widerrufenen Bestellung eingegangen (nur zur Kenntnis)', statement, receivedAt, orderNos: candidates.map(o => o.order_no) });
+    else await notifyAdmin({ type: 'withdrawal', reason: candidates.length > 1 ? 'mehrere passende Bestellungen' : candidates.length === 1 ? note : 'keine Bestellung zuzuordnen', statement, receivedAt, orderNos: candidates.map(o => o.order_no) });
     return { matched: false };
   }
 
@@ -803,7 +976,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       const to = channel === 'public' ? done[0].order.email : email;
       await send({ to, ...tplCancellationReceipt({ order: done[0].order, receivedAt, kind: input.kind, reason: input.reason, effectiveAt, email: to, seller: cfg.seller, productName: cfg.productName, base: cfg.base, statement }) }).catch(() => false);
     } else if (channel === 'public') {
-      await sendPlainReceipt('cancellation', email, receivedAt);
+      await sendPlainReceipt('cancellation', email, receivedAt, { name, orderNo: orderNo || null });
     } else {
       await send({ to: email, ...tplDeclarationUnmatched({ type: 'cancellation', statement, receivedAt }) }).catch(() => false);
     }
@@ -834,9 +1007,14 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
 
   /** Kündigung ohne Anmeldung. Gleiche Antwort für jeden Ausgang. Zugeordnet
-   *  nur, wenn die eingegebene Adresse die der Bestellung ist; dann geht an
-   *  diese Adresse die Eingangsbestätigung mit Bestätigungslink, und erst der
-   *  Klick beendet den Pass (H2). */
+   *  nur, wenn die eingegebene Adresse die der Bestellung ist.
+   *
+   *  P4 (Prüfteam 10.10.2026, BGH I ZR 161/24 „unmittelbar“): Passen
+   *  Bestellnummer UND Adresse zu einer laufenden Bestellung, wirkt die
+   *  Kündigung sofort, ohne Klick; die Mail an die Bestelladresse bestätigt
+   *  nur. Ohne Bestellnummer bleibt der Bestätigungslink (H2): Die Adresse
+   *  allein ist kein Nachweis, dass die Erklärung vom Kunden kommt.
+   *  Abwägung und Grenzen: SICHERHEIT.md, Abschnitt Runde 8b. */
   async function cancelPublic({ name, email, orderNo, body, receivedAt: at = null }) {
     const input = cancelInput(body);
     const receivedAt = at ? new Date(at) : new Date();
@@ -856,10 +1034,19 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       await finishCancellation({ orders, done: [], input, name, email: String(email).trim(), channel: 'public', receivedAt, userId: null, orderNo: no });
       return { matched: false };
     }
+    if (no && unguessableOrderNo(no)) {
+      // P4: Bestellnummer und Adresse passen — sofort ausführen.
+      const done = await applyCancellation(orders.map(o => o.id), { ...input, channel: 'public', receivedAt });
+      const { statement } = await finishCancellation({ orders, done, input, name, email: String(email).trim(), channel: 'public', receivedAt, userId: orders[0].user_id, orderNo: no });
+      // Außerordentliche Kündigungen meldet finishCancellation schon (Handarbeit); sonst zur Kenntnis.
+      if (input.kind !== 'extraordinary') await notifyAdmin({ type: 'cancellation', reason: 'öffentliche Kündigung mit Bestellnummer sofort ausgeführt (nur zur Kenntnis)', statement, receivedAt, orderNos: orders.map(o => o.order_no) });
+      log(`billing: öffentliche Kündigung für ${done.length} Bestellung(en) sofort ausgeführt (Bestellnummer und Adresse passen)`);
+      return { matched: true, pending: false };
+    }
     // Vorschau des Beendigungszeitpunkts für den Wortlaut — gerechnet ab dem Eingang, wie später bei der Ausführung.
     const preview = new Date(Math.max(...orders.map(o => cancelEffective(o, input.when, input.date, receivedAt.getTime()).getTime())));
     const statement = cancellationStatement({ orders, name, email, ...input, effectiveAt: preview, receivedAt, channel: 'public', orderNo: no });
-    const t = newConfirmToken();
+    const t = newConfirmToken('cancellation');
     await recordDeclaration({
       type: 'cancellation', channel: 'public', name, email, orderNo: orders.map(o => o.order_no).join(','), userId: orders[0].user_id,
       orderIds: orders.map(o => o.id), receivedAt, statement, status: 'pending_confirmation',
@@ -867,7 +1054,12 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       request: { name, email, kind: input.kind, reason: input.reason, when: input.when, date: input.date },
     });
     const url = confirmUrl('cancellation', t.token);
-    if (!url) await notifyAdmin({ type: 'cancellation', reason: 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)', statement, receivedAt, orderNos: orders.map(o => o.order_no) });
+    // P3: Betreiber sofort informieren, auch solange die Kündigung unbestätigt ist.
+    await notifyAdmin({
+      type: 'cancellation',
+      reason: url ? `öffentliche Kündigung ohne Bestellnummer eingegangen, offen und unbestätigt (Link ${DECLARATION_CONFIRM_DAYS} Tage)` : 'Bestätigungslink nicht verschickt (PUBLIC_BASE_URL fehlt)',
+      statement, receivedAt, orderNos: orders.map(o => o.order_no),
+    });
     await send({ to: orders[0].email, ...tplDeclarationConfirm({ type: 'cancellation', orders, statement, receivedAt, url, expiresAt: t.expiresAt }) }).catch(() => false);
     log(`billing: öffentliche Kündigung für ${orders.length} Bestellung(en) eingegangen, wartet auf Bestätigung`);
     return { matched: true, pending: true };
@@ -875,7 +1067,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
 
   /**
    * Klick auf den Link aus der Eingangsbestätigung: führt die Erklärung aus.
-   * Einmalig, 14 Tage gültig. Für Frist und Wirkzeitpunkt zählt der Eingang.
+   * Einmalig, gültig 5 Tage (Widerruf) bzw. 14 Tage (Kündigung). Für Frist und Wirkzeitpunkt zählt der Eingang.
    * @returns { status, body }
    */
   async function confirmDeclaration(token) {
@@ -929,16 +1121,22 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
   const firstNo = s => String(s || '').split(',')[0] || null;
 
-  /** Öffentliche Erklärungen, deren Link nach 14 Tagen nicht geklickt wurde:
-   *  an den Betreiber, nicht ausführen. */
+  /** Öffentliche Erklärungen, deren Link nicht rechtzeitig geklickt wurde
+   *  (Widerruf 5, Kündigung 14 Tage): an den Betreiber, nicht ausführen. */
   async function escalateUnconfirmed() {
     const { rows } = await pool.query(
-      `UPDATE declarations SET status = 'manual', note = 'nicht bestätigt (Link 14 Tage ungeklickt)'
+      `UPDATE declarations
+          SET status = 'manual',
+              note = CASE WHEN type = 'withdrawal' THEN 'nicht bestätigt (Link ${DECLARATION_CONFIRM_DAYS_WITHDRAWAL} Tage ungeklickt)'
+                          ELSE 'nicht bestätigt (Link ${DECLARATION_CONFIRM_DAYS} Tage ungeklickt)' END
         WHERE status = 'pending_confirmation' AND confirm_expires_at <= now()
         RETURNING id, type, order_no, received_at, statement`,
     );
     for (const d of rows) {
-      await notifyAdmin({ type: d.type, reason: 'öffentliche Erklärung 14 Tage unbestätigt — nicht ausgeführt, bitte entscheiden', statement: d.statement, receivedAt: d.received_at, orderNos: String(d.order_no || '').split(',').filter(Boolean) });
+      const why = d.type === 'withdrawal'
+        ? `öffentlicher Widerruf ${DECLARATION_CONFIRM_DAYS_WITHDRAWAL} Tage unbestätigt — nicht ausgeführt. Bitte entscheiden: Erstattung spätestens 14 Tage nach Eingang`
+        : `öffentliche Kündigung ${DECLARATION_CONFIRM_DAYS} Tage unbestätigt — nicht ausgeführt, bitte entscheiden`;
+      await notifyAdmin({ type: d.type, reason: why, statement: d.statement, receivedAt: d.received_at, orderNos: String(d.order_no || '').split(',').filter(Boolean) });
     }
     return rows.length;
   }
@@ -986,6 +1184,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     const warnings = [];
     if (euMax >= THRESHOLDS.euAbroadCents) warnings.push({ code: 'eu_threshold_exceeded', text: 'Umsätze an Privatkunden im EU-Ausland über 10.000 € (Vorjahr oder laufendes Jahr): Ab dem überschreitenden Umsatz gilt die Umsatzsteuer des Kundenlands (§ 3a Abs. 5 UStG), § 19 UStG schützt dort nicht. OSS-Registrierung beim BZSt prüfen, Steuerberatung einschalten.' });
     else if (euMax >= THRESHOLDS.euAbroadWarnCents) warnings.push({ code: 'eu_threshold_near', text: 'Umsätze an Privatkunden im EU-Ausland über 8.000 €: Die Schwelle von 10.000 € (§ 3a Abs. 5 UStG, Vorjahr und laufendes Jahr) rückt näher.' });
+    if (euMax >= cfg.euB2cStopCents) warnings.push({ code: 'eu_abroad_paused', text: `Verkauf ins EU-Ausland automatisch gesperrt: Die Umsätze dort haben ${(cfg.euB2cStopCents / 100).toLocaleString('de-DE')} € erreicht (EU_B2C_STOP_CENTS). Verkauf nach Deutschland läuft weiter.` });
     if (totals[curr] >= THRESHOLDS.smallBusinessCurrYearCents * 0.8 || totals[prev] >= THRESHOLDS.smallBusinessPrevYearCents * 0.8) {
       warnings.push({ code: 'small_business_near', text: 'Die Umsätze dieses Werkzeugs allein erreichen 80 % einer Grenze nach § 19 UStG. Die Grenzen gelten für ALLE Umsätze des Unternehmens zusammen.' });
     }
@@ -1005,6 +1204,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         currentYearCents: euAbroad[curr], previousYearCents: euAbroad[prev],
         thresholdCents: THRESHOLDS.euAbroadCents, warnAtCents: THRESHOLDS.euAbroadWarnCents,
         warning: euMax >= THRESHOLDS.euAbroadWarnCents, exceeded: euMax >= THRESHOLDS.euAbroadCents,
+        stopAtCents: cfg.euB2cStopCents, paused: euMax >= cfg.euB2cStopCents,
         note: 'Privatkunden mit Land der Bestellung in einem anderen EU-Staat als DE. Schwelle 10.000 € netto der Entgelte, Vorjahr UND laufendes Jahr (§ 3a Abs. 5 UStG).',
       },
       total: {
@@ -1074,9 +1274,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   function mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha }) {
     const urlencoded = express.urlencoded({ extended: false, limit: '4kb' });
 
-    app.get('/api/billing/offer', (_req, res) => {
+    app.get('/api/billing/offer', async (_req, res) => {
       res.setHeader('Cache-Control', 'no-store');
-      res.json(offer());
+      res.json(await offerFresh());
     });
 
     app.post('/api/billing/checkout', rateLimit({ route: 'checkout', max: 20, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
@@ -1142,6 +1342,23 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       } catch (err) {
         log(`billing: Rechnung ${o.id} nicht erstellt (${err?.message || err})`);
         res.status(503).json({ error: 'Die Rechnung lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.' });
+      }
+    });
+
+    /* P6: Stornobeleg nach Widerruf, eigener Beleg neben der unveränderten Rechnung. */
+    app.get('/api/billing/orders/:id/credit-note.pdf', rateLimit({ route: 'invoice', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+      const o = await ownOrder(req, res);
+      if (!o) return;
+      if (!o.invoice_no || !['withdrawn', 'refunded'].includes(o.status)) return res.status(404).json({ error: 'Für diese Bestellung gibt es keinen Stornobeleg.' });
+      try {
+        const pdf = await creditNotePdf(o);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Content-Disposition', `attachment; filename="Stornobeleg-${creditNoteNo(o)}.pdf"`);
+        res.send(pdf);
+      } catch (err) {
+        log(`billing: Stornobeleg ${o.id} nicht erstellt (${err?.message || err})`);
+        res.status(503).json({ error: 'Der Stornobeleg lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.' });
       }
     });
 
@@ -1231,6 +1448,42 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       res.json({ ok: true });
     });
 
+    /* Rechnung erneut laden, im Admin-Bereich (Runde 8b, 10.10.2026). Seit P6
+     * dasselbe gespeicherte PDF wie für die Kundin. */
+    app.get('/api/admin/billing/orders/:id/invoice.pdf', requireAuth, requireAdmin, async (req, res) => {
+      if (!UUID_RE.test(String(req.params.id))) return res.status(404).json({ error: 'Nicht gefunden.' });
+      const o = await loadOrder(req.params.id);
+      if (!o || !o.invoice_no) return res.status(404).json({ error: 'Für diese Bestellung gibt es keine Rechnung.' });
+      try {
+        const pdf = await invoicePdf(o);
+        res.locals.audit = { action: 'invoice_pdf', target: o.invoice_no };
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Content-Disposition', `attachment; filename="Rechnung-${o.invoice_no}.pdf"`);
+        res.send(pdf);
+      } catch (err) {
+        log(`billing: Rechnung ${o.id} nicht erstellt (${err?.message || err})`);
+        res.status(503).json({ error: 'Die Rechnung lässt sich gerade nicht erstellen.' });
+      }
+    });
+
+    app.get('/api/admin/billing/orders/:id/credit-note.pdf', requireAuth, requireAdmin, async (req, res) => {
+      if (!UUID_RE.test(String(req.params.id))) return res.status(404).json({ error: 'Nicht gefunden.' });
+      const o = await loadOrder(req.params.id);
+      if (!o || !o.invoice_no || !['withdrawn', 'refunded'].includes(o.status)) return res.status(404).json({ error: 'Für diese Bestellung gibt es keinen Stornobeleg.' });
+      try {
+        const pdf = await creditNotePdf(o);
+        res.locals.audit = { action: 'credit_note_pdf', target: creditNoteNo(o) };
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Content-Disposition', `attachment; filename="Stornobeleg-${creditNoteNo(o)}.pdf"`);
+        res.send(pdf);
+      } catch (err) {
+        log(`billing: Stornobeleg ${o.id} nicht erstellt (${err?.message || err})`);
+        res.status(503).json({ error: 'Der Stornobeleg lässt sich gerade nicht erstellen.' });
+      }
+    });
+
     app.get('/api/admin/billing', requireAuth, requireAdmin, async (_req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.json(await report());
@@ -1238,7 +1491,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
 
   return {
-    config: cfg, offer, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
+    config: cfg, offer, offerFresh, euAbroadStatus, invoicePdf, creditNotePdf, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
     sendConfirmation, report, runJobs, startJobs, mount, orderSummary,
   };
 }

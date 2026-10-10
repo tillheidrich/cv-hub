@@ -33,6 +33,12 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # Optional separate admin area on its own host (pdf-service/ADMIN.md).
+      # Empty = admin page under /admin/ on the main address. Set the same
+      # ADMIN_HOST for the frontend below.
+      ADMIN_HOST: ${ADMIN_HOST:-}
+      ADMIN_URL: ${ADMIN_URL:-}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -94,9 +100,16 @@ services:
     build:
       context: ./app
       args:
-        # Base for canonical, og:url and the sitemap of the static guides
-        # under /ratgeber/ (scripts/ratgeber-build.mjs).
+        # Base for canonical, hreflang, og:url, sitemap and llms.txt of the
+        # prerendered start page and the magazine under /magazin/
+        # (scripts/landing-prerender.mjs, scripts/magazin-build.mjs).
         PUBLIC_BASE_URL: ${APP_BASE_URL:-}
+    environment:
+      # app/nginx.conf is a template: the nginx image substitutes only the
+      # ADMIN_HOST placeholder at start-up (/etc/nginx/templates,
+      # NGINX_ENVSUBST_FILTER=^ADMIN_HOST$ in app/Dockerfile). admin.invalid
+      # never resolves, so without ADMIN_HOST there is no admin host.
+      ADMIN_HOST: ${ADMIN_HOST:-admin.invalid}
     ports:
       - "8080:80"
     depends_on:

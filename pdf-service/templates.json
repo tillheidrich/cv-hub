@@ -192,6 +192,54 @@
       "name": "Porto",
       "category": "kreativ",
       "description": "Name in Plakatgröße, Farbspalte rechts"
+    },
+    {
+      "id": "dublin",
+      "name": "Dublin",
+      "category": "klassisch",
+      "description": "Internationaler Lebenslauf, ohne Foto, Datum rechts"
+    },
+    {
+      "id": "luxemburg",
+      "name": "Luxemburg",
+      "category": "klassisch",
+      "description": "Europäisches Raster, Angaben rechtsbündig links"
+    },
+    {
+      "id": "freiburg",
+      "name": "Freiburg",
+      "category": "modern",
+      "description": "Berufseinstieg: Ausbildung zuerst, Profil im Kasten"
+    },
+    {
+      "id": "tallinn",
+      "name": "Tallinn",
+      "category": "modern",
+      "description": "IT: Technikliste zuerst, Überschriften in Monospace"
+    },
+    {
+      "id": "graz",
+      "name": "Graz",
+      "category": "klassisch",
+      "description": "Führungsposition: Kurzprofil groß, Schwerpunkte vorn"
+    },
+    {
+      "id": "linz",
+      "name": "Linz",
+      "category": "modern",
+      "description": "Quereinstieg: Kenntnisse vorn, kompakter Berufsweg"
+    },
+    {
+      "id": "luebeck",
+      "name": "Lübeck",
+      "category": "klassisch",
+      "description": "Nachweise zuerst: Zertifikate und Führerschein vorn"
+    },
+    {
+      "id": "valencia",
+      "name": "Valencia",
+      "category": "kreativ",
+      "description": "Freiberuf: Projekte zuerst, Links im Kopf"
     }
   ],
   "fontPairings": [

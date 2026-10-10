@@ -22,10 +22,14 @@ import { deriveKey } from 'altcha-lib/algorithms/pbkdf2';
 import { startPostgres, startServer, client, findChromium, findPgBin } from './testkit.mjs';
 import { runJanitor } from './janitor.js';
 import { runAccessNotices } from './access.js';
-import { createBilling, billingConfig, withdrawableUntil, isCountryCode } from './billing.js';
+import { createBilling, billingConfig, withdrawableUntil, isCountryCode, EU_COUNTRIES, DECLARATION_CONFIRM_DAYS_WITHDRAWAL } from './billing.js';
+import { legalVersions } from './consent.js';
 import { formatAmount, parseAmount, mollieLocale, checkApiBase } from './mollie.js';
 import { createAltcha } from './altcha.js';
 import { buildLegalJson, serialize as serializeLegal, LEGAL_DIR, LEGAL_JSON } from './scripts/sync-legal.mjs';
+import { ART9_VERSION } from './consent.js';
+// Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
+const ART9 = { version: ART9_VERSION };
 
 const PG_PORT = Number(process.env.BILLING_PG_PORT || 5481);
 const API_PORT = Number(process.env.BILLING_API_PORT || 3181);
@@ -160,7 +164,7 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
   /** Offene Registrierung samt Bestätigung; gibt { C, id, email } zurück. */
   async function registerSelf(email, { confirm = true } = {}) {
     const C = client(srv.base);
-    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true });
+    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     if (confirm) {
       const m = await waitFor(() => mailsTo(email).find(x => /bestätige/.test(x.subject)));
@@ -229,17 +233,17 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     db = new pg.Pool({ connectionString: pgInst.url, max: 4 });
 
     Adm = client(srv.base);
-    let r = await Adm.post('/api/auth/register', { username: 'leitung', password: 'admin-passwort-1', email: 'admin@example.org' });
+    let r = await Adm.post('/api/auth/register', { username: 'leitung', password: 'admin-passwort-1', email: 'admin@example.org', art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     const plain = (await Adm.post('/api/admin/invites', {})).data.code;
     Bestand = client(srv.base);
-    r = await Bestand.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: plain });
+    r = await Bestand.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: plain, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     bestandId = r.data.user.id;
     const pilotCode = (await Adm.post('/api/admin/invites', { maxUses: 5, accessDays: 30 })).data.code;
     Pilot = client(srv.base);
     // Neues Formular: Einladung ohne Nutzername — der entsteht aus der Adresse.
-    r = await Pilot.post('/api/auth/register', { email: 'pilot@example.org', password: 'pilot-passwort-1', inviteCode: pilotCode });
+    r = await Pilot.post('/api/auth/register', { email: 'pilot@example.org', password: 'pilot-passwort-1', inviteCode: pilotCode, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     pilotId = r.data.user.id;
   });
@@ -282,23 +286,31 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const b = createBilling({ pool: null, config: off, renderPdf: async () => Buffer.alloc(0) });
     assert.equal(b.offer().enabled, false);
     assert.equal((await b.checkout({ id: 1, email: 'x@example.org' }, checkoutBody())).status, 404);
-    const half = billingConfig({ BILLING_ENABLED: '1', MOLLIE_API_KEY: 'test_x' });
+    const half = billingConfig({ BILLING_ENABLED: '1', MOLLIE_API_KEY: MOLLIE_KEY });
+    // Platzhalter in der Umgebung gelten als nicht gesetzt.
+    assert.ok(billingConfig({ MOLLIE_API_KEY: 'HIER_EINTRAGEN', ALTCHA_HMAC_KEY: 'HIER_EINTRAGEN' }).missing.includes('MOLLIE_API_KEY'));
+    assert.ok(billingConfig({ ALTCHA_HMAC_KEY: 'HIER_EINTRAGEN' }).missing.includes('ALTCHA_HMAC_KEY'));
     assert.equal(half.ready, false);
-    for (const k of ['SELLER_NAME', 'SELLER_ADDRESS', 'SELLER_EMAIL', 'SELLER_PHONE', 'PUBLIC_BASE_URL', 'TERMS_VERSION', 'ALTCHA_HMAC_KEY']) assert.ok(half.missing.includes(k), k);
+    for (const k of ['SELLER_NAME', 'SELLER_ADDRESS', 'SELLER_EMAIL', 'SELLER_PHONE', 'PUBLIC_BASE_URL', 'ALTCHA_HMAC_KEY']) assert.ok(half.missing.includes(k), k);
+    // P5 (B4): Die Fassung kommt aus legal-texts.json, TERMS_VERSION ist nur noch Übersteuerung.
+    assert.ok(!half.missing.includes('TERMS_VERSION'), 'Fassung aus der Datei');
+    assert.equal(half.termsVersion, JSON.parse(readFileSync(LEGAL_JSON, 'utf8')).terms.version);
+    // Ohne Datei und ohne Variable fehlt die Fassung weiter.
+    assert.ok(billingConfig({ BILLING_ENABLED: '1' }, null).missing.includes('TERMS_VERSION'));
     assert.equal(billingConfig({ SELLER_ADDRESS: 'A 1 | 12345 B' }).seller.address, 'A 1\n12345 B');
   });
 
   test('ALTCHA: gültig, ungültig, abgelaufen, fremd, Wiederholung', async () => {
     const store = new Set();
     const fakePool = { query: async (_sql, [id]) => (store.has(id) ? { rowCount: 0 } : (store.add(id), { rowCount: 1 })) };
-    const a = createAltcha({ pool: fakePool, hmacKey: 'k1' });
+    const a = createAltcha({ pool: fakePool, hmacKey: 'k1-altcha-test-key-0123456789abcdef' });
     const ch = await a.challenge();
     const sol = await solveChallenge({ challenge: ch, deriveKey });
     const payload = Buffer.from(JSON.stringify({ challenge: ch, solution: sol })).toString('base64');
     assert.deepEqual(await a.verify(payload), { ok: true });
     assert.equal((await a.verify(payload)).reason, 'replay');
     // Falscher Schlüssel → Signatur passt nicht.
-    const b = createAltcha({ pool: fakePool, hmacKey: 'k2' });
+    const b = createAltcha({ pool: fakePool, hmacKey: 'k2-altcha-test-key-0123456789abcdef' });
     const ch2 = await a.challenge();
     const sol2 = await solveChallenge({ challenge: ch2, deriveKey });
     assert.equal((await b.verify(Buffer.from(JSON.stringify({ challenge: ch2, solution: sol2 })).toString('base64'))).reason, 'signature');
@@ -328,9 +340,9 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
 
   test('Gratis-Grenze nur mit FREE_TIER_LIMITS und verkaufsbereitem Dienst', () => {
     const full = {
-      BILLING_ENABLED: '1', MOLLIE_API_KEY: 'test_x', SELLER_NAME: 'S', SELLER_ADDRESS: 'A 1 | 12345 B',
+      BILLING_ENABLED: '1', MOLLIE_API_KEY: MOLLIE_KEY, SELLER_NAME: 'S', SELLER_ADDRESS: 'A 1 | 12345 B',
       SELLER_EMAIL: 's@example.org', SELLER_PHONE: '0', PUBLIC_BASE_URL: 'https://cv.example.org',
-      TERMS_VERSION: 'x', ALTCHA_HMAC_KEY: 'k',
+      TERMS_VERSION: 'x', ALTCHA_HMAC_KEY: 'altcha-test-key-0123456789abcdef',
     };
     const offerOf = env => createBilling({ pool: null, config: billingConfig(env), renderPdf: async () => Buffer.alloc(0) }).offer();
     // Heutiger Produktionsstand (Verkauf aus) und selbst gehostet: alles frei.
@@ -338,7 +350,9 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     assert.deepEqual(offerOf({ FREE_TIER_LIMITS: '1' }).freeTier, { limited: false }, 'ohne Verkauf keine Grenze');
     assert.deepEqual(offerOf({ ...full, BILLING_ENABLED: '0', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
     // Verkauf an, aber Pflichtangabe fehlt: nicht bereit, also keine Grenze.
-    assert.deepEqual(offerOf({ ...full, TERMS_VERSION: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
+    assert.deepEqual(offerOf({ ...full, SELLER_PHONE: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
+    // P5: Eine leere TERMS_VERSION macht den Dienst nicht unvollständig — die Fassung steht in der Datei.
+    assert.deepEqual(offerOf({ ...full, TERMS_VERSION: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: true });
     // Verkauf bereit, Schalter aus: frei wie bisher.
     assert.deepEqual(offerOf(full).freeTier, { limited: false });
     assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '0' }).freeTier, { limited: false });
@@ -369,12 +383,12 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
 
   test('Offene Registrierung: ALTCHA Pflicht (ungültig, Wiederholung), Alter ab 16, Mail-Dublette', async () => {
     const C = client(srv.base);
-    let r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: 'kaputt', ageConfirmed16: true });
+    let r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: 'kaputt', ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 400); assert.equal(r.data.code, 'altcha_invalid');
     const payload = await solveAltcha(srv.base);
-    r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: payload });
+    r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: payload, art9Consent: ART9 });
     assert.equal(r.status, 400); assert.equal(r.data.code, 'age16_required');
-    r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: payload, ageConfirmed16: true });
+    r = await C.post('/api/auth/register', { email: 'neu1@example.org', password: 'kunden-passwort-1', altcha: payload, ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal(r.data.emailConfirmed, false);
     assert.equal(r.data.user.emailConfirmed, false);
@@ -384,17 +398,17 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     assert.ok(C.cookie, 'sofort angemeldet');
     // Dieselbe gelöste Aufgabe ein zweites Mal: abgewiesen.
     const D = client(srv.base);
-    r = await D.post('/api/auth/register', { email: 'neu2@example.org', password: 'kunden-passwort-1', altcha: payload, ageConfirmed16: true });
+    r = await D.post('/api/auth/register', { email: 'neu2@example.org', password: 'kunden-passwort-1', altcha: payload, ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 400); assert.equal(r.data.code, 'altcha_invalid');
     // Gleiche Adresse noch einmal.
-    r = await D.post('/api/auth/register', { email: 'NEU1@example.org', password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true });
+    r = await D.post('/api/auth/register', { email: 'NEU1@example.org', password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 409); assert.equal(r.data.code, 'email_taken');
     const row = (await db.query(`SELECT * FROM users WHERE email = 'neu1@example.org'`)).rows[0];
     assert.equal(row.signup_source, 'self');
     assert.equal(row.plan_kind, 'none');
     assert.ok(row.age_confirmed_16_at);
     // Einladungscode ohne gültigen Code: weiterhin abgewiesen.
-    r = await client(srv.base).post('/api/auth/register', { email: 'x@example.org', password: 'kunden-passwort-1', inviteCode: 'FALSCH-CODE' });
+    r = await client(srv.base).post('/api/auth/register', { email: 'x@example.org', password: 'kunden-passwort-1', inviteCode: 'FALSCH-CODE', art9Consent: ART9 });
     assert.equal(r.status, 403);
   });
 
@@ -470,7 +484,7 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     const r = await C.post('/api/billing/checkout', checkoutBody({ priceCents: 1, amount: { value: '0.01' }, days: 9999, lang: 'fr' }));
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.match(r.data.checkoutUrl, /^https:\/\/www\.mollie\.com\/checkout\//);
-    assert.match(r.data.orderNo, /^B-\d{6}$/);
+    assert.match(r.data.orderNo, /^B-\d{6}-[A-HJ-NP-Z2-9]{5}$/);
     const call = mollie.calls.slice(before).find(c => c.method === 'POST' && c.url === '/v2/payments');
     assert.deepEqual(call.body.amount, { currency: 'EUR', value: '9.00' });
     assert.equal(call.body.locale, 'fr_FR');
@@ -515,10 +529,16 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
 
   test('Ganzer Weg: Checkout → Webhook paid → Pass aktiv → Rechnung → Widerruf → Erstattung → Pass gekürzt', async () => {
     const email = 'kaeuferin@example.org';
+    let invBefore = null;
     const { C, id: uid } = await registerSelf(email);
-    const co = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT' }));
+    // P1: aus dem EU-Ausland nur mit Häkchen „privat“.
+    const noConsumer = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT' }));
+    assert.equal(noConsumer.status, 400);
+    assert.equal(noConsumer.data.code, 'consumer_required');
+    const co = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true }));
     assert.equal(co.status, 200);
     const orderId = co.data.orderId;
+    assert.equal((await orderRow(orderId)).consumer_confirmed, true, 'Häkchen mit der Bestellung gespeichert');
     let o = await orderRow(orderId);
 
     // Vor der Zahlung: offen, nichts frei.
@@ -569,10 +589,12 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
           assert.ok(text.includes(w), `Rechnung hat Textebene mit „${w}“:\n${text}`);
         }
       }
-      // Dieselbe Rechnung über den Konto-Weg.
+      // Dieselbe Rechnung über den Konto-Weg — P6: byte-gleich mit dem Anhang (gespeichert, nicht neu erzeugt).
       const inv = await C.get(`/api/billing/orders/${orderId}/invoice.pdf`, { raw: true });
       assert.equal(inv.status, 200);
       assert.equal(inv.headers.get('content-type'), 'application/pdf');
+      assert.ok(inv.data.equals(pdf), 'ausgelieferte Rechnung = Rechnung aus der Bestellbestätigung');
+      invBefore = inv.data;
       if (HAS_PDFTOTEXT) assert.ok(pdfText(inv.data).includes(o.invoice_no));
     }
 
@@ -633,11 +655,36 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     assert.ok(await waitFor(() => mailsTo(email).find(x => /Erstattung ausgeführt/.test(x.subject))));
     const l2 = (await C.get('/api/billing/orders')).data.orders[0];
     assert.deepEqual({ status: l2.status, refund: l2.refund, w: l2.withdrawableUntil }, { status: 'refunded', refund: { status: 'refunded' }, w: null });
-    // Rechnung bleibt abrufbar und trägt den Widerruf.
-    if (chromiumPath && HAS_PDFTOTEXT) {
-      const t = pdfText((await C.get(`/api/billing/orders/${orderId}/invoice.pdf`, { raw: true })).data);
-      assert.match(t, /widerrufen/);
+    // P6 (B4): Die Rechnung bleibt unverändert (GoBD); der Widerruf hat einen eigenen Stornobeleg.
+    assert.equal(l2.creditNoteNo, `${o.invoice_no}-S`);
+    if (chromiumPath) {
+      const after = (await C.get(`/api/billing/orders/${orderId}/invoice.pdf`, { raw: true })).data;
+      assert.ok(after.equals(invBefore), 'Rechnung nach dem Widerruf byte-gleich');
+      if (HAS_PDFTOTEXT) assert.doesNotMatch(pdfText(after), /widerrufen/, 'kein nachträglicher Vermerk in der Rechnung');
+      const cn = await C.get(`/api/billing/orders/${orderId}/credit-note.pdf`, { raw: true });
+      assert.equal(cn.status, 200);
+      assert.equal(cn.headers.get('content-type'), 'application/pdf');
+      assert.match(String(cn.headers.get('content-disposition')), new RegExp(`Stornobeleg-${o.invoice_no}-S\\.pdf`));
+      if (HAS_PDFTOTEXT) {
+        const t = pdfText(cn.data);
+        for (const w of [`${o.invoice_no}-S`, `Rechnung ${o.invoice_no}`, '-9,00 €', 'Widerruf', 'Gemäß § 19 UStG', 'Erika Mustermann']) assert.ok(t.includes(w), `Stornobeleg enthält „${w}“:\n${t}`);
+      }
+      const cn2 = (await C.get(`/api/billing/orders/${orderId}/credit-note.pdf`, { raw: true })).data;
+      assert.ok(cn2.equals(cn.data), 'Stornobeleg ebenfalls eingefroren');
+      const docs = (await db.query('SELECT kind, doc_no FROM invoice_documents WHERE order_id = $1 ORDER BY kind', [orderId])).rows;
+      assert.deepEqual(docs, [{ kind: 'invoice', doc_no: o.invoice_no }, { kind: 'storno', doc_no: `${o.invoice_no}-S` }]);
+      const refundMail = mailsTo(email).find(x => /Erstattung ausgeführt/.test(x.subject));
+      assert.deepEqual((refundMail.attachments || []).map(a => a.filename), [`Stornobeleg-${o.invoice_no}-S.pdf`], 'Stornobeleg an der Erstattungsmail');
+      // Fremdes Konto bekommt den Beleg nicht.
+      const other = await registerSelf('fremd-storno@example.org');
+      assert.equal((await other.C.get(`/api/billing/orders/${orderId}/credit-note.pdf`)).status, 404);
     }
+    // Rechnungsnummernkreis bleibt lückenlos: der Storno verbraucht keine Nummer.
+    const yr = new Date().getFullYear();
+    const { rows: ctr } = await db.query('SELECT last FROM invoice_counters WHERE year = $1', [yr]);
+    const { rows: cnt } = await db.query(`SELECT count(*)::int AS n FROM orders WHERE invoice_no LIKE $1`, [`CV-${yr}-%`]);
+    assert.equal(cnt[0].n, ctr[0].last, 'so viele Rechnungen wie Zählerstand');
+    assert.equal((await db.query(`SELECT 1 FROM orders WHERE invoice_no LIKE '%-S'`)).rowCount, 0, 'Storno nicht im Rechnungskreis');
   });
 
   test('Zwei Pässe: Laufzeit addiert sich; Widerruf kürzt nur um diese Bestellung', async () => {
@@ -1035,5 +1082,317 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     mollie.setRefund(o2.refund_id, 'refunded');
     await b.runJobs();
     assert.equal((await orderRow(o.id)).status, 'refunded');
+  });
+
+  /* ── Rechtsfolgen im Bezahl- und Registrierungsfluss (B4, 10.10.2026) ──
+   * Patches P1–P9 aus der Rechtsprüfung des Prüfteams vom 10.10.2026. */
+
+  const pubPost = (pathName, body) => fetch(`${srv.base}${pathName}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  test('P1: Server verkauft nur in die EU-27; außerhalb DE nur mit Häkchen „privat“, das mit der Bestellung gespeichert wird', async () => {
+    // Testdaten der Auswertung oben (9.000 € FR) würden P7 auslösen — hier geht es um P1.
+    await db.query(`DELETE FROM orders WHERE invoice_no LIKE 'CV-TEST-%'`);
+    const { C } = await registerSelf('p1@example.org');
+    for (const country of ['CH', 'GB', 'US', 'NO']) {
+      const r = await C.post('/api/billing/checkout', checkoutBody({ country, consumer: true }));
+      assert.equal(r.status, 400, country);
+      assert.equal(r.data.code, 'country_not_available', country);
+    }
+    const noBox = await C.post('/api/billing/checkout', checkoutBody({ country: 'FR' }));
+    assert.equal(noBox.data.code, 'consumer_required');
+    assert.equal((await C.post('/api/billing/checkout', checkoutBody({ country: 'FR', consumer: 'true' }))).data.code, 'consumer_required', 'nur echtes true zählt');
+    const fr = await C.post('/api/billing/checkout', checkoutBody({ country: 'FR', consumer: true, billingName: 'Fanny France' }));
+    assert.equal(fr.status, 200, JSON.stringify(fr.data));
+    assert.equal((await orderRow(fr.data.orderId)).consumer_confirmed, true);
+    // Deutschland: auch Unternehmen, das Häkchen ist dort keine Pflicht und wird so gespeichert.
+    const de = await C.post('/api/billing/checkout', checkoutBody({ billingName: 'Firma GmbH' }));
+    assert.equal(de.status, 200);
+    assert.equal((await orderRow(de.data.orderId)).consumer_confirmed, false);
+    // Eine Liste für Server und Oberfläche: das Angebot nennt genau die EU-27, DE zuerst.
+    const offer = (await C.get('/api/billing/offer')).data;
+    assert.equal(offer.countries.length, 27);
+    assert.equal(offer.countries[0], 'DE');
+    assert.deepEqual([...offer.countries].sort(), [...EU_COUNTRIES].sort());
+    assert.equal(offer.euAbroadPaused, false);
+    const page = new URL('../app/src/billing/CheckoutPage.tsx', import.meta.url);
+    if (existsSync(page)) {
+      const src = readFileSync(page, 'utf8');
+      assert.match(src, /offer\.countries/, 'Bestellübersicht liest die Länder aus dem Angebot');
+      assert.ok(!/'AT',\s*'BE',\s*'BG'/.test(src), 'keine eigene Länderliste in der Oberfläche');
+    }
+  });
+
+  test('P7: Verkauf ins EU-Ausland sperrt ab 9.000 € (laufendes ODER voriges Jahr), Deutschland läuft weiter; Admin sieht den Zähler', async () => {
+    assert.equal(billingConfig({}).euB2cStopCents, 900_000, 'Standard 9.000 €');
+    assert.equal(billingConfig({ EU_B2C_STOP_CENTS: '500000' }).euB2cStopCents, 500_000);
+    assert.equal(billingConfig({ EU_B2C_STOP_CENTS: '5000000' }).euB2cStopCents, 1_000_000, 'nie über der gesetzlichen Schwelle');
+    await db.query(`DELETE FROM orders WHERE invoice_no LIKE 'CV-TEST-%' OR invoice_no LIKE 'CV-P7-%'`);
+    const { C } = await registerSelf('p7@example.org');
+    const base = (await db.query(`SELECT coalesce(sum(amount_cents), 0)::int AS c FROM orders WHERE paid_at IS NOT NULL AND country <> 'DE' AND status NOT IN ('withdrawn', 'refunded') AND paid_at >= date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin'`)).rows[0].c;
+    const ins = (no, cents, when, status = 'paid') => db.query(
+      `INSERT INTO orders (id, order_no, email, billing_name, country, sku, amount_cents, status, pass_days, paid_at, invoice_no)
+       VALUES ($1, $2, 'eu@example.org', 'E', 'IT', 'pass90', $3, $4, 90, ${when}, $5)`,
+      [crypto.randomUUID(), no, cents, status, `CV-P7-${no}`]);
+    // Knapp darunter: offen.
+    await ins('B-870001', 900_000 - base - 1, 'now()');
+    let r = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true, billingName: 'Anna Austria' }));
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    // Ein Widerruf zählt nicht mit.
+    await ins('B-870002', 500_000, 'now()', 'refunded');
+    r = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true, billingName: 'Anna Austria 2' }));
+    assert.equal(r.status, 200, 'widerrufene Umsätze zählen nicht');
+    // Ein Cent mehr: gesperrt.
+    await ins('B-870003', 1, 'now()');
+    r = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true, billingName: 'Anna Austria 3' }));
+    assert.equal(r.status, 400);
+    assert.equal(r.data.code, 'country_not_available');
+    assert.equal(r.data.reason, 'eu_abroad_paused');
+    const de = await C.post('/api/billing/checkout', checkoutBody({ billingName: 'Dora Deutschland' }));
+    assert.equal(de.status, 200, 'Deutschland läuft weiter');
+    const offer = (await C.get('/api/billing/offer')).data;
+    assert.deepEqual(offer.countries, ['DE']);
+    assert.equal(offer.euAbroadPaused, true);
+    const rep = (await Adm.get('/api/admin/billing')).data;
+    assert.equal(rep.euAbroad.paused, true);
+    assert.equal(rep.euAbroad.stopAtCents, 900_000);
+    assert.ok(rep.warnings.some(w => w.code === 'eu_abroad_paused'));
+    const ov = (await Adm.get('/api/admin/overview')).data;
+    assert.equal(ov.euAbroad.paused, true);
+    assert.ok(ov.euAbroad.currentYearCents >= 900_000);
+    assert.equal(ov.euAbroad.remainingToThresholdCents, 1_000_000 - Math.max(ov.euAbroad.currentYearCents, ov.euAbroad.previousYearCents));
+    assert.equal(ov.euAbroad.thresholdCents, 1_000_000);
+    // Voriges Jahr allein genügt.
+    await db.query(`DELETE FROM orders WHERE invoice_no LIKE 'CV-P7-%'`);
+    await ins('B-870004', 900_000, `make_timestamptz(extract(year FROM now() AT TIME ZONE 'Europe/Berlin')::int - 1, 6, 1, 12, 0, 0, 'Europe/Berlin')`);
+    r = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true, billingName: 'Anna Austria 4' }));
+    assert.equal(r.data.reason, 'eu_abroad_paused', 'voriges Jahr über der Sperre');
+    const ov2 = (await Adm.get('/api/admin/overview')).data;
+    assert.equal(ov2.euAbroad.previousYearCents, 900_000);
+    // Vorvorjahr zählt nicht.
+    await db.query(`UPDATE orders SET paid_at = paid_at - interval '1 year' WHERE invoice_no = 'CV-P7-B-870004'`);
+    r = await C.post('/api/billing/checkout', checkoutBody({ country: 'AT', consumer: true, billingName: 'Anna Austria 5' }));
+    assert.equal(r.status, 200, 'Vorvorjahr zählt nicht');
+    await db.query(`DELETE FROM orders WHERE invoice_no LIKE 'CV-P7-%'`);
+  });
+
+  test('P2: Eingangsbestätigung nicht zuzuordnender Erklärungen nennt Name und Bestellnummer (geprüft)', async () => {
+    let r = await pubPost('/api/billing/withdraw-public', { name: 'Wanda Widerruf', email: 'p2w@example.org', orderNo: 'b-555555', altcha: await solveAltcha(srv.base) });
+    assert.equal(r.status, 200);
+    const w = await waitFor(() => mailsTo('p2w@example.org')[0]);
+    assert.match(w.text, /Name: Wanda Widerruf/);
+    assert.match(w.text, /Angegebene Bestellnummer: B-555555/);
+    assert.match(w.text, /Bestätigung an: p2w@example\.org/);
+    assert.match(w.text, /Eingang: \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}/);
+    r = await pubPost('/api/billing/cancel-public', { name: 'Konrad Kündigung', email: 'p2k@example.org', orderNo: 'B-555556', kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) });
+    assert.equal(r.status, 200);
+    const k = await waitFor(() => mailsTo('p2k@example.org')[0]);
+    assert.match(k.text, /Name: Konrad Kündigung/);
+    assert.match(k.text, /Angegebene Bestellnummer: B-555556/);
+    // Ohne Nummer keine Nummernzeile.
+    await pubPost('/api/billing/withdraw-public', { name: 'Nina Ohne', email: 'p2n@example.org', altcha: await solveAltcha(srv.base) });
+    const n = await waitFor(() => mailsTo('p2n@example.org')[0]);
+    assert.match(n.text, /Name: Nina Ohne/);
+    assert.doesNotMatch(n.text, /Angegebene Bestellnummer/);
+  });
+
+  test('P3: öffentlicher Widerruf — Link 5 Tage, Betreiber sofort informiert, Admin zeigt „offen, unbestätigt“', async () => {
+    assert.equal(DECLARATION_CONFIRM_DAYS_WITHDRAWAL, 5);
+    const email = 'p3@example.org';
+    const { C } = await registerSelf(email);
+    const o = await buy(C, { billingName: 'Paula Drei' });
+    const before = mailsTo('verkauf@example.org').length;
+    const r = await pubPost('/api/billing/withdraw-public', { name: 'Paula Drei', email, orderNo: o.order_no, altcha: await solveAltcha(srv.base) });
+    assert.equal(r.status, 200);
+    const confirmMail = await waitFor(() => mailsTo(email).find(m => /Bitte bestätigen: Ihr Widerruf/.test(m.subject)));
+    assert.ok(confirmMail);
+    const d = await waitFor(async () => (await db.query(`SELECT * FROM declarations WHERE $1 = ANY(order_ids) AND type = 'withdrawal'`, [o.id])).rows[0]);
+    assert.equal(d.status, 'pending_confirmation');
+    const days = (new Date(d.confirm_expires_at) - new Date(d.received_at)) / DAY;
+    assert.ok(days > 4.99 && days < 5.01, `Link gilt 5 Tage, nicht ${days}`);
+    const until = new Date(d.confirm_expires_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' });
+    assert.ok(confirmMail.text.includes(`Der Link gilt bis ${until}`), 'Mail nennt das Ende des Links');
+    const adminMail = await waitFor(() => mailsTo('verkauf@example.org').slice(before).find(m => /offen und unbestätigt/.test(m.subject)));
+    assert.ok(adminMail, 'Betreiber sofort informiert, ohne Klick');
+    assert.match(adminMail.text, new RegExp(o.order_no));
+    assert.match(adminMail.text, /Hiermit widerrufe ich/);
+    assert.equal((await orderRow(o.id)).status, 'paid', 'ohne Klick nichts ausgeführt');
+    const list = (await Adm.get('/api/admin/declarations?status=pending_confirmation')).data.declarations;
+    assert.ok(list.some(x => x.id === d.id), 'im Admin-Bereich als offen, unbestätigt');
+    const ov = (await Adm.get('/api/admin/overview')).data;
+    assert.ok(ov.declarations.pending_confirmation >= 1);
+    // Nach 5 Tagen ohne Klick: Hinweis mit Frist an den Betreiber.
+    await db.query(`UPDATE declarations SET confirm_expires_at = now() - interval '1 minute' WHERE id = $1`, [d.id]);
+    const sent = [];
+    const b = createBilling({
+      pool: db, config: billingConfig({ BILLING_ENABLED: '1', MOLLIE_API_KEY: MOLLIE_KEY, MOLLIE_API_BASE: mollie.base, PUBLIC_BASE_URL: 'https://cv.example.org', SELLER_EMAIL: 'verkauf@example.org' }),
+      renderPdf: async () => Buffer.from('%PDF-1.4 stub'), send: async m => { sent.push(m); return true; }, log: () => {},
+    });
+    await b.runJobs({ onlyDeclarations: true });
+    const esc = sent.find(m => /Widerruf 5 Tage unbestätigt/.test(m.subject));
+    assert.ok(esc, 'Eskalation nach 5 Tagen');
+    assert.match(esc.subject, /14 Tage nach Eingang/);
+    assert.match((await db.query('SELECT note FROM declarations WHERE id = $1', [d.id])).rows[0].note, /5 Tage/);
+  });
+
+  test('P4: öffentliche Kündigung mit Bestellnummer und Bestelladresse wirkt sofort; ohne Nummer Link; Widerruf bleibt beim Link', async () => {
+    const email = 'p4@example.org';
+    const { C, id: uid } = await registerSelf(email);
+    const o = await buy(C, { billingName: 'Petra Vier' });
+    // Falsche Adresse mit richtiger Nummer: nichts.
+    await pubPost('/api/billing/cancel-public', { name: 'Fremd', email: 'p4fremd@example.org', orderNo: o.order_no, kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) });
+    await waitFor(() => mailsTo('p4fremd@example.org').length > 0);
+    assert.equal((await orderRow(o.id)).cancelled_at, null, 'fremde Adresse kündigt nichts');
+    // Nummer + Adresse (andere Schreibweise): sofort wirksam, Mail informiert nur.
+    const before = mailsTo('verkauf@example.org').length;
+    const r = await pubPost('/api/billing/cancel-public', { name: 'Petra Vier', email: email.toUpperCase(), orderNo: o.order_no.toLowerCase(), kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) });
+    assert.equal(r.status, 200);
+    assert.deepEqual(Object.keys(await r.json()).sort(), ['ok', 'receivedAt'], 'gleiche Antwort wie immer');
+    assert.ok(await waitFor(async () => !!(await orderRow(o.id)).cancelled_at), 'sofort gekündigt, ohne Klick');
+    const oc = await orderRow(o.id);
+    assert.equal(oc.cancel_channel, 'public');
+    assert.ok(await waitFor(async () => Math.abs(new Date((await userRow(uid)).access_until).getTime() - Date.now()) < 120_000), 'Pass endet jetzt');
+    const receipt = await waitFor(() => mailsTo(email).find(m => /Kündigungsbestätigung/.test(m.subject)));
+    assert.ok(receipt, 'Bestätigung an die Bestelladresse');
+    assert.ok(!mailsTo(email).some(m => /Bitte bestätigen: Ihre Kündigung/.test(m.subject)), 'kein Bestätigungslink');
+    assert.ok(await waitFor(() => mailsTo('verkauf@example.org').slice(before).find(m => /sofort ausgeführt/.test(m.subject))), 'Betreiber zur Kenntnis');
+    const d = (await db.query(`SELECT * FROM declarations WHERE $1 = ANY(order_ids) AND type = 'cancellation'`, [o.id])).rows[0];
+    assert.equal(d.status, 'processed');
+    assert.equal(d.confirm_token_hash, null);
+    // Widerruf mit Nummer + Adresse: weiter mit Bestätigungslink (Abwägung in SICHERHEIT.md).
+    const { C: C2 } = await registerSelf('p4w@example.org');
+    const o2 = await buy(C2, { billingName: 'Willi Vier' });
+    await pubPost('/api/billing/withdraw-public', { name: 'Willi Vier', email: 'p4w@example.org', orderNo: o2.order_no, altcha: await solveAltcha(srv.base) });
+    assert.ok(await waitFor(() => mailsTo('p4w@example.org').find(m => /Bitte bestätigen: Ihr Widerruf/.test(m.subject))));
+    assert.equal((await orderRow(o2.id)).status, 'paid', 'Widerruf erst nach dem Klick');
+  });
+
+  test('P5: Vertragsfassung aus legal-texts.json; Umgebungsvariable nur Übersteuerung mit Warnung; Admin zeigt die wirksame Fassung', async () => {
+    const file = JSON.parse(readFileSync(LEGAL_JSON, 'utf8'));
+    const plain = legalVersions({});
+    assert.equal(plain.terms, file.terms.version);
+    assert.equal(plain.withdrawal, file.withdrawal.version);
+    assert.deepEqual(plain.source, { terms: 'file', withdrawal: 'file' });
+    assert.deepEqual(plain.warnings, []);
+    const same = legalVersions({ TERMS_VERSION: file.terms.version });
+    assert.equal(same.source.terms, 'file');
+    assert.deepEqual(same.warnings, [], 'gleiche Fassung: keine Warnung');
+    const over = legalVersions({ TERMS_VERSION: 'notfall-1', WITHDRAWAL_VERSION: 'notfall-2' });
+    assert.equal(over.terms, 'notfall-1');
+    assert.equal(over.withdrawal, 'notfall-2');
+    assert.deepEqual(over.source, { terms: 'env', withdrawal: 'env' });
+    assert.equal(over.warnings.length, 2);
+    assert.equal(billingConfig({}).termsVersion, file.terms.version, 'Bestellungen bekommen die Fassung der Datei');
+    // Der Testdienst übersteuert (TERMS_VERSION=agb-2026-10-09): Warnung beim Start, Admin zeigt Quelle.
+    assert.match(srv.output, /legal: TERMS_VERSION=agb-2026-10-09 weicht von der Fassung in legal-texts\.json/);
+    const sys = (await Adm.get('/api/admin/system')).data;
+    assert.equal(sys.legal.terms, 'agb-2026-10-09');
+    assert.equal(sys.legal.source.terms, 'env');
+    assert.equal(sys.legal.file.terms, file.terms.version);
+    assert.ok(sys.legal.warnings.length >= 1);
+    assert.equal(sys.legal.art9Consent, ART9_VERSION);
+  });
+
+  test('P6: Bestandsrechnung wird beim ersten Abruf eingefroren — so, wie sie ausgestellt war', { skip: !chromiumPath && 'kein Chromium' }, async () => {
+    const { C, id: uid } = await registerSelf('p6@example.org');
+    const id = crypto.randomUUID();
+    await db.query(`INSERT INTO orders (id, order_no, user_id, email, billing_name, country, sku, amount_cents, status, pass_days, paid_at, invoice_no, withdrawn_at, refund_status)
+                    VALUES ($1, 'B-860001', $2, 'p6@example.org', 'Bea Bestand', 'DE', 'pass90', 900, 'refunded', 90, now() - interval '20 days', 'CV-P6-0001', now() - interval '19 days', 'refunded')`, [id, uid]);
+    assert.equal((await db.query('SELECT 1 FROM invoice_documents WHERE order_id = $1', [id])).rowCount, 0);
+    const a = await C.get(`/api/billing/orders/${id}/invoice.pdf`, { raw: true });
+    assert.equal(a.status, 200);
+    const stored = (await db.query(`SELECT doc_no, sha256 FROM invoice_documents WHERE order_id = $1 AND kind = 'invoice'`, [id])).rows[0];
+    assert.equal(stored.doc_no, 'CV-P6-0001');
+    assert.equal(stored.sha256, crypto.createHash('sha256').update(a.data).digest('hex'));
+    if (HAS_PDFTOTEXT) assert.doesNotMatch(pdfText(a.data), /widerrufen/, 'eingefroren ohne nachträglichen Vermerk');
+    // Spätere Änderungen an der Bestellung ändern das Dokument nicht.
+    await db.query(`UPDATE orders SET billing_name = 'Geändert' WHERE id = $1`, [id]);
+    const b2 = await C.get(`/api/billing/orders/${id}/invoice.pdf`, { raw: true });
+    assert.ok(b2.data.equals(a.data), 'immer genau dieses Dokument');
+    const cn = await C.get(`/api/billing/orders/${id}/credit-note.pdf`, { raw: true });
+    assert.equal(cn.status, 200);
+    if (HAS_PDFTOTEXT) assert.match(pdfText(cn.data), /CV-P6-0001-S/);
+    // Nicht widerrufene Bestellung: kein Stornobeleg.
+    const p = await buy(C, { billingName: 'Bea Bezahlt' });
+    assert.equal((await C.get(`/api/billing/orders/${p.id}/credit-note.pdf`)).status, 404);
+    // Admin-CSV führt den Storno mit eigener Nummer.
+    const csv = await Adm.get(`/api/admin/invoices.csv?year=${new Date().getFullYear()}`);
+    assert.match(String(csv.data), /CV-P6-0001-S;/);
+    await db.query('DELETE FROM orders WHERE id = $1', [id]);
+    assert.equal((await db.query('SELECT 1 FROM invoice_documents WHERE order_id = $1', [id])).rowCount, 0, 'Belege teilen die Aufbewahrung der Bestellung');
+  });
+
+  test('P8/P9: AGB-Fassung und Einwilligung Art. 9 bei der Registrierung; ohne Einwilligung speichert das Konto nicht; Widerruf löscht nichts', async () => {
+    // Offene Registrierung mit Einwilligung: beides gespeichert.
+    const { C, id } = await registerSelf('p9a@example.org');
+    let u = await userRow(id);
+    assert.equal(u.terms_accepted_version, 'agb-2026-10-09', 'Fassung, die beim Anlegen galt');
+    assert.ok(u.terms_accepted_at);
+    assert.equal(u.art9_consent_version, ART9_VERSION);
+    assert.ok(u.art9_consent_at);
+    const me = (await C.get('/api/me')).data.user;
+    assert.deepEqual({ ok: me.art9.ok, required: me.art9.required, version: me.art9.version }, { ok: true, required: true, version: ART9_VERSION });
+    assert.equal(me.termsAcceptedVersion, 'agb-2026-10-09');
+
+    // Einladung mit Laufzeit (darf schreiben), aber ohne bzw. mit falscher Einwilligung.
+    const code = (await Adm.post('/api/admin/invites', { maxUses: 3, accessDays: 30 })).data.code;
+    const K = client(srv.base);
+    let r = await K.post('/api/auth/register', { email: 'p9b@example.org', password: 'klient-passwort-1', inviteCode: code, art9Consent: { version: '1999-01-01' } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const kid = r.data.user.id;
+    assert.equal(r.data.user.art9.ok, false, 'fremde Fassung zählt nicht');
+    u = await userRow(kid);
+    assert.equal(u.art9_consent_at, null);
+    assert.equal(u.terms_accepted_version, 'agb-2026-10-09');
+    // Schreibwege: 403 mit Code; Lesen und Löschen gehen.
+    const blocked = await K.post('/api/resumes', { payload: { id: 'p9', data: {} }, id: 'p9' });
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.data.code, 'art9_consent_required');
+    assert.equal(blocked.data.version, ART9_VERSION);
+    for (const [m, pth, body] of [
+      ['put', '/api/resumes/p9', { payload: { id: 'p9', data: {} } }],
+      ['post', '/api/photos', { mime: 'image/png', data: 'iVBORw0KGgo=' }],
+      ['post', '/api/resumes/p9/import-md', { markdown: '# X' }],
+    ]) {
+      const x = await K[m](pth, body);
+      assert.equal(x.data.code, 'art9_consent_required', `${m} ${pth}`);
+    }
+    assert.equal((await K.get('/api/resumes')).status, 200);
+    // Einwilligen: falsche Fassung 409, über API-Schlüssel 403, im Browser ok.
+    assert.equal((await K.post('/api/me/consent/art9', { consent: true, version: 'alt' })).data.code, 'consent_version_mismatch');
+    assert.equal((await K.post('/api/me/consent/art9', { consent: 'ja' })).status, 400);
+    const key = (await K.post('/api/keys', { name: 'Test' })).data;
+    assert.ok(key.key, JSON.stringify(key));
+    const viaKey = await fetch(`${srv.base}/api/me/consent/art9`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key.key}` }, body: JSON.stringify({ consent: true, version: ART9_VERSION }) });
+    assert.equal(viaKey.status, 403);
+    assert.equal((await viaKey.json()).code, 'consent_session_only');
+    const viaKeySave = await fetch(`${srv.base}/api/resumes`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key.key}` }, body: JSON.stringify({ id: 'p9k', payload: { id: 'p9k', data: {} } }) });
+    assert.equal((await viaKeySave.json()).code, 'art9_consent_required', 'auch MCP/API-Schlüssel speichern nicht');
+    r = await K.post('/api/me/consent/art9', { consent: true, version: ART9_VERSION });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.user.art9.ok, true);
+    assert.equal((await K.post('/api/resumes', { payload: { id: 'p9', data: {} }, id: 'p9' })).status, 200, 'jetzt speichert das Konto');
+    assert.equal((await db.query(`SELECT 1 FROM events WHERE user_id = $1 AND kind = 'art9_consent'`, [kid])).rowCount, 1, 'im Ereignisprotokoll');
+
+    // Widerruf: nichts gelöscht, Speichern gesperrt, Lesen, Export, Löschen gehen.
+    r = await K.post('/api/me/consent/art9', { consent: false });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.user.art9.ok, false);
+    assert.ok(r.data.user.art9.withdrawnAt);
+    u = await userRow(kid);
+    assert.equal(u.art9_consent_at, null);
+    assert.ok(u.art9_withdrawn_at);
+    assert.equal((await K.get('/api/resumes/p9')).status, 200, 'Daten bleiben, nichts automatisch gelöscht');
+    assert.equal((await K.put('/api/resumes/p9', { payload: { id: 'p9', data: {} } })).data.code, 'art9_consent_required');
+    const exp = await K.get('/api/me/export');
+    assert.equal(exp.status, 200);
+    assert.ok(JSON.stringify(exp.data).includes('art9_withdrawn_at'), 'Datenauszug enthält den Stand der Einwilligung');
+    assert.equal((await K.del('/api/resumes/p9')).status, 200, 'Löschen geht');
+
+    // Versionsgleichheit mit dem Text der App.
+    const legalTs = new URL('../app/src/legal/einwilligung.ts', import.meta.url);
+    if (existsSync(legalTs)) {
+      const m = /ART9_CONSENT_VERSION = '([^']+)'/.exec(readFileSync(legalTs, 'utf8'));
+      assert.equal(m?.[1], ART9_VERSION, 'Fassung in App und Dienst gleich');
+    }
   });
 });

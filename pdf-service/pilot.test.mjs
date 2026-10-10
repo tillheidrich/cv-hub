@@ -16,6 +16,9 @@ import pg from 'pg';
 import { startPostgres, startServer, client, findChromium, findPgBin } from './testkit.mjs';
 import { runAccessNotices, accessInfo, isAccessExpired } from './access.js';
 import { runJanitor } from './janitor.js';
+import { ART9_VERSION } from './consent.js';
+// Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
+const ART9 = { version: ART9_VERSION };
 
 const PG_PORT = Number(process.env.PILOT_PG_PORT || 5453);
 const API_PORT = Number(process.env.PILOT_API_PORT || 3153);
@@ -60,13 +63,13 @@ describe('Pilot: Laufzeit je Platz und Auswertung je Code', { skip: PG_MISSING }
     db = new pg.Pool({ connectionString: pgInst.url, max: 2 });
 
     Adm = client(srv.base);
-    let r = await Adm.post('/api/auth/register', { username: 'leitung', password: 'admin-passwort-1', email: 'admin@example.org' });
+    let r = await Adm.post('/api/auth/register', { username: 'leitung', password: 'admin-passwort-1', email: 'admin@example.org', art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
 
     // Bestandsfall: Code ohne Laufzeit.
     altCode = (await Adm.post('/api/admin/invites', {})).data.code;
     Alt = client(srv.base);
-    r = await Alt.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', inviteCode: altCode });
+    r = await Alt.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', inviteCode: altCode, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     altId = r.data.user.id;
 
@@ -76,10 +79,10 @@ describe('Pilot: Laufzeit je Platz und Auswertung je Code', { skip: PG_MISSING }
     assert.equal(r.data.accessDays, 90);
     pilotCode = r.data.code;
     K1 = client(srv.base); K2 = client(srv.base);
-    r = await K1.post('/api/auth/register', { username: 'klientin1', password: 'klient-passwort-1', email: 'k1@example.org', inviteCode: pilotCode });
+    r = await K1.post('/api/auth/register', { username: 'klientin1', password: 'klient-passwort-1', email: 'k1@example.org', inviteCode: pilotCode, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     k1Id = r.data.user.id;
-    r = await K2.post('/api/auth/register', { username: 'klient2', password: 'klient-passwort-2', inviteCode: pilotCode });
+    r = await K2.post('/api/auth/register', { username: 'klient2', password: 'klient-passwort-2', inviteCode: pilotCode, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     k2Id = r.data.user.id;
 

@@ -1,0 +1,15 @@
+Demo-Foto „Lena Brandt" (fiktive Beispielperson)
+
+Dateien:   lena-brandt.jpg / lena-brandt.webp            (3:4, 800 x 1067, Original für den Zuschnitt)
+           lena-brandt-zuschnitt.jpg / -zuschnitt.webp   (4:5, 720 x 900, Zuschnitt im Lebenslauf)
+Foto:      Phạm Duy Quang (https://unsplash.com/@phamduyquang)
+Quelle:    https://unsplash.com/photos/woman-in-grey-blazer-business-portrait-QGr6H7pri-Q
+           Bilddatei: https://images.unsplash.com/photo-1604904612715-47bf9d9bc670
+Lizenz:    Unsplash License, https://unsplash.com/license
+           Kommerzielle Nutzung erlaubt, Namensnennung nicht verpflichtend
+           (wird hier freiwillig angegeben). Geprüft am 10.10.2026.
+Bearbeitet: Ansteckabzeichen am Revers entfernt, auf Brustbild beschnitten,
+           verkleinert, alle Metadaten (EXIF/XMP/ICC) entfernt.
+
+Die abgebildete Person ist nicht „Lena Brandt". Name, Lebenslauf und alle
+Angaben im Demo-Profil sind erfunden.

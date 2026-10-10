@@ -26,6 +26,9 @@ import { markdownToCV, markdownToCl, splitLanguageLine, splitKeyLine, MAX_MARKDO
 import { subnetOf, clientKey, originGuard, securityHeaders } from './guards.js';
 import { chromiumArgs, createRenderer } from './pdf.js';
 import { sharePhotoPath } from './share.js';
+import { ART9_VERSION } from './consent.js';
+// Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
+const ART9 = { version: ART9_VERSION };
 
 const PG_PORT = Number(process.env.SECURITY_PG_PORT || 5561);
 const API_PORT = Number(process.env.SECURITY_API_PORT || 3261);
@@ -251,7 +254,7 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
   async function registerSelf(email, { confirm = true } = {}) {
     const C = client(srv.base);
     const seen = mailsTo(email).filter(x => /bestätige/.test(x.subject)).length;
-    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true });
+    const r = await C.post('/api/auth/register', { email, password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     if (confirm) {
       const m = await waitFor(() => mailsTo(email).filter(x => /bestätige/.test(x.subject))[seen]);
@@ -298,7 +301,7 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
     proxy = await startServer({ ...env, TRUST_PROXY: '1', MAIL_CAPTURE_FILE: proxyMailFile, TEST_RATE_LIMIT_FACTOR: '1' }, { port: PROXY_PORT });
     db = new pg.Pool({ connectionString: pgInst.url, max: 4 });
     Adm = client(srv.base);
-    const r = await Adm.post('/api/auth/register', { username: 'admin1', password: 'admin-passwort-1', email: 'admin@example.org' });
+    const r = await Adm.post('/api/auth/register', { username: 'admin1', password: 'admin-passwort-1', email: 'admin@example.org', art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
   });
 
@@ -489,7 +492,8 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
   test('Bestätigungslink: abgelaufen → 410 und nichts ausgeführt; nach 14 Tagen unbestätigt → Hinweis an den Betreiber', async () => {
     const { C } = await registerSelf('ablauf@example.org');
     const order = await buy(C);
-    await post(srv.base, '/api/billing/cancel-public', { name: 'Anton Ablauf', email: 'ablauf@example.org', orderNo: order.order_no, kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) });
+    // Ohne Bestellnummer: Bestätigungslink (mit Nummer wirkt die Kündigung seit P4 sofort).
+    await post(srv.base, '/api/billing/cancel-public', { name: 'Anton Ablauf', email: 'ablauf@example.org', kind: 'ordinary', when: 'now', altcha: await solveAltcha(srv.base) });
     const mail = await waitFor(() => mailsTo('ablauf@example.org').find(m => /Bitte bestätigen: Ihre Kündigung/.test(m.subject)));
     await db.query(`UPDATE declarations SET confirm_expires_at = now() - interval '1 minute' WHERE $1 = ANY(order_ids) AND status = 'pending_confirmation'`, [order.id]);
     // Hintergrundlauf (eigene Instanz gegen dieselbe Datenbank): meldet, führt nicht aus.
@@ -503,7 +507,7 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
     });
     const r = await b.runJobs({ onlyDeclarations: true });
     assert.ok(r.unconfirmedDeclarations >= 1);
-    const admin = sent.find(m => m.to === 'verkauf@example.org' && /14 Tage unbestätigt/.test(m.subject));
+    const admin = sent.find(m => m.to === 'verkauf@example.org' && /Kündigung 14 Tage unbestätigt/.test(m.subject));
     assert.ok(admin, 'Hinweis an den Betreiber');
     assert.match(admin.text, /Hiermit kündige ich/, 'mit Wortlaut');
     assert.ok(!sent.some(m => m.to === 'ablauf@example.org'), 'keine Mail an den Kunden');
@@ -524,9 +528,14 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
     await post(srv.base, '/api/billing/cancel-public', { name: 'Ihr Konto wird gesperrt', email: 'beliebig@drittperson.example', kind: 'extraordinary', reason: 'Sicherheitswarnung: Bitte bestätigen Sie Ihr Konto unter https://phish.example/login sonst wird es gelöscht.', altcha: await solveAltcha(srv.base) });
     const m = await waitFor(() => mailsTo('beliebig@drittperson.example')[0]);
     assert.ok(m, 'Eingangsbestätigung (fester Text)');
-    for (const leak of ['phish.example', 'gesperrt', 'Sicherheitswarnung', 'Hiermit', 'bestaetigen?token']) {
+    for (const leak of ['phish.example', 'Sicherheitswarnung', 'Hiermit', 'bestaetigen?token', 'https://', 'gelöscht']) {
       assert.ok(!m.html.includes(leak) && !m.text.includes(leak), `kein Absendertext in der Mail: ${leak}`);
     }
+    /* P2 (§ 356a Abs. 4 BGB, Prüfteam 10.10.2026): Der Name steht geprüft in
+     * der Eingangsbestätigung — nur als „Name:“-Zeile, ohne Links, höchstens
+     * 80 Zeichen. Der Grund (freier Text) bleibt draußen. */
+    assert.match(m.text, /Name: Ihr Konto wird gesperrt/);
+    assert.equal(m.text.split('gesperrt').length - 1, 1, 'Name nur einmal, nur in der Namenszeile');
     const admin = await waitFor(() => mailsTo('verkauf@example.org').slice(before).find(x => /Handarbeit nötig: Kündigung/.test(x.subject)));
     assert.match(admin.text, /phish\.example/, 'der Betreiber sieht den Wortlaut');
     // Widerruf mit fremder Bestellnummer und eigener Adresse: ebenfalls nur fester Text, nichts über die Bestellung.
@@ -534,7 +543,11 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
     const order = await buy(victim.C);
     await post(srv.base, '/api/billing/withdraw-public', { name: 'Angreifer', email: 'angreifer@example.org', orderNo: order.order_no, altcha: await solveAltcha(srv.base) });
     const n = await waitFor(() => mailsTo('angreifer@example.org')[0]);
-    for (const leak of [order.order_no, 'opfer3@example.org', 'Angreifer', '9,00', 'token=']) assert.ok(!n.html.includes(leak), leak);
+    // Nichts über die fremde Bestellung (Adresse, Betrag, Datum, Link). Name und Nummer sind die eigenen
+    // Eingaben des Absenders an seine eigene Adresse (P2) und stehen nur in ihren Zeilen.
+    for (const leak of ['opfer3@example.org', '9,00', 'token=', 'Bestellt am', 'bezahlt am']) assert.ok(!n.html.includes(leak), leak);
+    assert.match(n.text, new RegExp(`Angegebene Bestellnummer: ${order.order_no}`));
+    assert.match(n.text, /Name: Angreifer/);
     assert.equal(mailsTo('opfer3@example.org').filter(x => /Bitte bestätigen: Ihr/.test(x.subject)).length, 0);
     assert.equal((await orderRow(order.id)).status, 'paid');
     // Name mit Adresse oder Markup wird gar nicht erst angenommen (Phishing über den Wortlaut).
@@ -567,7 +580,7 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
     assert.ok(await waitFor(() => mailsTo('nie-bestaetigt@fremd.example').find(m => /neue E-Mail-Adresse/.test(m.subject))), 'Link an die neue');
     assert.ok(await waitFor(() => mailsTo('echt@example.org').find(m => /Neue E-Mail-Adresse für dein Konto angefordert/.test(m.subject))), 'Hinweis an die alte');
     // Dieselbe Adresse erneut registrieren: geht nicht (sie gehört weiter zum ersten Konto) — Hinweis an den Inhaber.
-    const r = await client(srv.base).post('/api/auth/register', { email: 'echt@example.org', password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true });
+    const r = await client(srv.base).post('/api/auth/register', { email: 'echt@example.org', password: 'kunden-passwort-1', altcha: await solveAltcha(srv.base), ageConfirmed16: true, art9Consent: ART9 });
     assert.equal(r.status, 409);
     assert.equal(r.data.code, 'email_taken');
     assert.ok(await waitFor(() => mailsTo('echt@example.org').find(m => /schon ein Konto/.test(m.subject))), 'Hinweis an das Bestandskonto');
@@ -617,7 +630,7 @@ describe('Sicherheit Runde 6 gegen den laufenden Dienst', { skip: PG_MISSING }, 
   test('probe1 #10 / N2: Sharelink-Foto mit //Host bzw. /\\Host bleibt beim eigenen Pfad', async () => {
     const inv = (await Adm.post('/api/admin/invites', {})).data.code;
     const B = client(srv.base);
-    await B.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: inv });
+    await B.post('/api/auth/register', { username: 'bestand', password: 'bestand-passwort-1', email: 'bestand@example.org', inviteCode: inv, art9Consent: ART9 });
     const hex = 'a'.repeat(24);
     for (const [id, photo] of [['sp1', `//tracker.example/api/photos/${hex}`], ['sp2', `/\\tracker.example/api/photos/${hex}`]]) {
       await B.post('/api/resumes', { id, displayName: 'x', payload: { id, data: { de: { personal: { name: 'Max', photo } } }, settings: { lang: 'de' } } });

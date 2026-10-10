@@ -46,8 +46,8 @@ export interface DesignStrings {
   pairingAuto: string;
   // Seite
   format: string; pageCount: string;
-  pageModes: { one: string; two: string; three: string; auto: string };
-  pageModeHelp: { one: string; two: string; three: string; auto: string };
+  pageModes: { one: string; two: string; three: string; four: string; auto: string };
+  pageModeHelp: { one: string; two: string; three: string; four: string; auto: string };
   fitOverflow: (wish: string, pages: number, floorPt: string, oneToTwo: boolean) => string;
   fitCondensed: (pagesText: string, pt: string) => string;
   fitOk: (pagesText: string, pt: string) => string;
@@ -155,12 +155,13 @@ const DE: DesignStrings = {
   under8pt: 'Unter 8 pt. Personio nennt genau diese Grenze als Grund, warum ein Lebenslauf nicht ausgelesen wird. Für eine gedruckte Bewerbung an einen Menschen ist das deine Entscheidung, für ein Bewerberportal ein Risiko.',
   pairingAuto: 'Schrift der Vorlage',
   format: 'Format', pageCount: 'Seitenzahl',
-  pageModes: { one: '1 Seite', two: '2 Seiten', three: '3', auto: 'Auto' },
+  pageModes: { one: '1 Seite', two: '2 Seiten', three: '3', four: '4', auto: 'Auto' },
   pageModeHelp: {
     one: 'Alles auf eine Seite. Verdichtet wird gestaffelt: erst Weißraum, dann Ränder, dann Zeilenabstand, zuletzt die Schrift. Passt es dann nicht, sagt das Werkzeug es, statt weiter zu schrumpfen.',
     two: 'Bis zu zwei Seiten. Die Bundesagentur für Arbeit nennt „eine bis maximal zwei A4-Seiten" als Standard.',
     three: 'Bis zu drei Seiten. Außerhalb von Wissenschaft und Medizin unüblich; Textkernel nennt sehr lange Lebensläufe als Problemfall beim Auslesen.',
-    auto: 'So viele Seiten, wie der Inhalt braucht. Nichts wird verdichtet.',
+    four: 'Bis zu vier Seiten. Für Wissenschaft und Technik mit Publikationen oder Projektliste; sonst sind eine bis zwei Seiten üblich.',
+    auto: 'So viele Seiten, wie der Inhalt braucht. Nichts wird verdichtet und nichts abgeschnitten. Ab der dritten Seite steht ein Hinweis dabei.',
   },
   fitOverflow: (wish, pages, floor, oneToTwo) => `Passt nicht auf ${wish}, es ${pages === 1 ? 'wird eine' : `werden ${pages}`}.${oneToTwo ? ' Das ist kein Mangel: Die Bundesagentur für Arbeit nennt eine bis maximal zwei Seiten als Standard.' : ''} Von allein wird nichts kleiner als ${floor} pt.`,
   fitCondensed: (p, pt) => `Passt auf ${p} (Schrift ${pt} pt, etwas verdichtet).`,
@@ -222,7 +223,7 @@ const DE: DesignStrings = {
   startSample: 'Mit Beispiel', startSampleDesc: 'Ein ausgefülltes Beispiel zum Überschreiben.',
   startImport: 'Importieren', startImportDesc: 'Vorhandenen Lebenslauf mitbringen.',
   importPick: 'Datei wählen',
-  importKinds: 'LinkedIn-Datenexport (ZIP), Datensicherung (JSON), JSON Resume oder Markdown. Die Datei wird nur im Browser gelesen.',
+  importKinds: 'LinkedIn-Datenexport (ZIP), Datensicherung (JSON), JSON Resume, Markdown, RenderCV (YAML) oder eine .tex-Datei von hier. Die Datei wird nur im Browser gelesen.',
   importRead: w => `Gelesen: ${w}`,
   importFailed: 'Diese Datei ließ sich nicht lesen. Erwartet: LinkedIn-ZIP, JSON, JSON Resume oder Markdown.',
   personName: 'Dein Name', personNameHint: 'Steht oben im Lebenslauf. Kannst du später ändern.', personNamePlaceholder: 'z. B. Alex Muster',
@@ -264,12 +265,13 @@ const EN: DesignStrings = {
   under8pt: 'Below 8 pt. Personio names exactly this limit as a reason a CV is not parsed. For a printed application to a person that is your call; for an applicant portal it is a risk.',
   pairingAuto: 'Template typeface',
   format: 'Format', pageCount: 'Pages',
-  pageModes: { one: '1 page', two: '2 pages', three: '3', auto: 'Auto' },
+  pageModes: { one: '1 page', two: '2 pages', three: '3', four: '4', auto: 'Auto' },
   pageModeHelp: {
     one: 'Everything on one page. Condensing is staged: white space first, then margins, then line spacing, type last. If it still does not fit, the tool says so instead of shrinking further.',
     two: 'Up to two pages. The German Federal Employment Agency names "one to at most two A4 pages" as the norm.',
     three: 'Up to three pages. Unusual outside academia and medicine; Textkernel names very long CVs as a parsing problem.',
-    auto: 'As many pages as the content needs. Nothing is condensed.',
+    four: 'Up to four pages. For academia and engineering with publications or a project list; otherwise one to two pages are usual.',
+    auto: 'As many pages as the content needs. Nothing is condensed and nothing is cut. From the third page on, a note appears.',
   },
   fitOverflow: (wish, pages, floor, oneToTwo) => `Does not fit on ${wish}; it becomes ${pages === 1 ? 'one' : pages}.${oneToTwo ? ' That is not a flaw: one to at most two pages is the norm.' : ''} Nothing gets smaller than ${floor} pt by itself.`,
   fitCondensed: (p, pt) => `Fits on ${p} (type ${pt} pt, slightly condensed).`,
@@ -331,7 +333,7 @@ const EN: DesignStrings = {
   startSample: 'With example', startSampleDesc: 'A filled-in example to overwrite.',
   startImport: 'Import', startImportDesc: 'Bring an existing CV.',
   importPick: 'Choose file',
-  importKinds: 'LinkedIn data export (ZIP), backup (JSON), JSON Resume or Markdown. The file is only read in the browser.',
+  importKinds: 'LinkedIn data export (ZIP), backup (JSON), JSON Resume, Markdown, RenderCV (YAML) or a .tex file exported here. The file is only read in the browser.',
   importRead: w => `Read: ${w}`,
   importFailed: 'This file could not be read. Expected: LinkedIn ZIP, JSON, JSON Resume or Markdown.',
   personName: 'Your name', personNameHint: 'Appears at the top of the CV. You can change it later.', personNamePlaceholder: 'e.g. Alex Sample',
@@ -373,12 +375,13 @@ const FR: DesignStrings = {
   under8pt: 'Moins de 8 pt. Personio cite précisément cette limite comme raison pour laquelle un CV n’est pas lu. Pour une candidature imprimée, c’est votre choix ; pour un portail, c’est un risque.',
   pairingAuto: 'Police du modèle',
   format: 'Format', pageCount: 'Nombre de pages',
-  pageModes: { one: '1 page', two: '2 pages', three: '3', auto: 'Auto' },
+  pageModes: { one: '1 page', two: '2 pages', three: '3', four: '4', auto: 'Auto' },
   pageModeHelp: {
     one: 'Tout sur une page. La compression est progressive : d’abord les blancs, puis les marges, puis l’interligne, enfin la police. Si cela ne suffit pas, l’outil le dit au lieu de réduire encore.',
     two: 'Jusqu’à deux pages. L’agence fédérale allemande pour l’emploi cite « une à deux pages A4 au maximum » comme norme.',
     three: 'Jusqu’à trois pages. Inhabituel hors recherche et médecine ; Textkernel cite les CV très longs comme cas problématique.',
-    auto: 'Autant de pages que nécessaire. Rien n’est compressé.',
+    four: 'Jusqu’à quatre pages. Pour la recherche et la technique, avec publications ou liste de projets ; sinon une à deux pages sont l’usage.',
+    auto: 'Autant de pages que nécessaire. Rien n’est compressé ni coupé. À partir de la troisième page, une remarque s’affiche.',
   },
   fitOverflow: (wish, pages, floor, oneToTwo) => `Ne tient pas sur ${wish} : cela fait ${pages === 1 ? 'une page' : `${pages} pages`}.${oneToTwo ? ' Ce n’est pas un défaut : une à deux pages est la norme.' : ''} Rien ne descend seul sous ${floor} pt.`,
   fitCondensed: (p, pt) => `Tient sur ${p} (texte ${pt} pt, un peu compressé).`,
@@ -440,7 +443,7 @@ const FR: DesignStrings = {
   startSample: 'Avec exemple', startSampleDesc: 'Un exemple rempli à remplacer.',
   startImport: 'Importer', startImportDesc: 'Apporter un CV existant.',
   importPick: 'Choisir un fichier',
-  importKinds: 'Export LinkedIn (ZIP), sauvegarde (JSON), JSON Resume ou Markdown. Le fichier est lu uniquement dans le navigateur.',
+  importKinds: 'Export LinkedIn (ZIP), sauvegarde (JSON), JSON Resume, Markdown, RenderCV (YAML) ou un fichier .tex exporté ici. Le fichier est lu uniquement dans le navigateur.',
   importRead: w => `Lu : ${w}`,
   importFailed: 'Impossible de lire ce fichier. Attendu : ZIP LinkedIn, JSON, JSON Resume ou Markdown.',
   personName: 'Votre nom', personNameHint: 'Apparaît en haut du CV. Modifiable ensuite.', personNamePlaceholder: 'p. ex. Alex Martin',
@@ -482,12 +485,13 @@ const ES: DesignStrings = {
   under8pt: 'Menos de 8 pt. Personio menciona justo este límite como motivo de que un CV no se lea. Para una candidatura impresa es tu decisión; para un portal, un riesgo.',
   pairingAuto: 'Tipografía de la plantilla',
   format: 'Formato', pageCount: 'Páginas',
-  pageModes: { one: '1 página', two: '2 páginas', three: '3', auto: 'Auto' },
+  pageModes: { one: '1 página', two: '2 páginas', three: '3', four: '4', auto: 'Auto' },
   pageModeHelp: {
     one: 'Todo en una página. Se condensa por etapas: primero el espacio en blanco, luego los márgenes, luego el interlineado y por último la letra. Si aun así no cabe, la herramienta lo dice en vez de seguir reduciendo.',
     two: 'Hasta dos páginas. La Agencia Federal de Empleo alemana indica «de una a dos páginas A4 como máximo» como estándar.',
     three: 'Hasta tres páginas. Poco habitual fuera de la investigación y la medicina; Textkernel menciona los CV muy largos como caso problemático.',
-    auto: 'Tantas páginas como necesite el contenido. No se condensa nada.',
+    four: 'Hasta cuatro páginas. Para ciencia y tecnología con publicaciones o lista de proyectos; si no, lo habitual son una o dos páginas.',
+    auto: 'Tantas páginas como necesite el contenido. No se condensa ni se corta nada. A partir de la tercera página aparece una nota.',
   },
   fitOverflow: (wish, pages, floor, oneToTwo) => `No cabe en ${wish}; quedan ${pages === 1 ? 'una página' : `${pages} páginas`}.${oneToTwo ? ' No es un defecto: de una a dos páginas es lo estándar.' : ''} Nada baja solo de ${floor} pt.`,
   fitCondensed: (p, pt) => `Cabe en ${p} (letra ${pt} pt, algo condensada).`,
@@ -549,7 +553,7 @@ const ES: DesignStrings = {
   startSample: 'Con ejemplo', startSampleDesc: 'Un ejemplo relleno para sobrescribir.',
   startImport: 'Importar', startImportDesc: 'Trae un CV existente.',
   importPick: 'Elegir archivo',
-  importKinds: 'Exportación de LinkedIn (ZIP), copia de seguridad (JSON), JSON Resume o Markdown. El archivo solo se lee en el navegador.',
+  importKinds: 'Exportación de LinkedIn (ZIP), copia de seguridad (JSON), JSON Resume, Markdown, RenderCV (YAML) o un archivo .tex exportado aquí. El archivo solo se lee en el navegador.',
   importRead: w => `Leído: ${w}`,
   importFailed: 'No se pudo leer este archivo. Se espera: ZIP de LinkedIn, JSON, JSON Resume o Markdown.',
   personName: 'Tu nombre', personNameHint: 'Aparece arriba en el CV. Puedes cambiarlo después.', personNamePlaceholder: 'p. ej. Alex García',

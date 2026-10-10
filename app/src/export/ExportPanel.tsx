@@ -63,10 +63,10 @@ import { exportHtml, exportCoverLetterHtml, exportPdf } from './exportHtml';
 import type { ExportRenderConfig } from './exportHtml';
 import { exportMarkdown } from './exportMarkdown';
 import { exportJson } from './exportJson';
-import { exportDocx } from './exportDocx';
+/* Word, Vorlagen-Paket und LinkedIn-Import laden erst bei Bedarf (Audit 10.10.2026, S15):
+ * docx und jszip gehören nicht ins Hauptbündel der Startseite. */
 import { exportJsonResume, jsonResumeToCv, isJsonResume } from './jsonResume';
-import { importLinkedIn, type LinkedInBefund } from '../import/linkedinImport';
-import { exportTemplateKit } from './exportTemplate';
+import type { LinkedInBefund } from '../import/linkedinImport';
 import { exportFilename } from './filename';
 import { getMdTemplate, type MdTemplateFullLang } from './markdownTemplate';
 import { LANG_NAMES } from '../data/labels';
@@ -80,6 +80,9 @@ import { track } from '../data/track';
 import { DEFAULT_TEMPLATE } from '../data/storage';
 import { markdownToCvData, markdownToCoverLetter, clToMarkdown, isCvMarkdown, isClMarkdown } from '../import/markdownBridge';
 import { useFreeTier } from '../billing/freeTier';
+import { exportLatex, CODE_EXPORT_UI } from './exportLatex';
+import { exportRenderCv, readCodeImport, ImportRefused } from '../import/rendercv';
+import { MAX_IMPORT_BYTES } from '../import/latexImport';
 import { LockGlyph, PassNote } from '../billing/PassLock';
 
 interface ExportPanelProps {
@@ -308,16 +311,37 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const F = FASSUNG_I18N[uiLang];
   const snap = SHARE_SNAPSHOT_I18N[uiLang];
   /** Word entsteht im Browser — gezählt wird es nur über dieses Ereignis. */
-  const docxEvent = () => { if (!demoMode) void api.event('docx'); };
+  const docxEvent = () => { if (!demoMode) void api.event('docx', { template: exportConfig.themeId }); };
   /* Gratis-Grenze (billing/freeTier.ts): Word und das Anschreiben zeigen ohne
    * Pass vorher das Schloss und die Preiszeile; ein Klick öffnet das
    * Freischalt-Paneel. PDF des Lebenslaufs und Datenexporte bleiben frei. */
   const ft = useFreeTier();
   const wordLocked = !ft.docx;
+  const latexLocked = !ft.latex;
+  const cx = CODE_EXPORT_UI[uiLang] ?? CODE_EXPORT_UI.de;
   const coverLocked = docType === 'cover-letter' && !ft.coverLetter;
+  /* RenderCV-YAML oder eine .tex-Datei von hier einlesen (import/rendercv.ts).
+   * Läuft im Browser; das Foto der aktuellen Fassung bleibt, weil keine der
+   * beiden Dateiarten eines mitbringt. */
+  const [codeState, setCodeState] = useState<{ busy?: boolean; text?: string; error?: boolean }>({});
+  async function codeLesen(file: File) {
+    if (!onReplaceData || codeState.busy) return;
+    setCodeState({ busy: true, text: cx.importBusy });
+    try {
+      if (file.size > MAX_IMPORT_BYTES) throw new ImportRefused('too-large');
+      const r = await readCodeImport(file.name, await file.text(), data);
+      if (!r) throw new ImportRefused('not-rendercv');
+      const keep = data.personal.photo ? { photo: data.personal.photo, ...(data.personal.photoOriginal ? { photoOriginal: data.personal.photoOriginal } : {}) } : {};
+      track(r.what === 'LaTeX' ? 'import_latex' : 'import_rendercv');
+      onReplaceData({ ...r.cv, personal: { ...r.cv.personal, ...keep } });
+      setCodeState({ text: cx.importOk(r.what) });
+    } catch (e) {
+      setCodeState({ text: e instanceof ImportRefused ? cx.refused[e.code] : cx.refused.broken, error: true });
+    }
+  }
   const word = (variant: 'ats' | 'design') => {
     if (wordLocked) { ft.open('docx'); return; }
-    track(variant === 'ats' ? 'export_docx_ats' : 'export_docx'); docxEvent(); void exportDocx(data, exportConfig, variant);
+    track(variant === 'ats' ? 'export_docx_ats' : 'export_docx'); docxEvent(); void import('./exportDocx').then(m => m.exportDocx(data, exportConfig, variant));
   };
   const [atsPdfState, setAtsPdfState] = useState<{ busy?: boolean; text?: string; error?: boolean }>({});
   async function handleAtsPdf() {
@@ -589,7 +613,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   async function linkedinLesen(file: File) {
     setLiBusy(true); setLiErr(null); setLiBefund(null);
     try {
-      setLiBefund(await importLinkedIn(file, data));
+      setLiBefund(await (await import('../import/linkedinImport')).importLinkedIn(file, data));
     } catch (e) {
       setLiErr(e instanceof Error ? e.message : t.liReadError);
     } finally { setLiBusy(false); }
@@ -873,6 +897,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <ExportButton icon="markdown" label={d.mdLabel} sub={d.mdSub} onClick={resumeId && !demoMode ? downloadResumeMd : () => exportMarkdown(data)} />
             <ExportButton icon="braces" label={d.jsonLabel} sub={d.jsonSub} onClick={() => exportJson(data)} />
             <ExportButton icon="puzzle" label={d.jsonResumeLabel} sub={d.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
+            <ExportButton icon="braces" label={cx.rendercv} sub={cx.rendercvSub} onClick={() => { track('export_rendercv'); void exportRenderCv(data); }} />
+            <ExportButton icon="file-text" label={cx.latex} sub={latexLocked ? ft.priceLine : cx.latexSub} locked={latexLocked}
+              onClick={() => { if (latexLocked) { ft.open('docx'); return; } track('export_latex'); exportLatex(data, exportConfig); if (!demoMode) void api.event('latex', { template: exportConfig.themeId }); }} />
             {/* Der Ausgang aus dem Editor: das Design ohne die Daten, plus
                 alles, was ein Mensch oder eine KI braucht, um es zu füllen. */}
             <ExportButton
@@ -882,7 +909,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               onClick={async () => {
                 track('export_template_kit');
                 setKitBusy(true);
-                try { await exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang); }
+                try { await (await import('./exportTemplate')).exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang); }
                 finally { setKitBusy(false); }
               }}
             />
@@ -920,6 +947,18 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               style={{ display: 'flex', alignItems: 'center', minHeight: '32px', fontSize: '10.5px', color: 'var(--accent-ink)', fontFamily: 'inherit', textDecoration: 'none' }}>
               {t.liRequest}
             </a>
+            <label style={{ ...s.exportBtn(false), cursor: codeState.busy ? 'wait' : 'pointer', marginTop: '6px' }}>
+              <div style={s.btnIcon}><Icon name="braces" /></div>
+              <div>
+                <div style={s.btnLabel}>{cx.importCode}</div>
+                <div style={s.btnSub}>{cx.importCodeSub}</div>
+              </div>
+              <input type="file" accept=".yaml,.yml,.tex,application/yaml,text/yaml,application/x-tex,text/x-tex,text/plain" hidden disabled={codeState.busy}
+                data-testid="code-import" onChange={e => { const f = e.target.files?.[0]; if (f) void codeLesen(f); e.target.value = ''; }} />
+            </label>
+            {codeState.text && (
+              <div role="status" aria-live="polite" style={{ fontSize: '11px', lineHeight: 1.5, marginTop: '6px', color: codeState.error ? 'var(--ats-low-ink)' : 'var(--ats-high-ink)' }}>{codeState.text}</div>
+            )}
             {liErr && (
               <div style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '7px', padding: '8px 11px', fontSize: '11.5px', color: '#c0392b', marginTop: '8px', fontFamily: 'inherit', lineHeight: 1.5 }}>{liErr}</div>
             )}
@@ -1244,7 +1283,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           </div>
         </div>
       )}
-      {atsOpen && <AtsCheckModal data={data} coverLetter={coverLetter} exportConfig={exportConfig} onClose={() => setAtsOpen(false)} />}
+      {atsOpen && <AtsCheckModal data={data} coverLetter={coverLetter} exportConfig={exportConfig} initialDoc={docType === 'cover-letter' ? 'cover' : 'resume'} onClose={() => setAtsOpen(false)} />}
     </div>
   );
 }

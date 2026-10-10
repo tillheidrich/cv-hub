@@ -1,62 +1,190 @@
-import { useState, useEffect } from 'react';
-import { api } from '../data/api';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { api, ApiError, consentApi } from '../data/api';
 import type { AuthUser } from '../data/api';
+import type { Lang } from '../data/types';
 import { T, type UiLang } from '../ui/i18n';
 import { BILLING_I18N } from '../ui/i18n/billing';
+import { KONTO_I18N, type KontoStrings } from '../ui/i18n/konto';
 import { SiteFooter } from '../billing/BillingShell';
 import { useOffer, registrationOpen } from '../billing/hooks';
 import { PATHS, linkClick } from '../billing/route';
+import { BRAND } from '../landing/brand';
+import { createDemoProfile } from '../data/storage';
+import ResumeRenderer from '../templates/ResumeRenderer';
+import { getTheme, resolvePairing } from '../templates/theme';
+import { metricsFor } from '../templates/metrics';
+import { StaticPage } from '../preview/TemplateCarousel';
+import { Art9ConsentFields, RegisterNotice } from './Art9Consent';
+import { art9Texts, ART9_CONSENT_VERSION } from '../legal/einwilligung';
+import './auth.css';
 
-/* Marken-Tokens der neuen Website-Identität — bewusst LOKAL gehalten (nicht
- * die app-weiten ui/tokens.ts), damit die Editor-Chrome unberührt bleibt. */
-const PAPER = 'oklch(98.4% 0.003 264)';
-const SURFACE = 'oklch(100% 0 0)';
-const RAISED = 'oklch(96.6% 0.004 264)';
-const INK = 'oklch(21% 0.021 264)';
-const SOFT = 'oklch(44% 0.017 264)';
-const FAINT = 'oklch(52% 0.012 264)';
-const GHOST = 'oklch(72% 0.008 264)';
-const LINE = 'oklch(91% 0.005 264)';
-const LINE_STRONG = 'oklch(85% 0.008 264)';
-const ACCENT = 'oklch(55% 0.216 264)';
-const ACCENT_HOVER = 'oklch(48% 0.224 264)';
-const ERROR = 'oklch(55% 0.22 25)';
-const DISP = '"Space Grotesk", "Inter", system-ui, sans-serif';
-const SANS = '"Inter", system-ui, -apple-system, sans-serif';
-const MONO = '"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace';
-const RADIUS = '9px';
-const SHADOW_SM = '0 1px 2px oklch(21% 0.02 264 / 0.05)';
-const SHADOW_MD = '0 6px 20px -8px oklch(21% 0.02 264 / 0.14), 0 1px 2px oklch(21% 0.02 264 / 0.05)';
+/**
+ * Anmeldung, Registrierung, Passwort vergessen, Zwei-Faktor-Code — und die
+ * beiden Wege daneben: ohne Konto weiter, Zugangscode einlösen.
+ *
+ * Runde 8 (10.10.2026, Auftrag: „überarbeite den Anmelde-Screen"):
+ * Die Seite läuft jetzt im Flächensystem des Editors (ui/surface.css, Geist)
+ * statt mit eigenen Farbkonstanten und Space Grotesk. Was sich geändert hat:
+ *
+ *  • Anmelden und Konto anlegen sind ein Umschalter in derselben Karte, nicht
+ *    zwei Seiten. Passwort vergessen und der Bestätigungscode erscheinen in
+ *    derselben Karte, mit „Zurück".
+ *  • Anforderungen stehen vorher am Feld (3–32 Zeichen, mindestens 8 Zeichen;
+ *    so prüft es der Server), nicht erst in der Fehlermeldung.
+ *  • Fehlertexte sind übersetzt und sagen, was jetzt zu tun ist. Die Texte
+ *    des Servers sind nur deutsch; sie erscheinen nur noch, wenn wir den Fall
+ *    nicht kennen.
+ *  • „Ohne Konto weiter" und „Code einlösen" stehen gleichrangig unter der
+ *    Karte. Rechts eine echte, gerenderte Seite der Demo und drei Aussagen,
+ *    die belegt sind (selbst betrieben, Standort laut Datenschutzerklärung,
+ *    kein Abo, quelloffen). Keine Siegel, keine Zahlen.
+ */
 
 const LANG_ORDER: UiLang[] = ['de', 'en', 'fr', 'es'];
+type View = 'login' | 'register' | 'forgot' | 'twofa';
 
-const micromono: React.CSSProperties = {
-  fontFamily: MONO, fontSize: '11px', fontWeight: 500,
-  letterSpacing: '0.14em', textTransform: 'uppercase',
-};
-const overline: React.CSSProperties = {
-  fontFamily: MONO, fontSize: '11px', fontWeight: 500,
-  letterSpacing: '0.14em', textTransform: 'uppercase',
-};
+function Arrow() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+function Eye({ open }: { open: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+      {!open && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
+function Alert() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" />
+    </svg>
+  );
+}
+const TRUST_ICONS = [
+  // Server / Standort
+  <svg key="s" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="4" y="4" width="16" height="7" rx="2" /><rect x="4" y="13" width="16" height="7" rx="2" /><path d="M8 7.5h.01M8 16.5h.01" /></svg>,
+  // Kein Abo: Kreislauf durchgestrichen
+  <svg key="a" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" /><path d="M5 19L19 5" /></svg>,
+  // Quelloffen: spitze Klammern
+  <svg key="q" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14" /></svg>,
+];
 
-function useIsMobile() {
-  const [m, setM] = useState(() => typeof window !== 'undefined' && window.innerWidth < 720);
-  useEffect(() => {
-    const onResize = () => setM(window.innerWidth < 720);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return m;
+/** Wortmarke aus BRAND.name („CV-Hub" → CV<b>-</b>Hub; Trennung am ersten „/" oder „-"). */
+export function Wordmark() {
+  const i = BRAND.name.search(/[/-]/);
+  if (i < 0) return <span>{BRAND.name}</span>;
+  return <span>{BRAND.name.slice(0, i)}<b>{BRAND.name[i]}</b>{BRAND.name.slice(i + 1)}</span>;
 }
 
-function BrandMark() {
+/** Fehler aus der API in einen Satz, der sagt, was jetzt zu tun ist. */
+function friendlyError(err: unknown, x: KontoStrings, lang: UiLang): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return x.errWrong;
+    if (err.status === 429) return x.errLocked(Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)));
+    if (err.status === 403 && /gesperrt|disabled/i.test(err.message)) return x.errDisabled;
+    if (err.status >= 500 && !err.answered) return x.errNetwork;
+    if (err.message) return lang === 'de' ? err.message : x.errServerSays(err.message);
+    return x.errGeneric;
+  }
+  if (err instanceof TypeError) return x.errNetwork;
+  return x.errGeneric;
+}
+
+/** Ein Eingabefeld mit Beschriftung darüber, Hinweis darunter, Fehlerbezug. */
+function Field({ id, label, hint, aside, children }: {
+  id: string; label: string; hint?: string; aside?: React.ReactNode; children: React.ReactNode;
+}) {
   return (
-    <svg width="26" height="26" viewBox="0 0 30 30" fill="none" aria-hidden style={{ flex: '0 0 auto' }}>
-      <rect x="4.5" y="2.5" width="21" height="25" rx="2" stroke={INK} strokeWidth="1.6" />
-      <line x1="9" y1="9" x2="21" y2="9" stroke={INK} strokeWidth="1.6" />
-      <line x1="9" y1="14" x2="21" y2="14" stroke={INK} strokeWidth="1.6" />
-      <line x1="9" y1="19" x2="16" y2="19" stroke={ACCENT} strokeWidth="1.6" />
-    </svg>
+    <div className="ka-field">
+      <div className="ka-label-row">
+        <label htmlFor={id} className="ka-label">{label}</label>
+        {aside}
+      </div>
+      {children}
+      {hint && <p id={`${id}-hint`} className="ka-hint">{hint}</p>}
+    </div>
+  );
+}
+
+function PasswordInput({ id, value, onChange, autoComplete, x, describedBy, invalid }: {
+  id: string; value: string; onChange: (v: string) => void; autoComplete: string; x: KontoStrings;
+  describedBy?: string; invalid?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="ka-input-wrap">
+      <input id={id} className="ka-input has-toggle" type={show ? 'text' : 'password'} value={value}
+        onChange={e => onChange(e.target.value)} autoComplete={autoComplete} required
+        aria-describedby={describedBy} aria-invalid={invalid || undefined}
+        autoCapitalize="none" spellCheck={false} />
+      <button type="button" className="ka-toggle" onClick={() => setShow(s => !s)}
+        aria-label={show ? x.hidePassword : x.showPassword} aria-pressed={show} title={show ? x.hidePassword : x.showPassword}>
+        <Eye open={show} />
+      </button>
+    </div>
+  );
+}
+
+function SubmitButton({ busy, label, x, disabled }: { busy: boolean; label: string; x: KontoStrings; disabled?: boolean }) {
+  return (
+    <button type="submit" className="ka-btn ka-btn-primary" disabled={busy || disabled} aria-busy={busy || undefined}>
+      <span>{busy ? x.busy : label}</span>
+      <span className="ka-btn-arrow">{busy ? <span className="ka-spin" aria-hidden /> : <Arrow />}</span>
+    </button>
+  );
+}
+
+/** Zwei echte Seiten der Demo, statisch gerendert (kein Messlauf). Nur ab
+ *  960 px — auf dem Telefon kostet das Rechenzeit und Platz für nichts. */
+function DemoStage({ lang, x }: { lang: UiLang; x: KontoStrings }) {
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 960px)');
+    if (!mq) return;
+    const on = () => setWide(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const docLang: Lang = lang;
+  const demo = useMemo(() => createDemoProfile(''), []);
+  const metrics = useMemo(() => metricsFor(0, 1), []);
+  if (!wide) return null;
+  const page = (tpl: string) => {
+    const th = getTheme(tpl);
+    return <ResumeRenderer data={demo.data[docLang]} theme={th} pairing={resolvePairing(th, 'auto')} metrics={metrics} pageFormat="a4" />;
+  };
+  return (
+    <div className="ka-stage" aria-hidden>
+      <div className="ka-sheet is-back">
+        <div className="cv-doc-context"><StaticPage render={() => page('mailand')} scale={0.4} pageFormat="a4" /></div>
+      </div>
+      <div className="ka-sheet is-front ka-float">
+        <div className="cv-doc-context"><StaticPage render={() => page('espoo')} scale={0.46} pageFormat="a4" /></div>
+      </div>
+      <div className="ka-caption ui-pill">{x.previewCaption(getTheme('espoo').name)}</div>
+    </div>
+  );
+}
+
+function TrustList({ x, headingId }: { x: KontoStrings; headingId: string }) {
+  return (
+    <section className="ka-trust-wrap" aria-labelledby={headingId}>
+      <h2 id={headingId}>{x.trustTitle}</h2>
+      <ul className="ka-trust">
+        {x.trust.map((item, i) => (
+          <li key={item.title} className="ka-rise" style={{ ['--i' as string]: i + 4 }}>
+            <span className="ka-trust-icon">{TRUST_ICONS[i]}</span>
+            <span><strong>{item.title}</strong><span>{item.body}</span></span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -70,56 +198,72 @@ export default function AuthScreen({
   initialInvite?: string;
   initialMode?: 'login' | 'register';
 }) {
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const [view, setView] = useState<View>(initialMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [invite, setInvite] = useState(initialInvite);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focus, setFocus] = useState<string | null>(null);
-  const [forgot, setForgot] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState('');
-  const isMobile = useIsMobile();
+  /** Einwilligung Art. 9 DSGVO (P9) — Pflicht, damit das Konto speichert. */
+  const [art9, setArt9] = useState(false);
+  const [art9Invalid, setArt9Invalid] = useState(false);
   const { offer } = useOffer();
-  const bt = BILLING_I18N[lang] ?? BILLING_I18N.de;
-
+  const open = registrationOpen(offer);
   const t = T[lang]?.auth ?? T.de.auth;
-  // Zusatz-Strings für E-Mail / Passwort-vergessen (nicht im Haupt-T-Katalog).
-  const X = ({
-    de: { emailOpt: 'E-Mail (optional)', emailHint: 'Für Passwort-Reset & Benachrichtigungen. Ohne E-Mail kein Self-Service-Reset.', forgotLink: 'Passwort vergessen?', forgotTitle: 'Passwort zurücksetzen', forgotHint: 'Gib deinen Nutzernamen oder deine E-Mail ein — wir schicken dir einen Reset-Link.', forgotSend: 'Link senden', forgotSent: 'Falls ein Konto mit E-Mail existiert, ist der Link unterwegs. Prüfe dein Postfach.', back: '← Zurück', twofaTitle: 'Bestätigungscode', twofaHint: 'Wir haben dir einen 6-stelligen Code per E-Mail geschickt. Er ist 10 Minuten gültig.', twofaVerify: 'Anmelden', twofaBack: '← Andere Anmeldung' },
-    en: { emailOpt: 'Email (optional)', emailHint: 'For password reset & notifications. No email = no self-service reset.', forgotLink: 'Forgot password?', forgotTitle: 'Reset password', forgotHint: 'Enter your username or email — we\'ll send you a reset link.', forgotSend: 'Send link', forgotSent: 'If an account with an email exists, the link is on its way. Check your inbox.', back: '← Back', twofaTitle: 'Verification code', twofaHint: 'We e-mailed you a 6-digit code. It is valid for 10 minutes.', twofaVerify: 'Sign in', twofaBack: '← Different sign-in' },
-    fr: { emailOpt: 'E-mail (optionnel)', emailHint: 'Pour la réinitialisation et les notifications. Sans e-mail, pas de réinit. en self-service.', forgotLink: 'Mot de passe oublié ?', forgotTitle: 'Réinitialiser le mot de passe', forgotHint: 'Saisissez votre identifiant ou e-mail — nous envoyons un lien.', forgotSend: 'Envoyer le lien', forgotSent: 'Si un compte avec e-mail existe, le lien est en route. Vérifiez votre boîte.', back: '← Retour', twofaTitle: 'Code de vérification', twofaHint: 'Nous vous avons envoyé un code à 6 chiffres par e-mail. Valable 10 minutes.', twofaVerify: 'Se connecter', twofaBack: '← Autre connexion' },
-    es: { emailOpt: 'Correo (opcional)', emailHint: 'Para restablecer contraseña y avisos. Sin correo no hay restablecimiento self-service.', forgotLink: '¿Olvidaste la contraseña?', forgotTitle: 'Restablecer contraseña', forgotHint: 'Introduce tu usuario o correo — te enviamos un enlace.', forgotSend: 'Enviar enlace', forgotSent: 'Si existe una cuenta con correo, el enlace va en camino. Revisa tu bandeja.', back: '← Atrás', twofaTitle: 'Código de verificación', twofaHint: 'Te enviamos un código de 6 dígitos por correo. Válido 10 minutos.', twofaVerify: 'Entrar', twofaBack: '← Otro inicio de sesión' },
-  } as const)[lang] ?? undefined;
-  const x = X ?? { emailOpt: 'Email (optional)', emailHint: '', forgotLink: 'Forgot password?', forgotTitle: 'Reset password', forgotHint: '', forgotSend: 'Send link', forgotSent: 'Check your inbox.', back: '← Back', twofaTitle: 'Verification code', twofaHint: '', twofaVerify: 'Sign in', twofaBack: '← Back' };
+  const bt = BILLING_I18N[lang] ?? BILLING_I18N.de;
+  const x = KONTO_I18N[lang] ?? KONTO_I18N.de;
+  const uid = useId();
+  const ids = {
+    user: `${uid}-u`, pw: `${uid}-p`, email: `${uid}-e`, invite: `${uid}-i`, forgot: `${uid}-f`, code: `${uid}-c`,
+    err: `${uid}-err`, title: `${uid}-t`, trust: `${uid}-tr`, trust2: `${uid}-tr2`,
+  };
+  const firstField = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
-  async function submit(e: React.FormEvent) {
+  // Beim Wechsel der Ansicht: Fehler weg, Fokus ins erste Feld (nicht beim
+  // ersten Zeichnen — da soll der Bildschirmleser oben anfangen).
+  const shownView = useRef(view);
+  useEffect(() => {
+    if (shownView.current === view) return;
+    shownView.current = view;
+    window.requestAnimationFrame(() => firstField.current?.focus());
+  }, [view]);
+  useEffect(() => { document.title = `${view === 'register' ? x.registerTitle : x.tabLogin} · ${BRAND.name}`; }, [view, x]);
+
+  function go(v: View) { setView(v); setError(null); if (v !== 'forgot') setForgotSent(false); }
+  function fail(err: unknown) {
+    setError(friendlyError(err, x, lang));
+    window.requestAnimationFrame(() => errorRef.current?.focus());
+  }
+
+  async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
+    if (!username.trim() || !password) { setError(x.errRequired); return; }
+    setBusy(true); setError(null);
     try {
-      if (mode === 'login') {
-        const res = await api.login(username.trim(), password);
-        if (res.twofa && res.challenge) {
-          setChallenge(res.challenge);
-          setCode('');
-        } else if (res.user) {
-          onAuth(res.user);
-        } else {
-          setError('Error.');
-        }
-      } else {
-        const { user } = await api.register(username.trim(), password, invite.trim(), email.trim() || undefined);
-        onAuth(user);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error.');
-    } finally {
-      setBusy(false);
-    }
+      const res = await api.login(username.trim(), password);
+      if (res.twofa && res.challenge) { setChallenge(res.challenge); setCode(''); go('twofa'); }
+      else if (res.user) onAuth(res.user);
+      else setError(x.errGeneric);
+    } catch (err) { fail(err); } finally { setBusy(false); }
+  }
+
+  async function submitRegister(e: React.FormEvent) {
+    e.preventDefault();
+    if (!art9) { setArt9Invalid(true); setError(art9Texts(lang).errRegisterConsent); window.requestAnimationFrame(() => errorRef.current?.focus()); return; }
+    setBusy(true); setError(null);
+    try {
+      const { user } = await api.register(username.trim(), password, invite.trim(), email.trim() || undefined);
+      /* Einwilligung gleich danach speichern (eigener Aufruf, die Registrierung
+       * bleibt unverändert). Scheitert er, fragt der Dialog im Editor erneut. */
+      let next = user;
+      try { next = (await consentApi.art9(true, ART9_CONSENT_VERSION)).user ?? user; } catch { /* Dialog im Editor */ }
+      onAuth(next);
+    } catch (err) { fail(err); } finally { setBusy(false); }
   }
 
   async function submitCode(e: React.FormEvent) {
@@ -130,239 +274,186 @@ export default function AuthScreen({
       const { user } = await api.verify2fa(challenge, code.trim());
       onAuth(user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error.');
-    } finally {
-      setBusy(false);
-    }
+      if (err instanceof ApiError && (err.status === 400 || err.status === 401)) { setError(x.errCode); window.requestAnimationFrame(() => errorRef.current?.focus()); }
+      else fail(err);
+    } finally { setBusy(false); }
   }
 
   async function submitForgot(e: React.FormEvent) {
     e.preventDefault();
+    if (!username.trim()) { setError(x.errRequired); return; }
     setBusy(true); setError(null);
-    try {
-      await api.forgotPassword(username.trim() || email.trim());
-      setForgotSent(true);
-    } catch {
-      setForgotSent(true); // no enumeration — always show the neutral confirmation
-    } finally {
-      setBusy(false);
-    }
+    try { await api.forgotPassword(username.trim()); }
+    catch { /* keine Auskunft, ob es das Konto gibt */ }
+    finally { setForgotSent(true); setBusy(false); }
   }
 
-  const field = (id: string): React.CSSProperties => ({
-    width: '100%', padding: '12px 14px', fontFamily: SANS, fontSize: '16px',
-    fontWeight: 400, color: INK, background: SURFACE,
-    border: `1px solid ${focus === id ? ACCENT : LINE_STRONG}`, borderRadius: RADIUS,
-    outline: 'none', boxSizing: 'border-box',
-    boxShadow: focus === id ? `0 0 0 3px oklch(55% 0.216 264 / 0.14)` : 'none',
-    transition: 'border-color 140ms ease, box-shadow 140ms ease',
-  });
-  const label: React.CSSProperties = { ...overline, color: FAINT, marginTop: '18px', marginBottom: '7px', display: 'block' };
+  const errorBox = error ? (
+    <div id={ids.err} ref={errorRef} tabIndex={-1} role="alert" className="ka-error ka-swap"><Alert /><span>{error}</span></div>
+  ) : null;
+  const errBy = error ? ids.err : undefined;
+
+  const title = view === 'register' ? x.registerTitle : view === 'forgot' ? x.forgotTitle : view === 'twofa' ? x.twofaTitle : x.loginTitle;
+  const lead = view === 'register' ? (open ? x.registerLeadOpen : x.registerLeadInvite)
+    : view === 'forgot' ? x.forgotLead : view === 'twofa' ? x.twofaLead : x.loginLead;
+
+  const inviteForm = (
+    <form onSubmit={submitRegister} noValidate>
+      <Field id={ids.user} label={t.username} hint={x.usernameHint}>
+        <input ref={open ? undefined : firstField} id={ids.user} className="ka-input" value={username} onChange={e => setUsername(e.target.value)}
+          autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={3} maxLength={32}
+          aria-describedby={[`${ids.user}-hint`, errBy].filter(Boolean).join(' ')} aria-invalid={!!error || undefined} />
+      </Field>
+      <Field id={ids.pw} label={t.password} hint={x.passwordHintNew}>
+        <PasswordInput id={ids.pw} value={password} onChange={setPassword} autoComplete="new-password" x={x}
+          describedBy={[`${ids.pw}-hint`, errBy].filter(Boolean).join(' ')} invalid={!!error} />
+      </Field>
+      <Field id={ids.email} label={x.emailOpt} hint={x.emailHint}>
+        <input id={ids.email} className="ka-input" type="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)}
+          autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="name@example.com" aria-describedby={`${ids.email}-hint`} />
+      </Field>
+      <Field id={ids.invite} label={t.inviteCode}>
+        <input id={ids.invite} className="ka-input is-invite" value={invite} onChange={e => setInvite(e.target.value)}
+          autoComplete="off" autoCapitalize="characters" spellCheck={false} required aria-describedby={errBy} />
+      </Field>
+      <Art9ConsentFields lang={lang} checked={art9} invalid={art9Invalid}
+        onChange={v => { setArt9(v); if (v) { setArt9Invalid(false); setError(null); } }} />
+      {errorBox}
+      <SubmitButton busy={busy} label={t.submit.register} x={x} />
+      <RegisterNotice lang={lang} />
+    </form>
+  );
 
   return (
-    <div style={{ minHeight: '100vh', background: PAPER, display: 'flex', flexDirection: 'column', fontFamily: SANS, color: INK }}>
-      {/* Top bar: brand + language + mode */}
-      <div style={{ borderBottom: `1px solid ${LINE}`, padding: '14px clamp(20px, 5vw, 44px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-        <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-          <BrandMark />
-          <span style={{ fontFamily: DISP, fontSize: '19px', fontWeight: 600, letterSpacing: '-0.02em', color: INK }}>
-            CV<span style={{ fontFamily: MONO, fontSize: '12px', fontWeight: 500, color: ACCENT, marginLeft: '1px' }}>-Hub</span>
-          </span>
-        </a>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+    <div className="ui ka" lang={lang}>
+      <header className="ka-top">
+        <a href="/" className="ka-brand" aria-label={`${BRAND.name} · ${x.backHome}`}><Wordmark /></a>
+        <div className="ka-top-right">
+          <a href="/" className="ka-home-link">{x.backHome}</a>
           {onLangChange && (
-            <div style={{ display: 'inline-flex', gap: '2px', background: RAISED, border: `1px solid ${LINE}`, borderRadius: '999px', padding: '3px' }}>
+            <div className="ui-seg ui-pill ka-lang" role="group" aria-label="Sprache · Language">
               {LANG_ORDER.map(l => (
-                <button key={l} type="button" onClick={() => onLangChange(l)}
-                  style={{
-                    fontFamily: MONO, fontSize: '10.5px', fontWeight: 500, letterSpacing: '0.06em',
-                    color: lang === l ? '#fff' : FAINT, background: lang === l ? INK : 'transparent',
-                    border: 'none', borderRadius: '999px', padding: '4px 8px', cursor: 'pointer',
-                  }}>{l.toUpperCase()}</button>
+                <button key={l} type="button" aria-pressed={lang === l} lang={l} onClick={() => onLangChange(l)}
+                  aria-label={{ de: 'Deutsch', en: 'English', fr: 'Français', es: 'Español' }[l]}>{l.toUpperCase()}</button>
               ))}
             </div>
           )}
-          <div style={{ ...micromono, color: FAINT }}>{mode === 'login' ? t.submit.login : t.submit.register}</div>
         </div>
-      </div>
+      </header>
 
-      <main style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: isMobile ? '24px' : '48px', padding: isMobile ? '36px 20px' : '72px clamp(24px, 5vw, 48px)', maxWidth: '1120px', width: '100%', margin: '0 auto', alignItems: 'center' }}>
+      <main className="ka-main">
+        <section aria-labelledby={ids.title}>
+          <p className="ka-eyebrow ka-rise" style={{ ['--i' as string]: 0 }}>{x.eyebrow}</p>
+          <h1 id={ids.title} className="ka-h1 ka-rise" style={{ ['--i' as string]: 1 }}>{title}</h1>
+          <p className="ka-lead ka-rise" style={{ ['--i' as string]: 2 }}>{lead}</p>
 
-        {/* Hero side */}
-        <div style={{ gridColumn: isMobile ? '1 / -1' : '1 / span 6' }}>
-          <div style={{ ...overline, color: ACCENT, marginBottom: '22px' }}>Family &amp; Friends · Invite-only</div>
-          <h1 style={{
-            fontFamily: DISP, fontSize: 'clamp(42px, 5.6vw, 76px)', fontWeight: 600,
-            color: INK, lineHeight: 1.0, letterSpacing: '-0.035em', margin: 0, textWrap: 'balance',
-          }}>
-            {mode === 'login' ? t.welcomeBack : t.createAccount}
-          </h1>
-          <p style={{ fontFamily: SANS, fontSize: '17px', color: SOFT, lineHeight: 1.55, marginTop: '22px', maxWidth: '440px' }}>
-            {mode === 'login' ? t.description.login : t.description.register}
-          </p>
-        </div>
-
-        {/* Form side */}
-        <div style={{ gridColumn: isMobile ? '1 / -1' : '8 / span 5' }}>
-          <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: '16px', boxShadow: SHADOW_MD, padding: isMobile ? '22px' : '30px' }}>
-            {challenge ? (
-              <form onSubmit={submitCode}>
-                <div style={{ fontFamily: DISP, fontSize: '22px', fontWeight: 600, letterSpacing: '-0.02em', color: INK, marginBottom: '6px' }}>{x.twofaTitle}</div>
-                <p style={{ fontSize: '13px', color: SOFT, lineHeight: 1.55, margin: '0 0 4px' }}>{x.twofaHint}</p>
-                <label style={label}>Code</label>
-                <input style={{ ...field('c'), fontFamily: MONO, fontSize: '26px', letterSpacing: '0.4em', textAlign: 'center' }}
-                  value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onFocus={() => setFocus('c')} onBlur={() => setFocus(null)}
-                  inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="000000" />
-                {error && (
-                  <div style={{ marginTop: '18px', borderLeft: `2px solid ${ERROR}`, paddingLeft: '12px', fontSize: '12.5px', color: ERROR, fontFamily: SANS, lineHeight: 1.5 }}>{error}</div>
-                )}
-                <button type="submit" disabled={busy || code.length !== 6}
-                  style={{ marginTop: '24px', width: '100%', padding: '13px 18px', background: (busy || code.length !== 6) ? GHOST : ACCENT, color: '#fff', border: 'none', borderRadius: RADIUS, fontSize: '14px', fontWeight: 550, letterSpacing: '-0.01em', cursor: (busy || code.length !== 6) ? 'default' : 'pointer', fontFamily: SANS, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{busy ? `${t.busy}…` : x.twofaVerify}</span>
-                  <span style={{ fontFamily: MONO, fontWeight: 400 }}>→</span>
-                </button>
-                <button type="button" onClick={() => { setChallenge(null); setCode(''); setError(null); setPassword(''); }}
-                  style={{ marginTop: '14px', background: 'none', border: 'none', color: SOFT, cursor: 'pointer', fontFamily: SANS, fontSize: '12.5px', padding: 0 }}>
-                  {x.twofaBack}
-                </button>
-              </form>
-            ) : (
-            <>
-            <form onSubmit={submit}>
-              {/* Seit der offenen Registrierung meldet man sich auch mit der
-                  E-Mail-Adresse an (pdf-service, /api/auth/login). */}
-              <label style={label}>{mode === 'login' ? bt.identifier : t.username}</label>
-              <input style={field('u')} value={username} onChange={e => setUsername(e.target.value)}
-                onFocus={() => setFocus('u')} onBlur={() => setFocus(null)}
-                autoCapitalize="none" autoComplete="username" placeholder="username" />
-
-              <label style={label}>{t.password}</label>
-              <input style={field('p')} type="password" value={password} onChange={e => setPassword(e.target.value)}
-                onFocus={() => setFocus('p')} onBlur={() => setFocus(null)}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                placeholder="••••••••" />
-
-              {mode === 'register' && (
-                <>
-                  <label style={label}>{x.emailOpt}</label>
-                  <input style={field('e')} type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    onFocus={() => setFocus('e')} onBlur={() => setFocus(null)}
-                    autoCapitalize="none" autoComplete="email" placeholder="name@example.com" />
-                  {x.emailHint && <div style={{ fontSize: '11px', color: FAINT, lineHeight: 1.45, marginTop: '6px' }}>{x.emailHint}</div>}
-
-                  <label style={label}>{t.inviteCode}</label>
-                  <input style={{ ...field('i'), fontFamily: MONO, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                    value={invite} onChange={e => setInvite(e.target.value)}
-                    onFocus={() => setFocus('i')} onBlur={() => setFocus(null)}
-                    placeholder="XXXX-XXXX" />
-                </>
-              )}
-
-              {error && (
-                <div style={{ marginTop: '18px', borderLeft: `2px solid ${ERROR}`, paddingLeft: '12px', fontSize: '12.5px', color: ERROR, fontFamily: SANS, lineHeight: 1.5 }}>
-                  {error}
+          <div className="ka-card ka-rise" style={{ ['--i' as string]: 3 }}>
+            <div className="ka-card-inner">
+              {(view === 'login' || view === 'register') && (
+                <div className="ui-seg ka-tabs" role="group" aria-label={`${x.tabLogin} / ${x.tabRegister}`}>
+                  <button type="button" aria-pressed={view === 'login'} onClick={() => go('login')}>{x.tabLogin}</button>
+                  <button type="button" aria-pressed={view === 'register'} onClick={() => go('register')}>{x.tabRegister}</button>
                 </div>
               )}
 
-              <button type="submit" disabled={busy}
-                style={{
-                  marginTop: '26px', width: '100%', padding: '13px 18px',
-                  background: busy ? GHOST : ACCENT, color: '#fff',
-                  border: 'none', borderRadius: RADIUS, fontSize: '14px', fontWeight: 550,
-                  letterSpacing: '-0.01em', cursor: busy ? 'default' : 'pointer', fontFamily: SANS,
-                  boxShadow: busy ? 'none' : SHADOW_SM,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  transition: 'background 160ms ease',
-                }}
-                onMouseEnter={e => { if (!busy) e.currentTarget.style.background = ACCENT_HOVER; }}
-                onMouseLeave={e => { if (!busy) e.currentTarget.style.background = ACCENT; }}>
-                <span>{busy ? `${t.busy}…` : mode === 'login' ? t.submit.login : t.submit.register}</span>
-                <span style={{ fontFamily: MONO, fontWeight: 400 }}>→</span>
-              </button>
-            </form>
+              <div key={view} className="ka-swap">
+                {view === 'login' && (
+                  <form onSubmit={submitLogin} noValidate>
+                    <Field id={ids.user} label={bt.identifier}>
+                      <input ref={firstField} id={ids.user} className="ka-input" value={username} onChange={e => setUsername(e.target.value)}
+                        autoComplete="username" autoCapitalize="none" spellCheck={false} required inputMode="email"
+                        aria-describedby={errBy} aria-invalid={!!error || undefined} />
+                    </Field>
+                    <Field id={ids.pw} label={t.password}
+                      aside={<button type="button" className="ka-textlink" onClick={() => go('forgot')}>{x.forgotLink}</button>}>
+                      <PasswordInput id={ids.pw} value={password} onChange={setPassword} autoComplete="current-password" x={x} describedBy={errBy} invalid={!!error} />
+                    </Field>
+                    {errorBox}
+                    <SubmitButton busy={busy} label={t.submit.login} x={x} />
+                  </form>
+                )}
 
-            {mode === 'login' && (
-              <div style={{ marginTop: '14px' }}>
-                {!forgot ? (
-                  <button type="button" onClick={() => { setForgot(true); setForgotSent(false); setError(null); }}
-                    style={{ background: 'none', border: 'none', color: SOFT, cursor: 'pointer', fontFamily: SANS, fontSize: '12.5px', padding: 0, textDecoration: 'underline', textUnderlineOffset: '2px' }}>
-                    {x.forgotLink}
-                  </button>
-                ) : (
-                  <div style={{ background: RAISED, border: `1px solid ${LINE}`, borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontFamily: DISP, fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>{x.forgotTitle}</div>
-                    {forgotSent ? (
-                      <div style={{ fontSize: '12.5px', color: SOFT, lineHeight: 1.55 }}>{x.forgotSent}</div>
-                    ) : (
-                      <form onSubmit={submitForgot}>
-                        <div style={{ fontSize: '12.5px', color: SOFT, lineHeight: 1.5, marginBottom: '10px' }}>{x.forgotHint}</div>
-                        <input style={field('fg')} value={username} onChange={e => setUsername(e.target.value)}
-                          onFocus={() => setFocus('fg')} onBlur={() => setFocus(null)}
-                          autoCapitalize="none" placeholder="name@example.com / username" />
-                        <button type="submit" disabled={busy}
-                          style={{ marginTop: '12px', width: '100%', padding: '11px', background: ACCENT, color: '#fff', border: 'none', borderRadius: RADIUS, fontSize: '13px', fontWeight: 550, cursor: 'pointer', fontFamily: SANS }}>
-                          {busy ? `${t.busy}…` : x.forgotSend}
-                        </button>
-                      </form>
-                    )}
-                    <button type="button" onClick={() => { setForgot(false); setForgotSent(false); }}
-                      style={{ marginTop: '10px', background: 'none', border: 'none', color: SOFT, cursor: 'pointer', fontFamily: SANS, fontSize: '12px', padding: 0 }}>
-                      {x.back}
-                    </button>
-                  </div>
+                {view === 'register' && (open ? (
+                  <>
+                    <a href={PATHS.checkout} onClick={linkClick(PATHS.checkout)} className="ka-btn ka-btn-primary" style={{ marginTop: 0 }}>
+                      <span>{x.registerCta}</span><span className="ka-btn-arrow"><Arrow /></span>
+                    </a>
+                    <p className="ka-sub">{x.registerCtaSub}</p>
+                    <details className="ka-disclosure" open={!!initialInvite || undefined}>
+                      <summary>{x.inviteToggle}</summary>
+                      {inviteForm}
+                    </details>
+                  </>
+                ) : inviteForm)}
+
+                {view === 'forgot' && (
+                  forgotSent ? (
+                    <>
+                      <div className="ka-ok" role="status">{x.forgotSent}</div>
+                      <div className="ka-row-links"><button type="button" className="ka-textlink" onClick={() => go('login')}>{x.backToLogin}</button></div>
+                    </>
+                  ) : (
+                    <form onSubmit={submitForgot} noValidate>
+                      <Field id={ids.forgot} label={x.forgotField}>
+                        <input ref={firstField} id={ids.forgot} className="ka-input" value={username} onChange={e => setUsername(e.target.value)}
+                          autoComplete="username" autoCapitalize="none" spellCheck={false} required inputMode="email" aria-describedby={errBy} />
+                      </Field>
+                      {errorBox}
+                      <SubmitButton busy={busy} label={x.forgotSend} x={x} />
+                      <div className="ka-row-links"><button type="button" className="ka-textlink" onClick={() => go('login')}>{x.backToLogin}</button></div>
+                    </form>
+                  )
+                )}
+
+                {view === 'twofa' && (
+                  <form onSubmit={submitCode} noValidate>
+                    <Field id={ids.code} label={x.twofaField}>
+                      <input ref={firstField} id={ids.code} className="ka-input is-code" value={code}
+                        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
+                        aria-describedby={errBy} aria-invalid={!!error || undefined} />
+                    </Field>
+                    {errorBox}
+                    <SubmitButton busy={busy} label={x.twofaSubmit} x={x} disabled={code.length !== 6} />
+                    <div className="ka-row-links">
+                      <button type="button" className="ka-textlink" onClick={() => { setChallenge(null); setCode(''); setPassword(''); go('login'); }}>{x.twofaBack}</button>
+                    </div>
+                  </form>
                 )}
               </div>
-            )}
-
-            <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: `1px solid ${LINE}`, fontSize: '13px', color: SOFT, fontFamily: SANS, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
-              <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); setForgot(false); }}
-                style={{ background: 'none', border: 'none', color: ACCENT, fontWeight: 550, cursor: 'pointer', fontFamily: SANS, fontSize: '13px', padding: 0, letterSpacing: '-0.01em' }}>
-                {mode === 'login' ? t.swap.toRegister : t.swap.toLogin}
-              </button>
             </div>
-            {/* Offene Registrierung (mit Bewerbungs-Pass) läuft über /kauf:
-                E-Mail, Passwort, Bot-Schutz, Altersbestätigung. */}
-            {registrationOpen(offer) && (
-              <div style={{ marginTop: '12px' }}>
-                <a href={PATHS.checkout} onClick={linkClick(PATHS.checkout)}
-                  style={{ color: ACCENT_HOVER, fontWeight: 550, fontFamily: SANS, fontSize: '13px', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
-                  {bt.regTitle} · {bt.productName} →
-                </a>
-              </div>
-            )}
-            </>
-            )}
           </div>
 
-          {!challenge && onDemoStart && (
-            <div style={{ marginTop: '20px' }}>
-              <div style={{ ...overline, color: FAINT, marginBottom: '8px' }}>{t.demoOverline}</div>
-              <button type="button" onClick={onDemoStart}
-                style={{
-                  width: '100%', padding: '13px 18px',
-                  background: 'transparent', color: INK,
-                  border: `1px solid ${LINE_STRONG}`, borderRadius: RADIUS, fontSize: '14px', fontWeight: 550,
-                  letterSpacing: '-0.01em', cursor: 'pointer', fontFamily: SANS,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  transition: 'background 160ms ease, color 160ms ease',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = INK; e.currentTarget.style.color = '#fff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = INK; }}>
-                <span>{t.demoButton}</span>
-                <span style={{ fontFamily: MONO, fontWeight: 400 }}>→</span>
-              </button>
-              <div style={{ fontSize: '12px', color: FAINT, fontFamily: SANS, lineHeight: 1.5, marginTop: '9px' }}>
-                {t.demoCaption}
+          {view !== 'twofa' && (
+            <div className="ka-alt">
+              {onDemoStart && (
+                <div className="ka-alt-card ka-rise" style={{ ['--i' as string]: 4 }}>
+                  <h2>{x.guestTitle}</h2>
+                  <p>{x.guestLead}</p>
+                  <button type="button" className="ka-btn ka-btn-soft" onClick={onDemoStart}>
+                    <span>{t.demoButton}</span><span className="ka-btn-arrow"><Arrow /></span>
+                  </button>
+                </div>
+              )}
+              <div className="ka-alt-card ka-rise" style={{ ['--i' as string]: 5 }}>
+                <h2>{x.codeTitle}</h2>
+                <p>{x.codeLead}</p>
+                <a href={PATHS.code} onClick={linkClick(PATHS.code)} className="ka-btn ka-btn-soft">
+                  <span>{x.codeLink}</span><span className="ka-btn-arrow"><Arrow /></span>
+                </a>
               </div>
             </div>
           )}
-        </div>
+          <div className="ka-trust-mobile"><TrustList x={x} headingId={ids.trust2} /></div>
+        </section>
+
+        <aside className="ka-visual" aria-labelledby={ids.trust}>
+          <DemoStage lang={lang} x={x} />
+          <TrustList x={x} headingId={ids.trust} />
+        </aside>
       </main>
 
-      <div style={{ borderTop: `1px solid ${LINE}` }}>
-        <SiteFooter lang={lang} />
-      </div>
+      <div className="ka-foot"><SiteFooter lang={lang} /></div>
     </div>
   );
 }

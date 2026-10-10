@@ -1,7 +1,7 @@
 // Wie weit darf ein Name gesperrt werden, bevor die PDF-Textebene ihn zerlegt?
 //
 // Die Grenze aus dem Umbau vom 12.09. (0,08 em) wurde an KLEINEN Versalzeilen
-// gemessen — Sektionstitel in 7 pt. Die Vorlagen aus Tills Sammlung sperren
+// gemessen — Sektionstitel in 7 pt. Die Vorlagen aus der Vorlagensammlung sperren
 // den NAMEN in 20–26 pt sehr weit („K A T H A R I N A   M A I"). Ob dieselbe
 // Grenze gilt, ist eine Frage der Messung, nicht der Analogie: der Abstand in
 // em skaliert mit der Schriftgröße, die Heuristik von Poppler arbeitet aber

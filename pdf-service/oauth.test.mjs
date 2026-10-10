@@ -81,7 +81,7 @@ test('Zustimmungsseite escapet, was von außen kommt', () => {
 
 test('Zustimmungsseite zeigt beide Wege — erlauben und ablehnen', () => {
   const html = consentPage({
-    appName: 'Tool', username: 'till', clientName: 'Claude',
+    appName: 'Tool', username: 'leitung', clientName: 'Claude',
     redirectUri: 'https://claude.ai/cb', params: {},
   });
   assert.ok(html.includes('value="allow"'));

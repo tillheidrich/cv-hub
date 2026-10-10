@@ -16,6 +16,9 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { startPostgres, startServer, client, findChromium, findPgBin, pdfPageCount } from './testkit.mjs';
 import { runJanitor, prunePhotos } from './janitor.js';
+import { ART9_VERSION } from './consent.js';
+// Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
+const ART9 = { version: ART9_VERSION };
 
 const PG_PORT = Number(process.env.TEST_PG_PORT || 5441);
 const API_PORT = Number(process.env.TEST_API_PORT || 3141);
@@ -76,14 +79,14 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
 
     // Erster Nutzer wird Admin (Bootstrap), die weiteren brauchen Einladungen.
     Adm = admin();
-    let r = await Adm.post('/api/auth/register', { username: 'chefin', password: 'admin-passwort-1', email: 'chefin@example.org' });
+    let r = await Adm.post('/api/auth/register', { username: 'chefin', password: 'admin-passwort-1', email: 'chefin@example.org', art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     const invA = await Adm.post('/api/admin/invites', { email: 'anna@example.org' });
     const invB = await Adm.post('/api/admin/invites', {});
     A = admin(); B = admin();
-    r = await A.post('/api/auth/register', { username: 'anna', password: 'anna-passwort-1', email: 'anna@example.org', inviteCode: invA.data.code });
+    r = await A.post('/api/auth/register', { username: 'anna', password: 'anna-passwort-1', email: 'anna@example.org', inviteCode: invA.data.code, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    r = await B.post('/api/auth/register', { username: 'bert', password: 'bert-passwort-1', inviteCode: invB.data.code });
+    r = await B.post('/api/auth/register', { username: 'bert', password: 'bert-passwort-1', inviteCode: invB.data.code, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     const p = profil('Anna');
     r = await A.post('/api/resumes', { id: p.id, displayName: p.displayName, payload: p });
@@ -153,11 +156,11 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
   test('N8: an eine Mail gebundener Einladungscode prüft die Mail', async () => {
     const inv = await Adm.post('/api/admin/invites', { email: 'gebunden@example.org' });
     const C = client(srv.base);
-    let r = await C.post('/api/auth/register', { username: 'fremd', password: 'fremd-passwort-1', email: 'andere@example.org', inviteCode: inv.data.code });
+    let r = await C.post('/api/auth/register', { username: 'fremd', password: 'fremd-passwort-1', email: 'andere@example.org', inviteCode: inv.data.code, art9Consent: ART9 });
     assert.equal(r.status, 403);
-    r = await C.post('/api/auth/register', { username: 'fremd', password: 'fremd-passwort-1', inviteCode: inv.data.code });
+    r = await C.post('/api/auth/register', { username: 'fremd', password: 'fremd-passwort-1', inviteCode: inv.data.code, art9Consent: ART9 });
     assert.equal(r.status, 403, 'ohne Mail auch nicht');
-    r = await C.post('/api/auth/register', { username: 'gebunden', password: 'gebunden-passwort-1', email: 'Gebunden@Example.org', inviteCode: inv.data.code });
+    r = await C.post('/api/auth/register', { username: 'gebunden', password: 'gebunden-passwort-1', email: 'Gebunden@Example.org', inviteCode: inv.data.code, art9Consent: ART9 });
     assert.equal(r.status, 200, JSON.stringify(r.data));
   });
 
@@ -329,7 +332,7 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
   test('N7: Abmelden entwertet die Sitzung serverseitig', async () => {
     const C = client(srv.base);
     const inv = await Adm.post('/api/admin/invites', {});
-    await C.post('/api/auth/register', { username: 'carla', password: 'carla-passwort-1', inviteCode: inv.data.code });
+    await C.post('/api/auth/register', { username: 'carla', password: 'carla-passwort-1', inviteCode: inv.data.code, art9Consent: ART9 });
     const alt = C.cookie;
     assert.equal((await C.get('/api/auth/me')).status, 200);
     await C.post('/api/auth/logout', {});
@@ -341,7 +344,7 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
   test('Befund 2: Passwortwechsel trennt API-Schlüssel und OAuth-Token', async () => {
     const C = client(srv.base);
     const inv = await Adm.post('/api/admin/invites', {});
-    await C.post('/api/auth/register', { username: 'dora', password: 'dora-passwort-1', inviteCode: inv.data.code });
+    await C.post('/api/auth/register', { username: 'dora', password: 'dora-passwort-1', inviteCode: inv.data.code, art9Consent: ART9 });
     const key = (await C.post('/api/keys', {})).data.key;
     const uid = (await C.get('/api/auth/me')).data.user.id;
     const oauth = 'cvm_' + crypto.randomBytes(32).toString('hex');
@@ -362,7 +365,7 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
   test('Befund 2: Passwort-Reset per Token trennt ebenfalls alles', async () => {
     const C = client(srv.base);
     const inv = await Adm.post('/api/admin/invites', {});
-    await C.post('/api/auth/register', { username: 'emil', password: 'emil-passwort-1', inviteCode: inv.data.code });
+    await C.post('/api/auth/register', { username: 'emil', password: 'emil-passwort-1', inviteCode: inv.data.code, art9Consent: ART9 });
     const key = (await C.post('/api/keys', {})).data.key;
     const uid = (await C.get('/api/auth/me')).data.user.id;
     const token = crypto.randomBytes(32).toString('hex');
@@ -375,16 +378,11 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
     assert.equal((await C.get('/api/auth/me')).status, 401, 'alte Sitzung auch');
   });
 
-  test('Befund 2: Admin-Reset trennt alles und meldet, ob die Mail rausging', async () => {
-    const key = (await B.post('/api/keys', {})).data.key;
+  test('Befund 2 / Audit S2: Admin kann kein Kundenpasswort mehr direkt setzen', async () => {
     const uid = (await B.get('/api/auth/me')).data.user.id;
     const r = await Adm.post(`/api/admin/users/${uid}/reset-password`, { newPassword: 'neu-gesetzt-1' });
-    assert.equal(r.status, 200);
-    assert.equal(r.data.revoked.apiKeys, 1);
-    assert.equal(r.data.notified, false, 'ohne SMTP und ohne Mail-Adresse keine Zustellung');
-    assert.equal((await fetch(`${srv.base}/api/auth/me`, { headers: { Authorization: `Bearer ${key}` } })).status, 401);
-    assert.equal((await B.get('/api/auth/me')).status, 401);
-    assert.equal((await A.post(`/api/admin/users/${uid}/reset-password`, { newPassword: 'x'.repeat(10) })).status, 403);
+    assert.equal(r.status, 404, 'Route entfernt');
+    assert.equal((await B.get('/api/auth/me')).status, 200, 'Sitzung des Kunden bleibt');
   });
 
   test('N6: E-Mail-Wechsel nur mit aktuellem Passwort', async () => {
@@ -446,7 +444,7 @@ describe('cv-api gegen Postgres', { skip: PG_MISSING }, () => {
     await db.query(`INSERT INTO access_requests (name, email, message, status) VALUES ('Lotte Löschen', $1, 'Hallo', 'accepted')`, [mail]);
     const inv = await Adm.post('/api/admin/invites', { email: mail, note: 'Zugangsanfrage #1 · Lotte Löschen' });
     const C = client(srv.base);
-    await C.post('/api/auth/register', { username: 'lotte', password: 'lotte-passwort-1', email: mail, inviteCode: inv.data.code });
+    await C.post('/api/auth/register', { username: 'lotte', password: 'lotte-passwort-1', email: mail, inviteCode: inv.data.code, art9Consent: ART9 });
     const uid = (await C.get('/api/auth/me')).data.user.id;
     const p = profil('Lotte');
     await C.post('/api/resumes', { id: p.id, payload: p });

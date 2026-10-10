@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "CV-Tool backend — auth (invite-only), résumé storage, admin, PDF rendering.",
+  "description": "CV-Hub backend — auth (invite-only), résumé storage, admin, PDF rendering.",
   "scripts": {
     "start": "node server.js",
     "test": "node --test",

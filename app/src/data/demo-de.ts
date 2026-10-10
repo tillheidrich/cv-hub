@@ -1,14 +1,29 @@
 import type { CVData } from './types';
 import { labelsDE } from './labels';
 
-/* Kein Foto im Demo-Profil.
+/* Demo-Foto (seit 10.10.2026, Auftrag: „ein Foto für Lena Brandt, das
+ * standardmäßig drin ist").
  *
- * Bis zum 08.10.2026 stand hier eine graue Silhouette mit dem Wort „FOTO" —
- * und die landete in jedem Demo-PDF. Ein Platzhalter gehört höchstens in die
- * Bearbeitungsansicht, nie in ein Dokument. Wer ein Foto möchte, lädt in der
- * Demo jetzt ein eigenes hoch; es bleibt im Browser (siehe EditorPanel).
- * Ältere Demo-Profile tragen die Silhouette noch — sie fällt beim Export
- * heraus (export/photoEmbed.ts). */
+ * Quelle: Unsplash, Foto von Phạm Duy Quang,
+ * https://unsplash.com/photos/woman-in-grey-blazer-business-portrait-QGr6H7pri-Q
+ * Lizenz: Unsplash License (kommerzielle Nutzung erlaubt, Nennung nicht
+ * Pflicht). Bearbeitet: Ansteckabzeichen am Revers entfernt, auf Brustbild
+ * beschnitten, Metadaten entfernt. Nachweis in public/demo/CREDITS.txt.
+ *
+ * Die Felder folgen einem hochgeladenen Foto: `photo` ist der fertige
+ * Zuschnitt (4:5, 720 × 900 wie aus dem Zuschneide-Dialog), `photoOriginal`
+ * das größere Bild (3:4, 800 × 1067), an dem ein erneuter Zuschnitt ansetzt.
+ * Beides sind Adressen auf eigene, statisch ausgelieferte Dateien — keine
+ * data:-URL, sonst trüge jedes Bündel 120 KB Bild mit sich. Für PDF und HTML
+ * bettet export/photoEmbed.ts das Bild beim Export als data:-URL ein, Word
+ * rechnet es über die Leinwand um (exportDocx.ts, photoAsRaster).
+ *
+ * Bis zum 08.10.2026 stand hier eine graue Silhouette mit dem Wort „FOTO".
+ * Ältere Demo-Profile tragen sie noch; sie fällt beim Export heraus
+ * (export/photoEmbed.ts) und wird beim nächsten Laden der Demo durch dieses
+ * Foto ersetzt (data/demoUpgrade.ts). */
+export const DEMO_PHOTO = '/demo/lena-brandt-zuschnitt.jpg';
+export const DEMO_PHOTO_ORIGINAL = '/demo/lena-brandt.jpg';
 
 /**
  * Fictional demo persona. Not a real person.
@@ -22,12 +37,14 @@ export const demoDE: CVData = {
     subtitle: 'Produktdesign · Design Systems · UX Research',
     location: 'Lange Reihe 24, 20099 Hamburg',
     email: 'lena.brandt@example.com',
-    phone: '+49 151 23456789',
-    website: 'lenabrandt.design',
-    linkedin: 'linkedin.com/in/lena-brandt',
+    phone: '+49 30 23125 789',
+    website: 'lena-brandt.example',
+    linkedin: 'linkedin.com/in/lena-brandt-beispiel',
     instagram: '',
     birthDate: '14. März 1991',
     driversLicense: 'Klasse B',
+    photo: DEMO_PHOTO,
+    photoOriginal: DEMO_PHOTO_ORIGINAL,
   },
 
   profile: {

@@ -105,8 +105,30 @@ const PW = 'Accountcheck-Pass1';
 r = await uj('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password: PW, inviteCode: code }) });
 check(r.status === 200 && !!r.body?.user?.access?.until, 'Registrierung, Laufzeit in der Antwort', r.body?.user?.access ? `${r.body.user.access.daysLeft} Tage` : String(r.status));
 const userId = r.body?.user?.id;
+check(r.body?.user?.art9?.ok === false, 'Registrierung über die API ohne Einwilligung Art. 9: Konto speichert noch nicht');
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1000);
+
+/* Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert das Konto
+ * nichts. Der Dialog kommt nach der Anmeldung; hier wird er wie von einer
+ * Nutzerin ausgefüllt, dann geht der bisherige Ablauf unverändert weiter. */
+step('Einwilligung Art. 9');
+const a9 = page.locator('[data-art9-dialog]');
+await a9.waitFor({ timeout: 8000 }).catch(() => {});
+check(await a9.count() === 1, 'Dialog „besonders geschützte Angaben" nach der Anmeldung');
+const probe = await uj('/api/resumes', { method: 'POST', body: JSON.stringify({ id: 'a9probe', payload: { id: 'a9probe', data: {} } }) });
+check(probe.status === 403 && probe.body?.code === 'art9_consent_required', 'ohne Einwilligung: Speichern 403 art9_consent_required', `${probe.status} ${probe.body?.code}`);
+check(!(await a9.locator('[data-art9-checkbox]').isChecked()), 'Häkchen nicht vorangekreuzt');
+await a9.locator('[data-art9-accept]').click();
+await page.waitForTimeout(200);
+check(await a9.locator('.bl-error').count() === 1 && (await uj('/api/auth/me')).body?.user?.art9?.ok === false, 'ohne Häkchen keine Einwilligung');
+await a9.locator('[data-art9-checkbox]').check();
+await a9.locator('[data-art9-accept]').click();
+await page.waitForTimeout(800);
+check(await page.locator('[data-art9-dialog]').count() === 0, 'Dialog nach der Einwilligung zu');
+const meA9 = (await uj('/api/auth/me')).body?.user?.art9;
+check(meA9?.ok === true && !!meA9?.givenAt, 'Server: Einwilligung mit Zeit und Fassung gespeichert', JSON.stringify(meA9));
+check(!(await serverResumes()).some(x => x.id === 'a9probe'), 'die Probe ohne Einwilligung wurde nicht gespeichert');
 await page.getByRole('button', { name: /Neuer Lebenslauf/ }).first().click();
 await page.getByRole('radio', { name: /Mit Beispiel/ }).click();
 await page.locator('input[placeholder="z. B. Bewerbung Stadtwerke"]').fill('Bewerbung A');

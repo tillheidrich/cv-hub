@@ -184,22 +184,18 @@ async function durchlauf(vorlage, mitFoto) {
   await printer.close();
 }
 
-await durchlauf('Zürich', false);
+// Seit 10.10.2026 bringt die Demo ein Foto mit (Lena Brandt, public/demo/):
+// zuerst also der Lauf mit Foto (ATS-Vorlage mit Fotofeld, Schiefer), dann
+// Foto entfernen und der Lauf ohne Foto (Zürich).
+await durchlauf('Schiefer', true);
 
-// Mit Foto: die ATS-Vorlage mit Fotofeld (Schiefer).
 if (!(await page.locator('#ui-panel').count()) || !(await page.getByRole('button', { name: 'Persönlich' }).count())) {
   await page.getByRole('button', { name: 'Inhalt', exact: true }).first().click();
 }
 await page.getByRole('button', { name: 'Persönlich' }).first().click().catch(() => {});
-const jpeg = await page.evaluate(() => {
-  const c = document.createElement('canvas'); c.width = 600; c.height = 800;
-  const g = c.getContext('2d'); g.fillStyle = '#7a9'; g.fillRect(0, 0, 600, 800);
-  return c.toDataURL('image/jpeg', 0.9).split(',')[1];
-});
-await page.locator('input[type=file][accept="image/jpeg,image/png,image/webp"]').setInputFiles({ name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
-await page.getByRole('button', { name: 'Übernehmen' }).click();
+await page.getByRole('button', { name: '× Entfernen', exact: true }).first().click();
 await page.waitForTimeout(1500);
-await durchlauf('Schiefer', true);
+await durchlauf('Zürich', false);
 
 check(errors.length === 0, 'keine Laufzeitfehler', errors.join(' | '));
 await browser.close();

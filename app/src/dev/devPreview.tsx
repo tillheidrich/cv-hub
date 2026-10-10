@@ -175,8 +175,15 @@ function Harness() {
  * die älteren Vorlagen messen damit exakt wie bisher, und der Byte-Vergleich
  * ihres PDF-HTML bleibt aussagekräftig. */
 const NEUE_VORLAGEN = ['bamberg', 'weimar', 'kiel', 'goettingen', 'bergen', 'porto'];
-const schriften = NEUE_VORLAGEN.includes(tpl)
+/* Die acht vom 10.10.2026 brauchen zusätzlich die fetten Schnitte von
+ * Playfair, Space Grotesk und Lora (Name in 700). */
+const VORLAGEN_1010 = ['dublin', 'luxemburg', 'freiburg', 'tallinn', 'graz', 'linz', 'luebeck', 'valencia'];
+const schriften = NEUE_VORLAGEN.includes(tpl) || VORLAGEN_1010.includes(tpl)
   ? Promise.all([
+    ...(VORLAGEN_1010.includes(tpl) ? [
+      import('@fontsource/playfair-display/700.css'), import('@fontsource/space-grotesk/700.css'),
+      import('@fontsource/lora/700.css'), import('@fontsource/eb-garamond/500.css'),
+    ] : []),
     import('@fontsource/source-serif-4/400.css'), import('@fontsource/source-serif-4/500.css'),
     import('@fontsource/source-serif-4/600.css'), import('@fontsource/source-serif-4/700.css'),
     import('@fontsource/source-sans-3/600.css'), import('@fontsource/source-sans-3/700.css'),

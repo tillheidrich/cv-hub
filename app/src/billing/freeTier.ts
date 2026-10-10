@@ -159,6 +159,11 @@ export interface FreeTier {
   full: boolean;
   /** Word-Export erlaubt. */
   docx: boolean;
+  /** LaTeX-Export erlaubt (seit 10.10.2026; im Pass wie Word — ein gesetztes
+   *  Dokument zum Weiterbearbeiten). RenderCV-YAML bleibt frei: das sind die
+   *  eigenen Daten in einem offenen Format, wie JSON und Markdown. Gesperrt
+   *  wird über dasselbe Freischalt-Paneel wie Word (`open('docx')`). */
+  latex: boolean;
   /** Anschreiben für die aktive Fassung und Sprache (bearbeiten und exportieren). */
   coverLetter: boolean;
   /** Neue Fassung anlegen, duplizieren, als neues Profil importieren. */
@@ -172,7 +177,7 @@ export interface FreeTier {
 }
 
 export const FREE_TIER_OPEN: FreeTier = {
-  limited: false, full: true, docx: true, coverLetter: true, addProfile: true,
+  limited: false, full: true, docx: true, latex: true, coverLetter: true, addProfile: true,
   langAllowed: () => true, priceLine: '', open: () => {},
 };
 
@@ -190,6 +195,7 @@ export function computeFreeTier(o: {
     limited,
     full: false,
     docx: exportAll,
+    latex: exportAll,
     coverLetter: exportAll || hasOwnCoverLetter(o.active, o.lang),
     addProfile: ownProfileCount(o.profiles) === 0,
     langAllowed: l => exportAll || langAllowedFor(o.active, l),

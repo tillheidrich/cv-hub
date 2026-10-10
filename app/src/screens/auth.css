@@ -1,0 +1,199 @@
+/* ── Anmeldung (screens/AuthScreen.tsx) ─────────────────────────────────────
+ *
+ * Läuft im Flächensystem des Editors (ui/surface.css): Leinwand-Verlauf,
+ * schwebende Flächen, Geist, Tinte und ein Akzent. Kein eigenes Farbsystem
+ * mehr wie bis Runde 7 (Space Grotesk, Inter, lokale Konstanten).
+ *
+ * Telefon zuerst: eine Spalte, Formular oben. Ab 960 px steht rechts die
+ * echte Seite der Demo (gerendert, nicht als Bild) mit den drei belegten
+ * Vertrauensaussagen. Bewegung nur über transform/opacity und nur ohne
+ * „weniger Bewegung".
+ */
+.ka {
+  min-height: 100dvh; display: flex; flex-direction: column;
+  background: var(--canvas); color: var(--ink);
+}
+.ka a { color: inherit; }
+
+/* Kopfzeile */
+.ka-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; max-width: 1180px; width: 100%; margin: 0 auto; box-sizing: border-box;
+}
+.ka-brand {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px;
+  text-decoration: none; border-radius: var(--r-pill);
+  font-size: 17px; font-weight: 680; letter-spacing: -0.02em; color: var(--ink);
+}
+.ka-brand b { color: var(--accent-ink); font-weight: 700; }
+.ka-top-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ka-lang { padding: 3px; }
+.ka-lang > button { min-height: 32px; min-width: 36px; font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.04em; }
+.ka-home-link { font-size: var(--t-sm); color: var(--ink-2) !important; text-decoration: none; }
+.ka-home-link:hover { color: var(--ink) !important; }
+@media (max-width: 520px) { .ka-home-link { display: none; } }
+
+/* Hauptbereich */
+.ka-main {
+  flex: 1; width: 100%; max-width: 1180px; margin: 0 auto; box-sizing: border-box;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px;
+  padding: 8px 16px 56px;
+}
+@media (min-width: 960px) {
+  .ka-main { grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 64px; padding: 32px 32px 80px; align-items: start; }
+}
+
+.ka-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px;
+  padding: 5px 12px; border-radius: var(--r-pill);
+  background: oklch(1 0 0 / 0.65); box-shadow: var(--pill-shadow);
+  font-size: var(--t-xs); font-weight: 600; color: var(--ink-2);
+}
+.ka-eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.ka-h1 {
+  margin: 0; font-size: clamp(30px, 6.4vw, 44px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 700;
+  text-wrap: balance;
+}
+.ka-lead { margin: 12px 0 0; font-size: var(--t-lg); line-height: 1.55; color: var(--ink-2); max-width: 46ch; }
+
+/* Formularkarte */
+.ka-card {
+  margin-top: 24px; padding: 6px; border-radius: 26px;
+  background: oklch(1 0 0 / 0.5); box-shadow: var(--float-ring), var(--float-shadow);
+}
+.ka-card-inner {
+  padding: 18px; border-radius: 21px; background: var(--float-solid);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.9), 0 0 0 1px var(--hair);
+}
+@media (min-width: 520px) { .ka-card-inner { padding: 24px; } }
+.ka-tabs { display: flex; width: 100%; background: oklch(0.30 0.02 250 / 0.06); margin-bottom: 18px; }
+.ka-tabs > button { flex: 1; min-height: 40px; font-size: var(--t-md); }
+
+.ka-field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.ka-field:first-of-type { margin-top: 0; }
+.ka-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ka-label { font-size: var(--t-sm); font-weight: 600; color: var(--ink); }
+.ka-hint { font-size: var(--t-xs); line-height: 1.5; color: var(--ink-2); margin: 0; }
+.ka-input-wrap { position: relative; }
+.ka-input {
+  width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 14px;
+  font: inherit; font-size: 16px; color: var(--ink);
+  background: oklch(0.985 0.003 264); border: 0; border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px oklch(0.30 0.02 250 / 0.16), inset 0 1px 2px oklch(0.30 0.02 250 / 0.06);
+  outline: none; transition: box-shadow var(--d1) var(--ease), background-color var(--d1) var(--ease);
+}
+.ka-input::placeholder { color: var(--ink-3); opacity: 0.8; }
+.ka-input:focus { background: var(--white); box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-wash); }
+.ka-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--ats-low-ink), 0 0 0 4px oklch(0.47 0.15 28 / 0.08); }
+.ka-input.has-toggle { padding-right: 52px; }
+.ka-input.is-code { font-family: var(--ui-mono); font-size: 24px; letter-spacing: 0.36em; text-align: center; }
+.ka-input.is-invite { font-family: var(--ui-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.ka-toggle {
+  position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink-2); cursor: pointer; display: grid; place-items: center;
+}
+.ka-toggle:hover { color: var(--ink); background: oklch(0.30 0.02 250 / 0.06); }
+.ka-textlink {
+  border: 0; background: transparent; padding: 0; min-height: 32px; cursor: pointer;
+  font: inherit; font-size: var(--t-sm); font-weight: 560; color: var(--accent-ink);
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+.ka-textlink:hover { text-decoration-thickness: 2px; }
+
+.ka-error {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding: 11px 13px;
+  border-radius: 12px; background: var(--ats-low-bg); color: var(--ats-low-ink);
+  font-size: var(--t-sm); line-height: 1.5;
+}
+.ka-error svg { flex-shrink: 0; margin-top: 2px; }
+.ka-ok { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--ats-high-bg); color: var(--ats-high-ink); font-size: var(--t-sm); line-height: 1.55; }
+
+/* Knöpfe: Pille mit eingesetztem Pfeil */
+.ka-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  min-height: 52px; margin-top: 20px; padding: 0 6px 0 20px; box-sizing: border-box;
+  border: 0; border-radius: var(--r-pill); cursor: pointer; text-decoration: none;
+  font: inherit; font-size: var(--t-md); font-weight: 600;
+  transition: transform var(--d1) var(--ease), background-color var(--d1) var(--ease), box-shadow var(--d2) var(--ease);
+}
+.ka-btn:active { transform: scale(0.985); }
+.ka-btn:disabled { cursor: default; opacity: 0.55; transform: none; }
+.ka-btn-primary { background: var(--ink); color: oklch(0.985 0.003 264) !important; box-shadow: 0 1px 2px oklch(0.21 0.021 264 / 0.25), 0 10px 24px -12px oklch(0.21 0.021 264 / 0.7); }
+.ka-btn-primary:hover:not(:disabled) { background: oklch(0.29 0.024 264); }
+.ka-btn-soft { background: var(--white); color: var(--ink) !important; box-shadow: var(--pill-shadow); }
+.ka-btn-soft:hover { box-shadow: var(--pill-shadow), 0 8px 20px -12px oklch(0.25 0.03 250 / 0.4); }
+.ka-btn-arrow {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: oklch(1 0 0 / 0.14); transition: transform var(--d2) var(--ease);
+}
+.ka-btn-soft .ka-btn-arrow { background: oklch(0.30 0.02 250 / 0.06); }
+.ka-btn:hover:not(:disabled) .ka-btn-arrow { transform: translateX(2px); }
+.ka-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: ka-spin 700ms linear infinite; }
+@keyframes ka-spin { to { transform: rotate(360deg); } }
+
+.ka-sub { margin: 8px 0 0; font-size: var(--t-xs); color: var(--ink-2); line-height: 1.5; text-align: center; }
+.ka-row-links { display: flex; justify-content: center; margin-top: 10px; }
+.ka-sep { height: 1px; background: var(--hair); margin: 20px 0 16px; }
+.ka-disclosure { margin-top: 18px; }
+.ka-disclosure > summary {
+  list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer;
+  font-size: var(--t-sm); font-weight: 600; color: var(--ink);
+}
+.ka-disclosure > summary::-webkit-details-marker { display: none; }
+.ka-disclosure > summary::after {
+  content: ''; width: 7px; height: 7px; margin-left: 2px;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  transform: rotate(45deg) translateY(-2px); transition: transform var(--d2) var(--ease);
+}
+.ka-disclosure[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+
+/* Nebenwege: ohne Konto, Code einlösen */
+.ka-alt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 16px; }
+@media (min-width: 560px) { .ka-alt { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ka-alt-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 14px; border-radius: 20px;
+  background: oklch(1 0 0 / 0.62); box-shadow: var(--pill-shadow);
+}
+.ka-alt-card h2 { margin: 0; font-size: var(--t-md); font-weight: 650; letter-spacing: -0.01em; }
+.ka-alt-card p { margin: 0; font-size: var(--t-sm); line-height: 1.5; color: var(--ink-2); flex: 1; }
+.ka-alt-card .ka-btn { margin-top: 10px; min-height: 46px; font-size: var(--t-sm); padding-left: 16px; }
+.ka-alt-card .ka-btn-arrow { width: 34px; height: 34px; }
+
+/* Rechte Seite: echte Demo-Seite und Vertrauen */
+.ka-visual { display: none; }
+@media (min-width: 960px) { .ka-visual { display: block; position: relative; padding-top: 12px; } }
+.ka-stage { position: relative; height: 560px; }
+.ka-sheet {
+  position: absolute; top: 0; border-radius: 6px; overflow: hidden; background: #fff;
+  box-shadow: var(--page-shadow);
+}
+.ka-sheet.is-back { left: 9%; top: 28px; opacity: 0.55; transform: rotate(-4deg); filter: saturate(0.6); }
+.ka-sheet.is-front { left: 24%; }
+.ka-caption {
+  position: absolute; left: 24%; bottom: 0; display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; font-size: var(--t-xs); color: var(--ink-2);
+}
+.ka-trust { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ka-trust-wrap { margin-top: 28px; }
+.ka-trust-wrap h2 { margin: 0 0 10px; font-size: var(--t-sm); font-weight: 650; color: var(--ink-2); }
+.ka-trust li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; align-items: start; }
+.ka-trust-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: oklch(1 0 0 / 0.75); box-shadow: var(--pill-shadow); color: var(--accent-ink); }
+.ka-trust strong { display: block; font-size: var(--t-sm); font-weight: 640; }
+.ka-trust span { display: block; font-size: var(--t-sm); line-height: 1.5; color: var(--ink-2); }
+/* Auf dem Telefon steht das Vertrauen unter den Nebenwegen. */
+.ka-trust-mobile { margin-top: 28px; }
+@media (min-width: 960px) { .ka-trust-mobile { display: none; } }
+
+/* Eintritt: gestaffelt, nur transform und opacity */
+.ka-rise { animation: ka-rise 560ms var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes ka-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.ka-swap { animation: ka-swap 260ms var(--ease) both; }
+@keyframes ka-swap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.ka-float { animation: ka-float 9s ease-in-out infinite alternate; }
+@keyframes ka-float { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ka-rise, .ka-swap, .ka-float, .ka-spin { animation: none !important; }
+  .ka-btn, .ka-btn-arrow, .ka-input { transition: none !important; }
+}
+.ka-foot { border-top: 1px solid var(--hair); background: oklch(1 0 0 / 0.4); }

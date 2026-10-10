@@ -176,7 +176,13 @@ async function csvsAusZip(file: File): Promise<Record<string, string>> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const out: Record<string, string> = {};
   const dateien = Object.values(zip.files).filter(f => !f.dir && /\.csv$/i.test(f.name));
+  // Grenzen gegen ZIP-Bomben (Audit 10.10.2026, S14): höchstens 200 CSV,
+  // je 5 MB und zusammen 20 MB entpackt; was darüber liegt, wird übersprungen.
+  if (dateien.length > 200) throw new Error('Archiv zu groß');
+  let summe = 0;
   for (const f of dateien) {
+    const groesse = (f as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0;
+    if (groesse > 5_000_000 || (summe += groesse) > 20_000_000) continue;
     const basis = (f.name.split('/').pop() || f.name).replace(/\.csv$/i, '');
     out[normKey(basis)] = await f.async('string');
   }

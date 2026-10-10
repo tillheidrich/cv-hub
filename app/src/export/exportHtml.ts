@@ -592,7 +592,8 @@ export async function exportPdf({ data: raw, cfg, isCover, coverLetter, variant 
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ html, filename, pageFormat }),
+    // Für die Tageszähler (pdf-service/stats.js): nur Vorlagen-ID und Fassung.
+    body: JSON.stringify({ html, filename, pageFormat, meta: { template: cfg.themeId, variant: variant === 'ats' ? 'ats' : 'standard' } }),
   });
   if (!resp.ok) {
     // Der Dienst schickt bei Fehlern JSON mit Klartext — den zeigen wir dem

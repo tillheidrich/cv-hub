@@ -425,7 +425,7 @@ function PersonalEditor({ data, onChange, demoMode, onPhotoRemoved }: { data: CV
 
   /* Das Vorschaubild ist der Knopf zum Nachjustieren.
    *
-   * Till, 17.09.2026: „bei bereits hochgeladenen Fotos möchte ich, dass man
+   * Wunsch vom 17.09.2026: „bei bereits hochgeladenen Fotos möchte ich, dass man
    * das Foto anklicken kann, um die Crop-Funktion zu haben." Bis dahin führte
    * der einzige Weg zum Zuschnitt über eine neue Datei — wer den Ausschnitt
    * nur ein Stück höher setzen wollte, musste sein Foto erneut heraussuchen.

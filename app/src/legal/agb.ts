@@ -22,8 +22,19 @@
  *   (§ 327e, § 327h BGB) — nur eine ehrliche Beschreibung ohne SLA.
  *
  * Offene Entscheidung für den Betreiber:
- * - § 14 Abs. 2 Satz 2: Bereitschaft zur Verbraucherschlichtung (Vorschlag:
+ * - § 14 Abs. 3: Bereitschaft zur Verbraucherschlichtung (Vorschlag:
  *   nicht bereit und nicht verpflichtet — so steht es drin).
+ *
+ * Fassung 2026-10-10 (Prüfteam J1, Rechtsprüfung 10.10.2026, keine
+ * Rechtsberatung):
+ * - § 2 Abs. 2, § 13: AGB gelten für das kostenlose Konto nur, wenn bei der
+ *   Registrierung auf sie hingewiesen wird (§ 305 Abs. 2 BGB). Der Hinweis im
+ *   Registrierungsformular ist ein Patch-Wunsch an die Hauptsitzung.
+ * - § 5: LaTeX-Export gehört seit Runde 8 zum Pass (freeTier.ts), Exportformate
+ *   um LaTeX, JSON Resume und RenderCV-YAML ergänzt.
+ * - Neuer § 15: Zugangscodes und Gratiszugang (Gutscheine gab es bisher nur
+ *   auf der Code-Seite, ohne Vertragsgrundlage; „dauerhaft" ohne Grenze war
+ *   ein Versprechen ohne Ende).
  */
 import type { Bilingual, LegalSection } from './types';
 
@@ -34,7 +45,7 @@ export interface TermsTexts {
 }
 
 export const AGB: Bilingual<TermsTexts> = {
-  version: '2026-10-09.2',
+  version: '2026-10-10',
   de: {
     title: 'Allgemeine Geschäftsbedingungen',
     subtitle: 'für den Bewerbungs-Pass von {{PRODUCT_NAME}} · Fassung {{TERMS_VERSION}}',
@@ -54,7 +65,7 @@ export const AGB: Bilingual<TermsTexts> = {
         title: '§ 2 Kostenlose Nutzung',
         paragraphs: [
           '(1) Das Werkzeug lässt sich ohne Konto und ohne Pass kostenlos nutzen („lokaler Modus"), mindestens mit allen Vorlagen, dem PDF Ihres Lebenslaufs (auch als ATS-Fassung), dem Import und dem Datenexport sowie der Speicherung der Daten in Ihrem Browser. Welche Funktionen darüber hinaus kostenlos sind, steht auf der Preisseite. Der lokale Modus ist nicht Gegenstand des Vertrags über den Pass. Für ihn gelten die gesetzlichen Regeln für unentgeltliche Leistungen.',
-          '(2) Ein Konto können Sie kostenlos anlegen. Ohne aktiven Pass können Sie darin gespeicherte Inhalte lesen, exportieren und löschen, aber nicht ändern oder neu anlegen. Für das Konto gelten §§ 3, 9, 10, 11 und 14 dieser AGB entsprechend.',
+          '(2) Ein Konto können Sie kostenlos anlegen. Ohne aktiven Pass können Sie darin gespeicherte Inhalte lesen, exportieren und löschen, aber nicht ändern oder neu anlegen. Für das Konto gelten §§ 3, 9, 10, 11, 13, 14 und 15 dieser AGB entsprechend, wenn wir Sie bei der Registrierung auf diese AGB hingewiesen haben.',
           '(3) Der Kauf eines Passes schränkt die kostenlosen Funktionen nicht ein. Das PDF Ihres Lebenslaufs machen wir nie vom Kauf abhängig, und was zum Pass gehört, steht vor jeder Arbeit sichtbar am jeweiligen Knopf, nicht erst beim Herunterladen.',
         ],
       },
@@ -100,10 +111,10 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) Während der Laufzeit schaltet der Pass in Ihrem Konto frei:',
         ],
         list: [
-          'Export Ihrer Lebensläufe als Word-Datei (DOCX), gestaltet nach der gewählten Vorlage und als einspaltige ATS-Fassung,',
+          'Export Ihrer Lebensläufe als Word-Datei (DOCX), gestaltet nach der gewählten Vorlage und als einspaltige ATS-Fassung, sowie als LaTeX-Quelltext,',
           'Anschreiben: erstellen, bearbeiten und exportieren,',
           'mehrere Fassungen Ihres Lebenslaufs (weitere anlegen, duplizieren, als neue Fassung importieren) und weitere Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch),',
-          'Speichern Ihrer Lebensläufe, Anschreiben und Fotos auf unserem Server in Deutschland und Zugriff darauf von mehreren Geräten,',
+          'Speichern Ihrer Lebensläufe, Anschreiben und Fotos auf unserem Server und Zugriff darauf von mehreren Geräten,',
           'Sharelinks: Links, über die Sie einen Lebenslauf mit anderen teilen und die Sie jederzeit widerrufen können,',
           'gespeicherte Versionen am Server (frühere Stände wiederherstellen),',
           'Verbindung zu KI-Programmen über das Model Context Protocol (MCP),',
@@ -111,7 +122,7 @@ export const AGB: Bilingual<TermsTexts> = {
         ],
         after: [
           '(2) Wir betreiben den Dienst auf Servern in Deutschland mit der Sorgfalt, die für ein Angebot dieser Art üblich ist, und sichern die Daten regelmäßig. Eine bestimmte Verfügbarkeit in Prozent sagen wir nicht zu. Kurze Unterbrechungen für Wartung und Aktualisierungen sind möglich; wir halten sie so kurz wie möglich und kündigen geplante längere Unterbrechungen vorher an. Für Verbraucher bleiben die gesetzlichen Anforderungen an digitale Dienstleistungen (§§ 327e ff. BGB) unberührt.',
-          '(3) Technische Voraussetzungen: ein aktueller Browser (Chrome, Edge, Firefox oder Safari in einer der beiden neuesten Hauptversionen) mit eingeschaltetem JavaScript. Für die KI-Verbindung brauchen Sie ein Programm, das MCP unterstützt; für dessen Funktionsweise sind wir nicht verantwortlich. Exporte liegen in offenen Formaten vor (PDF, DOCX, HTML, Markdown, JSON).',
+          '(3) Technische Voraussetzungen: ein aktueller Browser (Chrome, Edge, Firefox oder Safari in einer der beiden neuesten Hauptversionen) mit eingeschaltetem JavaScript. Für die KI-Verbindung brauchen Sie ein Programm, das MCP unterstützt; für dessen Funktionsweise sind wir nicht verantwortlich. Exporte liegen in offenen Formaten vor (PDF, DOCX, HTML, Markdown, JSON, JSON Resume, LaTeX, RenderCV-YAML); welche davon ohne Pass kostenlos sind, steht auf der Preisseite.',
           '(4) Tipps, Prüfungen und der ATS-Abgleich im Werkzeug sind Hinweise. Ob eine Bewerbung Erfolg hat, hängt von vielen Dingen ab, die wir nicht beeinflussen; einen Erfolg schulden wir nicht.',
         ],
       },
@@ -186,7 +197,8 @@ export const AGB: Bilingual<TermsTexts> = {
         id: 'aenderung-agb',
         title: '§ 13 Änderungen dieser AGB',
         paragraphs: [
-          'Für einen bereits gekauften Pass gilt die Fassung dieser AGB, die bei der Bestellung galt. Eine neue Fassung gilt erst für spätere Käufe. Für das kostenlose Konto teilen wir Änderungen mindestens sechs Wochen vorher per E-Mail mit; sind Sie nicht einverstanden, können Sie das Konto jederzeit löschen.',
+          '(1) Für einen bereits gekauften Pass gilt die Fassung dieser AGB, die bei der Bestellung galt. Eine neue Fassung gilt erst für spätere Käufe.',
+          '(2) Für das kostenlose Konto und einen eingelösten Zugangscode (§ 15) teilen wir Änderungen mindestens sechs Wochen vor ihrem Inkrafttreten per E-Mail mit und nennen dabei die geänderten Regeln. Die neue Fassung gilt nur, wenn Sie ihr zustimmen; stimmen Sie nicht zu, gilt für Ihr Konto die bisherige Fassung weiter. Sie können das Konto außerdem jederzeit löschen.',
         ],
       },
       {
@@ -196,6 +208,17 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts. Sind Sie Verbraucher mit gewöhnlichem Aufenthalt in einem anderen Staat, behalten Sie den Schutz der zwingenden Vorschriften dieses Staates (Art. 6 Abs. 2 Rom-I-Verordnung).',
           '(2) Für Verbraucher gibt es keinen vereinbarten Gerichtsstand; es gelten die gesetzlichen Regeln. Sind Sie Kaufmann, juristische Person des öffentlichen Rechts oder öffentlich-rechtliches Sondervermögen, ist Gerichtsstand für alle Streitigkeiten aus diesem Vertrag unser Sitz.',
           '(3) Wir sind nicht verpflichtet und nicht bereit, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen. Bei Fragen oder Beschwerden wenden Sie sich bitte direkt an uns (§ 1 Abs. 2); wir suchen mit Ihnen eine Lösung.',
+        ],
+      },
+      {
+        id: 'zugangscodes',
+        title: '§ 15 Zugangscodes und Gratiszugang',
+        paragraphs: [
+          '(1) Mit einem Zugangscode (Gutschein) erhalten Sie die Leistungen des Passes (§ 5) kostenlos, entweder für eine bestimmte Zahl von Tagen oder als dauerhaften Gratiszugang. Was ein Code gewährt, bis wann er sich einlösen lässt und ob die Zahl der Einlösungen begrenzt ist, zeigen wir vor der Einlösung an. Einlösen können Sie einen Code mit einem Konto, dessen E-Mail-Adresse bestätigt ist.',
+          '(2) Jeder Code lässt sich je Konto einmal einlösen, aus derselben Aktion höchstens ein Code je Konto. Ein Code kann nicht in Geld ausgezahlt und nicht mit einem Kauf verrechnet werden. Einen noch nicht eingelösten Code können wir deaktivieren, wenn er erkennbar missbräuchlich verbreitet wird.',
+          '(3) Ein Zeitzugang beginnt mit der Einlösung, schließt an eine noch laufende Laufzeit an und endet danach von selbst. Es wird nichts abgebucht.',
+          '(4) Ein dauerhafter Gratiszugang gilt, solange wir den Dienst betreiben. Wollen wir den Dienst einstellen, kündigen wir das mindestens drei Monate vorher per E-Mail an; bis zum Ende können Sie alle Inhalte exportieren.',
+          '(5) Für den Gratiszugang gelten die Regeln dieser AGB zu Ihren Inhalten, Sharelinks, Datensicherung und Haftung (§§ 9 bis 11) entsprechend. Da Sie dafür nichts bezahlen, besteht kein Widerrufsrecht; Sie können den Zugang aber jederzeit beenden, indem Sie Ihr Konto löschen.',
         ],
       },
     ],
@@ -219,7 +242,7 @@ export const AGB: Bilingual<TermsTexts> = {
         title: '§ 2 Free use',
         paragraphs: [
           '(1) The tool can be used free of charge without an account and without a pass ("local mode"), at least with all templates, the PDF of your CV (also as the ATS version), import and data export, and data stored in your browser. Which further features are free is shown on the pricing page. Local mode is not part of the contract for the pass. The statutory rules for services provided free of charge apply to it.',
-          '(2) You can create an account free of charge. Without an active pass you can read, export and delete content stored in it, but not change it or create new content. §§ 3, 9, 10, 11 and 14 of these Terms apply to the account accordingly.',
+          '(2) You can create an account free of charge. Without an active pass you can read, export and delete content stored in it, but not change it or create new content. §§ 3, 9, 10, 11, 13, 14 and 15 of these Terms apply to the account accordingly where we referred you to these Terms when you registered.',
           '(3) Buying a pass does not restrict the free features. We never make the PDF of your CV depend on a purchase, and what belongs to the pass is shown on the respective button before any work, not only at download.',
         ],
       },
@@ -265,10 +288,10 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) During its term, the pass unlocks in your account:',
         ],
         list: [
-          'exporting your CVs as Word files (DOCX), designed after the chosen template and as a single-column ATS version,',
+          'exporting your CVs as Word files (DOCX), designed after the chosen template and as a single-column ATS version, and as LaTeX source,',
           'cover letters: create, edit and export,',
           'several versions of your CV (create more, duplicate, import as a new version) and further document languages (German, English, French, Spanish),',
-          'saving your CVs, cover letters and photos on our server in Germany and accessing them from several devices,',
+          'saving your CVs, cover letters and photos on our server and accessing them from several devices,',
           'share links: links you can use to share a CV with others and revoke at any time,',
           'stored versions on the server (restore earlier states),',
           'connection to AI programs via the Model Context Protocol (MCP),',
@@ -276,7 +299,7 @@ export const AGB: Bilingual<TermsTexts> = {
         ],
         after: [
           '(2) We run the service on servers in Germany with the care customary for an offer of this kind and back up the data regularly. We do not promise a specific availability percentage. Short interruptions for maintenance and updates are possible; we keep them as short as possible and announce planned longer interruptions in advance. For consumers, the statutory requirements for digital services (§§ 327e et seq. BGB) remain unaffected.',
-          '(3) Technical requirements: a current browser (Chrome, Edge, Firefox or Safari in one of the two latest major versions) with JavaScript enabled. For the AI connection you need a program that supports MCP; we are not responsible for how it works. Exports are provided in open formats (PDF, DOCX, HTML, Markdown, JSON).',
+          '(3) Technical requirements: a current browser (Chrome, Edge, Firefox or Safari in one of the two latest major versions) with JavaScript enabled. For the AI connection you need a program that supports MCP; we are not responsible for how it works. Exports are provided in open formats (PDF, DOCX, HTML, Markdown, JSON, JSON Resume, LaTeX, RenderCV YAML); which of them are free without a pass is shown on the pricing page.',
           '(4) Tips, checks and the ATS comparison in the tool are guidance. Whether an application succeeds depends on many things we cannot influence; we do not owe any success.',
         ],
       },
@@ -351,7 +374,8 @@ export const AGB: Bilingual<TermsTexts> = {
         id: 'aenderung-agb',
         title: '§ 13 Changes to these Terms',
         paragraphs: [
-          'For a pass already bought, the version of these Terms that applied when you ordered remains valid. A new version only applies to later purchases. For the free account, we announce changes at least six weeks in advance by e-mail; if you do not agree, you can delete the account at any time.',
+          '(1) For a pass already bought, the version of these Terms that applied when you ordered remains valid. A new version only applies to later purchases.',
+          '(2) For the free account and a redeemed access code (§ 15) we announce changes by e-mail at least six weeks before they take effect and name the changed rules. The new version only applies if you agree to it; if you do not, the previous version continues to apply to your account. You can also delete the account at any time.',
         ],
       },
       {
@@ -361,6 +385,17 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) German law applies, excluding the UN Convention on Contracts for the International Sale of Goods. If you are a consumer habitually resident in another country, you keep the protection of the mandatory provisions of that country (Art. 6(2) Rome I Regulation).',
           '(2) For consumers there is no agreed place of jurisdiction; the statutory rules apply. If you are a merchant, a legal entity under public law or a special fund under public law, the place of jurisdiction for all disputes arising from this contract is our registered place of business.',
           '(3) We are neither obliged nor willing to participate in dispute resolution proceedings before a consumer arbitration board. If you have questions or complaints, please contact us directly (§ 1(2)); we will look for a solution with you.',
+        ],
+      },
+      {
+        id: 'zugangscodes',
+        title: '§ 15 Access codes and free access',
+        paragraphs: [
+          '(1) An access code (voucher) gives you the features of the pass (§ 5) free of charge, either for a set number of days or as permanent free access. What a code grants, until when it can be redeemed and whether the number of redemptions is limited is shown before you redeem it. You can redeem a code with an account whose e-mail address is confirmed.',
+          '(2) Each code can be redeemed once per account, and at most one code per account from the same campaign. A code cannot be paid out in cash or offset against a purchase. We may deactivate a code that has not yet been redeemed if it is evidently being distributed abusively.',
+          '(3) Time-limited access starts on redemption, follows on from any term still running and then ends by itself. Nothing is charged.',
+          '(4) Permanent free access applies for as long as we operate the service. If we intend to discontinue the service, we will announce this by e-mail at least three months in advance; until then you can export all your content.',
+          '(5) The rules of these Terms on your content, share links, backups and liability (§§ 9 to 11) apply accordingly to free access. As you pay nothing for it, there is no right of withdrawal; you can end the access at any time by deleting your account.',
         ],
       },
     ],

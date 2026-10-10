@@ -59,7 +59,7 @@ const after2 = await page.locator('.cv-scale-wrapper [data-cv-edit*=".bullets."]
 check(after2 === before, `Rücktaste entfernt den leeren Punkt wieder (${after} → ${after2})`);
 
 // 5. Beschriftungen sind Daten: Überschrift, Feldbezeichnung, Wert, Fußzeile
-//    Das war die Lücke, die Till gemeldet hat — die ganze linke Leiste war
+//    Das war die Lücke, die gemeldet wurde — die ganze linke Leiste war
 //    unantastbar.
 const uebersprungen = [];
 const LABELPROBEN = [

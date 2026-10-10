@@ -1,7 +1,8 @@
 import type { CVData } from './types';
 import { labelsEN } from './labels';
+import { DEMO_PHOTO, DEMO_PHOTO_ORIGINAL } from './demo-de';
 
-/* No photo in the demo profile — see demo-de.ts. */
+/* Demo photo: same files as the German variant, source and licence in demo-de.ts. */
 
 /** Fictional demo persona — English variant. See demo-de.ts for context. */
 export const demoEN: CVData = {
@@ -11,12 +12,14 @@ export const demoEN: CVData = {
     subtitle: 'Product Design · Design Systems · UX Research',
     location: 'Hamburg, Germany',
     email: 'lena.brandt@example.com',
-    phone: '+49 151 23456789',
-    website: 'lenabrandt.design',
-    linkedin: 'linkedin.com/in/lena-brandt',
+    phone: '+49 30 23125 789',
+    website: 'lena-brandt.example',
+    linkedin: 'linkedin.com/in/lena-brandt-beispiel',
     instagram: '',
     birthDate: '14 March 1991',
     driversLicense: 'Class B',
+    photo: DEMO_PHOTO,
+    photoOriginal: DEMO_PHOTO_ORIGINAL,
   },
 
   profile: {

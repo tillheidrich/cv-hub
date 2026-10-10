@@ -210,7 +210,7 @@ const en: GutscheinStrings = {
   exportHint: 'Exporting always works, even without a pass: PDF, Word, Markdown and JSON.',
   freeSoon: d => `Your free access ends on ${d}. It ends on its own, nothing is charged. Reading and exporting keep working.`,
   freeExpired: d => `Your free access ended on ${d}. Your data is kept, reading and exporting still work. To make changes you need an Application Pass.`,
-  coLifetimeTitle: 'You have permanent free access – no purchase needed',
+  coLifetimeTitle: 'You have permanent free access, so there is nothing to buy',
   coLifetimeBody: 'Everything in the Application Pass is already available to you. There is nothing to pay here.',
 };
 
@@ -278,7 +278,7 @@ const fr: GutscheinStrings = {
   exportHint: 'L’export fonctionne toujours, même sans pass : PDF, Word, Markdown et JSON.',
   freeSoon: d => `Votre accès gratuit se termine le ${d}. Il prend fin automatiquement, rien n’est prélevé. Lire et exporter restent possibles.`,
   freeExpired: d => `Votre accès gratuit a pris fin le ${d}. Vos données sont conservées, lire et exporter restent possibles. Pour modifier, il vous faut un Pass candidature.`,
-  coLifetimeTitle: 'Vous avez un accès gratuit permanent – aucun achat nécessaire',
+  coLifetimeTitle: 'Vous avez un accès gratuit permanent, aucun achat n’est nécessaire',
   coLifetimeBody: 'Tout le Pass candidature est déjà à votre disposition. Il n’y a rien à payer ici.',
 };
 
@@ -346,7 +346,7 @@ const es: GutscheinStrings = {
   exportHint: 'Exportar funciona siempre, también sin pase: PDF, Word, Markdown y JSON.',
   freeSoon: d => `Tu acceso gratuito termina el ${d}. Termina solo, no se cobra nada. Leer y exportar siguen funcionando.`,
   freeExpired: d => `Tu acceso gratuito terminó el ${d}. Tus datos se conservan, leer y exportar siguen funcionando. Para hacer cambios necesitas un Pase de candidatura.`,
-  coLifetimeTitle: 'Tienes acceso gratuito permanente – no hace falta comprar',
+  coLifetimeTitle: 'Tienes acceso gratuito permanente, no hace falta comprar',
   coLifetimeBody: 'Todo el Pase de candidatura ya está a tu disposición. Aquí no hay nada que pagar.',
 };
 

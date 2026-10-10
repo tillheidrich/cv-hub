@@ -20,6 +20,7 @@ import { notifyPlanChanged } from './planEvents';
 import { clearPendingCode } from './pendingCode';
 import { useOffer, salesOpen } from './hooks';
 import { PATHS, navigate } from './route';
+import { CREDIT_NOTE_LABEL } from '../ui/i18n/billingLegal';
 import './billing.css';
 
 export default function PassSection({ lang, compact = false }: { lang: UiLang; compact?: boolean }) {
@@ -142,6 +143,7 @@ export default function PassSection({ lang, compact = false }: { lang: UiLang; c
                     {can && o.withdrawableUntil && <span className="bl-order-meta">{t.mpWithdrawUntil(fmtDate(o.withdrawableUntil, lang))}</span>}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                       {o.invoiceNo && <a className="ui-btn ui-btn-soft" href={billingApi.invoiceUrl(o.id)} target="_blank" rel="noopener">{t.mpInvoice}</a>}
+                      {o.creditNoteNo && <a className="ui-btn ui-btn-soft" href={billingApi.creditNoteUrl(o.id)} target="_blank" rel="noopener" data-credit-note>{CREDIT_NOTE_LABEL[lang] ?? CREDIT_NOTE_LABEL.de}</a>}
                       {can && asking !== o.id && (
                         <button type="button" className="ui-btn ui-btn-soft" onClick={() => { setAsking(o.id); setErr(null); }}>{t.mpWithdraw}</button>
                       )}

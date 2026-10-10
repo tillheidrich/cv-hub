@@ -504,6 +504,91 @@ ALTER TABLE declarations ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 ALTER TABLE declarations ADD COLUMN IF NOT EXISTS request JSONB;
 ALTER TABLE declarations ADD COLUMN IF NOT EXISTS result JSONB;
 CREATE UNIQUE INDEX IF NOT EXISTS declarations_confirm_token_uq ON declarations(confirm_token_hash) WHERE confirm_token_hash IS NOT NULL;
+
+-- ── Admin-Bereich auf eigener Adresse (Runde 8b, 10.10.2026, ADMIN.md) ────
+-- Eigene Admin-Sitzungen: nur nach Passwort UND E-Mail-Code auf dem
+-- Admin-Host. Gespeichert wird nur der SHA-256 des Cookie-Werts. pcm ist die
+-- Passwortmarke (Millisekunden) beim Ausstellen: ein Passwortwechsel beendet
+-- die Sitzung. Laufzeit 8 Stunden absolut, 30 Minuten ohne Anfrage.
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash    TEXT PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pcm           BIGINT NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL,
+  revoked_at    TIMESTAMPTZ,
+  ip_net        TEXT,
+  ua_summary    TEXT
+);
+CREATE INDEX IF NOT EXISTS admin_sessions_user_idx ON admin_sessions(user_id);
+
+-- Login-Codes nur für die Admin-Anmeldung. Getrennt von login_codes, damit
+-- ein Code aus der normalen Anmeldung nie eine Admin-Sitzung öffnet.
+CREATE TABLE IF NOT EXISTS admin_login_codes (
+  challenge   TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  used        BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Protokoll: gekürzte Adresse (IPv4 /24, IPv6 /64) und Weg der Anmeldung.
+ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS ip_net TEXT;
+ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS via TEXT;
+
+-- Nutzung ohne Personenbezug: nur Tageszähler. Keine Nutzer-ID, keine
+-- Adresse, keine freien Texte; dim/value kommen aus festen Listen (stats.js).
+-- dim 'all' mit value '' ist die Gesamtzahl des Tages.
+CREATE TABLE IF NOT EXISTS usage_daily (
+  day     DATE NOT NULL,
+  metric  TEXT NOT NULL,
+  dim     TEXT NOT NULL DEFAULT 'all',
+  value   TEXT NOT NULL DEFAULT '',
+  n       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, metric, dim, value)
+);
+
+-- Zahlungsart je Bestellung (für den Steuerexport), einmal bei Mollie
+-- nachgelesen und hier gemerkt. Eigene Tabelle, orders bleibt unverändert.
+CREATE TABLE IF NOT EXISTS order_payment_info (
+  order_id    UUID PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+  method      TEXT,
+  fetched_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── Rechtsfolgen im Bezahl- und Registrierungsfluss (B4, 10.10.2026) ──────
+-- P1: Bestätigung „Kauf als Privatperson“ (Pflicht außerhalb von DE) als
+-- steuerlicher Nachweis B2C. NULL bei Bestellungen von vor dieser Spalte.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS consumer_confirmed BOOLEAN;
+
+-- P8/P9: Fassung der AGB bei der Registrierung und die ausdrückliche
+-- Einwilligung nach Art. 9 Abs. 2 lit. a DSGVO (Zeit und Textfassung).
+-- Ein Widerruf leert at/version und merkt sich den Zeitpunkt.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_version TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS art9_consent_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS art9_consent_version TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS art9_withdrawn_at TIMESTAMPTZ;
+
+-- P6 (GoBD, Paragraf 14b UStG): Das ausgestellte Rechnungs-PDF wird einmal
+-- gespeichert und danach immer genau so ausgeliefert. Ein Widerruf ändert die
+-- Rechnung nicht, sondern bekommt einen eigenen Stornobeleg (kind 'storno',
+-- Nummer Rechnungsnummer + '-S'; der Nummernkreis der Rechnungen bleibt
+-- lückenlos). Teilt die Aufbewahrung der Bestellung (janitor.js, 10 Jahre).
+CREATE TABLE IF NOT EXISTS invoice_documents (
+  id          UUID PRIMARY KEY,
+  order_id    UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,
+  doc_no      TEXT UNIQUE NOT NULL,
+  issued_at   TIMESTAMPTZ NOT NULL,
+  pdf         BYTEA NOT NULL,
+  sha256      TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (order_id, kind)
+);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */

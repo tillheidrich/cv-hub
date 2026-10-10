@@ -108,3 +108,88 @@ nachgebaut und scheitert jetzt.
 - `BILLING_JOBS` nicht auf 0 setzen: der Hintergrundlauf meldet unbestätigte
   Erklärungen nach 14 Tagen.
 - Der MCP-Container läuft jetzt als `node` (Port 3000, keine Schreibrechte nötig).
+
+# Nachtrag Runde 8b (10.10.2026) — Rechtsfolgen im Bezahl- und Registrierungsfluss (B4)
+
+Grundlage: eine Rechtsprüfung vom 10.10.2026 (Patches P1–P9; der Bericht ist nicht
+Teil dieses Repositorys) und das Audit vom 09.10.2026 (H2/M1/M4 oben).
+Tests: `billing.test.mjs` (Tests „P1“ bis „P8/P9“), angepasste Fälle in
+`security.test.mjs` und `admin.test.mjs`; Oberfläche `app/scripts/accountcheck.mjs`,
+`billingcheck.mjs`, `vouchercheck.mjs`.
+
+## P4: Öffentliche Kündigung sofort, öffentlicher Widerruf weiter mit Link
+
+| Erklärung ohne Anmeldung | Angaben | Wirkung |
+|---|---|---|
+| Kündigung | Bestellnummer **und** Adresse der Bestellung passen | sofort, ohne Klick; Mail an die Bestelladresse bestätigt nur; Betreiber bekommt sie zur Kenntnis |
+| Kündigung | nur Adresse (ohne Bestellnummer) | wie bisher: Bestätigungslink an die Bestelladresse (14 Tage) |
+| Widerruf | Bestellnummer und Adresse passen | **weiter Bestätigungslink** (5 Tage, P3) |
+| beide | passt nicht | fester Text an die eingegebene Adresse (M4), Wortlaut nur an den Betreiber |
+
+**Abwägung Kündigung.** Der BGH (I ZR 161/24) verlangt einen unmittelbaren
+Kündigungsweg ohne zusätzliche Hürden. Bestellnummer + Bestelladresse ist das
+Mindestmaß an Nachweis, das der Audit vom 09.10. für „fremde Personen dürfen
+keine Pässe Dritter beenden“ zulässt; die Adresse allein (H2) reicht weiter
+nicht. Restrisiko: Bestellnummern sind fortlaufend (`B-001001` …) und damit
+ratbar. Wer die Adresse eines Kunden kennt, kann Nummern durchprobieren —
+begrenzt durch ALTCHA, 5/h je IP, 20/h je Netz, und jeder Treffer landet sofort
+beim Kunden (Kündigungsbestätigung) und beim Betreiber („sofort ausgeführt“).
+Schaden: Der Pass endet früher; Geld fließt nicht ab, und der Betreiber kann
+die Laufzeit im Admin-Bereich wiederherstellen („Pass gewähren“). Härtung für
+später: nicht ratbare Bestellnummern (z. B. Zufallsanteil) — dann trüge die
+Nummer selbst den Nachweis.
+
+**Abwägung Widerruf.** Ein Widerruf löst eine Erstattung bei Mollie aus, die sich
+nicht zurückholen lässt, und beendet den Pass. Mit ratbaren Bestellnummern wäre
+Nummer + Adresse dafür zu schwach. Das Prüfteam hält den Link beim Widerruf für
+vertretbar, wenn (1) der Eingang zählt, (2) die Eingangsbestätigung sofort
+hinausgeht (P2) und (3) die Erstattung auch ohne Klick fristgerecht kommt. Dafür
+gilt der Link nur 5 Tage, und der Betreiber erfährt sofort von jeder öffentlichen
+Erklärung (P3) — ihm bleiben mindestens 9 der 14 Tage aus § 357 Abs. 1 BGB.
+Anwaltsfrage 1 bleibt offen.
+
+## P9: Einwilligung Art. 9 DSGVO als Schreibsperre
+
+- Durchgesetzt am Server, nicht in der Oberfläche: `consent.js`
+  (`requireArt9Consent`) steht hinter `requireWritable` auf allen Wegen, die
+  Inhalte im Konto ablegen: `POST/PUT/PATCH /api/resumes`, `import-md`,
+  `import-cover-letter-md`, Versionen wiederherstellen, `POST /api/photos`,
+  Sharelink anlegen/auffrischen (der Link speichert einen festen Stand).
+  Antwort 403 `art9_consent_required`. Lesen, Export, Datenauszug und Löschen
+  bleiben frei. Gilt auch für API-Schlüssel und KI-Verbindungen (MCP).
+- Einwilligen nur mit Browser-Sitzung (`POST /api/me/consent/art9`, 403
+  `consent_session_only` über API-Schlüssel/OAuth) und nur mit der Textfassung,
+  die der Server kennt (`ART9_VERSION`; sonst 409). Gespeichert: Zeit und
+  Fassung (`users.art9_consent_at`, `art9_consent_version`); Widerruf leert
+  beides und setzt `art9_withdrawn_at`. Ereignis `art9_consent`/`art9_withdraw`.
+- Neue Textfassung = neue `ART9_VERSION` (und `ART9_CONSENT_VERSION` in
+  `app/src/legal/einwilligung.ts`): Bis zur erneuten Einwilligung speichert
+  kein Konto. Der Test „P8/P9“ prüft, dass beide gleich sind.
+
+## P6: Rechnungen unveränderbar
+
+`invoice_documents` hält das ausgestellte PDF (mit SHA-256). Ausgeliefert wird
+nur noch dieses; Bestand wird beim ersten Abruf eingefroren, so wie ausgestellt
+(ohne späteren Widerrufsvermerk). Ein Widerruf erzeugt einen eigenen
+Stornobeleg `<Rechnungsnummer>-S`; der Rechnungskreis bleibt lückenlos. Belege
+teilen die Aufbewahrung der Bestellung (ON DELETE CASCADE, Löschung nach
+10 Jahren durch `janitor.js`). Kunde: `GET /api/billing/orders/:id/credit-note.pdf`
+(nur eigene Bestellung), Admin: `/api/admin/billing/orders/:id/credit-note.pdf`
+(protokolliert).
+
+## P1/P7: Länder
+
+`checkout()` nimmt nur EU-27 (`EU_COUNTRIES`), außerhalb DE nur mit
+`consumer: true` (gespeichert in `orders.consumer_confirmed`). Ab
+`EU_B2C_STOP_CENTS` (Standard 9.000 €) im laufenden oder vorigen Jahr lehnt er
+Länder ≠ DE ab (`country_not_available`, `reason: eu_abroad_paused`); die
+Länderliste der Oberfläche kommt aus `GET /api/billing/offer` (`countries`).
+
+## Geänderte Prüfungen (bewusst, mit Grund)
+
+- `security.test.mjs` M4: Die neutrale Eingangsbestätigung enthält seit P2 den
+  geprüften Namen und die angegebene Bestellnummer (§ 356a Abs. 4 BGB). Geprüft
+  wird jetzt: nur in ihren Zeilen, keine Links, kein freier Grund, nichts über
+  die fremde Bestellung (Adresse, Betrag, Datum, Link).
+- `security.test.mjs` „Bestätigungslink abgelaufen“: Kündigung ohne
+  Bestellnummer, weil sie mit Nummer seit P4 sofort wirkt.

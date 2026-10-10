@@ -11,11 +11,17 @@ import './ui/surface.css'
 import BillingRoot from './billing/BillingRoot.tsx'
 import ShareView from './screens/ShareView.tsx'
 import ResetPassword from './screens/ResetPassword.tsx'
+import { bootPrerender } from './landing/boot.ts'
 
 const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9]+)\/?$/);
 const resetMatch = window.location.pathname.match(/^\/reset\/([a-fA-F0-9]+)\/?$/);
 
-createRoot(document.getElementById('root')!).render(
+// Vorgerenderte Startseite und /preise (scripts/landing-prerender.mjs): Die
+// App rendert verdeckt und übernimmt, sobald sie etwas Echtes zeigt.
+const rootEl = document.getElementById('root')!
+bootPrerender(rootEl)
+
+createRoot(rootEl).render(
   <StrictMode>
     {shareMatch ? <ShareView token={shareMatch[1]} />
       : resetMatch ? <ResetPassword token={resetMatch[1]} />

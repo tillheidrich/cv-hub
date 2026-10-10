@@ -45,7 +45,7 @@ async function run(width, signedIn) {
       await p.close();
       return prof;
     })();
-    await page.route('**/api/auth/me', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 1, username: 'pruefung@example.com', role: 'admin' } }) }));
+    await page.route('**/api/auth/me', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 1, username: 'pruefung@example.com', role: 'admin', adminUrl: '/admin/' } }) }));
     await page.route('**/api/resumes', r => r.request().method() === 'GET'
       ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ resumes: [{ id: profile.id, display_name: profile.displayName, updated_at: new Date().toISOString() }] }) })
       : r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));

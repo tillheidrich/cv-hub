@@ -27,6 +27,23 @@ export const ABSCHNITT_MARKEN = [
 /** Überschriften der festen Abschnitte (deutsche Vorgabe), in Reihenfolge. */
 export const ABSCHNITT_TITEL = ['Projekte', 'Zertifikate', 'Ehrenamt', 'Publikationen'];
 
+/* Seit 10.10.2026 schlagen einige Vorlagen eine eigene Reihenfolge vor
+ * (`mainOrder` in theme.ts: Lübeck Zertifikate zuerst, Valencia Projekte,
+ * Tallinn und Graz Publikationen vor dem Ehrenamt). Die Marken sind deshalb
+ * nach Abschnitt gruppiert; `markenFuer(reihenfolge)` stellt sie in die
+ * Reihenfolge, die die Vorlage tatsächlich setzt. */
+const GRUPPEN = {
+  projects: ABSCHNITT_MARKEN.slice(0, 8),
+  certificates: ABSCHNITT_MARKEN.slice(8, 14),
+  volunteering: ABSCHNITT_MARKEN.slice(14, 17),
+  publications: ABSCHNITT_MARKEN.slice(17, 21),
+  custom: ABSCHNITT_MARKEN.slice(21),
+};
+const TITEL = { projects: 'Projekte', certificates: 'Zertifikate', volunteering: 'Ehrenamt', publications: 'Publikationen' };
+const reihe = order => (order || Object.keys(GRUPPEN)).filter(k => k in GRUPPEN);
+export function markenFuer(order) { return reihe(order).flatMap(k => GRUPPEN[k]); }
+export function titelFuer(order) { return reihe(order).filter(k => k in TITEL).map(k => TITEL[k]); }
+
 const flach = s => s.replace(/\s+/g, ' ').toLowerCase();
 
 /**

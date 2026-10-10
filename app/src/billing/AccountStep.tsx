@@ -19,6 +19,8 @@ import { errorText } from './format';
 import { Icon } from '../ui/Icon';
 import { registrationOpen } from './hooks';
 import { PATHS, linkClick } from './route';
+import { Art9ConsentFields, RegisterNotice } from '../screens/Art9Consent';
+import { art9Texts, ART9_CONSENT_VERSION } from '../legal/einwilligung';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -35,6 +37,8 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [age16, setAge16] = useState(false);
+  /** Einwilligung Art. 9 DSGVO (P9): Ohne sie speichert das Konto nichts. */
+  const [art9, setArt9] = useState(false);
   const [altcha, setAltcha] = useState<string | null>(null);
   const [identifier, setIdentifier] = useState('');
   const [challenge, setChallenge] = useState<string | null>(null);
@@ -54,10 +58,11 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
     if (!EMAIL_RE.test(mail)) { setInvalid('email'); setErr(t.errEmail); return; }
     if (password.length < 8) { setInvalid('password'); setErr(t.errPwShort); return; }
     if (!age16) { setInvalid('age16'); setErr(t.errAge16); return; }
+    if (!art9) { setInvalid('art9'); setErr(art9Texts(lang).errRegisterConsent); return; }
     if (!altcha) { setInvalid('altcha'); setErr(t.errAltcha); return; }
     busyRef.current = true; setBusy(true);
     try {
-      const r = withPlan(await billingApi.register({ email: mail, password, altcha, ageConfirmed16: true }));
+      const r = withPlan(await billingApi.register({ email: mail, password, altcha, ageConfirmed16: true, art9Consent: { version: ART9_CONSENT_VERSION } }));
       track('register_done');
       const user: AuthUser = { ...r.user, emailConfirmed: r.user.emailConfirmed ?? r.emailConfirmed ?? false, email: r.user.email ?? mail };
       onDone(user, true);
@@ -147,6 +152,8 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
         <input type="checkbox" checked={age16} onChange={e => { setAge16(e.target.checked); if (e.target.checked && invalid === 'age16') { setInvalid(null); setErr(null); } }} required />
         <span>{t.age16}</span>
       </label>
+      <Art9ConsentFields lang={lang} checked={art9} invalid={invalid === 'art9'}
+        onChange={v => { setArt9(v); if (v && invalid === 'art9') { setInvalid(null); setErr(null); } }} />
       <div data-invalid={invalid === 'altcha' || undefined}>
         <AltchaField lang={lang} onChange={p => { setAltcha(p); if (p && invalid === 'altcha') { setInvalid(null); setErr(null); } }} />
       </div>
@@ -156,6 +163,7 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
       {err && <p className="bl-error" role="alert">{err}</p>}
       <div>
         <button type="submit" className="ui-btn ui-btn-primary bl-submit" disabled={busy}>{busy ? t.busy : t.regSubmit}</button>
+        <RegisterNotice lang={lang} />
       </div>
       <div><button type="button" className="bl-linkbtn" onClick={() => switchTo('login')}>{t.haveAccount}</button></div>
     </form>

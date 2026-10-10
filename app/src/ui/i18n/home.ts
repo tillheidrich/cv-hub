@@ -130,7 +130,7 @@ export const HOME_I18N: Record<UiLang, HomeStrings> = {
 
     modalOverline: 'NEW · RÉSUMÉ',
     modalTitle: 'Create a new', modalTitleAccent: 'résumé.',
-    nameLabel: 'Title in your overview (not printed on the résumé)', namePlaceholder: 'e.g. Application — City Utilities',
+    nameLabel: 'Title in your overview (not printed on the résumé)', namePlaceholder: 'e.g. Application City Utilities',
     startLabel: 'Where to start?',
     blankLabel: 'Start empty', blankDesc: 'Every field blank — you type in your own details',
     sampleLabel: 'With sample', sampleDesc: 'A filled-in sample résumé to overwrite',

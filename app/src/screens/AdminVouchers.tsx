@@ -1,4 +1,7 @@
 /**
+ * Farben seit Runde 8b (10.10.2026) als CSS-Variablen mit dem bisherigen Wert
+ * als Rückfall: Der Admin-Bereich (src/admin/) hat einen dunklen Modus.
+ *
  * Admin-Reiter „Gutscheine" (09.10.2026, Gutscheine und Gratiszugänge).
  * Deutsch wie der Rest des Panels.
  *
@@ -19,20 +22,20 @@ import { voucherApi, type AdminRedemption, type AdminVoucher, type CreateVoucher
 import { PATHS } from '../billing/route';
 
 const UI = "'Inter', sans-serif";
-const INK = 'oklch(0.21 0.021 264)';
-const INK2 = 'oklch(0.42 0.017 264)';
-const INK3 = 'oklch(0.48 0.012 264)';
-const ACCENT = 'oklch(0.50 0.216 264)';
-const HAIR = 'oklch(0.91 0.005 264)';
-const card: React.CSSProperties = { background: 'oklch(0.985 0.003 264)', border: `1px solid ${HAIR}`, borderRadius: '10px', padding: '12px 14px' };
+const INK = 'var(--adm-ink, oklch(0.21 0.021 264))';
+const INK2 = 'var(--adm-ink-2, oklch(0.42 0.017 264))';
+const INK3 = 'var(--adm-ink-3, oklch(0.48 0.012 264))';
+const ACCENT = 'var(--adm-accent, oklch(0.50 0.216 264))';
+const HAIR = 'var(--adm-line, oklch(0.91 0.005 264))';
+const card: React.CSSProperties = { background: 'var(--adm-surface-2, oklch(0.985 0.003 264))', border: `1px solid ${HAIR}`, borderRadius: '10px', padding: '12px 14px' };
 const label: React.CSSProperties = { display: 'block', fontSize: '11.5px', fontWeight: 700, color: INK2, marginBottom: '4px', fontFamily: UI };
-const input: React.CSSProperties = { width: '100%', minHeight: '40px', padding: '7px 10px', border: '1px solid oklch(0.80 0.008 264)', borderRadius: '7px', fontFamily: UI, fontSize: '14px', boxSizing: 'border-box', background: '#fff', color: INK };
+const input: React.CSSProperties = { width: '100%', minHeight: '40px', padding: '7px 10px', border: '1px solid var(--adm-line-strong, oklch(0.80 0.008 264))', borderRadius: '7px', fontFamily: UI, fontSize: '14px', boxSizing: 'border-box', background: 'var(--adm-surface, #fff)', color: INK };
 const hint: React.CSSProperties = { fontSize: '11.5px', color: INK3, fontFamily: UI, lineHeight: 1.5, marginTop: '4px' };
-const btn: React.CSSProperties = { minHeight: '36px', background: 'none', border: '1px solid oklch(0.80 0.008 264)', borderRadius: '7px', padding: '6px 11px', fontSize: '12.5px', cursor: 'pointer', color: INK2, fontFamily: UI };
-const btnPrimary: React.CSSProperties = { ...btn, background: ACCENT, border: 'none', color: '#fff', fontWeight: 700, padding: '8px 16px', minHeight: '40px' };
+const btn: React.CSSProperties = { minHeight: '36px', background: 'none', border: '1px solid var(--adm-line-strong, oklch(0.80 0.008 264))', borderRadius: '7px', padding: '6px 11px', fontSize: '12.5px', cursor: 'pointer', color: INK2, fontFamily: UI };
+const btnPrimary: React.CSSProperties = { ...btn, background: ACCENT, border: 'none', color: 'var(--adm-accent-ink, #fff)', fontWeight: 700, padding: '8px 16px', minHeight: '40px' };
 const fieldset: React.CSSProperties = { border: 0, margin: 0, padding: 0, minWidth: 0 };
 const radioRow: React.CSSProperties = { display: 'flex', gap: '6px', flexWrap: 'wrap' };
-const radioLbl = (on: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: '7px', minHeight: '40px', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontFamily: UI, fontSize: '13px', color: INK, background: on ? 'oklch(0.96 0.02 264)' : '#fff', border: `1px solid ${on ? ACCENT : 'oklch(0.85 0.006 264)'}` });
+const radioLbl = (on: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: '7px', minHeight: '40px', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontFamily: UI, fontSize: '13px', color: INK, background: on ? 'var(--adm-accent-soft, oklch(0.96 0.02 264))' : 'var(--adm-surface, #fff)', border: `1px solid ${on ? ACCENT : 'var(--adm-line-strong, oklch(0.85 0.006 264))'}` });
 
 const dateDe = (iso: string) => {
   try { return new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' }); }
@@ -156,12 +159,12 @@ export default function AdminVouchers() {
   return (
     <div data-admin-vouchers>
       <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{status}</div>
-      {err && <div role="alert" style={{ background: '#fff0f0', border: '1px solid #f0c0c0', borderRadius: '8px', padding: '8px 11px', fontSize: '12.5px', color: '#a52a1d', marginBottom: '14px', fontFamily: UI }}>{err}</div>}
+      {err && <div role="alert" style={{ background: 'var(--adm-danger-soft, #fff0f0)', border: '1px solid var(--adm-danger-line, #f0c0c0)', borderRadius: '8px', padding: '8px 11px', fontSize: '12.5px', color: 'var(--adm-danger, #a52a1d)', marginBottom: '14px', fontFamily: UI }}>{err}</div>}
 
       <CreateForm campaigns={campaigns} onCreated={async r => { setCreated(r); setStatus(r.codes ? `${r.codes.length} Code(s) erzeugt.` : 'Aktionscode angelegt.'); await refresh(); }} onError={setErr} />
 
       {created && (
-        <section aria-labelledby="adm-v-created" style={{ ...card, marginBottom: '14px', borderColor: ACCENT, background: 'oklch(0.97 0.02 264)' }} data-voucher-created>
+        <section aria-labelledby="adm-v-created" style={{ ...card, marginBottom: '14px', borderColor: ACCENT, background: 'var(--adm-accent-soft, oklch(0.97 0.02 264))' }} data-voucher-created>
           <h3 id="adm-v-created" style={{ margin: '0 0 6px', fontSize: '14px', fontFamily: UI, color: INK }}>
             {created.codes ? 'Neue Codes – nur jetzt sichtbar' : 'Aktionscode angelegt'}
           </h3>
@@ -202,7 +205,7 @@ export default function AdminVouchers() {
                       const st = v.status ?? (v.active ? 'active' : 'inactive');
                       const on = st === 'active';
                       const word = { active: 'aktiv', inactive: 'deaktiviert', expired: 'Frist vorbei', exhausted: 'ausgeschöpft' }[st];
-                      return <span data-status={st} style={{ fontFamily: UI, fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', background: on ? 'oklch(0.93 0.06 150)' : 'oklch(0.93 0.004 264)', color: on ? 'oklch(0.36 0.11 150)' : INK2 }}>{word}</span>;
+                      return <span data-status={st} style={{ fontFamily: UI, fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', background: on ? 'var(--adm-ok-soft, oklch(0.93 0.06 150))' : 'var(--adm-chip, oklch(0.93 0.004 264))', color: on ? 'var(--adm-ok, oklch(0.36 0.11 150))' : INK2 }}>{word}</span>;
                     })()}
                   </div>
                   <div style={{ fontFamily: UI, fontSize: '12.5px', color: INK2, marginTop: '3px', lineHeight: 1.5 }}>
@@ -214,13 +217,13 @@ export default function AdminVouchers() {
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                     <button type="button" style={btn} aria-expanded={openRed === id} onClick={() => showRedemptions(id)}>Einlösungen</button>
                     {v.distribution === 'public' && v.code && <button type="button" style={btn} aria-expanded={noticeFor === id} onClick={() => setNoticeFor(noticeFor === id ? null : id)}>Aktionshinweis</button>}
-                    {v.active && asking !== id && <button type="button" style={{ ...btn, color: '#a52a1d' }} onClick={() => setAsking(id)}>Deaktivieren …</button>}
+                    {v.active && asking !== id && <button type="button" style={{ ...btn, color: 'var(--adm-danger, #a52a1d)' }} onClick={() => setAsking(id)}>Deaktivieren …</button>}
                   </div>
                   {asking === id && (
-                    <div role="group" aria-label={`${v.name} deaktivieren`} style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', background: '#fff6f4', border: '1px solid #f0c8c0' }}>
+                    <div role="group" aria-label={`${v.name} deaktivieren`} style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', background: 'var(--adm-danger-soft, #fff6f4)', border: '1px solid var(--adm-danger-line, #f0c8c0)' }}>
                       <p style={{ margin: 0, fontFamily: UI, fontSize: '12.5px', color: INK, lineHeight: 1.5 }}>Neue Einlösungen sind dann nicht mehr möglich. Bereits gewährte Zugänge bleiben bestehen.</p>
                       <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <button type="button" style={{ ...btnPrimary, background: '#a52a1d' }} onClick={() => deactivate(v)} data-confirm-deactivate>Deaktivieren</button>
+                        <button type="button" style={{ ...btnPrimary, background: 'var(--adm-danger, #a52a1d)' }} onClick={() => deactivate(v)} data-confirm-deactivate>Deaktivieren</button>
                         <button type="button" style={btn} onClick={() => setAsking(null)}>Abbrechen</button>
                       </div>
                     </div>
@@ -258,7 +261,7 @@ function NoticeBox({ v, onCopied }: { v: AdminVoucher; onCopied: (m: string) => 
 
 function RedemptionList({ rows }: { rows: AdminRedemption[] | 'err' | undefined }) {
   if (rows === undefined) return <p style={hint} role="status">Wird geladen …</p>;
-  if (rows === 'err') return <p style={{ ...hint, color: '#a52a1d' }}>Die Einlösungen ließen sich nicht laden.</p>;
+  if (rows === 'err') return <p style={{ ...hint, color: 'var(--adm-danger, #a52a1d)' }}>Die Einlösungen ließen sich nicht laden.</p>;
   if (!rows.length) return <p style={hint}>Noch keine Einlösungen.</p>;
   return (
     <div style={{ overflowX: 'auto', marginTop: '8px' }}>
@@ -285,7 +288,7 @@ function RedemptionList({ rows }: { rows: AdminRedemption[] | 'err' | undefined 
 
 function StatsBox({ stats, vouchers }: { stats: VoucherStats | null; vouchers: AdminVoucher[] }) {
   const th: React.CSSProperties = { textAlign: 'right', fontWeight: 700, fontSize: '11px', color: INK2, padding: '6px 8px', borderBottom: `1px solid ${HAIR}`, whiteSpace: 'nowrap' };
-  const td: React.CSSProperties = { textAlign: 'right', fontSize: '12.5px', color: INK, padding: '6px 8px', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid oklch(0.95 0.004 264)' };
+  const td: React.CSSProperties = { textAlign: 'right', fontSize: '12.5px', color: INK, padding: '6px 8px', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid var(--adm-line-soft, oklch(0.95 0.004 264))' };
   const rows = stats?.campaigns ?? [];
   const nameOf = (id: string | number | null | undefined) => vouchers.find(v => String(v.id) === String(id))?.name ?? `Gutschein ${id}`;
   const dash = (n: number | null | undefined) => (n == null ? '–' : n);
@@ -325,7 +328,7 @@ function StatsBox({ stats, vouchers }: { stats: VoucherStats | null; vouchers: A
                 {kinds.map(k => {
                   const x = stats!.byKind![k];
                   return (
-                    <tr key={`sum-${k}`} style={{ background: 'oklch(0.97 0.004 264)' }}>
+                    <tr key={`sum-${k}`} style={{ background: 'var(--adm-surface-2, oklch(0.97 0.004 264))' }}>
                       <th scope="row" style={{ ...td, textAlign: 'left', fontWeight: 700, paddingLeft: '14px' }}>Summe</th>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{k === 'lifetime' ? 'dauerhaft' : 'Zeitgutschein'}</td>
                       <td style={{ ...td, fontWeight: 700 }}>{x.redemptions}</td>
@@ -528,11 +531,11 @@ function CreateForm({ campaigns, onCreated, onError }: {
         </fieldset>
       )}
 
-      <p data-voucher-summary style={{ margin: 0, padding: '10px 12px', borderRadius: '8px', background: '#fff', border: `1px solid ${HAIR}`, fontFamily: UI, fontSize: '13.5px', color: INK, lineHeight: 1.5 }}>
+      <p data-voucher-summary style={{ margin: 0, padding: '10px 12px', borderRadius: '8px', background: 'var(--adm-surface, #fff)', border: `1px solid ${HAIR}`, fontFamily: UI, fontSize: '13.5px', color: INK, lineHeight: 1.5 }}>
         {sentence}
       </p>
       {problems.length > 0 && (
-        <ul role="alert" style={{ margin: 0, padding: '8px 12px 8px 28px', borderRadius: '8px', background: '#fff0f0', border: '1px solid #f0c0c0', fontFamily: UI, fontSize: '12.5px', color: '#a52a1d' }} data-voucher-problems>
+        <ul role="alert" style={{ margin: 0, padding: '8px 12px 8px 28px', borderRadius: '8px', background: 'var(--adm-danger-soft, #fff0f0)', border: '1px solid var(--adm-danger-line, #f0c0c0)', fontFamily: UI, fontSize: '12.5px', color: 'var(--adm-danger, #a52a1d)' }} data-voucher-problems>
           {problems.map(p => <li key={p}>{p}</li>)}
         </ul>
       )}

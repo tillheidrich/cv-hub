@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PageMode, PageFormat, UILabels } from '../data/types';
-import { getPageFormat } from '../data/pageFormats';
+import { getPageFormat, MAX_CV_PAGES, PDF_MAX_PAGES } from '../data/pageFormats';
 import { metricsFor, EXPAND, type Metrics } from '../templates/metrics';
 import { paginate, type MeasuredBlock, type PaginationResult } from './paginate';
 
@@ -81,6 +81,7 @@ function targetPages(mode: PageMode): number | null {
   if (mode === 'one') return 1;
   if (mode === 'two') return 2;
   if (mode === 'three') return 3;
+  if (mode === 'four') return 4;
   return null;
 }
 
@@ -170,6 +171,25 @@ export default function DocumentPreview({
     return () => ro.disconnect();
   }, []);
 
+  /** Zählt hoch, wenn der Browser Schriften nachgeladen hat.
+   *
+   *  Befund vom 10.10.2026 (Weimar, viel Inhalt, „Auto"): Schriften werden
+   *  erst geladen, wenn Text sie braucht — also NACH dem ersten Rendern. Die
+   *  erste Messung lief mit der Ersatzschrift, die Seiten wurden danach
+   *  aufgeteilt, und als die echte Schrift kam, wurde nicht neu gemessen.
+   *  Seite 1 trug dann vier Blöcke zu viel und lief 80 px über die Kante.
+   *  Im Modus „Auto" (und wenn schon die erste Messung passt) gibt es keinen
+   *  zweiten Suchschritt, der das zufällig ausgleicht. Jetzt stößt jedes
+   *  Nachladen eine neue Rechnung an. */
+  const [fontTick, setFontTick] = useState(0);
+  useEffect(() => {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+    if (!fonts || typeof fonts.addEventListener !== 'function') return;
+    const bump = () => setFontTick(t => t + 1);
+    fonts.addEventListener('loadingdone', bump);
+    return () => fonts.removeEventListener('loadingdone', bump);
+  }, []);
+
   /** Zuletzt gemessene Zeichen je Zeile — überlebt Suchschritte. */
   const charsPerLineRef = useRef(78);
   const [settledKey, setSettledKey] = useState(contentKey);
@@ -179,7 +199,7 @@ export default function DocumentPreview({
     return () => clearTimeout(t);
   }, [contentKey, settledKey]);
 
-  const sig = `${userScale}|${pageMode}|${pageFormat}|${settledKey}|${visibleTick}`;
+  const sig = `${userScale}|${pageMode}|${pageFormat}|${settledKey}|${visibleTick}|${fontTick}`;
   const metrics = useMemo(() => metricsFor(condense, userScale), [condense, userScale]);
 
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -330,7 +350,13 @@ export default function DocumentPreview({
     const wish = targetPages(pageMode);
     // Ist das Wunschziel als unerreichbar erwiesen, gilt das Ersatzziel.
     const want = wish === null ? null : (fallbackPagesRef.current ?? wish);
-    const maxPages = want ?? 3;
+    /* 'auto' setzt bis zur Grenze des PDF-Dienstes, nicht bis drei Seiten.
+     * Bis zum 10.10.2026 stand hier `want ?? 3`: Alles, was nicht auf drei
+     * Seiten passte, landete auf Seite 3 und lief dort unten aus dem Blatt
+     * — in Vorschau und PDF abgeschnitten, ohne Meldung, weil 'auto' nie
+     * einen Überlauf meldete. Jetzt wird weitergesetzt; über MAX_CV_PAGES
+     * hinaus gibt es eine Meldung, gefehlt wird nichts. */
+    const maxPages = want ?? PDF_MAX_PAGES;
     const res = paginate(blocks, [cap1, capN], Math.max(maxPages, 1));
 
     /** Letzte Stufe, bevor Inhalt der Seitenspalte unten aus der Seite fällt:
@@ -382,8 +408,10 @@ export default function DocumentPreview({
        * nicht sagen, was zu kürzen wäre. */
       const heightById = new Map(blocks.map(b => [b.id, b.height + b.gap]));
       let beyondWish = 0;
-      if (wish !== null && r.pages.length > wish) {
-        for (const ids of r.pages.slice(wish)) {
+      /* Für 'auto' gilt die Obergrenze des Werkzeugs als Wunsch. */
+      const limit = wish ?? MAX_CV_PAGES;
+      if (r.pages.length > limit) {
+        for (const ids of r.pages.slice(limit)) {
           for (const id of ids) beyondWish += heightById.get(id) ?? 0;
         }
       }
@@ -401,8 +429,9 @@ export default function DocumentPreview({
       });
     };
 
-    // 'auto': nie verdichten, nur zählen.
-    if (want === null) { finish(res, false); return; }
+    // 'auto': nie verdichten, nur zählen — und melden, wenn es mehr als
+    // MAX_CV_PAGES Seiten werden oder selbst die PDF-Grenze nicht reicht.
+    if (want === null) { finish(res, res.overflowPx > 0 || res.pages.length > MAX_CV_PAGES); return; }
 
     // Aufgegeben: Zielseitenzahl ist nicht erreichbar. Dann lieber eine Seite
     // mehr in bequemer Größe als eine gequetschte, halb abgeschnittene Seite —

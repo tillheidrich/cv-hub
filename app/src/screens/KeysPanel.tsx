@@ -4,6 +4,7 @@ import type { TwoFaStatus, OauthConnection } from '../data/api';
 import { useUiLang } from '../ui/useUiLang';
 import { KEYS_I18N } from '../ui/i18n/keys';
 import PassSection from '../billing/PassSection';
+import { Art9ConsentSettings } from './Art9Consent';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -330,7 +331,7 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
                 )}
                 {clientHilfe === 'cursor' && (
                   <>
-                    <strong>{t.cursorHelpTitle}</strong> — {t.cursorHelpWhere} <em>URL</em> {t.cursorHelpOr} <em>Streamable HTTP</em> {t.cursorHelpBelongs} <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>mcp/</code> {t.cursorHelpReadme}
+                    <strong>{t.cursorHelpTitle}</strong>: {t.cursorHelpWhere} <em>URL</em> {t.cursorHelpOr} <em>Streamable HTTP</em> {t.cursorHelpBelongs} <code style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>mcp/</code> {t.cursorHelpReadme}
                   </>
                 )}
               </div>
@@ -380,6 +381,8 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
               ↓ {t.downloadData}
             </a>
           </div>
+
+          <Art9ConsentSettings lang={uiLang} />
 
           {/* ── DSGVO: Konto löschen ────────────────────────────────────── */}
           <div style={{ ...sectionH, marginTop: '28px', color: '#a1322b' }}>{t.sectionDelete}</div>

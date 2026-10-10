@@ -96,7 +96,7 @@ export interface WithdrawalTexts {
 }
 
 export const WIDERRUF: Bilingual<WithdrawalTexts> = {
-  version: '2026-10-09',
+  version: '2026-10-10',
   de: {
     policy: {
       title: 'Widerrufsbelehrung',
@@ -135,6 +135,10 @@ export const WIDERRUF: Bilingual<WithdrawalTexts> = {
       footnote: '(*) Unzutreffendes streichen.',
     },
     // Anwalt prüfen: Bestätigungslink bei öffentlicher Erklärung
+    // Prüfteam J1 (10.10.2026): Belehrung unverändert (Abgleich mit Anlage 1
+    // EGBGB i. d. F. vom 03.02.2026, buzer.de). Nur die Seitentexte stellen
+    // jetzt klar, dass der Widerruf auch ohne Klick wirksam eingegangen ist
+    // und wie es ohne Zugriff auf die Bestelladresse weitergeht.
     // (§ 356a Abs. 2 Nr. 3, Abs. 4 BGB: Eingangsbestätigung geht an die Adresse
     // der Bestellung statt an die eingegebene; ausgeführt wird erst nach dem
     // Klick, für die Frist zählt der Eingang. Sicherheitsbefund M1, 09.10.2026.)
@@ -152,7 +156,7 @@ export const WIDERRUF: Bilingual<WithdrawalTexts> = {
       reviewTitle: 'Bitte prüfen',
       reviewText: 'Sie widerrufen den Vertrag über den Bewerbungs-Pass aus der Bestellung {{ORDER_NO}}. Name: {{CUSTOMER_NAME}}. E-Mail-Adresse der Bestellung: {{CUSTOMER_EMAIL}}.',
       doneTitle: 'Ihr Widerruf ist eingegangen',
-      doneText: 'Eingegangen am {{RECEIVED_AT}}. Wir haben Ihre Erklärung erhalten. Zur Sicherheit schicken wir einen Bestätigungslink an die E-Mail-Adresse der Bestellung; nach dem Klick erstatten wir den Preis und der Pass endet. Für die Frist zählt dieser Eingang. Angemeldet geht es sofort unter „Mein Pass“. Bitte speichern oder drucken Sie diese Seite, wenn Sie einen eigenen Beleg möchten.',
+      doneText: 'Eingegangen am {{RECEIVED_AT}}. Ihr Widerruf ist damit bei uns eingegangen; für die Frist zählt dieser Zeitpunkt. Zur Sicherheit schicken wir einen Bestätigungslink an die E-Mail-Adresse der Bestellung. Nach dem Klick erstatten wir den Preis sofort automatisch und der Pass endet. Haben Sie keinen Zugriff mehr auf diese Adresse, schreiben Sie uns an {{SELLER_EMAIL}}; wir prüfen den Widerruf dann von Hand und erstatten innerhalb der gesetzlichen 14 Tage. Angemeldet geht es sofort unter „Mein Pass“. Bitte speichern oder drucken Sie diese Seite, wenn Sie einen eigenen Beleg möchten.',
       refundQueued: 'Die Erstattung von {{PRICE}} ist veranlasst und wird ausgeführt, sobald unser Zahlungsdienstleister sie verarbeitet.',
       refundDone: 'Die Erstattung von {{PRICE}} ist ausgeführt. Je nach Zahlungsart sehen Sie den Betrag in einigen Tagen auf Ihrem Konto.',
       refundFailed: 'Die automatische Erstattung hat nicht geklappt. Wir kümmern uns von Hand darum und melden uns innerhalb von zwei Werktagen per E-Mail. Ihr Widerruf ist trotzdem wirksam eingegangen.',
@@ -213,7 +217,7 @@ export const WIDERRUF: Bilingual<WithdrawalTexts> = {
       reviewTitle: 'Please check',
       reviewText: 'You are withdrawing from the contract for the application pass from order {{ORDER_NO}}. Name: {{CUSTOMER_NAME}}. E-mail address of the order: {{CUSTOMER_EMAIL}}.',
       doneTitle: 'Your withdrawal has been received',
-      doneText: 'Received on {{RECEIVED_AT}}. We have received your declaration. For your security we send a confirmation link to the e-mail address of the order; after the click we refund the price and the pass ends. The time of this receipt counts for the deadline. Signed in, it works straight away under “My pass”. Please save or print this page if you want your own record.',
+      doneText: 'Received on {{RECEIVED_AT}}. Your withdrawal has reached us; this time counts for the deadline. For your security we send a confirmation link to the e-mail address of the order. After the click we refund the price automatically and the pass ends. If you no longer have access to that address, write to us at {{SELLER_EMAIL}}; we will then check the withdrawal manually and refund within the statutory 14 days. Signed in, it works straight away under “My pass”. Please save or print this page if you want your own record.',
       refundQueued: 'The refund of {{PRICE}} has been initiated and will be carried out as soon as our payment provider processes it.',
       refundDone: 'The refund of {{PRICE}} has been carried out. Depending on the payment method, you will see it in your account within a few days.',
       refundFailed: 'The automatic refund did not go through. We will handle it manually and get back to you by e-mail within two working days. Your withdrawal has still been validly received.',

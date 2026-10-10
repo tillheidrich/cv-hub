@@ -5,6 +5,7 @@ import { FASSUNG_I18N } from './i18n/fassung';
 import { FREETIER_I18N } from './i18n/freetier';
 import { useFreeTier } from '../billing/freeTier';
 import { LockGlyph } from '../billing/PassLock';
+import AtsExplain from './AtsExplain';
 
 /**
  * Der ATS-Hinweis im Moment der Wahl — an der gewählten Vorlage, im Karussell
@@ -30,7 +31,12 @@ export default function AtsLine({ level, uiLang, onLoadAts, onLoadAtsPdf, compac
   const btn: React.CSSProperties = { minHeight: '32px', padding: '0 12px', fontSize: 'var(--t-xs)' };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', rowGap: '6px', fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.4 }}>
-      <span className="ui-badge" data-level={level} title={atsNote(level, uiLang)}>{atsLabel(level, uiLang)}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+        <span className="ui-badge" data-level={level} title={atsNote(level, uiLang)}>{atsLabel(level, uiLang)}</span>
+        {/* „Was heißt das?" (Runde 8): an jeder Marke, damit klar ist, was
+            „Für Portale geeignet" für die Bewerbung bedeutet. */}
+        <AtsExplain level={level} uiLang={uiLang} compact={compact} />
+      </span>
       {!compact && <span style={{ flex: '1 1 180px', minWidth: 0 }}>{d.atsLine[level]}</span>}
       {onLoadAts && level !== 'high' && (
         onLoadAtsPdf ? (

@@ -216,33 +216,33 @@ export const EXP_I18N: Record<UiLang, ExportStrings> = {
     pdfFailed: (reason) => `PDF-Export fehlgeschlagen: ${reason}`,
     pdfUnknownError: 'unbekannter Fehler',
     pdfServiceError: 'PDF-Dienst-Fehler',
-    pdfHint: 'Ein Klick, ein Download. Vektor-PDF, echte Textebene, kein Druckdialog — die Seiten sind exakt die aus der Vorschau.',
-    atsCheck: 'ATS prüfen — so sieht eine Maschine deinen CV',
+    pdfHint: 'Ein Klick, ein Download. Vektor-PDF, echte Textebene, kein Druckdialog. Die Seiten sind genau die aus der Vorschau.',
+    atsCheck: 'ATS prüfen: so liest ein Portal deinen Lebenslauf',
 
     moreFormats: 'Weitere Formate',
     buttonBusy: 'Wird gebaut…',
-    clHtmlSub: 'Anschreiben als Webseite — zum Ansehen und Weitergeben. Gedruckt wird das PDF.',
+    clHtmlSub: 'Anschreiben als Webseite zum Ansehen und Weitergeben. Gedruckt wird das PDF.',
     clMdSub: 'Anschreiben als .md (rund-um-bearbeitbar)',
-    docxSub: 'Die gewählte Vorlage in Word — Farbfläche, Akzentfarben, Datumsspalte. Öffnet in Word und LibreOffice.',
+    docxSub: 'Die gewählte Vorlage in Word, mit Farbfläche, Akzentfarben und Datumsspalte. Öffnet in Word und LibreOffice.',
     docxAtsLabel: 'Word — ATS-Fassung',
     docxAtsSub: 'Einspaltig, ohne Tabellen und Flächen. Für Portale, die die Datei maschinell auslesen.',
-    htmlSub: 'Webseite zum Ansehen und Weitergeben. Gedruckt wird das PDF — der Browserdruck legt eigene Ränder und Kopfzeilen darüber.',
+    htmlSub: 'Webseite zum Ansehen und Weitergeben. Gedruckt wird das PDF, denn der Browserdruck legt eigene Ränder und Kopfzeilen darüber.',
     mdSub: 'Server-Bridge-Format (rund-um-bearbeitbar)',
     jsonSub: 'Vollständige Daten, re-importierbar',
-    jsonResumeSub: 'Standard-Schema (jsonresume.org) — portabel, re-importierbar',
+    jsonResumeSub: 'Standard-Schema (jsonresume.org), lässt sich wieder einlesen',
     kitLabel: 'Vorlage ohne Daten',
-    kitSub: 'ZIP mit HTML, Word, leerem JSON und Anleitung — das Design zum Selbstbefüllen, auch ohne dieses Werkzeug.',
+    kitSub: 'ZIP mit HTML, Word, leerem JSON und Anleitung: das Design zum Selbstbefüllen, auch ohne dieses Werkzeug.',
 
     bringCv: 'Lebenslauf mitbringen',
-    bringCvHint: 'Du musst nichts abtippen, was du schon hast. Das Archiv wird im Browser gelesen — es geht an keinen Server, auch nicht an unseren.',
+    bringCvHint: 'Du musst nichts abtippen, was du schon hast. Das Archiv wird im Browser gelesen und geht an keinen Server, auch nicht an unseren.',
     liReading: 'Lese Archiv…',
     liLabel: 'LinkedIn-Datenexport',
-    liSub: 'ZIP aus „Eine Kopie deiner Daten erhalten" — Stationen, Ausbildung, Skills, Sprachen',
+    liSub: 'ZIP aus „Eine Kopie deiner Daten erhalten": Stationen, Ausbildung, Kenntnisse, Sprachen',
     liRequest: 'Archiv bei LinkedIn anfordern →',
     liReadError: 'Das Archiv ließ sich nicht lesen.',
     liModalTitle: 'Das steht im Archiv',
     liModalBody: 'Noch ist nichts ersetzt. Übernimmst du, werden Stationen, Ausbildung, Skills und Sprachen durch die aus dem Archiv ersetzt.',
-    liNoDiff: 'Keine Unterschiede zum aktuellen Stand — der Import wäre folgenlos.',
+    liNoDiff: 'Keine Unterschiede zum aktuellen Stand. Der Import würde nichts ändern.',
     countStations: 'Stationen',
     countEducation: 'Ausbildung',
     countSkills: 'Skills',
@@ -260,14 +260,14 @@ export const EXP_I18N: Record<UiLang, ExportStrings> = {
     uploadJsonSub: 'Vollständiger Profil-Import (überschreibt aktiv)',
 
     demoSection: 'Demo-Modus',
-    demoBefore: 'Du arbeitest gerade ohne Konto, deine Daten liegen nur in diesem Browser. Word, HTML, Markdown und JSON entstehen direkt hier. Für das PDF geht der Inhalt einmalig an unseren Server in Deutschland, wird im Arbeitsspeicher gesetzt und nicht gespeichert. ',
+    demoBefore: 'Du arbeitest gerade ohne Konto, deine Daten liegen nur in diesem Browser. Word, HTML, Markdown und JSON entstehen direkt hier. Für das PDF geht der Inhalt einmalig an unseren Server, wird im Arbeitsspeicher gesetzt und nicht gespeichert. ',
     demoStrong: 'Sharelinks, Versionen und die KI-Anbindung per MCP',
     demoAfter: ' brauchen ein Konto.',
     demoCta: 'Konto anlegen →',
 
     shareSection: 'Link teilen',
-    mdTooShort: 'Das Markdown ist zu kurz für einen Import — fehlt etwas beim Einfügen?',
-    shareHint: 'Read-only Link, kein Login nötig — auch für Anschreiben (das Anschreiben wird im Link mit angezeigt). Bevor du teilst: Stehen Daten anderer Personen drin, etwa Name und Telefon einer Referenz, sollten diese damit einverstanden sein.',
+    mdTooShort: 'Das Markdown ist zu kurz für einen Import. Fehlt etwas beim Einfügen?',
+    shareHint: 'Link nur zum Lesen, ohne Anmeldung, auch fürs Anschreiben (das Anschreiben wird im Link mit angezeigt). Bevor du teilst: Stehen Daten anderer Personen drin, etwa Name und Telefon einer Referenz, sollten diese damit einverstanden sein.',
     shareIncludeCl: 'Anschreiben im Link sichtbar machen',
     shareCreate: '+ Neuen Link erzeugen',
     shareNone: 'Noch keine Links.',
@@ -298,7 +298,7 @@ export const EXP_I18N: Record<UiLang, ExportStrings> = {
     aiOpenChatgpt: 'In ChatGPT öffnen ↗',
     aiOpenClaude: 'In Claude öffnen ↗',
     aiOpenGemini: 'In Gemini öffnen ↗',
-    aiGeminiTitle: 'Prompt wird in die Zwischenablage kopiert, Gemini öffnet sich — drüben mit Cmd/Strg+V einfügen.',
+    aiGeminiTitle: 'Prompt wird in die Zwischenablage kopiert, Gemini öffnet sich. Dort mit Cmd/Strg+V einfügen.',
     aiImportBack: '↑ Korrigierte Markdown-Version importieren',
 
     promptResumeInline: (md) =>
@@ -308,7 +308,7 @@ ${md}
 
 Bitte:
 1. Schlage Verbesserungen vor: Bullets nach Schema „Aktion + Kontext + Ergebnis/Wirkung" schärfen, Profil prägnanter machen, deutsche Bewerbungssprache. Erfinde KEINE Zahlen.
-2. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`,
+2. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück, exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`,
     promptResumeUrl: (url) =>
       `Hier ist mein Lebenslauf als Markdown:
 ${url}
@@ -316,7 +316,7 @@ ${url}
 Bitte:
 1. Lies meinen Lebenslauf (lade die URL oben, oder bitte mich, dir den Markdown-Text direkt einzufügen, falls du keine URLs lesen kannst).
 2. Schlage Verbesserungen vor: Bullets nach Schema „Aktion + Kontext + Ergebnis/Wirkung" schärfen, Profil prägnanter machen, deutsche Bewerbungssprache. Erfinde KEINE Zahlen.
-3. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`,
+3. Gib mir am Ende eine VOLLSTÄNDIGE, aktualisierte Markdown-Version zurück, exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 in mein Tool zurückimportieren kann.`,
     promptCoverUrl: (url) =>
       `Hier ist mein Anschreiben als Markdown:
 ${url}
@@ -324,7 +324,7 @@ ${url}
 Bitte:
 1. Lies mein Anschreiben (lade die URL oben, oder bitte mich, den Text direkt einzufügen).
 2. Verbessere Aufbau, Sprache und Tonalität für eine deutsche Bewerbung. Halte die Sektionen Einstieg / Hauptteil / Firmenbezug / Motivation / Abschluss. Erfinde KEINE Fakten.
-3. Gib mir am Ende die VOLLSTÄNDIGE, überarbeitete Markdown-Version zurück — exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 zurückimportieren kann.`,
+3. Gib mir am Ende die VOLLSTÄNDIGE, überarbeitete Markdown-Version zurück, exakt im gleichen Format inkl. Frontmatter (---), damit ich sie 1:1 zurückimportieren kann.`,
 
     modalReviewTitle: 'Änderungen prüfen vor Übernahme',
     modalImportClTitle: 'Anschreiben aus Markdown importieren',
@@ -333,7 +333,7 @@ Bitte:
     modalImportClBody: 'Füge das überarbeitete Anschreiben-Markdown ein (mit oder ohne Frontmatter). Vorhandenes Anschreiben wird überschrieben.',
     modalImportCvBody: 'Füge die von der KI zurückgegebene Markdown-Version ein. Inklusive des Frontmatter-Blocks (---). Foto bleibt erhalten. Du siehst vor der Übernahme eine Diff-Vorschau.',
     mdPlaceholder: '---\ntemplate: hamburg\nlang: de\n---\n\n# Dein Name\n**Berufsbezeichnung**\n\n## Kontakt\n…',
-    noChanges: 'Keine Änderungen erkannt — Import wäre folgenlos.',
+    noChanges: 'Keine Änderungen erkannt. Der Import würde nichts ändern.',
     valueBefore: 'vorher',
     valueAfter: 'nachher',
     valueEmpty: 'leer',
@@ -350,11 +350,11 @@ Bitte:
     serverAnswered: (status) => `Der Server antwortete mit ${status}.`,
     notMarkdown: 'Die Antwort war kein Markdown.',
     serverUnreachable: 'Der Server war nicht erreichbar.',
-    mdFallbackNote: (reason) => `${reason} Heruntergeladen wurde die lokale Fassung — sie enthält denselben Text, aber keine Server-Einstellungen.`,
+    mdFallbackNote: (reason) => `${reason} Heruntergeladen wurde die lokale Fassung. Sie enthält denselben Text, aber keine Server-Einstellungen.`,
     clLoadFailed: (reason) => `${reason} Das Anschreiben konnte nicht geladen werden.`,
     invalidJson: 'Ungültiges JSON',
     importUnavailable: 'Import hier nicht verfügbar.',
-    noActiveProfile: 'Kein aktives Profil — bitte erst eines anlegen.',
+    noActiveProfile: 'Kein aktiver Lebenslauf. Leg bitte zuerst einen an.',
     unknownJsonFormat: 'JSON-Format unbekannt. Erwartet: Profil-Export, JSON Resume oder CVData.',
     jsonImportFailed: 'JSON-Import fehlgeschlagen.',
     fileUnreadable: 'Datei konnte nicht gelesen werden.',
@@ -400,33 +400,33 @@ Bitte:
     pdfFailed: (reason) => `PDF export failed: ${reason}`,
     pdfUnknownError: 'unknown error',
     pdfServiceError: 'PDF service error',
-    pdfHint: 'One click, one download. Vector PDF, real text layer, no print dialog — the pages are exactly the ones from the preview.',
-    atsCheck: 'Run the ATS check — this is how a machine sees your CV',
+    pdfHint: 'One click, one download. Vector PDF, real text layer, no print dialog. The pages are exactly the ones from the preview.',
+    atsCheck: 'ATS check: how a portal reads your CV',
 
     moreFormats: 'More formats',
     buttonBusy: 'Building…',
-    clHtmlSub: 'Cover letter as a web page — to view and pass on. For printing, use the PDF.',
+    clHtmlSub: 'Cover letter as a web page to view and pass on. For printing, use the PDF.',
     clMdSub: 'Cover letter as .md (editable everywhere)',
-    docxSub: 'Your chosen template in Word — colour panel, accent colours, date column. Opens in Word and LibreOffice.',
+    docxSub: 'Your chosen template in Word, with colour panel, accent colours and date column. Opens in Word and LibreOffice.',
     docxAtsLabel: 'Word — ATS version',
     docxAtsSub: 'Single column, no tables, no colour panels. For portals that read the file by machine.',
-    htmlSub: 'Web page to view and pass on. For printing, use the PDF — browser printing lays its own margins and headers over it.',
+    htmlSub: 'Web page to view and pass on. For printing, use the PDF, because browser printing adds its own margins and headers.',
     mdSub: 'Server bridge format (editable everywhere)',
     jsonSub: 'Complete data, re-importable',
-    jsonResumeSub: 'Standard schema (jsonresume.org) — portable, re-importable',
+    jsonResumeSub: 'Standard schema (jsonresume.org), can be imported again',
     kitLabel: 'Template without data',
-    kitSub: 'ZIP with HTML, Word, an empty JSON and instructions — the design to fill in yourself, even without this tool.',
+    kitSub: 'ZIP with HTML, Word, an empty JSON and instructions: the design to fill in yourself, even without this tool.',
 
     bringCv: 'Bring your own résumé',
-    bringCvHint: 'You do not have to retype what you already have. The archive is read in your browser — it goes to no server, not even ours.',
+    bringCvHint: 'You do not have to retype what you already have. The archive is read in your browser and goes to no server, not even ours.',
     liReading: 'Reading archive…',
     liLabel: 'LinkedIn data export',
-    liSub: 'ZIP from "Get a copy of your data" — positions, education, skills, languages',
+    liSub: 'ZIP from "Get a copy of your data": positions, education, skills, languages',
     liRequest: 'Request your archive from LinkedIn →',
     liReadError: 'The archive could not be read.',
     liModalTitle: 'What is in the archive',
     liModalBody: 'Nothing has been replaced yet. If you apply this, positions, education, skills and languages will be replaced by the ones from the archive.',
-    liNoDiff: 'No differences from the current state — the import would change nothing.',
+    liNoDiff: 'No differences from the current state. The import would change nothing.',
     countStations: 'Positions',
     countEducation: 'Education',
     countSkills: 'Skills',
@@ -444,14 +444,14 @@ Bitte:
     uploadJsonSub: 'Complete profile import (overwrites the active one)',
 
     demoSection: 'Demo mode',
-    demoBefore: 'You are working without an account; your data lives only in this browser. Word, HTML, Markdown and JSON are made right here. For the PDF, the content goes once to our server in Germany, is typeset in memory and is not stored. ',
+    demoBefore: 'You are working without an account; your data lives only in this browser. Word, HTML, Markdown and JSON are made right here. For the PDF, the content goes once to our server, is typeset in memory and is not stored. ',
     demoStrong: 'Share links, versions and the AI connection via MCP',
     demoAfter: ' need an account.',
     demoCta: 'Create an account →',
 
     shareSection: 'Share a link',
-    mdTooShort: 'The Markdown is too short to import — did something get lost when pasting?',
-    shareHint: 'Read-only link, no login needed — cover letter included (it is shown inside the link). Before you share: if the document contains other people’s details, such as a referee’s name and phone number, they should agree to it.',
+    mdTooShort: 'The Markdown is too short to import. Did something get lost when pasting?',
+    shareHint: 'Read-only link, no sign-in needed, cover letter included (it is shown inside the link). Before you share: if the document contains other people’s details, such as a referee’s name and phone number, they should agree to it.',
     shareIncludeCl: 'Show the cover letter in the link',
     shareCreate: '+ Create a new link',
     shareNone: 'No links yet.',
@@ -482,7 +482,7 @@ Bitte:
     aiOpenChatgpt: 'Open in ChatGPT ↗',
     aiOpenClaude: 'Open in Claude ↗',
     aiOpenGemini: 'Open in Gemini ↗',
-    aiGeminiTitle: 'The prompt is copied to your clipboard and Gemini opens — paste it there with Cmd/Ctrl+V.',
+    aiGeminiTitle: 'The prompt is copied to your clipboard and Gemini opens. Paste it there with Cmd/Ctrl+V.',
     aiImportBack: '↑ Import the corrected Markdown version',
 
     promptResumeInline: (md) =>
@@ -492,7 +492,7 @@ ${md}
 
 Please:
 1. Suggest improvements: sharpen the bullets along "action + context + result/impact", make the profile more concise, use standard English application language. Do NOT invent any numbers.
-2. At the end, give me a COMPLETE, updated Markdown version — in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
+2. At the end, give me a COMPLETE, updated Markdown version, in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
     promptResumeUrl: (url) =>
       `Here is my résumé as Markdown:
 ${url}
@@ -500,7 +500,7 @@ ${url}
 Please:
 1. Read my résumé (load the URL above, or ask me to paste the Markdown text directly if you cannot read URLs).
 2. Suggest improvements: sharpen the bullets along "action + context + result/impact", make the profile more concise, use standard English application language. Do NOT invent any numbers.
-3. At the end, give me a COMPLETE, updated Markdown version — in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
+3. At the end, give me a COMPLETE, updated Markdown version, in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
     promptCoverUrl: (url) =>
       `Here is my cover letter as Markdown:
 ${url}
@@ -508,7 +508,7 @@ ${url}
 Please:
 1. Read my cover letter (load the URL above, or ask me to paste the text directly).
 2. Improve the structure, language and tone for an English-language application. Keep the sections intro / main part / company reference / motivation / closing. Do NOT invent any facts.
-3. At the end, give me the COMPLETE, revised Markdown version — in exactly the same format including the frontmatter (---), so I can import it straight back.`,
+3. At the end, give me the COMPLETE, revised Markdown version, in exactly the same format including the frontmatter (---), so I can import it straight back.`,
 
     modalReviewTitle: 'Check the changes before applying',
     modalImportClTitle: 'Import cover letter from Markdown',
@@ -517,7 +517,7 @@ Please:
     modalImportClBody: 'Paste the revised cover-letter Markdown (with or without frontmatter). The existing cover letter is overwritten.',
     modalImportCvBody: 'Paste the Markdown version the AI gave back, including the frontmatter block (---). Your photo is kept. You get a diff preview before anything is applied.',
     mdPlaceholder: '---\ntemplate: hamburg\nlang: en\n---\n\n# Your name\n**Job title**\n\n## Contact\n…',
-    noChanges: 'No changes detected — the import would change nothing.',
+    noChanges: 'No changes detected. The import would change nothing.',
     valueBefore: 'before',
     valueAfter: 'after',
     valueEmpty: 'empty',
@@ -534,11 +534,11 @@ Please:
     serverAnswered: (status) => `The server answered with ${status}.`,
     notMarkdown: 'The answer was not Markdown.',
     serverUnreachable: 'The server could not be reached.',
-    mdFallbackNote: (reason) => `${reason} What was downloaded is the local version — same text, but without the server-side settings.`,
+    mdFallbackNote: (reason) => `${reason} What was downloaded is the local version: same text, but without the server-side settings.`,
     clLoadFailed: (reason) => `${reason} The cover letter could not be loaded.`,
     invalidJson: 'Invalid JSON',
     importUnavailable: 'Import is not available here.',
-    noActiveProfile: 'No active profile — create one first.',
+    noActiveProfile: 'No active CV. Create one first.',
     unknownJsonFormat: 'Unknown JSON format. Expected: profile export, JSON Resume or CVData.',
     jsonImportFailed: 'JSON import failed.',
     fileUnreadable: 'The file could not be read.',
@@ -584,33 +584,33 @@ Please:
     pdfFailed: (reason) => `Échec de l'export PDF : ${reason}`,
     pdfUnknownError: 'erreur inconnue',
     pdfServiceError: 'Erreur du service PDF',
-    pdfHint: "Un clic, un téléchargement. PDF vectoriel, vrai calque de texte, aucune boîte de dialogue d'impression — les pages sont exactement celles de l'aperçu.",
-    atsCheck: 'Lancer le contrôle ATS — voici comment une machine voit votre CV',
+    pdfHint: "Un clic, un téléchargement. PDF vectoriel, vrai calque de texte, aucune boîte de dialogue d'impression. Les pages sont exactement celles de l'aperçu.",
+    atsCheck: 'Contrôle ATS : comment un portail lit votre CV',
 
     moreFormats: 'Autres formats',
     buttonBusy: 'Création…',
-    clHtmlSub: "Lettre de motivation en page web — à consulter et à transmettre. Pour imprimer, prenez le PDF.",
+    clHtmlSub: "Lettre de motivation en page web, à consulter et à transmettre. Pour imprimer, prenez le PDF.",
     clMdSub: 'Lettre de motivation en .md (modifiable partout)',
-    docxSub: 'Le modèle choisi dans Word — aplat de couleur, couleurs d\'accent, colonne de dates. S\'ouvre dans Word et LibreOffice.',
+    docxSub: 'Le modèle choisi dans Word, avec aplat de couleur, couleurs d\'accent et colonne de dates. S\'ouvre dans Word et LibreOffice.',
     docxAtsLabel: 'Word — version ATS',
     docxAtsSub: 'Une seule colonne, sans tableaux ni aplats. Pour les portails qui lisent le fichier de façon automatique.',
-    htmlSub: "Page web à consulter et à transmettre. Pour imprimer, prenez le PDF — l'impression du navigateur ajoute ses propres marges et en-têtes.",
+    htmlSub: "Page web à consulter et à transmettre. Pour imprimer, prenez le PDF, car l'impression du navigateur ajoute ses propres marges et en-têtes.",
     mdSub: 'Format passerelle du serveur (modifiable partout)',
     jsonSub: 'Données complètes, réimportables',
-    jsonResumeSub: 'Schéma standard (jsonresume.org) — portable, réimportable',
+    jsonResumeSub: 'Schéma standard (jsonresume.org), réimportable',
     kitLabel: 'Modèle sans données',
-    kitSub: 'ZIP avec HTML, Word, un JSON vide et un mode d\'emploi — le design à remplir soi-même, même sans cet outil.',
+    kitSub: 'ZIP avec HTML, Word, un JSON vide et un mode d\'emploi : le design à remplir soi-même, même sans cet outil.',
 
     bringCv: 'Apportez votre CV',
-    bringCvHint: "Vous n'avez pas à retaper ce que vous avez déjà. L'archive est lue dans le navigateur — elle ne part vers aucun serveur, pas même le nôtre.",
+    bringCvHint: "Vous n'avez pas à retaper ce que vous avez déjà. L'archive est lue dans le navigateur et ne part vers aucun serveur, pas même le nôtre.",
     liReading: "Lecture de l'archive…",
     liLabel: 'Export de données LinkedIn',
-    liSub: 'ZIP issu de « Obtenir une copie de vos données » — postes, formation, compétences, langues',
+    liSub: 'ZIP issu de « Obtenir une copie de vos données » : postes, formation, compétences, langues',
     liRequest: 'Demander votre archive à LinkedIn →',
     liReadError: "L'archive n'a pas pu être lue.",
     liModalTitle: "Ce que contient l'archive",
     liModalBody: "Rien n'est encore remplacé. Si vous appliquez, les postes, la formation, les compétences et les langues seront remplacés par ceux de l'archive.",
-    liNoDiff: "Aucune différence avec l'état actuel — l'import ne changerait rien.",
+    liNoDiff: "Aucune différence avec l'état actuel. L'import ne changerait rien.",
     countStations: 'Postes',
     countEducation: 'Formation',
     countSkills: 'Compétences',
@@ -628,14 +628,14 @@ Please:
     uploadJsonSub: 'Import complet du profil (écrase le profil actif)',
 
     demoSection: 'Mode démo',
-    demoBefore: 'Vous travaillez sans compte ; vos données ne sont que dans ce navigateur. Word, HTML, Markdown et JSON sont produits ici même. Pour le PDF, le contenu part une seule fois vers notre serveur en Allemagne, y est composé en mémoire et n\'est pas conservé. ',
+    demoBefore: 'Vous travaillez sans compte ; vos données ne sont que dans ce navigateur. Word, HTML, Markdown et JSON sont produits ici même. Pour le PDF, le contenu part une seule fois vers notre serveur, y est composé en mémoire et n\'est pas conservé. ',
     demoStrong: 'Les liens de partage, les versions et la connexion IA via MCP',
     demoAfter: ' demandent un compte.',
     demoCta: 'Créer un compte →',
 
     shareSection: 'Partager un lien',
-    mdTooShort: 'Le Markdown est trop court pour être importé — quelque chose a-t-il manqué au collage ?',
-    shareHint: 'Lien en lecture seule, sans connexion — lettre de motivation comprise (elle est affichée dans le lien). Avant de partager : si le document contient des données d’autres personnes, comme le nom et le téléphone d’une référence, celles-ci doivent être d’accord.',
+    mdTooShort: 'Le Markdown est trop court pour être importé. Quelque chose a-t-il manqué au collage ?',
+    shareHint: 'Lien en lecture seule, sans connexion, lettre de motivation comprise (elle est affichée dans le lien). Avant de partager : si le document contient des données d’autres personnes, comme le nom et le téléphone d’une référence, celles-ci doivent être d’accord.',
     shareIncludeCl: 'Afficher la lettre de motivation dans le lien',
     shareCreate: '+ Créer un nouveau lien',
     shareNone: 'Aucun lien pour le moment.',
@@ -666,7 +666,7 @@ Please:
     aiOpenChatgpt: 'Ouvrir dans ChatGPT ↗',
     aiOpenClaude: 'Ouvrir dans Claude ↗',
     aiOpenGemini: 'Ouvrir dans Gemini ↗',
-    aiGeminiTitle: "Le prompt est copié dans le presse-papiers et Gemini s'ouvre — collez-le là-bas avec Cmd/Ctrl+V.",
+    aiGeminiTitle: "Le prompt est copié dans le presse-papiers et Gemini s'ouvre. Collez-le là-bas avec Cmd/Ctrl+V.",
     aiImportBack: '↑ Importer la version Markdown corrigée',
 
     promptResumeInline: (md) =>
@@ -676,7 +676,7 @@ ${md}
 
 Merci de :
 1. Proposer des améliorations : resserrer les puces selon le schéma « action + contexte + résultat/impact », rendre le profil plus percutant, employer la langue de candidature française. N'inventez AUCUN chiffre.
-2. Me rendre à la fin une version Markdown COMPLÈTE et mise à jour — exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle dans mon outil.`,
+2. Me rendre à la fin une version Markdown COMPLÈTE et mise à jour, exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle dans mon outil.`,
     promptResumeUrl: (url) =>
       `Voici mon CV en Markdown :
 ${url}
@@ -684,7 +684,7 @@ ${url}
 Merci de :
 1. Lire mon CV (chargez l'URL ci-dessus, ou demandez-moi de coller directement le texte Markdown si vous ne pouvez pas lire les URL).
 2. Proposer des améliorations : resserrer les puces selon le schéma « action + contexte + résultat/impact », rendre le profil plus percutant, employer la langue de candidature française. N'inventez AUCUN chiffre.
-3. Me rendre à la fin une version Markdown COMPLÈTE et mise à jour — exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle dans mon outil.`,
+3. Me rendre à la fin une version Markdown COMPLÈTE et mise à jour, exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle dans mon outil.`,
     promptCoverUrl: (url) =>
       `Voici ma lettre de motivation en Markdown :
 ${url}
@@ -692,7 +692,7 @@ ${url}
 Merci de :
 1. Lire ma lettre (chargez l'URL ci-dessus, ou demandez-moi de coller directement le texte).
 2. Améliorer la structure, la langue et le ton pour une candidature en français. Conservez les sections introduction / corps / lien avec l'entreprise / motivation / conclusion. N'inventez AUCUN fait.
-3. Me rendre à la fin la version Markdown COMPLÈTE et retravaillée — exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle.`,
+3. Me rendre à la fin la version Markdown COMPLÈTE et retravaillée, exactement au même format, frontmatter (---) compris, pour que je puisse la réimporter telle quelle.`,
 
     modalReviewTitle: "Vérifier les changements avant d'appliquer",
     modalImportClTitle: 'Importer la lettre de motivation depuis un Markdown',
@@ -701,7 +701,7 @@ Merci de :
     modalImportClBody: 'Collez le Markdown retravaillé de la lettre (avec ou sans frontmatter). La lettre existante sera écrasée.',
     modalImportCvBody: "Collez la version Markdown rendue par l'IA, bloc frontmatter (---) compris. La photo est conservée. Vous verrez un aperçu des différences avant toute application.",
     mdPlaceholder: '---\ntemplate: hamburg\nlang: fr\n---\n\n# Votre nom\n**Intitulé de poste**\n\n## Contact\n…',
-    noChanges: "Aucun changement détecté — l'import ne changerait rien.",
+    noChanges: "Aucun changement détecté. L'import ne changerait rien.",
     valueBefore: 'avant',
     valueAfter: 'après',
     valueEmpty: 'vide',
@@ -718,11 +718,11 @@ Merci de :
     serverAnswered: (status) => `Le serveur a répondu ${status}.`,
     notMarkdown: "La réponse n'était pas du Markdown.",
     serverUnreachable: "Le serveur était injoignable.",
-    mdFallbackNote: (reason) => `${reason} Ce qui a été téléchargé est la version locale — même texte, mais sans les réglages côté serveur.`,
+    mdFallbackNote: (reason) => `${reason} Ce qui a été téléchargé est la version locale : même texte, mais sans les réglages côté serveur.`,
     clLoadFailed: (reason) => `${reason} La lettre de motivation n'a pas pu être chargée.`,
     invalidJson: 'JSON invalide',
     importUnavailable: "L'import n'est pas disponible ici.",
-    noActiveProfile: "Aucun profil actif — créez-en un d'abord.",
+    noActiveProfile: "Aucun CV actif. Créez-en un d'abord.",
     unknownJsonFormat: 'Format JSON inconnu. Attendu : export de profil, JSON Resume ou CVData.',
     jsonImportFailed: "L'import JSON a échoué.",
     fileUnreadable: "Le fichier n'a pas pu être lu.",
@@ -769,7 +769,7 @@ Merci de :
     pdfUnknownError: 'error desconocido',
     pdfServiceError: 'Error del servicio de PDF',
     pdfHint: 'Un clic, una descarga. PDF vectorial, capa de texto real, sin diálogo de impresión: las páginas son exactamente las de la vista previa.',
-    atsCheck: 'Comprobar el ATS: así ve una máquina tu CV',
+    atsCheck: 'Comprobar el ATS: así lee un portal tu CV',
 
     moreFormats: 'Más formatos',
     buttonBusy: 'Generando…',
@@ -812,13 +812,13 @@ Merci de :
     uploadJsonSub: 'Importación completa del perfil (sobrescribe el activo)',
 
     demoSection: 'Modo demo',
-    demoBefore: 'Trabajas sin cuenta; tus datos solo están en este navegador. Word, HTML, Markdown y JSON se generan aquí mismo. Para el PDF, el contenido viaja una sola vez a nuestro servidor en Alemania, se compone en memoria y no se guarda. ',
+    demoBefore: 'Trabajas sin cuenta; tus datos solo están en este navegador. Word, HTML, Markdown y JSON se generan aquí mismo. Para el PDF, el contenido viaja una sola vez a nuestro servidor, se compone en memoria y no se guarda. ',
     demoStrong: 'Los enlaces compartidos, las versiones y la conexión con IA por MCP',
     demoAfter: ' necesitan una cuenta.',
     demoCta: 'Crear una cuenta →',
 
     shareSection: 'Compartir un enlace',
-    mdTooShort: 'El Markdown es demasiado corto para importarlo — ¿falta algo al pegarlo?',
+    mdTooShort: 'El Markdown es demasiado corto para importarlo. ¿Falta algo al pegarlo?',
     shareHint: 'Enlace de solo lectura, sin necesidad de iniciar sesión, también con la carta de presentación (se muestra dentro del enlace). Antes de compartir: si el documento contiene datos de otras personas, como el nombre y el teléfono de una referencia, deberían estar de acuerdo.',
     shareIncludeCl: 'Mostrar la carta de presentación en el enlace',
     shareCreate: '+ Crear un enlace nuevo',

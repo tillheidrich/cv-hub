@@ -1,6 +1,6 @@
 // Jeden Ausgang einmal wirklich benutzen.
 //
-// Die Export-Liste behauptet neun Wege aus dem Werkzeug heraus. Geprüft war
+// Die Export-Liste behauptet elf Wege aus dem Werkzeug heraus. Geprüft war
 // bisher nur, dass die Module existieren — das ist keine Prüfung, sondern eine
 // Vermutung. Dieses Skript öffnet die App im Demo-Modus, klickt jeden Knopf,
 // fängt den echten Download ab und sieht in die Datei hinein: richtige
@@ -74,6 +74,22 @@ const PRUEFUNGEN = {
     const liste = execFileSync('unzip', ['-Z1', f], { encoding: 'utf8' });
     const fehlt = ['.html', '.docx', '.json', '.md'].filter(e => !liste.includes(e));
     if (fehlt.length) return `im ZIP fehlen Dateien mit: ${fehlt.join(', ')}`;
+    return null;
+  },
+  /* Seit 10.10.2026: Lebenslauf als Code. Übersetzt wird in
+   * scripts/latexcheck.mjs; hier zählt, dass der Knopf eine echte Datei
+   * liefert, die zurückgelesen werden kann. */
+  'LaTeX (.tex)': (f) => {
+    const t = readFileSync(f, 'utf8');
+    if (!t.includes('\\documentclass')) return 'kein \\documentclass';
+    if (!t.includes('\\end{document}')) return 'kein \\end{document}';
+    if (!t.includes('cv-daten v1')) return 'kein Datenblock für den Wiederimport';
+    return null;
+  },
+  'RenderCV (YAML)': (f) => {
+    const t = readFileSync(f, 'utf8');
+    if (!/^cv:/m.test(t)) return 'kein cv:-Abschnitt';
+    if (!/^  sections:/m.test(t)) return 'keine sections';
     return null;
   },
   'Leere Markdown-Vorlage': (f) => {

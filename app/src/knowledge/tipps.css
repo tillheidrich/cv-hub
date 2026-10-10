@@ -1,0 +1,102 @@
+/* Tipps (knowledge/KnowledgePanel.tsx). Größen aus ui/surface.css.
+ *
+ * Aufbau: Bereichswahl als Chips, darunter Karten. Eine Karte zeigt Titel und
+ * ersten Absatz; „Weiterlesen" klappt Rest, Vorher/Nachher und Belege auf.
+ * Belege stehen nie hinter einem zweiten Klick nach dem Aufklappen.
+ */
+.tp { display: flex; flex-direction: column; min-width: 0; font-family: var(--ui); color: var(--ink); }
+.tp-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 20px 12px; }
+.tp-tab {
+  min-height: 34px; padding: 0 12px; border: 0; border-radius: var(--r-pill); cursor: pointer;
+  font: inherit; font-size: var(--t-sm); font-weight: 540; color: var(--ink-2);
+  background: oklch(1 0 0 / 0.75); box-shadow: var(--pill-shadow);
+  transition: background-color var(--d1) var(--ease), color var(--d1) var(--ease);
+}
+.tp-tab:hover { color: var(--ink); background: oklch(1 0 0); }
+.tp-tab[aria-selected="true"] { background: var(--ink); color: oklch(0.985 0.003 264); box-shadow: none; }
+.tp-tab:focus-visible, .tp-more:focus-visible, .tp-jump:focus-visible, .tp-copy:focus-visible, .tp-check input:focus-visible + span, .tp-reset:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.tp-body { padding: 0 16px 28px 20px; }
+.tp-intro { margin: 0 0 12px; font-size: var(--t-xs); line-height: 1.55; color: var(--ink-2); max-width: 60ch; }
+.tp-loading { padding: 12px 20px; font-size: var(--t-sm); color: var(--ink-2); }
+
+/* Passt gerade */
+.tp-foryou { margin: 0 0 14px; padding: 12px 14px; border-radius: 14px; background: var(--accent-wash); }
+.tp-foryou h3 { margin: 0 0 8px; font-size: var(--t-xs); font-weight: 640; color: var(--accent-ink); }
+.tp-foryou ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.tp-jump {
+  display: block; width: calc(100% + 16px); padding: 6px 8px; margin: 0 -8px; border: 0; border-radius: 9px; background: transparent;
+  text-align: left; cursor: pointer; font: inherit; color: var(--ink); min-height: 44px; box-sizing: border-box;
+}
+.tp-jump:hover { background: oklch(1 0 0 / 0.7); }
+.tp-jump strong { display: block; font-size: var(--t-sm); font-weight: 620; }
+.tp-jump span { display: block; font-size: var(--t-xs); color: var(--ink-2); }
+
+/* Karten */
+.tp-cards { display: grid; gap: 10px; }
+.tp-card {
+  padding: 14px 16px; border-radius: 14px; background: oklch(1 0 0 / 0.82);
+  box-shadow: inset 0 0 0 1px var(--hair); scroll-margin-top: 12px;
+}
+.tp-card[data-hint="true"] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tp-card h3 { margin: 0 0 6px; font-size: var(--t-md); line-height: 1.3; font-weight: 640; letter-spacing: -0.005em; color: var(--ink); text-wrap: pretty; }
+.tp-card p { margin: 0 0 8px; font-size: var(--t-sm); line-height: 1.6; color: var(--ink-2); }
+.tp-card p:last-child { margin-bottom: 0; }
+/* Zugeklappt: drei Zeilen zum Überfliegen, der Rest hinter „Weiterlesen". */
+.tp-card[data-open="false"] > .tp-lede { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-more {
+  border: 0; background: transparent; padding: 0; min-height: 32px; cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 620; color: var(--accent-ink);
+}
+.tp-ba { display: grid; gap: 6px; margin: 10px 0; }
+.tp-ba > div { padding: 9px 11px; border-radius: 10px; font-size: var(--t-xs); line-height: 1.55; white-space: pre-line; }
+.tp-ba b { display: block; font-size: 11px; font-weight: 680; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px; }
+.tp-ba-before { background: oklch(0.97 0.004 264); color: var(--ink-2); }
+.tp-ba-before b { color: var(--ink-2); }
+.tp-ba-after { background: var(--ats-high-bg); color: var(--ink); }
+.tp-ba-after b { color: var(--ats-high-ink); }
+.tp-meta { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hair); font-size: var(--t-xs); line-height: 1.6; color: var(--ink-2); }
+.tp-meta h4 { margin: 0 0 2px; font-size: 11px; font-weight: 680; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.tp-meta ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.tp-meta a { color: var(--accent-ink); text-underline-offset: 2px; }
+
+/* Länder */
+.tp-country dl { display: grid; grid-template-columns: minmax(0, 7.5em) 1fr; gap: 4px 10px; margin: 0; font-size: var(--t-xs); line-height: 1.5; }
+.tp-country dt { font-weight: 620; color: var(--ink); }
+.tp-country dd { margin: 0; color: var(--ink-2); }
+.tp-code { display: inline-grid; place-items: center; min-width: 28px; height: 20px; padding: 0 5px; margin-right: 8px; border-radius: 6px; background: var(--ink); color: oklch(0.985 0.003 264); font-size: 11px; font-weight: 680; letter-spacing: 0.04em; vertical-align: 2px; }
+.tp-tool { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--accent-wash); font-size: var(--t-xs); line-height: 1.5; color: var(--ink); }
+.tp-tool b { color: var(--accent-ink); font-weight: 640; }
+
+/* Checkliste */
+.tp-progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; font-size: var(--t-xs); font-weight: 600; color: var(--ink); }
+.tp-reset { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--t-xs); font-weight: 600; color: var(--accent-ink); min-height: 32px; padding: 0 4px; }
+.tp-bar { height: 4px; border-radius: 4px; background: oklch(0.30 0.02 250 / 0.08); overflow: hidden; margin: 0 0 12px; }
+.tp-bar > span { display: block; height: 100%; background: var(--ats-high-ink); transform-origin: left; transition: transform var(--d2) var(--ease); }
+.tp-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tp-check { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 12px; background: oklch(1 0 0 / 0.82); box-shadow: inset 0 0 0 1px var(--hair); cursor: pointer; font-size: var(--t-sm); line-height: 1.5; color: var(--ink); }
+.tp-check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tp-check > span:first-of-type {
+  width: 20px; height: 20px; margin-top: 1px; border-radius: 6px; box-shadow: inset 0 0 0 1.5px oklch(0.30 0.02 250 / 0.35);
+  display: grid; place-items: center; color: oklch(1 0 0); background: oklch(1 0 0);
+  transition: background-color var(--d1) var(--ease);
+}
+.tp-check input:checked + span { background: var(--ats-high-ink); box-shadow: none; }
+.tp-check input:checked ~ span:last-child { color: var(--ink-2); text-decoration: line-through; text-decoration-color: oklch(0.30 0.02 250 / 0.35); }
+
+/* Prompts */
+.tp-prompt pre {
+  margin: 8px 0 0; padding: 12px 14px; border-radius: 10px; background: oklch(0.97 0.004 264);
+  font-family: var(--ui-mono); font-size: 12px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; word-break: break-word;
+}
+.tp-prompt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tp-copy {
+  flex-shrink: 0; min-height: 32px; padding: 0 11px; border: 0; border-radius: var(--r-pill); cursor: pointer;
+  font: inherit; font-size: var(--t-xs); font-weight: 620; color: var(--accent-ink); background: var(--accent-wash);
+}
+.tp-copy[data-copied="true"] { color: var(--ats-high-ink); background: var(--ats-high-bg); }
+.tp-note { margin: 8px 0 0; font-size: var(--t-xs); line-height: 1.55; color: var(--ink-2); }
+.tp-note b { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) { .tp-bar > span, .tp-tab, .tp-check > span:first-of-type { transition: none; } }

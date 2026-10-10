@@ -1,0 +1,153 @@
+/* Prüfen: Dialog „So liest ein Portal …", Befundlisten, Anschreiben-Prüfung.
+ *
+ * Baut auf den Größen aus ui/surface.css auf (--ink, --hair, --ats-*). Die
+ * Schwere eines Befunds steht immer auch als Wort da (Gruppenüberschrift),
+ * nie nur als Farbe. Ruhig gehalten: kein Rot als Fläche, nur als Tinte.
+ */
+
+/* ── Dialog ─────────────────────────────────────────────────────────────── */
+.ck-backdrop {
+  position: fixed; inset: 0; z-index: 2100;
+  background: oklch(0.21 0.021 264 / 0.38);
+  animation: ck-fade var(--d2, 220ms) var(--ease, ease);
+}
+.ck-dialog {
+  position: fixed; z-index: 2110; inset: 0; margin: auto;
+  width: min(940px, calc(100vw - 48px)); height: min(88vh, 900px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--float-solid, oklch(0.995 0.002 250));
+  border-radius: var(--r-panel, 20px);
+  box-shadow: var(--float-ring), 0 30px 80px -20px oklch(0.25 0.03 250 / 0.45);
+  font-family: var(--ui); color: var(--ink);
+  outline: none;
+  animation: ck-rise var(--d3, 360ms) var(--ease, ease);
+}
+@keyframes ck-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ck-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ck-backdrop, .ck-dialog { animation: none; } }
+
+.ck-head { padding: 20px 20px 0 28px; border-bottom: 1px solid var(--hair); flex-shrink: 0; }
+.ck-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.ck-overline { margin: 0 0 4px; font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); }
+.ck-title { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 640; letter-spacing: -0.015em; color: var(--ink); text-wrap: balance; }
+.ck-close { width: 44px; height: 44px; min-width: 44px; font-size: 22px; color: var(--ink-2); }
+.ck-docs { margin: 14px 0 0; background: oklch(0.30 0.02 250 / 0.06); }
+.ck-tabs { display: flex; gap: 22px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; }
+.ck-tab {
+  position: relative; padding: 10px 0 12px; border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: var(--t-sm); font-weight: 560; color: var(--ink-2); white-space: nowrap;
+  min-height: 44px;
+}
+.ck-tab:hover { color: var(--ink); }
+.ck-tab[aria-selected="true"] { color: var(--ink); font-weight: 640; }
+.ck-tab[aria-selected="true"]::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ink);
+}
+.ck-tab:focus-visible, .ck-docs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.ck-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 28px 28px; }
+.ck-intro { margin: 0 0 16px; max-width: 64ch; font-size: var(--t-sm); line-height: 1.6; color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  .ck-dialog { width: 100vw; height: 100dvh; border-radius: 0; }
+  .ck-head { padding: 12px 8px 0 16px; }
+  .ck-title { font-size: 19px; }
+  .ck-body { padding: 16px 16px 28px; }
+  .ck-docs { display: flex; width: calc(100% - 8px); }
+  .ck-docs > button { flex: 1; padding: 0 8px; }
+}
+
+/* ── Befunde ─────────────────────────────────────────────────────────────── */
+.ck-group { margin: 0 0 14px; }
+.ck-group-title {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 6px;
+  font-size: var(--t-xs); font-weight: 640; letter-spacing: 0.02em; color: var(--ink);
+}
+.ck-group-title .ck-mark { width: 18px; height: 18px; }
+.ck-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ck-item {
+  display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start;
+  padding: 10px 12px; border-radius: 12px;
+  background: oklch(1 0 0 / 0.75); box-shadow: inset 0 0 0 1px var(--hair);
+  font-size: var(--t-sm); line-height: 1.5; color: var(--ink);
+}
+.ck-item[data-sev="ok"] { background: transparent; box-shadow: none; padding: 4px 12px; color: var(--ink-2); }
+.ck-mark { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; flex-shrink: 0; }
+.ck-mark[data-sev="fehler"] { color: var(--ats-low-ink); background: var(--ats-low-bg); }
+.ck-mark[data-sev="hinweis"] { color: var(--ats-mid-ink); background: var(--ats-mid-bg); }
+.ck-mark[data-sev="ok"] { color: var(--ats-high-ink); background: var(--ats-high-bg); }
+.ck-passed > summary {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px; min-height: 36px;
+  font-size: var(--t-xs); font-weight: 600; color: var(--ink-2);
+}
+.ck-passed > summary::-webkit-details-marker { display: none; }
+.ck-passed > summary::before { content: '▸'; font-size: 10px; transition: transform var(--d1) var(--ease); }
+.ck-passed[open] > summary::before { transform: rotate(90deg); }
+.ck-passed > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.ck-none { margin: 0 0 12px; font-size: var(--t-sm); color: var(--ats-high-ink); font-weight: 600; }
+.ck-measuring { font-size: var(--t-xs); color: var(--ink-2); margin: 0 0 10px; }
+
+/* ── Textansicht ─────────────────────────────────────────────────────────── */
+.ck-h { margin: 22px 0 8px; font-size: var(--t-sm); font-weight: 640; color: var(--ink); }
+.ck-pre {
+  margin: 0; padding: 18px 22px; border-radius: 14px;
+  background: var(--ink); color: oklch(0.97 0.004 264);
+  font-family: var(--ui-mono); font-size: 12.5px; line-height: 1.65;
+  white-space: pre-wrap; word-break: break-word; max-height: 52vh; overflow: auto;
+}
+
+/* ── Stellenanzeige ──────────────────────────────────────────────────────── */
+.ck-label { display: block; margin: 0 0 6px; font-size: var(--t-sm); font-weight: 620; color: var(--ink); }
+.ck-textarea, .ck-input {
+  width: 100%; box-sizing: border-box; padding: 12px 14px;
+  font: inherit; font-size: var(--t-sm); line-height: 1.55; color: var(--ink);
+  background: oklch(0.985 0.003 264); border: 0; border-radius: 12px;
+  box-shadow: inset 0 0 0 1px oklch(0.30 0.02 250 / 0.16);
+}
+.ck-textarea { resize: vertical; min-height: 150px; }
+.ck-textarea:focus, .ck-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; background: oklch(1 0 0); }
+.ck-meta { margin: 6px 0 0; font-size: var(--t-xs); color: var(--ink-2); line-height: 1.5; }
+.ck-facts { margin: 18px 0 4px; padding: 14px 16px; border-radius: 14px; background: var(--accent-wash); }
+.ck-facts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.ck-facts-grid label { font-size: var(--t-xs); font-weight: 600; color: var(--ink-2); display: grid; gap: 4px; }
+.ck-facts .ck-input { padding: 9px 12px; background: oklch(1 0 0); }
+@media (max-width: 640px) { .ck-facts-grid { grid-template-columns: 1fr; } }
+
+.ck-terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 8px; }
+@media (max-width: 640px) { .ck-terms { grid-template-columns: 1fr; } }
+.ck-terms h4 { margin: 0 0 8px; font-size: var(--t-xs); font-weight: 640; color: var(--ink); }
+.ck-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ck-chip {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 10px; border-radius: var(--r-pill);
+  font-size: 12.5px; font-weight: 560; color: var(--ink); background: oklch(1 0 0); box-shadow: inset 0 0 0 1px var(--hair);
+}
+.ck-chip[data-hit="true"] { color: var(--ats-high-ink); background: var(--ats-high-bg); box-shadow: none; }
+
+/* ── Stil ────────────────────────────────────────────────────────────────── */
+.ck-style { display: grid; gap: 10px; }
+.ck-style-kind { padding: 12px 14px; border-radius: 14px; background: oklch(1 0 0 / 0.75); box-shadow: inset 0 0 0 1px var(--hair); }
+.ck-style-kind h4 { margin: 0 0 4px; font-size: var(--t-sm); font-weight: 640; }
+.ck-style-kind p { margin: 0 0 8px; font-size: var(--t-xs); line-height: 1.55; color: var(--ink-2); }
+.ck-hit { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 9px; margin: 0 6px 6px 0; border-radius: 8px; background: var(--ats-mid-bg); color: var(--ink); font-size: 12.5px; }
+.ck-hit small { color: var(--ink-2); font-size: 11px; }
+.ck-sources { margin: 18px 0 0; padding-top: 12px; border-top: 1px solid var(--hair); font-size: var(--t-xs); line-height: 1.7; color: var(--ink-2); }
+.ck-sources a { color: var(--accent-ink); text-underline-offset: 2px; }
+
+/* ── Beide ───────────────────────────────────────────────────────────────── */
+.ck-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); margin-top: 8px; }
+.ck-table th { text-align: left; font-size: var(--t-xs); font-weight: 640; color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--hair); }
+.ck-table td { padding: 7px 8px; border-bottom: 1px solid var(--hair); }
+.ck-table td[data-yes="true"] { color: var(--ats-high-ink); font-weight: 620; }
+.ck-table td[data-yes="false"] { color: var(--ink-2); }
+.ck-table th:not(:first-child), .ck-table td:not(:first-child) { width: 7.5em; }
+
+/* ── Paneel ──────────────────────────────────────────────────────────────── */
+.ck-panel-docs { display: flex; width: 100%; background: oklch(0.30 0.02 250 / 0.06); }
+.ck-panel-docs > button { flex: 1; padding: 0 6px; min-height: 36px; }
+.ck-panel-summary { margin: 0 0 8px; font-size: var(--t-sm); line-height: 1.5; color: var(--ink); font-weight: 560; }
+.ck-panel-list { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 6px; }
+.ck-panel-list li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; font-size: var(--t-xs); line-height: 1.5; color: var(--ink); }
+.ck-open {
+  margin-top: 12px; width: 100%; justify-content: space-between; min-height: 52px; border-radius: 14px; padding: 8px 14px; text-align: left;
+}
+.ck-open-title { display: block; font-weight: 620; }
+.ck-open-sub { display: block; font-size: var(--t-xs); color: var(--ink-2); font-weight: 450; white-space: normal; }

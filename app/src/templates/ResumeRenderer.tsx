@@ -2,7 +2,7 @@ import React from 'react';
 import type { CVData, SocialLink, SectionKey, PageFormat } from '../data/types';
 import { getPageFormat } from '../data/pageFormats';
 import type { ResumeTheme, ThemeColors, FontPairing, BulletStyle } from './theme';
-import { MONO } from './theme';
+import { MONO, templateOrder, skillsHeading } from './theme';
 import { TRACK_CAPS, TRACK_NAME, FS, LH, MIN_X_HEIGHT_PX, fs, fsn, sp, spn, pd, pdn, lh, type Metrics } from './metrics';
 import type { InlinePath } from '../data/inlineEdit';
 import { Ed, EntryTools, InlineEditCtx, type InlineEditApi } from './InlineEdit';
@@ -49,12 +49,16 @@ export function webHref(v: string): string {
   return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, '')}`;
 }
 
+/** Metadaten nur für bekannte Plattformen; gespeicherte Altdaten mit
+ *  „__proto__“ o. ä. brechen so die Vorschau nicht (Audit 10.10.2026, S6). */
+const metaOf = (p: unknown) => (typeof p === 'string' && Object.hasOwn(SOCIAL_META, p) ? SOCIAL_META[p as keyof typeof SOCIAL_META] : undefined);
+
 /** Pretty value for a social — uses platform prefix if user only wrote a handle. */
 export function socialDisplay(s: SocialLink): string {
   const v = (s.value || '').trim();
   if (!v) return '';
   if (/^https?:\/\//i.test(v) || v.includes('/')) return shortUrl(v);
-  return SOCIAL_META[s.platform]?.prefix + v;
+  return (metaOf(s.platform)?.prefix ?? '') + v;
 }
 
 export function socialHref(s: SocialLink): string {
@@ -65,7 +69,7 @@ export function socialHref(s: SocialLink): string {
 }
 
 export function socialLabel(s: SocialLink): string {
-  return SOCIAL_META[s.platform]?.label || s.platform;
+  return metaOf(s.platform)?.label || (typeof s.platform === 'string' ? s.platform : '');
 }
 
 /** Kontaktzeile für Kopfbalken (E-Mail · Telefon · Ort · Web · Profile).
@@ -220,8 +224,11 @@ function Marker({ style, color, M, widthPx }: { style: BulletStyle; color: strin
  *  genau den Merkmalen, die hier zusammenkommen — allein in der Zeile, fett,
  *  größer als der Fließtext. Die Auszeichnung ersetzt den sichtbaren Kontrast
  *  nicht, sie ergänzt ihn. */
-function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num }: {
+function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
   label: string; T: ResumeTheme; C: ThemeColors; P: FontPairing; M: Metrics; onPanel?: boolean;
+  /** Gruppenüberschrift der Kenntnisse in der Hauptspalte, kein Abschnitt.
+   *  Wirkt nur in den Überschriftenstilen vom 10.10.2026. */
+  group?: boolean;
   /** Gliederungsnummer (nur Überschriftenstil `numbered`, nur Hauptabschnitte). */
   num?: number;
   /** Steht in der Seitenspalte — dort gilt ein anderer Abstand nach unten. */
@@ -253,6 +260,17 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num }: {
   // letter-spacing muss em-basiert sein, damit es mit der tatsächlichen
   // Schriftgröße skaliert. px-basiertes Tracking sprengte in schmalen Spalten
   // die Wörter ('G EB U R TS D A TU M').
+  /* Gruppenüberschriften der Kenntnisse in Freiburg: eine Stufe leiser als
+   * die gefüllten Abschnittsköpfe, sonst stünde die Rangfolge auf dem Kopf.
+   * Gilt nur mit `groupHeads: 'small'` — Berlin und Amsterdam bleiben. */
+  if (T.heading === 'block' && group && T.groupHeads === 'small') {
+    return (
+      <h2 style={{
+        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+        textTransform: 'uppercase', color: accent, marginBottom: sp(headGap, M), overflowWrap: 'normal', wordBreak: 'normal',
+      }}>{L}</h2>
+    );
+  }
   if (T.heading === 'block') {
     return (
       <h2 style={{
@@ -301,7 +319,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num }: {
            * gleicher Blattbreite (14.09.) zeigt: Bei Robin Masset und Damian
            * Watracz ist die Sektionsüberschrift das DREI- bis VIERFACHE des
            * Fließtexts; bei uns war sie das 1,8-fache. Genau dieser Abstand
-           * — nicht der Schriftgrad — macht den Eindruck aus, den Till mit
+           * — nicht der Schriftgrad — macht den Eindruck aus, der mit
            * „kreativ" meint. 1,15 × nameS ≈ 21 pt ≈ 2,4-facher Fließtext. */
           ...H2, fontFamily: P.heading, fontSize: fs(FS.nameS * (aside ? 0.62 : 1.15), M),
           fontWeight: 700, color: ink, lineHeight: 1.0, letterSpacing: '-0.015em',
@@ -373,6 +391,56 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num }: {
       </div>
     );
   }
+  /* Versalzeile in der Überschriftenschrift über einer durchgehenden Linie
+   * in Schriftfarbe (Dublin). Gruppenüberschriften der Kenntnisse ohne
+   * Linie, sonst stünden drei Linien nebeneinander. */
+  if (T.heading === 'caps-full') {
+    const caps: React.CSSProperties = {
+      ...H2, fontFamily: P.heading, fontSize: fs(FS.meta * (group || aside ? 1 : 1.12), M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+      textTransform: 'uppercase', color: ink, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
+    };
+    if (group || aside) return <h2 style={{ ...caps, marginBottom: sp(headGap, M) }}>{L}</h2>;
+    return (
+      <div style={{ marginBottom: sp(headGap, M), minWidth: 0 }}>
+        <h2 style={caps}>{L}</h2>
+        <div style={{ height: `${0.9 * M.t}px`, background: ink, marginTop: sp(3, M) }} />
+      </div>
+    );
+  }
+  /* Überschrift rechtsbündig in der breiten Datumsspalte, rechts davon eine
+   * Haarlinie bis zum Rand (Luxemburg). Gruppenüberschriften stehen als
+   * schlichte Versalzeile in ihrer Spalte. */
+  if (T.heading === 'label') {
+    const caps: React.CSSProperties = {
+      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+      textTransform: 'uppercase', color: accent, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
+    };
+    if (group || aside) return <h2 style={{ ...caps, color: ink, marginBottom: sp(headGap, M) }}>{L}</h2>;
+    return (
+      <div style={{
+        display: 'grid', gridTemplateColumns: `${T.dateColMm ?? DATE_COL_MM}mm minmax(0, 1fr)`, columnGap: `${DATE_GAP_MM}mm`,
+        alignItems: 'center', marginBottom: sp(headGap, M), minWidth: 0,
+      }}>
+        <h2 style={{ ...caps, textAlign: 'right' }}>{L}</h2>
+        <div aria-hidden style={{ height: `${0.9 * M.t}px`, background: C.rule }} />
+      </div>
+    );
+  }
+  /* Überschrift in gleich breiter Schrift, normale Schreibung, eine
+   * Haarlinie läuft bis zum Rand (Tallinn). */
+  if (T.heading === 'mono') {
+    const t: React.CSSProperties = {
+      ...H2, fontFamily: MONO, fontSize: fs(FS.entry * (group || aside ? 0.86 : 1), M), fontWeight: 500, color: group || aside ? ink : accent,
+      letterSpacing: '-0.01em', lineHeight: lh(LH.title, M), overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0, flexShrink: 0,
+    };
+    if (group || aside) return <h2 style={{ ...t, marginBottom: sp(headGap, M) }}>{L}</h2>;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: sp(8, M), marginBottom: sp(headGap, M), minWidth: 0 }}>
+        <h2 style={t}>{L}</h2>
+        <div aria-hidden style={{ flex: '1 1 auto', height: `${0.9 * M.t}px`, background: C.rule }} />
+      </div>
+    );
+  }
   if (T.heading === 'caps-rule') {
     return (
       <div style={{ marginBottom: sp(headGap, M), minWidth: 0 }}>
@@ -409,7 +477,7 @@ function BulletLine({ text, C, T, M, onPanel, path }: {
   return (
     <div style={{
       fontSize: fs(FS.body, M), color: onPanel ? C.panelInkSoft : C.inkMid, lineHeight: lh(LH.body, M),
-      display: 'flex', alignItems: 'flex-start', maxWidth: '122mm',
+      display: 'flex', alignItems: 'flex-start', maxWidth: T.wideMeasure ? undefined : '122mm',
     }}>
       <Marker style={T.bullet} color={onPanel ? C.panelAccent : C.accent} M={M} widthPx={16 * M.t} />
       <span style={{ flex: '1 1 auto', minWidth: 0 }}><Ed path={path} block>{text}</Ed></span>
@@ -773,12 +841,18 @@ function RailNode({ C, M, top, big }: { C: ThemeColors; M: Metrics; top: number;
   );
 }
 
-function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dateFont }: {
+function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dateFont, variant, dateCol = DATE_COL_MM, labelRight }: {
   e: CVData['experience'][number]; data: CVData; C: ThemeColors; P: FontPairing; M: Metrics;
   tabular: boolean; timeline?: boolean; isLast?: boolean;
   /** Rasterspalten der Zeitachse (Datum · Knoten · Text), siehe `rail`. */
   rail?: string;
   dateFont?: 'mono' | 'heading';
+  /** Eintragskopf ohne Datumsspalte (`entryHead` der Vorlage). */
+  variant?: 'split' | 'line';
+  /** Breite der Datumsspalte in mm (`dateColMm`). */
+  dateCol?: number;
+  /** Datumsspalte rechtsbündig (`labelAlign: 'right'`). */
+  labelRight?: boolean;
 }) {
   const body = (
     <div style={{ minWidth: 0 }}>
@@ -799,6 +873,14 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
     </DateChip>
   );
 
+  if (variant) {
+    return (
+      <SplitHead variant={variant} C={C} P={P} M={M} date={date} titleSize={FS.role}
+        title={<Ed path={`experience.${e.id}.role`}>{e.role}</Ed>} hasTitle={!!e.role}
+        sub={e.company ? <Ed path={`experience.${e.id}.company`}>{e.company}</Ed> : null}
+        note={e.location ? <Ed path={`experience.${e.id}.location`}>{e.location}</Ed> : null} />
+    );
+  }
   if (tabular && rail) {
     const line = fsn(FS.role, M) * LH.title;
     return (
@@ -813,8 +895,8 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
     // Tabellarische Datumsspalte — die im DACH-Raum erwartete Form. Das Datum
     // steht 8 mm neben dem Titel statt 190 mm entfernt am rechten Blattrand.
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
-        <div style={{ paddingTop: `${fsn(FS.role, M) * 0.18}px` }}>{date}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `${dateCol}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.role, M) * 0.18}px`, textAlign: labelRight ? 'right' : undefined }}>{date}</div>
         {body}
       </div>
     );
@@ -840,9 +922,12 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
   );
 }
 
-function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont }: {
+function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont, variant, dateCol = DATE_COL_MM, labelRight, wide }: {
   e: CVData['education'][number]; C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
   rail?: string; dateFont?: 'mono' | 'heading';
+  variant?: 'split' | 'line'; dateCol?: number; labelRight?: boolean;
+  /** Notiz über die volle Satzbreite (`wideMeasure`). */
+  wide?: boolean;
 }) {
   const body = (
     <div style={{ minWidth: 0 }}>
@@ -864,6 +949,19 @@ function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont }: {
       <Ed path={`education.${e.id}.end`}>{e.end}</Ed>
     </DateChip>
   );
+  if (variant) {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <SplitHead variant={variant} C={C} P={P} M={M} date={date} titleSize={FS.entry}
+          title={<Ed path={`education.${e.id}.degree`}>{e.degree}</Ed>} hasTitle={!!e.degree}
+          sub={e.institution ? <Ed path={`education.${e.id}.institution`}>{e.institution}</Ed> : null}
+          note={e.location ? e.location : null} />
+        {e.notes && <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, marginTop: sp(2, M), maxWidth: wide ? undefined : '122mm' }}>
+          <Ed path={`education.${e.id}.notes`}>{e.notes}</Ed>
+        </div>}
+      </div>
+    );
+  }
   if (tabular && rail) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
@@ -875,8 +973,8 @@ function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont }: {
   }
   if (tabular) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
-        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.18}px` }}>{date}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `${dateCol}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.18}px`, textAlign: labelRight ? 'right' : undefined }}>{date}</div>
         {body}
       </div>
     );
@@ -885,6 +983,41 @@ function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont }: {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: sp(10, M) }}>
       <div style={{ flex: 1, minWidth: 0 }}>{body}</div>
       {date}
+    </div>
+  );
+}
+
+/** Eintragskopf ohne Datumsspalte (Vorlagen vom 10.10.2026).
+ *
+ *  `split`: zwei Zeilen — links Titel und darunter Firma bzw. Einrichtung,
+ *  rechts Zeitraum und darunter der Ort. So steht es in englischsprachigen
+ *  Lebensläufen; im Textstrom folgt auf den Titel der Zeitraum, dann Firma
+ *  und Ort, jeweils in einer Zeile.
+ *  `line`: alles in einer Zeile, „Titel · Firma · Ort", Zeitraum rechts.
+ *  Bricht die Zeile, laufen die Teile an den Mittelpunkten um. */
+function SplitHead({ variant, title, hasTitle, sub, note, date, titleSize, C, P, M }: {
+  variant: 'split' | 'line'; title: React.ReactNode; hasTitle: boolean; sub: React.ReactNode; note: React.ReactNode;
+  date: React.ReactNode; titleSize: number; C: ThemeColors; P: FontPairing; M: Metrics;
+}) {
+  const h3: React.CSSProperties = { margin: 0, fontFamily: P.heading, fontSize: fs(titleSize, M), fontWeight: 600, color: C.ink, lineHeight: lh(LH.title, M) };
+  if (variant === 'line') {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: sp(10, M) }}>
+        <div style={{ flex: 1, minWidth: 0, lineHeight: lh(LH.title, M) }}>
+          {hasTitle && <h3 style={{ ...h3, display: 'inline' }}>{title}</h3>}
+          {sub && <span style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), fontWeight: 600, color: C.accent }}>{hasTitle ? '  ·  ' : ''}{sub}</span>}
+          {note && <span style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.inkSoft }}>{hasTitle || sub ? '  ·  ' : ''}{note}</span>}
+        </div>
+        {date}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', columnGap: sp(12, M), rowGap: sp(1.5, M), alignItems: 'baseline' }}>
+      {hasTitle ? <h3 style={h3}>{title}</h3> : <div />}
+      <div style={{ textAlign: 'right' }}>{date}</div>
+      {sub ? <div style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), fontWeight: 600, color: C.accent, minWidth: 0 }}>{sub}</div> : <div />}
+      {note ? <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, textAlign: 'right', whiteSpace: 'nowrap' }}>{note}</div> : <div />}
     </div>
   );
 }
@@ -916,12 +1049,13 @@ function ExtraLink({ url, C, P, M }: { url: string; C: ThemeColors; P: FontPairi
     : <div style={style}><a href={linkHref(url)} style={{ color: 'inherit', textDecoration: 'none' }}>{text}</a></div>;
 }
 
-function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFont, num }: {
+function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFont, num, variant, dateCol = DATE_COL_MM, labelRight }: {
   title: string; sub?: string; note?: string; url?: string; date?: string;
   C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
   rail?: string; dateFont?: 'mono' | 'heading';
   /** Laufende Nummer vor dem Titel (`numberedPubs`). */
   num?: number;
+  variant?: 'split' | 'line'; dateCol?: number; labelRight?: boolean;
 }) {
   const subLine = [sub, note].filter(Boolean);
   const body = (
@@ -941,6 +1075,16 @@ function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFo
     </div>
   );
   const chip = date ? <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>{date}</DateChip> : null;
+  if (variant) {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <SplitHead variant={variant} C={C} P={P} M={M} date={chip} titleSize={FS.entry}
+          title={<>{num != null && <span style={{ color: C.accent }}>{`[${num}] `}</span>}{title}</>} hasTitle={!!title}
+          sub={sub || null} note={note || null} />
+        {url ? <ExtraLink url={url} C={C} P={P} M={M} /> : null}
+      </div>
+    );
+  }
   if (tabular && rail) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: rail, alignItems: 'start' }}>
@@ -952,8 +1096,8 @@ function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFo
   }
   if (tabular) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
-        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.18}px` }}>{chip}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `${dateCol}mm 1fr`, columnGap: `${DATE_GAP_MM}mm`, alignItems: 'start' }}>
+        <div style={{ paddingTop: `${fsn(FS.entry, M) * 0.18}px`, textAlign: labelRight ? 'right' : undefined }}>{chip}</div>
         {body}
       </div>
     );
@@ -968,11 +1112,11 @@ function ExtraHead({ title, sub, note, url, date, C, P, M, tabular, rail, dateFo
 
 /** Fließtext unter einem Eintrag (Projektbeschreibung, Text eines freien
  *  Eintrags). Zeilenmaß und Farbe wie die Notizen der Ausbildung. */
-function ExtraText({ text, C, P, M }: { text: string; C: ThemeColors; P: FontPairing; M: Metrics }) {
+function ExtraText({ text, C, P, M, wide }: { text: string; C: ThemeColors; P: FontPairing; M: Metrics; wide?: boolean }) {
   return (
     <p style={{
       fontFamily: P.body, fontSize: fs(FS.body, M), color: C.inkMid, lineHeight: lh(LH.body, M),
-      margin: 0, maxWidth: '122mm', whiteSpace: 'pre-line',
+      margin: 0, maxWidth: wide ? undefined : '122mm', whiteSpace: 'pre-line',
     }}>{text}</p>
   );
 }
@@ -1089,6 +1233,7 @@ const MAIN_ORDER_SIDEBAR: SectionKey[] = [
   'skills', 'volunteering', 'publications', 'additional', 'custom',
 ];
 
+
 interface Props {
   data: CVData;
   theme: ResumeTheme;
@@ -1151,8 +1296,12 @@ export default function ResumeRenderer({
   // standen (einmal Nebenspalte, einmal Hauptspalte) und die sieben Band-
   // Vorlagen deshalb über den Seitenrand liefen.
   const hasAside = isSidebar || (T.layout === 'header-band' && !T.bandSolo);
-  const tabular = ((T.layout === 'single-column' || T.layout === 'timeline' || T.layout === 'top-centered') && !T.hangMm)
-    || (T.layout === 'header-band' && !!T.bandSolo);
+  const tabular = (((T.layout === 'single-column' || T.layout === 'timeline' || T.layout === 'top-centered') && !T.hangMm)
+    || (T.layout === 'header-band' && !!T.bandSolo)) && !T.entryHead;
+  /** Breite der Datumsspalte (`dateColMm`), Vorgabe wie bisher 26 mm. */
+  const dc = T.dateColMm ?? DATE_COL_MM;
+  /** Gemeinsame Angaben für alle Eintragsköpfe der Vorlagen vom 10.10.2026. */
+  const headOpts = { variant: T.entryHead, dateCol: dc, labelRight: T.labelAlign === 'right' };
   /** Breiter Rand mit hängenden Überschriften (Weimar): Breite in mm, sonst 0. */
   const hang = !hasAside && T.hangMm ? T.hangMm : 0;
   /** Rasterspalten der Zeitachse (Kiel): Datum · Knoten · Text. */
@@ -1163,7 +1312,7 @@ export default function ResumeRenderer({
   const profileAside = isSidebar && T.profileInSidebar === true;
   const defaultOrder: SectionKey[] = hasAside
     ? (profileAside ? MAIN_ORDER_SIDEBAR.filter(k => k !== 'profile') : MAIN_ORDER_SIDEBAR)
-    : DEFAULT_MAIN_ORDER;
+    : T.mainOrder ? templateOrder(T.mainOrder) : DEFAULT_MAIN_ORDER;
   const ownable = new Set<SectionKey>(defaultOrder);
   const mainOrder: SectionKey[] = (() => {
     if (!sectionOrder || !sectionOrder.length) return defaultOrder;
@@ -1197,9 +1346,31 @@ export default function ResumeRenderer({
       // in tabellarischen Layouts jetzt auf derselben Kante beginnt wie die
       // Einträge, endet er dort auch auf derselben — vorher liefen im selben
       // Absatzblock zwei verschiedene rechte Kanten nebeneinander her.
-      lineHeight: lh(LH.body, M), margin: 0, maxWidth: '122mm', whiteSpace: 'pre-line',
+      lineHeight: lh(LH.body, M), margin: 0, maxWidth: T.wideMeasure ? undefined : '122mm', whiteSpace: 'pre-line',
     }}><Ed path="profile.text">{profile.text}</Ed></p>
   );
+  /* Profil als Kasten (Freiburg) oder als Einleitungsabsatz (Graz). Beides
+   * nur Rahmen und Schriftgrad — im Textstrom steht derselbe Absatz. */
+  const profileFlow = (): React.ReactNode => {
+    if (T.profileStyle === 'box') {
+      return (
+        <div style={{ background: C.chipBg, borderRadius: `${4 * M.t}px`, padding: `${pd(12, M)} ${pd(14, M)}` }}>
+          {profilePara(C.inkMid)}
+        </div>
+      );
+    }
+    if (T.profileStyle === 'lead') {
+      return (
+        <div style={{ borderLeft: `${2.4 * M.t}px solid ${C.accent}`, paddingLeft: pd(12, M) }}>
+          <p style={{
+            fontFamily: P.body, fontSize: fs(FS.body * 1.14, M), color: C.ink,
+            lineHeight: lh(LH.body, M), margin: 0, maxWidth: '132mm', whiteSpace: 'pre-line',
+          }}><Ed path="profile.text">{profile.text}</Ed></p>
+        </div>
+      );
+    }
+    return profilePara();
+  };
 
   // ── Blöcke der Hauptspalte bauen ──────────────────────────────────────────
   const GAP_SECTION = spn(20, M);   // vor einer neuen Sektion
@@ -1222,7 +1393,7 @@ export default function ResumeRenderer({
   const indented = (node: React.ReactNode): React.ReactNode => (tabular
     ? (rail
       ? <div style={{ display: 'grid', gridTemplateColumns: rail }}><div /><div />{node}</div>
-      : <div style={{ display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }}>
+      : <div style={{ display: 'grid', gridTemplateColumns: `${dc}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }}>
         <div />{node}
       </div>)
     : hang ? hangWrap(node) : node);
@@ -1232,7 +1403,7 @@ export default function ResumeRenderer({
   /** Raster einer Stichpunktzeile — dieselben Spalten wie der Eintragskopf. */
   const bulletRow = (extraTimeline: boolean): React.CSSProperties | undefined => (rail
     ? { display: 'grid', gridTemplateColumns: rail }
-    : tabular ? { display: 'grid', gridTemplateColumns: `${DATE_COL_MM}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }
+    : tabular ? { display: 'grid', gridTemplateColumns: `${dc}mm 1fr`, columnGap: `${DATE_GAP_MM}mm` }
       : hang ? { display: 'grid', gridTemplateColumns: `${hang}mm minmax(0, 1fr)` }
         : (extraTimeline && T.layout === 'timeline' ? { paddingLeft: `${16 * M.t}px` } : undefined));
   /* Abschnittsüberschriften der Hauptspalte. Zählt mit, wo die Vorlage
@@ -1264,7 +1435,7 @@ export default function ResumeRenderer({
       if (isSidebar && !T.nameInSidebar) continue;
       push({
         id: 'profile', section: 'profile', gap: GAP_SECTION, breakBefore,
-        node: <>{secTitle(sec.profile, 'labels.sections.profile')}{indented(profilePara())}</>,
+        node: <>{secTitle(sec.profile, 'labels.sections.profile')}{indented(T.profileStyle ? profileFlow() : profilePara())}</>,
       });
       continue;
     }
@@ -1307,7 +1478,7 @@ export default function ResumeRenderer({
           keepWithNext: e.bullets.length > 0,
           node: (
             <>
-              {onEdge(<ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} rail={rail} dateFont={T.dateFont} />)}
+              {onEdge(<ExperienceHead e={e} data={data} C={C} P={P} M={M} tabular={tabular} timeline={T.layout === 'timeline'} isLast={i === entries.length - 1} rail={rail} dateFont={T.dateFont} {...headOpts} />)}
               {/* Nur mit Bearbeitungskontext, ohne Höhe, außerhalb des Flusses. */}
               <EntryTools kind="experience" id={e.id} index={data.experience.indexOf(e)} count={data.experience.length} />
             </>
@@ -1341,7 +1512,7 @@ export default function ResumeRenderer({
           id: `education:${e.id}`, section: 'education', gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           node: (
             <>
-              {onEdge(<EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />)}
+              {onEdge(<EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} wide={T.wideMeasure} />)}
               <EntryTools kind="education" id={e.id} index={i} count={data.education.length} />
             </>
           ),
@@ -1352,6 +1523,52 @@ export default function ResumeRenderer({
 
     if (key === 'skills') {
       if (!mainSkills.length) continue;
+      /* Kenntnisse als Zeilen „Gruppe: A, B, C" unter einer Überschrift
+       * (Tallinn). Die Form, in der Parser eine Kenntnisliste am sichersten
+       * erkennen: ein Begriff, ein Doppelpunkt, eine Aufzählung. */
+      if (T.skillsStyle === 'inline') {
+        push({
+          id: 'skills', section: 'skills', gap: GAP_SECTION, breakBefore,
+          node: (
+            <>
+              {secTitle(skillsHeading(labels), 'labels.sections.skills')}
+              {indented(
+                <div style={{ display: 'flex', flexDirection: 'column', gap: sp(4, M) }}>
+                  {mainSkills.map(g => {
+                    const gi = data.skillGroups.indexOf(g);
+                    return (
+                      <div key={g.label} style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), color: C.inkMid, lineHeight: lh(LH.body, M), maxWidth: T.wideMeasure ? undefined : '132mm' }}>
+                        <span style={{ fontWeight: 600, color: C.ink }}><Ed path={`skills.${gi}.label`}>{g.label}</Ed></span>{': '}
+                        {g.items.map((it, i) => (
+                          <React.Fragment key={`${it}-${i}`}>{i > 0 ? ', ' : ''}<Ed path={`skills.${gi}.items.${i}`}>{it}</Ed></React.Fragment>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>,
+              )}
+            </>
+          ),
+        });
+        continue;
+      }
+      /* Je Gruppe ein getönter Kasten, zwei nebeneinander (Linz). */
+      if (T.skillsStyle === 'panels') {
+        push({
+          id: 'skills', section: 'skills', gap: GAP_SECTION, breakBefore,
+          node: indented(
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(mainSkills.length, 2)}, minmax(0, 1fr))`, gap: `${spn(10, M)}px ${spn(12, M)}px` }}>
+              {mainSkills.map(g => (
+                <div key={g.label} style={{ background: C.chipBg, borderRadius: `${4 * M.t}px`, padding: `${pd(11, M)} ${pd(13, M)}`, minWidth: 0 }}>
+                  <SectionTitle label={g.label} path={`skills.${data.skillGroups.indexOf(g)}.label`} T={T} C={C} P={P} M={M} group />
+                  <SkillGroupBlock group={g} T={T} C={C} P={P} M={M} pathBase={`skills.${data.skillGroups.indexOf(g)}.items`} />
+                </div>
+              ))}
+            </div>,
+          ),
+        });
+        continue;
+      }
       const cols = Math.min(mainSkills.length, 3);
       push({
         id: 'skills', section: 'skills', gap: GAP_SECTION, breakBefore,
@@ -1359,7 +1576,7 @@ export default function ResumeRenderer({
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: `${spn(16, M)}px ${spn(24, M)}px` }}>
             {mainSkills.map(g => (
               <div key={g.label}>
-                <SectionTitle label={g.label} path={`skills.${data.skillGroups.indexOf(g)}.label`} T={T} C={C} P={P} M={M} aside={T.groupHeads === 'small' ? true : undefined} />
+                <SectionTitle label={g.label} path={`skills.${data.skillGroups.indexOf(g)}.label`} T={T} C={C} P={P} M={M} aside={T.groupHeads === 'small' ? true : undefined} group />
                 <SkillGroupBlock group={g} T={T} C={C} P={P} M={M} pathBase={`skills.${data.skillGroups.indexOf(g)}.items`} />
               </div>
             ))}
@@ -1433,11 +1650,11 @@ export default function ResumeRenderer({
           id: `projects:${i}:head`, section: 'projects', entry,
           gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           keepWithNext: !!desc || bullets.length > 0,
-          node: onEdge(<ExtraHead title={(e.title || '').trim()} sub={(e.role || '').trim()} url={(e.url || '').trim()} date={dateRange(e.start, e.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
+          node: onEdge(<ExtraHead title={(e.title || '').trim()} sub={(e.role || '').trim()} url={(e.url || '').trim()} date={dateRange(e.start, e.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} />),
         });
         if (desc) push({
           id: `projects:${i}:desc`, section: 'projects', entry, gap: spn(4, M),
-          node: indented(<ExtraText text={desc} C={C} P={P} M={M} />),
+          node: indented(<ExtraText text={desc} C={C} P={P} M={M} wide={T.wideMeasure} />),
         });
         bulletBlocks(`projects:${i}`, 'projects', bullets, spn(desc ? 4 : 6, M), undefined, entry);
       });
@@ -1452,7 +1669,7 @@ export default function ResumeRenderer({
         push({
           id: `certificates:${i}`, section: 'certificates',
           gap: i === 0 ? GAP_HEAD : spn(10, M),
-          node: onEdge(<ExtraHead title={(c.name || '').trim()} sub={(c.issuer || '').trim()} note={(c.credentialId || '').trim()} url={(c.url || '').trim()} date={(c.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
+          node: onEdge(<ExtraHead title={(c.name || '').trim()} sub={(c.issuer || '').trim()} note={(c.credentialId || '').trim()} url={(c.url || '').trim()} date={(c.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} />),
         });
       });
       continue;
@@ -1469,7 +1686,7 @@ export default function ResumeRenderer({
           id: `volunteering:${i}:head`, section: 'volunteering', entry,
           gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           keepWithNext: bullets.length > 0,
-          node: onEdge(<ExtraHead title={(v.role || '').trim()} sub={(v.organization || '').trim()} note={(v.location || '').trim()} date={dateRange(v.start, v.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
+          node: onEdge(<ExtraHead title={(v.role || '').trim()} sub={(v.organization || '').trim()} note={(v.location || '').trim()} date={dateRange(v.start, v.end, present)} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} />),
         });
         bulletBlocks(`volunteering:${i}`, 'volunteering', bullets, spn(6, M), undefined, entry);
       });
@@ -1486,11 +1703,11 @@ export default function ResumeRenderer({
           id: `publications:${i}:head`, section: 'publications',
           gap: i === 0 ? GAP_HEAD : spn(10, M),
           keepWithNext: !!desc,
-          node: onEdge(<ExtraHead title={(p.title || '').trim()} sub={(p.publisher || '').trim()} url={(p.url || '').trim()} date={(p.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} num={T.numberedPubs ? i + 1 : undefined} />),
+          node: onEdge(<ExtraHead title={(p.title || '').trim()} sub={(p.publisher || '').trim()} url={(p.url || '').trim()} date={(p.date || '').trim()} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} num={T.numberedPubs ? i + 1 : undefined} {...headOpts} />),
         });
         if (desc) push({
           id: `publications:${i}:desc`, section: 'publications', gap: spn(4, M),
-          node: indented(<ExtraText text={desc} C={C} P={P} M={M} />),
+          node: indented(<ExtraText text={desc} C={C} P={P} M={M} wide={T.wideMeasure} />),
         });
       });
       continue;
@@ -1519,12 +1736,12 @@ export default function ResumeRenderer({
             id: `custom:${si}:${i}:head`, section: 'custom', caption, entry,
             gap: first ? GAP_HEAD : GAP_ENTRY,
             keepWithNext: !!text,
-            node: onEdge(<ExtraHead title={title} sub={sub} date={date} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} />),
+            node: onEdge(<ExtraHead title={title} sub={sub} date={date} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} />),
           });
           if (text) push({
             id: `custom:${si}:${i}:text`, section: 'custom', caption, entry,
             gap: hasHead ? spn(4, M) : (first ? GAP_HEAD : GAP_ENTRY),
-            node: indented(<ExtraText text={text} C={C} P={P} M={M} />),
+            node: indented(<ExtraText text={text} C={C} P={P} M={M} wide={T.wideMeasure} />),
           });
         });
       });
@@ -1943,14 +2160,14 @@ export default function ResumeRenderer({
             {rows.length > 0 && (
               <div style={{
                 marginTop: sp(20, M), display: 'grid',
-                gridTemplateColumns: `${DATE_COL_MM}mm minmax(0, 1fr)`,
+                gridTemplateColumns: `${dc}mm minmax(0, 1fr)`,
                 columnGap: `${DATE_GAP_MM}mm`, rowGap: sp(3.5, M), alignItems: 'baseline',
               }}>
                 {rows.map((r, i) => {
                   const value = editing && r.vp ? <Ed path={r.vp} block>{r.v}</Ed> : r.v;
                   return (
                     <React.Fragment key={i}>
-                      <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, color: C.inkSoft, letterSpacing: '0.01em', lineHeight: lh(LH.tight, M), overflowWrap: 'normal', wordBreak: 'normal', hyphens: 'none' }}>
+                      <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, color: C.inkSoft, letterSpacing: '0.01em', lineHeight: lh(LH.tight, M), overflowWrap: 'normal', wordBreak: 'normal', hyphens: 'none', textAlign: T.labelAlign === 'right' ? 'right' : undefined }}>
                         {r.lp ? <Ed path={r.lp}>{r.l}</Ed> : r.l}
                       </div>
                       <div style={{
@@ -1966,6 +2183,83 @@ export default function ResumeRenderer({
             )}
           </div>
           {hasPhoto && <Photo data={data} T={T} C={C} widthMm={30} />}
+        </div>
+      );
+    }
+    /* Name und Kontaktzeile mittig (Dublin). Ein Foto steht, wenn die
+     * Vorlage eines zulässt, mittig darüber. */
+    if (T.head === 'center') {
+      return (
+        <div style={{ padding: `${wide.padV} ${wide.padH} ${sp(14, M)}`, textAlign: 'center' }}>
+          {hasPhoto && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: sp(10, M) }}><Photo data={data} T={T} C={C} widthMm={26} /></div>}
+          <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+          {contactLine({ marginTop: sp(10, M), justifyContent: 'center', color: C.inkMid })}
+        </div>
+      );
+    }
+    /* Foto links, Name und Kontakt daneben, darunter eine Linie im Akzent
+     * (Freiburg). */
+    if (T.head === 'photo-left') {
+      return (
+        <div style={{
+          padding: `${wide.padV} ${wide.padH} ${sp(20, M)}`, display: 'flex', alignItems: 'center', gap: sp(22, M),
+          borderBottom: `${1.2 * M.t}px solid ${C.accent}`,
+        }}>
+          {hasPhoto && <Photo data={data} T={T} C={C} widthMm={30} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+            {contactLine({ marginTop: sp(10, M) })}
+          </div>
+        </div>
+      );
+    }
+    /* Akzentstrich am linken Rand von Name und Kontakt (Graz). */
+    if (T.head === 'bar') {
+      return (
+        <div style={{ padding: `${wide.padV} ${wide.padH} ${sp(18, M)}` }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: sp(22, M) }}>
+            <div style={{ flex: 1, minWidth: 0, borderLeft: `${3.2 * M.t}px solid ${C.accent}`, paddingLeft: pd(14, M) }}>
+              <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+              {contactLine({ marginTop: sp(10, M) })}
+            </div>
+            {hasPhoto && <Photo data={data} T={T} C={C} widthMm={26} />}
+          </div>
+          <div aria-hidden style={{ height: `${0.9 * M.t}px`, background: C.rule, marginTop: sp(18, M) }} />
+        </div>
+      );
+    }
+    /* Name links, rechts Kontakt und Links als Liste aus Bezeichnung und
+     * Wert (Valencia). Jede Zeile bleibt am Stück — eine umgebrochene
+     * Adresse ist für einen Parser kaputt. */
+    if (T.head === 'portfolio') {
+      const rows = contactRows(data, editing).filter(r => r.kind !== 'address');
+      const addr = (data.personal.location || '').replace(/\s*\n+\s*/g, ', ');
+      return (
+        <div style={{ padding: `${wide.padV} ${wide.padH} ${sp(20, M)}`, borderBottom: `${0.9 * M.t}px solid ${C.rule}` }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: sp(22, M) }}>
+            {hasPhoto && <Photo data={data} T={T} C={C} widthMm={24} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <NameBlock data={data} T={T} C={C} P={P} M={M} big />
+              {addr && <div style={{ marginTop: sp(8, M), fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft }}>{addr === data.personal.location ? <Ed path="personal.location">{addr}</Ed> : addr}</div>}
+            </div>
+            {rows.length > 0 && (
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'auto auto', columnGap: sp(10, M), rowGap: sp(2.5, M),
+                alignItems: 'baseline', flexShrink: 0,
+              }}>
+                {rows.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <div style={{ fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: C.accent, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {r.lp ? <Ed path={r.lp}>{r.l}</Ed> : r.l}
+                    </div>
+                    <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkMid, whiteSpace: 'nowrap', lineHeight: lh(LH.tight, M) }}>
+                      {editing && r.vp ? <Ed path={r.vp}>{r.v}</Ed> : r.href ? <a href={r.href} style={{ color: 'inherit', textDecoration: 'none' }}>{r.v}</a> : r.v}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -2067,6 +2361,7 @@ export default function ResumeRenderer({
             <div style={{
               background: C.panelBg, color: C.panelInk, padding: `${pd(44, M)} ${pd(50, M)}`,
               display: 'flex', alignItems: 'center', gap: sp(24, M),
+              borderBottom: T.bandRule ? `${2.4 * M.t}px solid ${C.accent}` : undefined,
             }}>
               {T.photo !== 'none' && data.personal.photo && <Photo data={data} T={T} C={C} widthMm={T.photo === 'circle' ? 30 : 28} />}
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2082,6 +2377,7 @@ export default function ResumeRenderer({
             <div style={{
               background: C.panelBg, color: C.panelInk, padding: `${pd(20, M)} ${pd(50, M)}`,
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              borderBottom: T.bandRule ? `${1.6 * M.t}px solid ${C.accent}` : undefined,
             }}>
               <span style={{ fontFamily: P.heading, fontSize: fs(FS.entry, M), fontWeight: 600 }}>{data.personal.name}</span>
               <span style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.panelInkSoft, letterSpacing: '0.08em', textTransform: 'uppercase' }}>

@@ -29,7 +29,16 @@
 import crypto from 'crypto';
 import { consentCsp } from './guards.js';
 
-const ACCESS_TTL_S = 60 * 60 * 24 * 30;    // 30 Tage
+/** Rückleitungen, die als bekannt gelten (lokal oder große KI-Clients).
+ *  Alles andere bekommt auf der Zustimmungsseite eine Warnung (Audit S4). */
+function trustedHost(host) {
+  const h = String(host || '').toLowerCase();
+  return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(h) || /^(claude\.ai|chatgpt\.com|chat\.openai\.com)$/.test(h);
+}
+
+// 24 Stunden (Audit 10.10.2026, S4; vorher 30 Tage). Clients erneuern per
+// Refresh-Token; ein abgeflossenes Zugriffstoken gilt so höchstens einen Tag.
+const ACCESS_TTL_S = 60 * 60 * 24;
 const REFRESH_TTL_S = 60 * 60 * 24 * 365;  // 1 Jahr
 const CODE_TTL_S = 300;                    // 5 Minuten
 
@@ -135,6 +144,8 @@ export function consentPage({ appName, username, clientName, redirectUri, params
   dt{color:oklch(0.58 0.012 264);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin-top:12px}
   dt:first-child{margin-top:0}
   dd{margin:3px 0 0;word-break:break-all;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px}
+  .host{font-size:17px;font-weight:700;color:oklch(0.21 0.021 264);margin:0 0 8px;word-break:break-all}
+  .warn{color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;font-size:14px}
   .row{display:flex;gap:10px}
   button{flex:1;padding:12px;font-size:15px;font-weight:600;cursor:pointer;border-radius:9px;
          font-family:inherit}
@@ -144,8 +155,10 @@ export function consentPage({ appName, username, clientName, redirectUri, params
   <form class="card" method="post">
     <div class="brand">${esc(appName)}</div>
     <h1>Zugriff erlauben?</h1>
-    <p><strong>${esc(clientName || 'Ein Client')}</strong> möchte in deinem Namen auf
+    <p><strong>${esc(clientName || 'Ein Client')}</strong> <span class="who">(Name vom Client selbst angegeben)</span> möchte in deinem Namen auf
        deine Lebensläufe und Anschreiben zugreifen.</p>
+    <p class="host">Zugang geht an: ${esc(host)}</p>
+    ${trustedHost(host) ? '' : `<p class="warn">Unbekannter Dienst. Erlaube nur, wenn du die Verbindung gerade selbst in deinem KI-Programm gestartet hast und diese Adresse kennst.</p>`}
     <ul>
       <li>Lebensläufe und Anschreiben lesen</li>
       <li>Inhalte als Markdown zurückschreiben</li>

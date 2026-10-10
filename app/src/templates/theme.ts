@@ -3,7 +3,7 @@
 // ResumeRenderer / CoverLetterRenderer. This keeps 15+ templates consistent
 // and maintainable instead of 15 hand-written components.
 
-import type { FontPairingId, AccentId, PaperId } from '../data/types';
+import type { FontPairingId, AccentId, PaperId, SectionKey, UILabels } from '../data/types';
 
 // ── Layout archetypes ───────────────────────────────────────────────────────
 
@@ -41,7 +41,16 @@ export type HeadingStyle =
   | 'serif-quiet'
   /** Nummerierte Abschnitte: Ziffer in der Datumsspalte, Titel auf der
    *  Textkante, Haarlinie darunter. Gliederung wie in einem Antrag. */
-  | 'numbered';
+  | 'numbered'
+  /** Versalzeile in der Überschriftenschrift über einer durchgehenden
+   *  Linie in Schriftfarbe. Die Form des englischsprachigen Lebenslaufs. */
+  | 'caps-full'
+  /** Überschrift rechtsbündig in der Datumsspalte, rechts davon eine
+   *  Haarlinie bis zum Rand — das Raster des europäischen Standardformats. */
+  | 'label'
+  /** Überschrift in gleich breiter Schrift, normale Schreibung, rechts eine
+   *  Haarlinie. Für technische Lebensläufe. */
+  | 'mono';
 
 // ── Font pairings ───────────────────────────────────────────────────────────
 
@@ -246,8 +255,14 @@ export interface ResumeTheme {
    *    Körper stehen auf einem Raster. Die Eckdaten stehen dann nur hier.
    *  - `letter`: Briefkopf — Name links, Kontakt rechtsbündig gestapelt.
    *  - `margin`: Foto im Rand, Name und Kontakt auf der Textkante.
+   *  Seit 10.10.2026:
+   *  - `center`: Name und Kontaktzeile mittig, ohne Foto daneben.
+   *  - `photo-left`: Foto links, Name und Kontakt rechts daneben.
+   *  - `bar`: Akzentstrich am linken Rand von Name und Kontakt.
+   *  - `portfolio`: Name links, rechts Kontakt und Links als Liste aus
+   *    Bezeichnung und Wert.
    *  Fehlt das Feld, gilt der bisherige Kopf (Name, Kontaktzeile, Linie). */
-  head?: 'facts' | 'letter' | 'margin';
+  head?: 'facts' | 'letter' | 'margin' | 'center' | 'photo-left' | 'bar' | 'portfolio';
 
   /** Breiter linker Rand in mm, in dem nur die Überschriften stehen; aller
    *  übrige Text beginnt auf einer gemeinsamen Kante rechts davon. Das Datum
@@ -285,6 +300,55 @@ export interface ResumeTheme {
    *  passen drei Gruppen sonst nicht nebeneinander, und die Rangfolge
    *  Abschnitt › Gruppe stünde auf dem Kopf. */
   groupHeads?: 'small';
+
+  // ── Stellschrauben der Vorlagen vom 10.10.2026 ──────────────────────────
+  // Wie oben: alle optional, ohne Wirkung, solange sie fehlen. Die 32
+  // älteren Vorlagen setzen keine davon und behalten ihr PDF-HTML Byte für
+  // Byte (Vergleichslauf in der Übergabe).
+
+  /** Reihenfolge der Abschnitte, die die Vorlage vorschlägt (nur Vorlagen
+   *  ohne Seitenspalte). Ein Lebenslauf für den Berufseinstieg beginnt mit
+   *  der Ausbildung, einer für den Quereinstieg mit den Kenntnissen, einer
+   *  für Freiberufler mit den Projekten. Eine eigene Reihenfolge des Nutzers
+   *  geht wie immer vor; fehlende Schlüssel werden hinten angehängt. */
+  mainOrder?: SectionKey[];
+
+  /** Eintragskopf ohne Datumsspalte.
+   *  - `split`: zwei Zeilen, links Position und Firma, rechts Zeitraum und
+   *    Ort — die Form des englischsprachigen Lebenslaufs.
+   *  - `line`: eine Zeile „Position · Firma · Ort", Zeitraum rechts. Kompakt,
+   *    für Lebensläufe, in denen die Kenntnisse vorne stehen. */
+  entryHead?: 'split' | 'line';
+
+  /** Stichpunkte und Fließtext über die volle Satzbreite statt auf 122 mm
+   *  begrenzt. Nur sinnvoll ohne Datumsspalte. */
+  wideMeasure?: boolean;
+
+  /** Breite der Datumsspalte in mm (Vorgabe 26). Breiter, wenn in ihr auch
+   *  die Überschriften stehen (Überschriftenstil `label`). */
+  dateColMm?: number;
+
+  /** Datumsspalte rechtsbündig: Zeitraum und Beschriftungen schließen an der
+   *  Textkante ab, wie im europäischen Standardformat. */
+  labelAlign?: 'right';
+
+  /** Darstellung des Profiltexts: `box` = getönter Kasten, `lead` = größerer
+   *  Einleitungsabsatz mit Akzentstrich am Rand. */
+  profileStyle?: 'box' | 'lead';
+
+  /** Darstellung der Kenntnisse in der Hauptspalte.
+   *  - `inline`: eine Überschrift, darunter je Gruppe eine Zeile
+   *    „Gruppe: A, B, C" — die Form, die Parser am sichersten als
+   *    Kenntnisliste erkennen.
+   *  - `panels`: je Gruppe ein getönter Kasten, zwei nebeneinander. */
+  skillsStyle?: 'inline' | 'panels';
+
+  /** Kopfband mit einer Linie in der Akzentfarbe an der Unterkante. */
+  bandRule?: boolean;
+
+  /** Kopfband in einer hellen Tönung der Akzentfarbe statt in einer festen
+   *  Vorlagenfarbe. Schrift bleibt dunkel, die Beschriftung im Akzent. */
+  panelTint?: boolean;
 }
 
 export type StructureLang = 'de' | 'en' | 'fr' | 'es';
@@ -825,7 +889,176 @@ export const THEMES: ResumeTheme[] = [
       panelInkSoft: '#E0E4EF', panelAccent: '#D3D9E8', rule: 'oklch(0.82 0.012 265)', chipBg: 'oklch(0.95 0.012 265)',
     },
   },
+  // ── Acht Entwürfe vom 10.10.2026: Lebenslagen statt Farben ────────────────
+  //
+  // Auftrag: „Schaffst du es auf 40 Vorlagen zu kommen? Recherchier gerne
+  // noch einmal, was uns da fehlt." Abgeglichen wurde der Bestand gegen die
+  // Lebenslauf-Arten der deutschen Ratgeber (tabellarisch, Kurzprofil,
+  // funktional, Quereinstieg, Europass, ATS-einspaltig), gegen die
+  // Aufbauformen der verbreiteten Code-Vorlagen (RenderCV, moderncv, Awesome
+  // CV: Datum rechts statt in der Spalte, Überschrift mit durchgehender
+  // Linie, Abschnitte in fester Reihenfolge) und gegen die Lebenslagen aus
+  // dem Personas-Bericht. Was fehlte, waren keine Farben, sondern Formen für
+  // bestimmte Lagen: Bewerbung ins Ausland, europäisches Standardraster,
+  // Berufseinstieg, IT mit Technikliste, Führungsposition, Quereinstieg,
+  // Pflege und Handwerk mit Nachweisen, Freiberufler mit Projektliste.
+  //
+  // Alle acht sind einspaltig oder haben ein Kopfband — für Portale. Keine
+  // bildet eine fremde Vorlage nach; übernommen sind nur Satzregeln.
+  {
+    /* Englischsprachiger Lebenslauf: Name und Kontakt mittig, kein Foto,
+     * Überschriften als Versalzeile über einer durchgehenden Linie, Datum
+     * und Ort rechtsbündig neben Position und Firma. Für Bewerbungen nach
+     * Großbritannien, Irland, Nordamerika und in internationale Konzerne. */
+    id: 'dublin', name: 'Dublin', description: 'Internationaler Lebenslauf, ohne Foto, Datum rechts', category: 'klassisch',
+    structure: { de: 'Einspaltig · Datum rechts, ohne Foto', en: 'One column · dates right, no photo', fr: 'Une colonne · dates à droite, sans photo', es: 'Una columna · fechas a la derecha, sin foto' },
+    layout: 'single-column', defaultPairing: 'source-serif', photo: 'none', bullet: 'dot', heading: 'caps-full',
+    head: 'center', entryHead: 'split', wideMeasure: true,
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.20 0.006 255)', inkMid: 'oklch(0.37 0.008 255)', inkSoft: 'oklch(0.52 0.008 255)',
+      accent: 'oklch(0.34 0.050 255)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.20 0.006 255)',
+      panelInkSoft: 'oklch(0.44 0.008 255)', panelAccent: 'oklch(0.34 0.050 255)', rule: 'oklch(0.80 0.006 255)', chipBg: 'oklch(0.96 0.004 255)',
+    },
+  },
+  {
+    /* Das europäische Standardraster: eine breite linke Spalte, in der
+     * Überschriften, Zeiträume und Bezeichnungen rechtsbündig stehen, rechts
+     * daneben der Inhalt. Für Bewerbungen innerhalb der EU, Behörden,
+     * Förderanträge und überall dort, wo ausdrücklich dieses Raster
+     * erwartet wird. */
+    id: 'luxemburg', name: 'Luxemburg', description: 'Europäisches Raster, Angaben rechtsbündig links', category: 'klassisch',
+    structure: { de: 'Einspaltig · Bezeichnungen rechtsbündig links', en: 'One column · labels right-aligned on the left', fr: 'Une colonne · libellés alignés à droite', es: 'Una columna · etiquetas alineadas a la derecha' },
+    layout: 'single-column', defaultPairing: 'plex-sans', photo: 'rect', bullet: 'dot', heading: 'label',
+    head: 'facts', dateColMm: 40, labelAlign: 'right', skillsStyle: 'inline',
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.010 255)', inkMid: 'oklch(0.39 0.012 255)', inkSoft: 'oklch(0.52 0.012 255)',
+      accent: 'oklch(0.42 0.110 255)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.22 0.010 255)',
+      panelInkSoft: 'oklch(0.44 0.012 255)', panelAccent: 'oklch(0.42 0.110 255)', rule: 'oklch(0.84 0.010 255)', chipBg: 'oklch(0.96 0.008 255)',
+    },
+  },
+  {
+    /* Berufseinstieg: Schule und Ausbildung stehen vorn, weil dort noch das
+     * Meiste steht. Foto links neben dem Namen, Profil im getönten Kasten,
+     * Stärken als Kacheln. Für Schülerinnen und Schüler, Ausbildung,
+     * duales Studium, Praktikum, erste Stelle nach dem Studium. */
+    id: 'freiburg', name: 'Freiburg', description: 'Berufseinstieg: Ausbildung zuerst, Profil im Kasten', category: 'modern',
+    structure: { de: 'Einspaltig · Ausbildung zuerst', en: 'One column · education first', fr: 'Une colonne · formation en premier', es: 'Una columna · formación primero' },
+    layout: 'single-column', defaultPairing: 'archivo-grotesk', photo: 'circle', bullet: 'dot', heading: 'block',
+    head: 'photo-left', profileStyle: 'box', skillsAsChips: true, groupHeads: 'small',
+    mainOrder: ['profile', 'education', 'experience', 'projects', 'certificates', 'skills', 'languages', 'volunteering', 'details', 'publications', 'additional', 'custom'],
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.012 200)', inkMid: 'oklch(0.39 0.014 200)', inkSoft: 'oklch(0.52 0.012 200)',
+      accent: 'oklch(0.44 0.085 195)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.22 0.012 200)',
+      panelInkSoft: 'oklch(0.44 0.012 200)', panelAccent: 'oklch(0.44 0.085 195)', rule: 'oklch(0.83 0.012 200)', chipBg: 'oklch(0.955 0.014 195)',
+    },
+  },
+  {
+    /* IT und Entwicklung: die Technik zuerst, als Zeilen „Gruppe: A, B, C" —
+     * so findet ein Parser die Begriffe, nach denen gesucht wird. Danach
+     * Berufsweg und Projekte, Überschriften in gleich breiter Schrift. */
+    id: 'tallinn', name: 'Tallinn', description: 'IT: Technikliste zuerst, Überschriften in Monospace', category: 'modern',
+    structure: { de: 'Einspaltig · Kenntnisse als Zeilen zuerst', en: 'One column · skills as lines first', fr: 'Une colonne · compétences en lignes d’abord', es: 'Una columna · conocimientos en líneas primero' },
+    layout: 'single-column', defaultPairing: 'space-inter', photo: 'rounded', bullet: 'square', heading: 'mono',
+    skillsStyle: 'inline', dateFont: 'mono', dateColMm: 30,
+    mainOrder: ['profile', 'skills', 'experience', 'projects', 'education', 'certificates', 'publications', 'languages', 'volunteering', 'details', 'additional', 'custom'],
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.21 0.010 170)', inkMid: 'oklch(0.38 0.012 170)', inkSoft: 'oklch(0.52 0.010 170)',
+      accent: 'oklch(0.43 0.090 160)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.21 0.010 170)',
+      panelInkSoft: 'oklch(0.44 0.010 170)', panelAccent: 'oklch(0.43 0.090 160)', rule: 'oklch(0.82 0.010 170)', chipBg: 'oklch(0.955 0.010 165)',
+    },
+  },
+  {
+    /* Führungsposition: der Name groß mit einem Akzentstrich am Rand, das
+     * Kurzprofil als Einleitungsabsatz, darunter sofort die Schwerpunkte.
+     * Wer zwanzig Jahre Berufsweg hat, wird zuerst nach dem Profil gelesen. */
+    id: 'graz', name: 'Graz', description: 'Führungsposition: Kurzprofil groß, Schwerpunkte vorn', category: 'klassisch',
+    structure: { de: 'Einspaltig · Kurzprofil und Schwerpunkte vorn', en: 'One column · summary and key areas first', fr: 'Une colonne · profil et domaines clés en tête', es: 'Una columna · perfil y áreas clave primero' },
+    layout: 'single-column', defaultPairing: 'garamond-archivo', photo: 'rect', bullet: 'dash', heading: 'caps-rule',
+    head: 'bar', profileStyle: 'lead',
+    mainOrder: ['profile', 'skills', 'experience', 'projects', 'education', 'certificates', 'languages', 'publications', 'volunteering', 'details', 'additional', 'custom'],
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.21 0.008 30)', inkMid: 'oklch(0.38 0.010 30)', inkSoft: 'oklch(0.52 0.010 30)',
+      accent: 'oklch(0.37 0.075 22)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.21 0.008 30)',
+      panelInkSoft: 'oklch(0.44 0.010 30)', panelAccent: 'oklch(0.37 0.075 22)', rule: 'oklch(0.83 0.008 30)', chipBg: 'oklch(0.96 0.006 30)',
+    },
+  },
+  {
+    /* Quereinstieg: was jemand kann, steht vor dem, wo er es gelernt hat.
+     * Die Kenntnisse als Kästen gleich unter dem Profil, der Berufsweg
+     * danach mit einzeiligen Köpfen. Für Wechsel in einen neuen Beruf und
+     * für Lebensläufe mit Lücken oder vielen kurzen Stationen. */
+    id: 'linz', name: 'Linz', description: 'Quereinstieg: Kenntnisse vorn, kompakter Berufsweg', category: 'modern',
+    structure: { de: 'Einspaltig · Kenntnisse vor dem Berufsweg', en: 'One column · skills before experience', fr: 'Une colonne · compétences avant le parcours', es: 'Una columna · conocimientos antes de la experiencia' },
+    layout: 'single-column', defaultPairing: 'lora-source', photo: 'rounded', bullet: 'dash', heading: 'serif',
+    skillsStyle: 'panels', entryHead: 'line', wideMeasure: true,
+    mainOrder: ['profile', 'skills', 'experience', 'projects', 'education', 'certificates', 'volunteering', 'languages', 'details', 'publications', 'additional', 'custom'],
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.010 70)', inkMid: 'oklch(0.39 0.012 70)', inkSoft: 'oklch(0.52 0.012 70)',
+      accent: 'oklch(0.43 0.075 65)', accentInk: '#ffffff', panelBg: '#ffffff', panelInk: 'oklch(0.22 0.010 70)',
+      panelInkSoft: 'oklch(0.44 0.012 70)', panelAccent: 'oklch(0.43 0.075 65)', rule: 'oklch(0.83 0.012 70)', chipBg: 'oklch(0.955 0.014 75)',
+    },
+  },
+  {
+    /* Pflege, Gesundheit, Handwerk: Nachweise zuerst. Zertifikate und
+     * Eckdaten (Führerschein, Staatsangehörigkeit) stehen gleich unter dem
+     * Profil, weil dort zuerst geschaut wird. Ein helles Kopfband in einer
+     * Tönung der Akzentfarbe, darunter eine Spalte. */
+    id: 'luebeck', name: 'Lübeck', description: 'Nachweise zuerst: Zertifikate und Führerschein vorn', category: 'klassisch',
+    structure: { de: 'Helles Kopfband · Nachweise zuerst', en: 'Light header band · credentials first', fr: 'Bandeau clair · certificats en premier', es: 'Banda clara · certificados primero' },
+    layout: 'header-band', defaultPairing: 'source-classic', photo: 'rect', bullet: 'dot', heading: 'caps-tracked',
+    bandSolo: true, bandRule: true, panelTint: true,
+    mainOrder: ['profile', 'certificates', 'details', 'experience', 'education', 'skills', 'languages', 'volunteering', 'projects', 'publications', 'additional', 'custom'],
+    colors: {
+      pageBg: '#ffffff', ink: 'oklch(0.22 0.012 220)', inkMid: 'oklch(0.39 0.014 220)', inkSoft: 'oklch(0.52 0.012 220)',
+      accent: 'oklch(0.42 0.080 215)', accentInk: '#ffffff', panelBg: 'oklch(0.95 0.016 215)', panelInk: 'oklch(0.22 0.012 220)',
+      panelInkSoft: 'oklch(0.40 0.014 220)', panelAccent: 'oklch(0.40 0.080 215)', rule: 'oklch(0.83 0.012 220)', chipBg: 'oklch(0.955 0.012 215)',
+    },
+  },
+  {
+    /* Freiberuf und Portfolio: Projekte vor dem Berufsweg, Links und
+     * Kontakt rechts oben als Liste, Überschriften in Anzeigengröße. Für
+     * Freelancer, Gestaltung, Text, Fotografie — wer Arbeiten zeigt statt
+     * Stellen aufzählt. */
+    id: 'valencia', name: 'Valencia', description: 'Freiberuf: Projekte zuerst, Links im Kopf', category: 'kreativ',
+    structure: { de: 'Einspaltig · Projekte zuerst, Links im Kopf', en: 'One column · projects first, links in header', fr: 'Une colonne · projets d’abord, liens en tête', es: 'Una columna · proyectos primero, enlaces arriba' },
+    layout: 'single-column', defaultPairing: 'inter-playfair', photo: 'rect', bullet: 'dash', heading: 'display',
+    head: 'portfolio', groupHeads: 'small',
+    mainOrder: ['profile', 'projects', 'experience', 'skills', 'education', 'certificates', 'publications', 'languages', 'volunteering', 'details', 'additional', 'custom'],
+    colors: {
+      pageBg: '#fcfaf6', ink: 'oklch(0.20 0.010 45)', inkMid: 'oklch(0.38 0.012 45)', inkSoft: 'oklch(0.52 0.012 45)',
+      accent: 'oklch(0.46 0.110 38)', accentInk: '#ffffff', panelBg: '#fcfaf6', panelInk: 'oklch(0.20 0.010 45)',
+      panelInkSoft: 'oklch(0.43 0.012 45)', panelAccent: 'oklch(0.46 0.110 38)', rule: 'oklch(0.82 0.012 45)', chipBg: 'oklch(0.945 0.012 50)',
+    },
+  },
 ];
+
+/** Grundreihenfolge der Hauptspalte ohne Seitenspalte — dieselbe wie
+ *  `DEFAULT_MAIN_ORDER` im Renderer (dort für alle Vorlagen ohne eigene). */
+const DEFAULT_MAIN_ORDER: SectionKey[] = [
+  'profile', 'details', 'experience', 'projects', 'education', 'certificates',
+  'skills', 'languages', 'volunteering', 'publications', 'additional', 'custom',
+];
+
+/** Reihenfolge einer Vorlage (`mainOrder`) als vollständige Liste: nur
+ *  bekannte Schlüssel, jeder einmal, fehlende hinten angehängt. Eine
+ *  Vorlage, die einen Abschnitt vergisst, darf ihn nicht verschlucken. */
+export function templateOrder(order: SectionKey[] | undefined): SectionKey[] {
+  if (!order) return [...DEFAULT_MAIN_ORDER];
+  const seen = new Set<SectionKey>();
+  const out: SectionKey[] = [];
+  for (const k of order) if (DEFAULT_MAIN_ORDER.includes(k) && !seen.has(k)) { seen.add(k); out.push(k); }
+  for (const k of DEFAULT_MAIN_ORDER) if (!seen.has(k)) out.push(k);
+  return out;
+}
+
+/** Überschrift über den Kenntnissen, wo eine Vorlage eine braucht
+ *  (`skillsStyle: 'inline'`). Gespeicherte Profile kennen das Feld nicht;
+ *  dann gilt die Vorgabe der Dokumentsprache. Im Dokument beschreibbar. */
+const SKILLS_HEADING: Record<string, string> = { de: 'Kenntnisse', en: 'Skills', fr: 'Compétences', es: 'Conocimientos' };
+export function skillsHeading(labels: UILabels): string {
+  const own = (labels.sections.skills ?? '').trim();
+  return own || SKILLS_HEADING[labels.lang] || SKILLS_HEADING.de;
+}
 
 /** Vorlagen für die Auswahl — ohne die stillgelegten Farbvarianten. */
 export const PICKABLE_THEMES: ResumeTheme[] = THEMES.filter(t => !t.deprecated);
@@ -862,7 +1095,7 @@ export type { AccentId, PaperId };
 
 /** Wählbare Papierfarben.
  *
- *  Till, 14.09.2026: „Wenn du schon den Hintergrund änderst bei einigen
+ *  Wunsch vom 14.09.2026: „Wenn du schon den Hintergrund änderst bei einigen
  *  Designs, dann lass uns dafür sorgen, dass man das als Nutzer notfalls
  *  wieder rückgängig machen kann." Genau das ist `auto`: die Vorlage behält
  *  ihre eigene Farbe, jede andere Wahl überschreibt sie, und zurück geht es
@@ -957,6 +1190,15 @@ export function applyAccent(theme: ResumeTheme, accent?: AccentId): ResumeTheme 
     colors.panelInk = '#FFFFFF';
     colors.panelAccent = tint(pick.value, 0.80);
     colors.panelInkSoft = tint(pick.value, 0.86);
+    return { ...theme, colors };
+  }
+  /* Helles Band in einer Tönung der Akzentfarbe (Lübeck): die Fläche wird
+   * aus der Wahl zu 91 % mit Weiß gemischt, die Schrift darauf bleibt
+   * dunkel, die Beschriftung trägt den Akzent. Alle Akzente halten auf
+   * dieser Tönung ≥ 4,5:1 (scripts/contrastcheck.mjs). */
+  if (theme.panelTint) {
+    colors.panelBg = tint(pick.value, 0.91);
+    colors.panelAccent = pick.value;
     return { ...theme, colors };
   }
   // Auf einer hellen Seitenspalte trägt dieselbe Farbe; auf einer dunklen

@@ -19,7 +19,14 @@ export const RETENTION = {
   unconfirmedAccountHours: 48,
   unpaidOrderDays: 30,
   paidOrderYears: 10,
+  // Admin-Bereich (Runde 8b, 10.10.2026): Protokoll ein Jahr, Sitzungen und
+  // Codes sobald abgelaufen.
+  adminAuditDays: 365,
 };
+
+/** Letzter Lauf, für das Admin-Dashboard („Janitor-Lauf"). Nur im Speicher:
+ *  Nach einem Neustart steht hier der Lauf beim Start. */
+export const janitorState = { lastRunAt: null, lastResult: null, lastError: null };
 
 /* Ein Foto gilt als benutzt, wenn seine ID im aktuellen Stand eines Profils
  * desselben Nutzers steht oder im festen Stand eines aktiven Sharelinks.
@@ -101,6 +108,9 @@ export async function runJanitor(db) {
     ['declarations', `DELETE FROM declarations
                        WHERE (cardinality(order_ids) = 0 AND received_at < now() - interval '3 years')
                           OR received_at < date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin' - interval '${R.paidOrderYears} years'`],
+    ['admin_audit', `DELETE FROM admin_audit WHERE created_at < now() - interval '${R.adminAuditDays} days'`],
+    ['admin_sessions', `DELETE FROM admin_sessions WHERE expires_at < now() OR revoked_at IS NOT NULL`],
+    ['admin_login_codes', `DELETE FROM admin_login_codes WHERE expires_at < now() OR used`],
     ['orders_paid', `DELETE FROM orders WHERE paid_at IS NOT NULL
                       AND paid_at < date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin' - interval '${R.paidOrderYears} years'`],
   ];
@@ -109,6 +119,9 @@ export async function runJanitor(db) {
     try { out[name] = (await db.query(sql)).rowCount; }
     catch (err) { out[name] = `Fehler: ${err?.message || err}`; }
   }
+  janitorState.lastRunAt = new Date().toISOString();
+  janitorState.lastResult = out;
+  janitorState.lastError = Object.values(out).some(v => typeof v === 'string') ? 'Mindestens ein Schritt ist fehlgeschlagen.' : null;
   return out;
 }
 

@@ -1,115 +1,63 @@
 # CV-Hub
 
-> Selbst gehostetes Tool zum Erstellen von Lebensläufen und Anschreiben:
-> 32 Vorlagen, vier Sprachen, blockweise Seitenumbrüche ohne Schnitt mitten
-> im Eintrag und eine Markdown-Brücke (plus MCP-Server) für KI-Lektorat.
-> Keine eingebaute KI. Diese Datei beschreibt die Instanz, auf der sie liegt.
+> CV-Hub ist ein Werkzeug für Lebenslauf und Anschreiben im Browser. Man schreibt direkt in der Vorschau, wählt aus 40 Vorlagen und lädt ein PDF mit echter Textebene herunter, deren Lesereihenfolge Prüfskripte gegen die Vorschau vergleichen. Für Bewerbungsportale gibt es zu jeder Vorlage dieselbe Fassung einspaltig als PDF oder Word. Starten geht ohne Konto. Keine eingebaute KI; eine Markdown-Brücke und ein MCP-Server verbinden externe Modelle. Quelloffen unter AGPL-3.0.
 
-## Über das Produkt
+Stand: 2026-10-10. Website auf Deutsch (https://cv.example.com/), Englisch (https://cv.example.com/en/), Französisch (https://cv.example.com/fr/) und Spanisch (https://cv.example.com/es/).
 
-- Webbasiertes Tool, läuft im Browser
-- Erstellt Lebensläufe und Anschreiben für Bewerbungen in vier Sprachen (Deutsch, Englisch, Französisch, Spanisch)
-- 32 wählbare Vorlagen in mehreren Layout-Archetypen (Single-Column, Sidebar L/R, Header-Band, Top-Centered, Timeline)
-- Exportiert als PDF, Word (.docx) in zwei Fassungen (mit dem Design der
-  Vorlage und ATS-einspaltig ohne Layout-Tabellen), HTML, Markdown, JSON,
-  JSON-Resume sowie als ZIP „Vorlage ohne Daten" (Design als HTML und
-  Word-Datei, Platzhalter mit JSON-Pfad, leere daten.json)
-- Eingabe per Editor oder Markdown-Import
-- Versionshistorie mit automatischen Sicherungen vor Importen
-- Sharelinks mit optionalem Anschreiben-Toggle und Aufruf-Tracking
-- Demo-Modus ohne Registrierung (localStorage-only)
-- Cloud-Konto per Einladungscode, den der Betreiber vergibt
+## Was das Werkzeug kann
 
-## Technische Architektur
+- 40 wählbare Vorlagen: einspaltig, mit Kopfband oder mit Seitenspalte, jede mit eigener Schriftpaarung; acht Akzentfarben und Papiertöne getrennt davon
+- Jede Vorlage trägt eine Marke: „Gut für Portale“ (eine Spalte), „Für Portale geeignet“ (Kopfband, danach eine Spalte) oder „Für Mail und Druck“ (zwei Spalten)
+- ATS-Fassung mit einem Klick: derselbe Inhalt einspaltig, als PDF oder Word, ohne die gewählte Vorlage im Profil zu ändern
+- Export: PDF (Vektor, echte Textebene, genau die Seiten der Vorschau), PDF in der ATS-Fassung (einspaltig), Word (.docx) mit dem Design der Vorlage, Word (.docx) in der ATS-Fassung, einspaltig ohne Tabellen, HTML, Markdown, JSON, JSON Resume, LaTeX (.tex, für pdfLaTeX und Overleaf), RenderCV (YAML)
+- Import: Markdown, JSON Resume, LinkedIn-Datenexport (ZIP, wird im Browser gelesen), RenderCV (YAML), LaTeX (nur .tex-Dateien, die aus diesem Werkzeug stammen)
+- Lebenslauf, Anschreiben und Oberfläche in vier Sprachen: Deutsch, Englisch, Französisch, Spanisch
+- Seitenzahl: eine bis vier Seiten oder automatisch; was über vier Seiten hinausgeht, wird gemeldet und nicht abgeschnitten
+- Prüfen-Paneel für Lebenslauf, Anschreiben und beide zusammen: zeigt den Text in der Reihenfolge, in der ein Parser ihn aus dem PDF liest, meldet fehlende Angaben (beim Anschreiben auch Betreff, Datum, Anrede, Länge, Platzhalter) und gleicht mit einer Stellenanzeige ab; unter „Beides“ werden Name, Kontakt und Sprache beider Unterlagen verglichen. Keine Punktzahl
+- Ohne Konto: Lebensläufe werden im Browser gespeichert (IndexedDB), Sicherungsdatei zum Mitnehmen. Für den PDF-Export geht das Dokument kurz an den eigenen Server und wird dort nicht gespeichert
+- Mit Konto: Speichern über Geräte, Sharelinks, Versionen am Server, MCP-Anbindung für KI-Assistenten
 
-- Frontend: React 19, Vite 8, TypeScript
-- Backend: Node.js, Express, Postgres
-- PDF-Rendering: Playwright (headless Chromium)
-- Hosting: Docker Compose auf einem eigenen Server (z. B. Coolify, Dokploy, nacktes Docker)
-- KI: nicht eingebaut. Markdown-Brücke ermöglicht externe Modelle (ChatGPT, Claude, Perplexity)
+## Preise
 
-## ATS-Tauglichkeit
+- Siehe https://cv.example.com/preise. Selbst betrieben kostet das Werkzeug nichts.
 
-- Einspaltige Vorlagen werden von Parsern am zuverlässigsten in Felder überführt.
-  Belegt über Herstellerdokumentation: Personio nennt mehrspaltige Layouts,
-  Tabellen, Kopf-/Fußzeilen, Schrift ≤ 8 pt und Grafiken statt Text als
-  Parsing-Fehlerursachen; Greenhouse nennt „columned layout" und Grafiken;
-  Workday nennt Bilder und die Lesereihenfolge der Wörter.
-- Einspaltige Vorlagen tragen im Tool die Marke „Gut für Portale".
-  Mehrspaltige Vorlagen sind als „Für Mail und Druck" markiert: Textkernel
-  (Parser u. a. hinter softgarden) erkennt nach eigener Verbesserung rund
-  90 % der Spalten-Layouts korrekt, jeder zehnte also nicht. Für Portale gibt
-  es zu jeder Vorlage die ATS-Fassung (derselbe Inhalt einspaltig, als PDF
-  oder Word) mit einem Klick.
-- Das Tool behauptet ausdrücklich KEINE Ablehnungsquote. Die kursierende
-  „75 % werden vom ATS aussortiert"-Zahl stammt aus einem Verkaufsargument von
-  2012 ohne Methodik. Parsing-Qualität ist hier ein Hygienefaktor, kein
-  Erfolgsversprechen.
-- Fließtext ab Werk 8,8 pt. Die automatische Verdichtung geht nie unter
-  8,2 pt — auch wenn der Inhalt dadurch auf eine zweite Seite läuft.
-- Der manuelle Schriftgrößen-Regler darf bewusst tiefer, bis ≈ 7,5 pt. Das
-  ist keine harte Grenze, sondern eine bewusste Entscheidung des Nutzers:
-  unterhalb von 8 pt zeigt die Oberfläche an, welche Grenze überschritten
-  wird.
-- DOCX-Export ist vorhanden (ATS-clean, ohne Layout-Tabellen).
+## Was geprüft ist und was nicht
+
+- Prüfskripte im Quelltext (https://github.com/tillheidrich/cv-hub, Ordner app/scripts) drucken jede Vorlage als PDF, lesen die Textebene mit pdftotext wieder aus und vergleichen sie Seite für Seite mit der Vorschau: Text, Lesereihenfolge, Wortgrenzen, Trennstriche.
+- Keine Garantie, dass ein bestimmtes Bewerbermanagement-System einen Lebenslauf richtig liest: Jedes System hat seinen eigenen Parser. Für Portale wird die einspaltige ATS-Fassung empfohlen.
+- Keine Ablehnungsquote: Die verbreitete Zahl „75 % werden vom ATS aussortiert" stammt aus einem Verkaufsargument von 2012 ohne Methodik.
+- Belege zu Lesefehlern: Personio (https://support.personio.de/hc/en-us/articles/360010193018), Greenhouse (https://support.greenhouse.io/hc/en-us/articles/200989175-Unsuccessful-resume-parse), Textkernel (https://www.textkernel.com/learn-support/blog/improving-extraction-from-column-resumes/).
+
+## Magazin
+
+- [Anschreiben 2026: Pflicht, Kür oder überholt?](https://cv.example.com/magazin/anschreiben-2026-pflicht-oder-ueberholt/): Wann ein Anschreiben noch verlangt wird, was KI an seinem Wert verändert hat und wie ein kurzes, belegtes Anschreiben 2026 aussieht.
+- [Bewerben, wenn KI vorsortiert: Was hilft und was Mythos ist](https://cv.example.com/magazin/bewerben-wenn-ki-vorsortiert/): Wie Rangfolge-Software Bewerbungen ordnet, was dir dabei wirklich hilft und warum versteckter Text und ATS-Scores eher schaden.
+- [Gehalt in der Stellenanzeige: Was die EU-Richtlinie ändert](https://cv.example.com/magazin/gehalt-stellenanzeige-entgelttransparenz/): Gehalt vor dem Gespräch, keine Frage nach dem alten Gehalt: was die Entgelttransparenzrichtlinie vorsieht und was in Deutschland schon gilt.
+- [KI im Recruiting: Was die KI-Verordnung Bewerbern bringt](https://cv.example.com/magazin/ki-verordnung-recruiting-bewerber/): KI zur Bewerberauswahl gilt in der EU als Hochrisiko. Was schon verboten ist, was erst ab Dezember 2027 gilt und welche Rechte du heute hast.
+- [Lebenslauf als PDF oder Word?](https://cv.example.com/magazin/lebenslauf-pdf-oder-word/): Wann PDF, wann Word: was Bewerbersysteme annehmen, wie du die Textebene deines PDFs selbst prüfst und worauf es bei Dateiname und Größe ankommt.
+- [Lebenslauf maschinenlesbar machen: die Checkliste](https://cv.example.com/magazin/lebenslauf-maschinenlesbar-checkliste/): Textebene, Lesereihenfolge, Kontaktdaten, Dateiformat: 20 Punkte, mit denen du prüfst, ob Bewerbersysteme deinen Lebenslauf richtig auslesen.
+- [Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird](https://cv.example.com/magazin/lebenslauf-mit-ki-schreiben-ohne-erfindungen/): Fakten zuerst, KI als Lektor, Änderungen Zeile für Zeile prüfen: so nutzt du ChatGPT, Claude oder Gemini für den Lebenslauf, ohne Daten preiszugeben.
+- [Lücke im Lebenslauf: Was Studien zeigen und was hilft](https://cv.example.com/magazin/luecke-im-lebenslauf/): Wie stark Lücken in Experimenten schaden, warum Erklären allein nicht hilft und wie du eine Auszeit ehrlich und lesbar im Lebenslauf darstellst.
+- [Wie Bewerbermanagement-Systeme Lebensläufe wirklich lesen](https://cv.example.com/magazin/wie-bewerbermanagement-systeme-lebenslaeufe-lesen/): Was ATS-Anbieter selbst über das Auslesen von Lebensläufen sagen, woher die 75-%-Zahl stammt und was du konkret tun kannst.
+- [Example guide: check the text layer of your CV PDF](https://cv.example.com/magazin/example-guide/): A sample article that shows the guide format: how to check in one minute whether the PDF of your CV contains real, selectable text.
+
+Übersicht: https://cv.example.com/magazin/
 
 ## Für KI-Agenten ohne MCP-Server
 
-Das Tool lässt sich vollständig über Markdown bedienen — ohne MCP, ohne API-Key,
-ohne Login auf Agentenseite. Ablauf:
+Das Werkzeug lässt sich vollständig über Markdown bedienen, ohne Konto auf Agentenseite:
 
-1. Vorlage holen (statisch, ohne Authentifizierung abrufbar):
-   - https://example.org/vorlage-lebenslauf-de.md
-   - https://example.org/vorlage-lebenslauf-en.md
-   - https://example.org/vorlage-anschreiben-de.md
-   - https://example.org/vorlage-anschreiben-en.md
-2. Inhalte in genau dieser Struktur ausfüllen. Der Frontmatter-Block steuert
-   Vorlage, Sprache, Schriftgröße und Seitenzahl (`pageMode: one | two | three | auto`).
-3. Den fertigen Markdown-Text im Tool unter „Import" einfügen. Der Parser ist
-   tolerant gegenüber `### **Fettschrift-Titeln**` und den Bullet-Zeichen `*`, `+`, `-`.
-4. Vor jedem Import legt das Tool automatisch eine Version an; ein Fehlgriff ist
-   also rückholbar.
-
-Alternativ versteht das Tool den JSON-Resume-Standard (jsonresume.org) für
-Import und Export — deterministisch, ohne KI-Zwischenschritt.
-
-Grenzen, die ein Agent kennen sollte:
-- Konten gibt es nur per Einladungscode. Es existiert keine offene Registrierung
-  und kein Weg, sich selbst einen Zugang zu verschaffen.
-- Der Demo-Modus arbeitet ausschließlich im localStorage und braucht keinen Zugang.
-- Im Tool selbst arbeitet keine KI. Es rechnet, setzt und exportiert — Formulieren
-  ist Sache des Modells davor.
+1. Vorlage holen: https://cv.example.com/vorlage-lebenslauf-de.md, https://cv.example.com/vorlage-lebenslauf-en.md, https://cv.example.com/vorlage-anschreiben-de.md, https://cv.example.com/vorlage-anschreiben-en.md
+2. In genau dieser Struktur ausfüllen. Der Frontmatter-Block steuert Sprache, Schriftgröße und Seitenzahl (pageMode).
+3. Den Text im Werkzeug unter „Import" einfügen. Vor jedem Import legt das Werkzeug eine Version an; vor dem Übernehmen zeigt es jede Änderung.
 
 ## Datenschutz
 
-- Self-Hosted: Daten verlassen die Instanz des Betreibers nicht
-- Keine externen KI-Provider eingebunden
-- Schriften self-hosted ausgeliefert — keine Google-Fonts-Calls, keine IP-Übermittlung an Google
-- Analytics standardmäßig aus; optional cookieloses, selbst gehostetes Umami
-- Sharelinks tracken Browser-Familie und OS-Familie (z. B. „Chrome/Mac"), keine IP-Adressen
-- Demo-Modus: Speicherung ausschließlich im localStorage, kein Konto, keine
-  Cloud-Ablage. Ausnahme ist der PDF-Export: dafür geht das fertig
-  gerenderte Dokument einmalig an den eigenen Render-Dienst (Playwright auf
-  derselben Instanz), der das PDF zurückschickt. Auch das bleibt innerhalb der
-  selbst gehosteten Instanz; ein Dritter ist nicht beteiligt.
+- Selbst betrieben: Konten und Lebensläufe liegen auf dem Server dieser Instanz (Standort: siehe Datenschutzerklärung); Schriften selbst ausgeliefert, keine Aufrufe an fremde Server
+- Keine Werbe-Tracker; Reichweitenmessung ist ab Werk aus (optional selbst betriebenes Umami, ohne Cookies)
+- Keine externen KI-Dienste eingebunden
 
-## Sprachen
+## Quelltext und Rechtliches
 
-- Deutsch
-- Englisch
-- Französisch
-- Spanisch
-
-## MCP-Server (nur für registrierte Nutzer)
-
-- Optionaler Model-Context-Protocol-Server (stdio) verbindet externe KI-Clients
-  (Claude Desktop, Cursor) mit dem eigenen Konto
-- Auth ausschließlich per persönlichem API-Key (cvk_…), erzeugt im Konto unter
-  Einstellungen → Schlüssel; serverseitig nur als Hash gespeichert
-- Kein Zugriff im Demo-Modus (Demo hat keine Schlüssel)
-- Tools: Lebensläufe auflisten, als Markdown lesen und zurückschreiben,
-  Anschreiben lesen/schreiben, Vorlagen auflisten
-- Nutzt dieselbe Markdown-Brücke wie der Editor — im Tool selbst ist keine KI
-  eingebaut; das externe Modell arbeitet ausschließlich auf Markdown
-- Vor jedem Zurückschreiben legt der Server automatisch eine Version an
-- Quelle & Anleitung: Verzeichnis `mcp/` im Repository
+- Quelltext (AGPL-3.0): https://github.com/tillheidrich/cv-hub
+- Impressum: https://cv.example.com/impressum · Datenschutz: https://cv.example.com/datenschutz · AGB: https://cv.example.com/agb

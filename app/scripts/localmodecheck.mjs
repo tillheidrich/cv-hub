@@ -2,8 +2,8 @@
 //
 // Befunde aus dem Persona-Test vom 08.10.2026, jeder hier als Prüfschritt:
 //
-//   1. Demo startet mit einer ATS-starken Vorlage (nicht „Hamburg") und ohne
-//      Platzhalterfoto.
+//   1. Demo startet mit einer ATS-starken Vorlage (nicht „Hamburg") und mit
+//      dem echten Demo-Foto statt eines Platzhalters (seit Runde 8).
 //   2. Foto hochladen geht ohne Konto; es bleibt im Browser (data:-URL), das
 //      Original ist neu codiert (keine EXIF-Daten mehr, auch kein GPS).
 //   3. Der PDF-Export schickt das Foto eingebettet mit — keine Fotoadresse,
@@ -74,7 +74,11 @@ await page.waitForTimeout(1500);
 // 1.
 let ps = await profiles();
 check(ps.length === 1 && ps[0].settings.template === 'espoo', 'Demo startet mit Espoo', ps[0]?.settings.template);
-check(!ps[0]?.data.de.personal.photo, 'Demo ohne Platzhalterfoto');
+/* Seit Runde 8 (10.10.2026) trägt die Demo ein echtes Foto
+ * (public/demo/, Unsplash). Geprüft wird, dass es genau dieses ist und nie
+ * die alte Silhouette mit „FOTO". */
+const demoFoto = ps[0]?.data.de.personal.photo || '';
+check(demoFoto === '/demo/lena-brandt-zuschnitt.jpg' && ps[0]?.data.de.personal.photoOriginal === '/demo/lena-brandt.jpg' && !/FOTO/.test(decodeURIComponent(demoFoto)), 'Demo mit echtem Demo-Foto, ohne Platzhalter', demoFoto);
 
 // 2. Foto mit EXIF-Block erzeugen und hochladen.
 const jpeg = await page.evaluate(() => {
@@ -120,7 +124,7 @@ check(!/api\/photos/.test(html) && !/FOTO/.test(html), 'keine Fotoadresse, kein 
 await page.getByRole('button', { name: /ATS prüfen/ }).first().click();
 await page.waitForTimeout(800);
 const atsText = await page.locator('body').innerText();
-check(/tatsächlich exportierten Dokuments/.test(atsText) && atsText.includes('lena.brandt@example.com'), 'ATS-Prüfung geöffnet, liest den Exporttext');
+check(/Text deines exportierten Dokuments/.test(atsText) && atsText.includes('lena.brandt@example.com'), 'ATS-Prüfung geöffnet, liest den Exporttext');
 check(!/taucht im exportierten Dokument nicht als Text auf/.test(atsText), 'ATS-Prüfung ohne falsche E-Mail-Lücke');
 await page.keyboard.press('Escape');
 await page.mouse.click(5, 5);

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CVData, CoverLetterData, Lang } from '../data/types';
 import { exportHtml, exportCoverLetterHtml, exportPdf, type ExportRenderConfig } from '../export/exportHtml';
-import { exportDocx } from '../export/exportDocx';
+/* Word, Vorlagen-Paket und LinkedIn-Import laden erst bei Bedarf (Audit 10.10.2026, S15):
+ * docx und jszip gehören nicht ins Hauptbündel der Startseite. */
 import { exportMarkdown } from '../export/exportMarkdown';
 import { exportJson } from '../export/exportJson';
 import { exportJsonResume } from '../export/jsonResume';
-import { exportTemplateKit } from '../export/exportTemplate';
+import { exportLatex, CODE_EXPORT_UI } from '../export/exportLatex';
+import { exportRenderCv } from '../import/rendercv';
 import { clToMarkdown } from '../import/markdownBridge';
 import { saveText } from '../export/saveFile';
 import { exportFilename } from '../export/filename';
@@ -60,6 +62,8 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
    * dem Klick. Ein Klick öffnet das Freischalt-Paneel statt der Datei. */
   const ft = useFreeTier();
   const wordLocked = !ft.docx;
+  const latexLocked = !ft.latex;
+  const cx = CODE_EXPORT_UI[uiLang] ?? CODE_EXPORT_UI.de;
   const coverLocked = isCover && !ft.coverLetter;
   const close = useCallback(() => setOpen(false), []);
   /* Die Meldung räumt sich selbst ab, gebunden an genau diese Meldung: Ein
@@ -108,7 +112,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   }
   /** Word entsteht im Browser — der Server erfährt nur über dieses Ereignis
    *  davon (Auswertung je Einladungscode). Ohne Konto gibt es den Weg nicht. */
-  const docxEvent = () => { if (!demoMode) void api.event('docx'); };
+  const docxEvent = () => { if (!demoMode) void api.event('docx', { template: exportConfig.themeId }); };
 
   const run = (fn: () => void | Promise<void>) => () => { setOpen(false); void fn(); };
   const recommend = atsLevel !== 'high';
@@ -135,7 +139,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
         {!isCover && (
           <>
             <div className="ui-menu-label">{d.secPortals}</div>
-            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx_ats'); docxEvent(); return exportDocx(data, exportConfig, 'ats'); })}
+            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx_ats'); docxEvent(); return import('../export/exportDocx').then(m => m.exportDocx(data, exportConfig, 'ats')); })}
               icon={wordLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={wordLocked ? ft.priceLine : d.wordAtsSub}
               tag={wordLocked ? undefined : recommend ? <span className="ui-tag">{d.recommended}</span> : undefined}>
               {d.wordAts}
@@ -163,7 +167,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
           </>
         ) : (
           <>
-            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx'); docxEvent(); return exportDocx(data, exportConfig, 'design'); })}
+            <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx'); docxEvent(); return import('../export/exportDocx').then(m => m.exportDocx(data, exportConfig, 'design')); })}
               icon={wordLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={wordLocked ? ft.priceLine : d.wordDesignSub}
               >{d.wordDesign}</MenuItem>
             <MenuItem onSelect={run(() => exportHtml(data, exportConfig))} icon={<Icon name="globe" size={15} />} sub={d.htmlSub}>{d.html}</MenuItem>
@@ -176,7 +180,10 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
             <MenuItem onSelect={run(() => exportMarkdown(data))} icon={<Icon name="markdown" size={15} />} sub={d.mdSub}>{d.mdLabel}</MenuItem>
             <MenuItem onSelect={run(() => exportJson(data))} icon={<Icon name="braces" size={15} />} sub={d.jsonSub}>{d.jsonLabel}</MenuItem>
             <MenuItem onSelect={run(() => { track('export_json_resume'); exportJsonResume(data); })} icon={<Icon name="puzzle" size={15} />} sub={d.jsonResumeSub}>{d.jsonResumeLabel}</MenuItem>
-            <MenuItem onSelect={run(async () => { track('export_template_kit'); await exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang); })} icon={<Icon name="package" size={15} />} sub={d.kitSub}>{d.kitLabel}</MenuItem>
+            <MenuItem onSelect={run(async () => { track('export_rendercv'); await exportRenderCv(data); })} icon={<Icon name="braces" size={15} />} sub={cx.rendercvSub}>{cx.rendercv}</MenuItem>
+            <MenuItem onSelect={run(() => { if (latexLocked) { ft.open('docx'); return; } track('export_latex'); exportLatex(data, exportConfig); if (!demoMode) void api.event('latex', { template: exportConfig.themeId }); })}
+              icon={latexLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={latexLocked ? ft.priceLine : cx.latexSub}>{cx.latex}</MenuItem>
+            <MenuItem onSelect={run(async () => { track('export_template_kit'); await (await import('../export/exportTemplate')).exportTemplateKit(exportConfig, (data.labels?.lang ?? 'de') as Lang); })} icon={<Icon name="package" size={15} />} sub={d.kitSub}>{d.kitLabel}</MenuItem>
           </>
         )}
         <div className="ui-menu-sep" />

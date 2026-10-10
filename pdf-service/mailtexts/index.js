@@ -85,7 +85,7 @@ export function tplConfirmEmail({ token, base, lang = 'de', productName = 'CV-Hu
   const b = base ? String(base).replace(/\/+$/, '') : null;
   const url = b ? `${b}/email-bestaetigen?token=${encodeURIComponent(token)}` : '';
   const L = legalLang(lang);
-  const m = legalMail('registrationConfirmation', L, { PRODUCT_NAME: productName, CONFIRM_URL: url });
+  const m = legalMail('registrationConfirmation', L, { PRODUCT_NAME: productName, CONFIRM_URL: url, BASE_URL: b || '' });
   if (m) return fromLines(m);
   // TODO(Rechtstexte): Ersatz ohne legal-texts.json.
   return fromLines({
@@ -251,7 +251,10 @@ export function tplDeclarationConfirm({ type, orders = [], statement, receivedAt
       ? 'Damit niemand in Ihrem Namen widerrufen kann, führen wir den Widerruf erst aus, wenn Sie ihn mit dem Knopf unten bestätigen. Erst dann erstatten wir den Betrag und beenden den Pass. Für die Widerrufsfrist zählt der Eingang oben, nicht der Zeitpunkt Ihres Klicks.'
       : 'Damit niemand in Ihrem Namen kündigen kann, beenden wir den Pass erst, wenn Sie die Kündigung mit dem Knopf unten bestätigen. Maßgeblich ist der Eingang oben, nicht der Zeitpunkt Ihres Klicks.',
     until ? `Der Link gilt bis ${until}.` : '',
-    '', 'Haben Sie das nicht selbst abgeschickt? Dann ignorieren Sie diese Mail. Ohne Bestätigung geschieht nichts; nach Ablauf des Links sehen wir uns die Erklärung von Hand an.',
+    '', w
+      ? 'Haben Sie keinen Zugriff auf den Knopf oder klappt er nicht, antworten Sie einfach auf diese Mail. Ihr Widerruf ist mit dem Eingang oben wirksam bei uns angekommen; wir erstatten dann nach einer kurzen Prüfung von Hand, spätestens 14 Tage nach dem Eingang.'
+      : 'Haben Sie keinen Zugriff auf den Knopf oder klappt er nicht, antworten Sie einfach auf diese Mail; wir bearbeiten die Kündigung dann von Hand.',
+    '', 'Haben Sie das nicht selbst abgeschickt? Dann ignorieren Sie diese Mail. Ohne Ihre Bestätigung führen wir nichts automatisch aus; nach Ablauf des Links prüfen wir die Erklärung von Hand.',
   ];
   const en = L === 'en' ? ['', w
     ? 'Your withdrawal has been received. To make sure nobody withdraws on your behalf, please confirm it with the button below. The time of receipt above counts for the withdrawal period.'
@@ -266,18 +269,40 @@ export function tplDeclarationConfirm({ type, orders = [], statement, receivedAt
   });
 }
 
-/** Erklärung, die sich nicht zuordnen ließ (M4): fester Text, KEINE Eingabe
- *  des Absenders — weder Name noch Grund noch Bestellnummer. Sonst schickt
- *  jeder beliebigen Text unter unserem Absender an beliebige Adressen. */
-export function tplDeclarationReceivedPlain({ type, receivedAt }) {
+/** Erklärung, die sich nicht zuordnen ließ (M4): KEIN freier Text des
+ *  Absenders (kein Grund, keine Nachricht). Sonst schickt jeder beliebigen
+ *  Text unter unserem Absender an beliebige Adressen.
+ *
+ *  Prüfteam J1 (10.10.2026): § 356a Abs. 4 BGB verlangt in der
+ *  Eingangsbestätigung „zumindest den Inhalt der Widerrufserklärung nach
+ *  Absatz 2" (Name, Vertrag, Kommunikationsmittel) sowie Datum und Uhrzeit.
+ *  Deshalb nimmt die Vorlage die drei Angaben optional auf, aber nur in
+ *  geprüfter Form: die Adresse ist die Empfängeradresse selbst, die
+ *  Bestellnummer nur im Format der Bestellnummern, der Name nur ohne Links,
+ *  Spitzklammern und Steuerzeichen und höchstens 80 Zeichen lang. Was die
+ *  Prüfung nicht besteht, fällt still weg. billing.js gibt die Angaben
+ *  noch nicht mit (Patch-Wunsch an die Hauptsitzung). */
+const PLAIN_NAME_OK = n => typeof n === 'string' && n.trim().length >= 2 && n.trim().length <= 80
+  && !/[<>]|:\/\/|www\.|@/i.test(n) && ![...n].some(ch => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127);
+const ORDER_NO_OK = n => typeof n === 'string' && /^[A-Z0-9][A-Z0-9-]{2,31}$/.test(n.trim().toUpperCase());
+export function tplDeclarationReceivedPlain({ type, receivedAt, name = null, orderNo = null, email = null }) {
   const what = type === 'withdrawal' ? 'Widerruf' : 'Kündigung';
+  const facts = [
+    PLAIN_NAME_OK(name) ? `Name: ${name.trim()}` : '',
+    ORDER_NO_OK(orderNo) ? `Angegebene Bestellnummer: ${orderNo.trim().toUpperCase()}` : '',
+    email ? `Bestätigung an: ${String(email).trim()}` : '',
+  ].filter(Boolean);
   return fromLines({
     subject: `Eingangsbestätigung Ihrer Erklärung (${what})`,
     lines: [
       'Guten Tag,', '',
       `wir haben eine Erklärung (${what}) erhalten, die diese E-Mail-Adresse nennt.`,
-      `Eingang: ${berlinDateTime(receivedAt)}`, '',
-      'Wir haben Ihre Erklärung erhalten und melden uns, falls wir sie einer Bestellung zuordnen können.',
+      `Eingang: ${berlinDateTime(receivedAt)}`,
+      ...(facts.length ? [`Inhalt: ${type === 'withdrawal' ? 'Widerruf des Vertrags über den Bewerbungs-Pass' : 'Kündigung des Bewerbungs-Passes'}`, ...facts] : []),
+      '',
+      type === 'withdrawal'
+        ? 'Ihr Widerruf ist damit bei uns eingegangen. Wir konnten ihn nicht sofort einer Bestellung zuordnen, prüfen ihn von Hand und melden uns innerhalb von zwei Werktagen. Für die Frist zählt der Eingang oben.'
+        : 'Ihre Kündigung ist damit bei uns eingegangen. Wir konnten sie nicht sofort einer Bestellung zuordnen, prüfen sie von Hand und melden uns innerhalb von zwei Werktagen.',
       '', 'Haben Sie nichts abgeschickt, können Sie diese Mail ignorieren.',
     ],
   });

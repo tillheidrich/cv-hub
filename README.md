@@ -1,7 +1,7 @@
 # CV-Hub
 
 **Self-hosted résumé & cover-letter studio.** Build print-ready CVs and cover
-letters from structured data — 32 editorial templates, four languages
+letters from structured data — 40 editorial templates, four languages
 (EN / DE / FR / ES), automatic A4 fitting, and AI proofreading through a
 **model-agnostic Markdown bridge** (plus an optional MCP server). **No built-in
 AI, no vendor lock-in.** Runs entirely on your own server.
@@ -47,8 +47,17 @@ its source in a comment next to it:
 
 ## Highlights
 
-- **32 templates** across several layout archetypes (single-column, sidebars,
-  header band, top-centered, timeline). Single-column templates are ATS-friendly.
+- **40 templates** across several layout archetypes (single-column, sidebars,
+  header band, top-centered, timeline). Every template carries a label saying
+  what it is made for ("good for portals", "suitable for portals", "for e-mail
+  and print"); single-column templates are ATS-friendly. CVs run from one to
+  four pages, or automatic — anything beyond four pages is reported, never cut.
+- **Check panel** for the CV, the cover letter and both together: the text in
+  the order a parser reads it from the PDF, missing details (for the letter
+  also subject, date, salutation, length, leftover placeholders) and a match
+  against a pasted job ad. No score.
+- **LaTeX and RenderCV.** Export as `.tex` (pdfLaTeX/Overleaf) and as RenderCV
+  YAML; RenderCV YAML and LaTeX files written by this tool can be imported back.
 - **Four languages** for both CV and cover letter, living in parallel in one
   profile; section, date and field labels adapt automatically — and every label
   is editable, so "Berufserfahrung" can become whatever you want it to be.
@@ -80,6 +89,19 @@ its source in a comment next to it:
   it, import the result. Version history snapshots before every import.
 - **Optional MCP server** (`mcp/`) for registered users — programmatic access
   via a personal API key.
+- **Admin area** with statistics (daily counters without personal data),
+  customers, payments, invoices (CSV export for the tax adviser), withdrawals,
+  vouchers, invitations and an audit log. By default it lives under `/admin/`
+  on the main address. Optionally it moves to its own host (`ADMIN_HOST`) with
+  its own sign-in (password + e-mail code, separate cookie, strict CSP); see
+  `pdf-service/ADMIN.md`.
+- **Start page and magazine, prerendered.** `npm run build` renders `/`,
+  `/en/`, `/fr/`, `/es/` and `/preise` with `react-dom/server` (JSON-LD,
+  hreflang, sitemap, `llms.txt`) and builds the static articles under
+  `/magazin/` (old `/ratgeber/` addresses redirect). The articles in
+  `app/content/magazin/` are sample content; replace them with your own (see
+  `app/content/magazin/README.md`). The product name for both comes from
+  `app/src/landing/brand.js` (override with `VITE_APP_NAME`).
 - **Accounts are invite-only** by default (nothing works without a code);
   open registration with double opt-in and self-hosted ALTCHA bot protection
   can be switched on (`OPEN_REGISTRATION=1`). Optional **two-factor login by
@@ -134,11 +156,47 @@ Open **http://localhost:8080**. The first account you register becomes the admin
   ports are allowed by default.
 
 **Before going live**, replace the placeholders in
-`app/public/.well-known/security.txt` (`Contact: mailto:security@example.com`,
-`Canonical: https://cv.example.com/...`) with your own address and domain, and
-keep `Expires` within a year. Analytics are off by default; `app/nginx.conf`
+`app/public/.well-known/security.txt` (`Contact: mailto:security@example.com`)
+with your own address and keep `Expires` within a year (the file has no
+`Canonical` field, so it fits whatever domain serves it). Fill in
+`app/src/data/operator.ts` and replace every `[placeholder]` on the legal
+pages. Analytics are off by default; `app/nginx.conf`
 contains an optional Umami pass-through under `/u/` (set `$umami_host`, then
 uncomment the tag in `app/index.html`), which you can also delete.
+
+**Separate admin host (optional).** Point a second name (e.g.
+`admin.example.com`) at the same frontend, set `ADMIN_HOST` (and SMTP, for the
+sign-in code) in `.env`; `docker-compose.yml` passes it to both `cv-api` and
+the frontend nginx. `app/nginx.conf` is an nginx-image template
+(`/etc/nginx/templates`): only `${ADMIN_HOST}` is substituted at start-up
+(`NGINX_ENVSUBST_FILTER`), and without a value it is `admin.invalid`, a name
+that never resolves — so self-hosting without `ADMIN_HOST` keeps the admin page
+at `/admin/`.
+
+## Start-page screenshots and demo photo
+
+The start page, the magazine and the link previews (`app/public/og*.png`) use
+real screenshots of the app in demo mode, stored in `app/public/landing/`
+together with `manifest.json`; `app/src/landing/shots.gen.ts` lists them. The
+ones in this repository were taken from this code base with the `CV-Hub`
+wordmark. If you change the name, the UI, the demo person or the templates,
+take new ones:
+
+```bash
+cd app
+npx vite --port 5261 --strictPort &
+LANDING_BASE=http://127.0.0.1:5261 npm run landing:shots   # ~10 minutes
+```
+
+It needs Chromium (`CHROMIUM_PATH`), Python 3 with Pillow ≥ 11 (AVIF/WebP) and
+`pdftotext`; partial runs with `LANDING_LANGS=de` or
+`LANDING_ONLY=ui|thumbs|text|og`. Details in `app/src/landing/README.md`.
+
+The demo profile "Lena Brandt" (fictitious) carries a sample photo from
+`app/public/demo/`: photo by Phạm Duy Quang on Unsplash
+(https://unsplash.com/photos/woman-in-grey-blazer-business-portrait-QGr6H7pri-Q),
+Unsplash License; see `app/public/demo/CREDITS.txt`. The person shown is not
+the fictitious sample person.
 
 ## Running the checks
 

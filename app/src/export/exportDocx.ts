@@ -28,7 +28,7 @@ import {
   Header, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType,
 } from 'docx';
 import type { CVData, PersonalInfo, SectionKey } from '../data/types';
-import { getTheme } from '../templates/theme';
+import { getTheme, skillsHeading } from '../templates/theme';
 import type { HeadingStyle, ResumeTheme } from '../templates/theme';
 import { socialLabel, socialDisplay } from '../templates/ResumeRenderer';
 import { isPlaceholderPhoto } from './photoEmbed';
@@ -269,6 +269,14 @@ const MAIN_ORDER_FLOW: SectionKey[] = [
  * der sie in der Vorlagenreihenfolge stehen — vor den nächsten bekannten
  * Nachbarn, statt hinten angehängt zu werden.
  */
+/** Reihenfolge einer Vorlage (`mainOrder`) auf das, was der Textfluss in
+ *  Word trägt: nur Schlüssel aus MAIN_ORDER_FLOW, fehlende hinten an. */
+function docxTemplateOrder(order: SectionKey[]): SectionKey[] {
+  const out = order.filter((k, i) => MAIN_ORDER_FLOW.includes(k) && order.indexOf(k) === i);
+  for (const k of MAIN_ORDER_FLOW) if (!out.includes(k)) out.push(k);
+  return out;
+}
+
 function orderedSections(defaultOrder: SectionKey[], sectionOrder?: SectionKey[]): SectionKey[] {
   if (!sectionOrder || !sectionOrder.length) return defaultOrder;
   const ownable = new Set<SectionKey>(defaultOrder);
@@ -323,6 +331,9 @@ function makeParts(
   hidden: Set<SectionKey> = new Set(),
   /** Publikationen mit laufender Nummer [1], [2] … (Vorlage `numberedPubs`). */
   numberedPubs = false,
+  /** Kenntnisse als Zeilen „Gruppe: A, B, C" unter einer Überschrift
+   *  (Vorlage `skillsStyle: 'inline'`); der Text ist die Überschrift. */
+  skillsInline: string | null = null,
 ) {
   const val2 = val;
   /* Sektionsüberschriften.
@@ -331,7 +342,7 @@ function makeParts(
    * gesperrte Versalien in der Akzentfarbe mit einer Linie über die ganze
    * Spaltenbreite. Im Browser hat jede Vorlage ihre eigene — Terrakotta einen
    * Serifentitel mit kurzem Farbbalken darunter, Lissabon einen Balken davor,
-   * die Register-Vorlagen einen Strich darüber. Genau das meinte Till mit den
+   * die Register-Vorlagen einen Strich darüber. Genau das war mit den
    * fehlenden Farbleisten: nicht die Farbe fehlte, die Form fehlte.
    *
    * Word kennt keine freien Rechtecke, aber es kennt Absatzrahmen. Damit
@@ -349,8 +360,9 @@ function makeParts(
     'block': [18, 17], 'bar': [19, 17], 'caps-plain': [19, 17],
     'caps-rule': [19, 17], 'caps-tracked': [19, 17],
     'serif-rule': [24, 20], 'serif-quiet': [22, 19], 'numbered': [19, 17],
+    'caps-full': [21, 18], 'label': [19, 17], 'mono': [22, 19],
   };
-  const serifish = (st: HeadStyle) => st === 'serif' || st === 'display' || st === 'serif-rule' || st === 'serif-quiet';
+  const serifish = (st: HeadStyle) => st === 'serif' || st === 'display' || st === 'serif-rule' || st === 'serif-quiet' || st === 'mono';
   /** Laufende Abschnittsnummer für den Stil `numbered`. */
   let headNo = 0;
 
@@ -377,9 +389,11 @@ function makeParts(
     const run = new TextRun({
       text: label,
       bold: true,
-      color: st === 'block' ? (pal.accentInk || 'FFFFFF') : st === 'serif-quiet' ? pal.accent : pal.ink,
+      color: st === 'block' ? (pal.accentInk || 'FFFFFF') : st === 'serif-quiet' || st === 'label' || st === 'mono' ? pal.accent : pal.ink,
       characterSpacing: serifish(st) ? 0 : 16,
-      font: serifish(st) ? fonts.heading : fonts.body,
+      /* Gleich breite Schrift für `mono`: Consolas gibt es auf jedem
+       * Windows-Rechner, LibreOffice setzt dafür seine eigene Monospace. */
+      font: st === 'mono' ? 'Consolas' : serifish(st) || st === 'caps-full' ? fonts.heading : fonts.body,
       size,
       ...(st === 'block' ? { shading: { type: ShadingType.CLEAR, color: 'auto', fill: pal.accent } } : {}),
     });
@@ -412,6 +426,11 @@ function makeParts(
         return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 4, color: pal.soft } } })];
       case 'serif-quiet':
         return [new Paragraph(base)];
+      case 'caps-full':
+        return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 6, space: 3, color: pal.ink } } })];
+      case 'label':
+      case 'mono':
+        return [new Paragraph({ ...base, border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 4, color: pal.soft } } })];
       case 'block':
         return [new Paragraph(base)];
       case 'caps-plain':
@@ -554,6 +573,22 @@ function makeParts(
          * demselben Zeichen wie die übrigen Listen der Vorlage. Zweispaltig
          * wie in der Vorschau wäre eine verschachtelte Tabelle — die kostet
          * mehr an Maschinenlesbarkeit, als die gesparten Zeilen wert sind. */
+        /* Ausnahme mit Absicht: Vorlagen, die die Kenntnisse als Zeilen
+         * „Gruppe: A, B, C" setzen (Tallinn), bekommen in Word dieselbe Form
+         * — eine Überschrift, je Gruppe ein Absatz. */
+        if (skillsInline !== null) {
+          const groups = skills.map(g => ({ label: val2(g.label), items: (g.items || []).map(val2).filter(Boolean) })).filter(g => g.items.length);
+          if (!groups.length) continue;
+          out.push(...H1(skillsInline));
+          for (const g of groups) out.push(new Paragraph({
+            spacing: { after: 50 }, indent: dateTab !== null ? { left: dateTab } : undefined,
+            children: [
+              ...(g.label ? [new TextRun({ text: `${g.label}: `, bold: true, color: pal.ink, font: fonts.body })] : []),
+              new TextRun({ text: g.items.join(', '), color: pal.soft, font: fonts.body }),
+            ],
+          }));
+          continue;
+        }
         for (const g of skills) {
           const items = (g.items || []).map(val2).filter(Boolean);
           if (!items.length) continue;
@@ -843,9 +878,16 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
   const bandSolo = variant === 'design' && layout === 'header-band' && !!theme?.bandSolo;
   const hasAside = variant === 'design'
     && (layout === 'sidebar-left' || layout === 'sidebar-right' || (layout === 'header-band' && !bandSolo));
+  /* Vorlagen mit Eintragskopf ohne Datumsspalte (Dublin, Linz) gehen den
+   * einspaltigen Weg mit Datum am rechten Rand — genau ihre Form. */
   const tabular = variant === 'design'
-    && (layout === 'single-column' || layout === 'timeline' || layout === 'top-centered');
+    && (layout === 'single-column' || layout === 'timeline' || layout === 'top-centered') && !theme?.entryHead;
   const numberedPubs = variant === 'design' && !!theme?.numberedPubs;
+  /* Reihenfolge und Kenntnis-Zeilen der Vorlage gelten nur in der
+   * Design-Fassung; die ATS-Fassung bleibt in der üblichen Reihenfolge. */
+  const flowOrder = variant === 'design' && theme?.mainOrder ? docxTemplateOrder(theme.mainOrder) : MAIN_ORDER_FLOW;
+  const skillsInline = variant === 'design' && theme?.skillsStyle === 'inline' ? skillsHeading(cv.labels) : null;
+  const centeredHead = variant === 'design' && theme?.head === 'center';
 
   // ── Einspaltige Fassung (ATS) ────────────────────────────────────────────
   if (!hasAside && !tabular && !bandSolo) {
@@ -853,15 +895,16 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
      * Vorher stand hier eine feste Zahl für A4; auf Letter oder A5 hing die
      * Datumsspalte damit neben dem Blatt. */
     const rightTab = PAGE_W - 720 - 720;
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, null, headStyle, bulletChar, hidden);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, null, headStyle, bulletChar, hidden, numberedPubs, skillsInline);
     const kids: Paragraph[] = [];
-    kids.push(new Paragraph({ heading: HeadingLevel.TITLE, spacing: { after: 20 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true })] }));
-    if (val(p.title)) kids.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19 })] }));
-    for (const line of personalLines(p, fields, hidden)) kids.push(P.para(line));
+    const align = centeredHead ? AlignmentType.CENTER : undefined;
+    kids.push(new Paragraph({ heading: HeadingLevel.TITLE, alignment: align, spacing: { after: 20 }, children: [new TextRun({ text: val(p.name) || 'CV', bold: true })] }));
+    if (val(p.title)) kids.push(new Paragraph({ alignment: align, spacing: { after: 60 }, children: [new TextRun({ text: val(p.title).toUpperCase(), bold: true, color: accent, characterSpacing: 24, size: 19 })] }));
+    for (const line of personalLines(p, fields, hidden)) kids.push(centeredHead ? new Paragraph({ alignment: align, spacing: { after: 40 }, children: [new TextRun({ text: line })] }) : P.para(line));
     /* Auch die ATS-Fassung bleibt sonst, wie sie ist — einspaltig, ohne
      * Tabelle, ohne Kopfzeile. Nur Ausgeblendetes und die Reihenfolge folgen
      * dem, was der Nutzer eingestellt hat. */
-    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder)));
+    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(flowOrder, cfg.sectionOrder)));
     return new Document({
       ...docMeta, numbering, styles,
       sections: [{ properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } }, children: kids }],
@@ -877,7 +920,7 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
     // Rechte Textkante aus dem Blattmaß und den Rändern dieser Bauform
     // (unten: links 20 mm, rechts 18 mm) — nicht aus einer A4-Konstanten.
     const rightTab = PAGE_W - mm(20) - mm(18);
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, dateTab, headStyle, bulletChar, hidden, numberedPubs);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, rightTab, dateTab, headStyle, bulletChar, hidden, numberedPubs, skillsInline);
     const centered = layout === 'top-centered';
     const kids: Paragraph[] = [];
     /* Befund vom 14.09.2026, zweiter Teil: Der tabellarische Zweig hatte nie
@@ -910,7 +953,7 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
       border: { bottom: { style: BorderStyle.SINGLE, size: 8, space: 6, color: accent } },
       children: [],
     }));
-    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder)));
+    kids.push(...P.mainBlocks(cv.skillGroups || [], orderedSections(flowOrder, cfg.sectionOrder)));
     return new Document({
       ...docMeta, numbering, styles,
       sections: [{ properties: { page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: mm(18), bottom: mm(16), left: mm(20), right: mm(18) } } }, children: kids }],
@@ -924,7 +967,7 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
     const bandSoft = theme ? toHex(theme.colors.panelInkSoft, 'DDDDDD') : 'DDDDDD';
     const bandAccent = theme ? toHex(theme.colors.panelAccent, 'DDDDDD') : 'DDDDDD';
     const padL = mm(20), padR = mm(18);
-    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, PAGE_W - padL - padR, mm(30), headStyle, bulletChar, hidden, numberedPubs);
+    const P = makeParts(cv, { ink, soft, accent, accentInk }, fonts, PAGE_W - padL - padR, mm(30), headStyle, bulletChar, hidden, numberedPubs, skillsInline);
     const bandCell = new TableCell({
       width: { size: PAGE_W, type: WidthType.DXA },
       shading: { type: ShadingType.CLEAR, color: 'auto', fill: bandBg },
@@ -959,7 +1002,7 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
           titlePage: true,
           page: { size: { width: PAGE_W, height: PAGE_H }, margin: { top: mm(14), bottom: mm(14), left: padL, right: padR, header: 0, footer: mm(6) } },
         },
-        children: [band, new Paragraph({ spacing: { after: 80 }, children: [] }), ...P.mainBlocks(cv.skillGroups || [], orderedSections(MAIN_ORDER_FLOW, cfg.sectionOrder))],
+        children: [band, new Paragraph({ spacing: { after: 80 }, children: [] }), ...P.mainBlocks(cv.skillGroups || [], orderedSections(flowOrder, cfg.sectionOrder))],
       }],
     });
   }

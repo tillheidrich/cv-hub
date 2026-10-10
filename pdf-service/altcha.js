@@ -1,6 +1,6 @@
 // Bot-Schutz ohne Drittanbieter: ALTCHA (Proof of Work, MIT-Lizenz).
 //
-// Tills Vorgabe vom 09.10.2026: selbst gehostet, kein US-Dienst. Der Browser
+// Vorgabe vom 09.10.2026: selbst gehostet, kein US-Dienst. Der Browser
 // rechnet eine kleine Aufgabe (PBKDF2/SHA-256), der Server prüft hier mit dem
 // HMAC-Schlüssel aus ALTCHA_HMAC_KEY. Kein Aufruf nach außen, kein Cookie.
 //
@@ -40,7 +40,9 @@ function keySignatureSecret(master) {
  * ALTCHA_COUNTER_MIN, ALTCHA_COUNTER_MAX und ALTCHA_TTL_S einstellbar.
  */
 export function createAltcha({ pool, hmacKey = process.env.ALTCHA_HMAC_KEY } = {}) {
-  const key = String(hmacKey || '').trim();
+  // Unter 32 Zeichen = Platzhalter oder zu schwach → gilt als nicht gesetzt.
+  const raw = String(hmacKey || '').trim();
+  const key = raw.length >= 32 ? raw : '';
   const cost = envInt('ALTCHA_COST', 2000, 1, 1_000_000);
   const counterMin = envInt('ALTCHA_COUNTER_MIN', 2000, 1, 10_000_000);
   const counterMax = Math.max(counterMin + 1, envInt('ALTCHA_COUNTER_MAX', 6000, 2, 10_000_000));

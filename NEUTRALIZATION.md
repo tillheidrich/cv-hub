@@ -3,6 +3,61 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-10, round 8)
+
+Mirrored diff-based (`git merge-file`, base = the private tool's previous
+revision) — new start page, magazine, 40 templates, admin area, legal review,
+audit. Files that were rewritten from scratch in the private tool
+(`LandingScreen.tsx`, `HomeScreen.tsx`) were taken from it and then checked
+line by line; the legal pages were rebuilt from the private revision with
+every earlier CV-Hub neutralization re-applied (template notice, `[placeholder]`
+fields, `shortUrl(SOURCE_REPO_URL)`).
+
+- **One name in one place.** `app/src/landing/brand.js` says `CV-Hub` and
+  reads `VITE_APP_NAME` (in the browser and in the build scripts), so start
+  page, magazine, JSON-LD, `llms.txt`, admin area and preview images follow the
+  same override as `src/brand.ts`. `FALLBACK_BASE_URL` is
+  `https://cv.example.com`. The wordmark splits at the first `/` or `-`.
+- **Screenshots re-taken, not mirrored.** The private `app/public/landing/`
+  (~15 MB) and the `og*.png` previews showed the original operator's wordmark
+  and a server-location sentence. They were taken again from this code base
+  with `scripts/landing-shots.mjs` (Vite on a spare port, `LANDING_BASE`,
+  Pillow/AVIF, `pdftotext`): 473 files, 15.1 MB, plus a new `shots.gen.ts`.
+  The README says how to repeat that after a rename.
+- **Magazine (`/ratgeber/` → `/magazin/`).** All nine articles came over as
+  sample content: they hold no personal data, only generic, sourced advice.
+  Neutralized: `outlineId` removed (the sync never touches them), product name
+  `CV-Hub`, the pass sentence made conditional ("if the instance offers the
+  optional pass"). Keeping all nine keeps the tips panel
+  (`src/knowledge/magazin.ts`) free of dead links. `example-guide.md` stays.
+  `OUTLINE_MAGAZIN_COLLECTION` (or the old `OUTLINE_RATGEBER_COLLECTION`) is
+  still required — the private fallback collection ID was dropped again — and
+  the Dockerfile now passes both collection names as build args.
+- **Admin area.** Taken over with `ADMIN_HOST` optional. `docker-compose.yml`
+  passes `ADMIN_HOST` to `cv-api` (empty = admin page under `/admin/`) and to
+  the frontend (`admin.invalid` when unset); `app/nginx.conf` is installed as
+  `/etc/nginx/templates/default.conf.template` and the image substitutes only
+  `${ADMIN_HOST}` (`NGINX_ENVSUBST_FILTER=^ADMIN_HOST$`). `pdf-service/ADMIN.md`
+  lost the original deployment section (DNS, IP, app IDs) in favour of generic
+  steps; examples use `admin.example.com`.
+- **No server location claimed.** Landing FAQ, sign-up trust tile, pricing
+  table, photo hint, export note, order page, terms and the Art. 9 consent no
+  longer say "our server in Germany"; the privacy policy keeps `[Land]` /
+  `[country]`. `legal-texts.json` regenerated with `sync-legal.mjs`. The
+  private `mailtexts/archiv/` (the original deployment's delivered contract
+  versions) is not mirrored.
+- **Umami** stays off: both tags (`umami-filter-v1.js` and `/u/script.js`) are
+  commented out in `index.html` with `YOUR-UMAMI-WEBSITE-ID`; no website ID or
+  analytics host of the original instance. The privacy template marks the
+  section and the opt-out switch as "remove if you do not measure".
+- **Also neutralized:** `security.txt` keeps the placeholder contact (no
+  `Canonical` any more, as in the private tool), `robots.txt`/`llms.txt` use
+  `cv.example.com`, mail footer uses `APP_NAME` and the host of
+  `PUBLIC_BASE_URL`, `admin.html` title, test fixtures (`leitung`,
+  `ops@example.test`), code comments that quoted the operator by first name
+  (also the older ones from earlier rounds), "CV-Tool" in package description,
+  server and MCP headers, review-report references to a private wiki.
+
 ## Done (2026-10-09, free-tier limits)
 
 Mirrored diff-based (`git merge-file`, base = the private tool's previous

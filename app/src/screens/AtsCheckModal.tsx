@@ -1,10 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CVData, CoverLetterData } from '../data/types';
 import { extractExportText, type ExportRenderConfig } from '../export/exportHtml';
-import { COLORS as C, FONTS as F, BORDER as B, TYPE } from '../ui/tokens';
 import { ATS_I18N, type AtsStrings } from '../ui/i18n/ats';
+import { PRUEFEN_I18N, type CheckDoc } from '../ui/i18n/pruefen';
 import { useUiLang } from '../ui/useUiLang';
+import { Portal } from '../ui/Overlay';
 import { extraSectionsPlain, extraSectionsText } from '../data/extraSections';
+import { useFreeTier } from '../billing/freeTier';
+import { PassNote } from '../billing/PassLock';
+import { haystack, contains, jobTerms } from '../check/keywords';
+import { docLang, JD_MIN } from '../check/coverLetterCheck';
+import { BothView, CoverJobView, CoverReadView, JdBox, StyleView } from '../check/CheckViews';
+import { useCoverReport } from '../check/useCoverReport';
+import '../check/check.css';
 
 interface Props {
   data: CVData;
@@ -12,77 +20,127 @@ interface Props {
   /** Export-Einstellungen — der Check liest das echte Exportdokument, nicht
    *  die Rohdaten. Ohne sie fällt er auf eine einfache Datenansicht zurück. */
   exportConfig?: ExportRenderConfig;
+  /** Womit der Dialog aufgeht. Ohne Angabe: Lebenslauf. */
+  initialDoc?: CheckDoc;
   onClose: () => void;
 }
 
-/**
- * ATS-Check: two tools an applicant can use to see their resume the way an
- * Applicant Tracking System does — before they hit "Apply".
- *
- *   Tab 1 — Notepad-Vorschau:
- *     The resume rendered as plain text in the reading order an ATS parser
- *     would produce. If contact info is missing, sections are scrambled, or
- *     a bullet runs into the next section, the user sees it here.
- *
- *   Tab 2 — Keyword-Match:
- *     Paste a job description; the tool surfaces which hard skills from the
- *     posting appear verbatim in the CV (green) and which are missing (red).
- *     No AI — string matching against a hand-tuned stoplist.
- *
- * Tip from the HR-recruiter Threads post: ATS doesn't understand synonyms.
- * If the posting says "Microsoft Excel" your CV must say "Microsoft Excel",
- * not "Microsoft Office". This tool makes that gap visible.
- */
-export default function AtsCheckModal({ data, coverLetter, exportConfig, onClose }: Props) {
-  const t = ATS_I18N[useUiLang()];
-  const [tab, setTab] = useState<'notepad' | 'keywords'>('notepad');
+type Tab = 'text' | 'job' | 'style' | 'match';
+const TABS: Record<CheckDoc, Tab[]> = { resume: ['text', 'job'], cover: ['text', 'job', 'style'], both: ['match'] };
 
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
+/**
+ * „So liest ein Portal …": Lebenslauf, Anschreiben oder beide zusammen so,
+ * wie ein Bewerbermanagement-System sie bekommt — als Text in der Reihenfolge
+ * der PDF-Textebene, abgeglichen mit einer Stellenanzeige.
+ *
+ * Bis zum 10.10.2026 gab es hier nur den Lebenslauf (Rückmeldung: „ats test vom
+ * anschreiben ging gestern nicht? Da war nur der für den Lebenslauf"). Jetzt
+ * lässt sich oben wählen, was geprüft wird; die Stellenanzeige gilt für alle
+ * drei Prüfungen.
+ *
+ * Der Dialog hängt per Portal am Dokument. Vorher lag er im Prüfen-Paneel, und
+ * dessen Transformation fing `position: fixed` ein: Der Dialog war auf die
+ * Breite des Paneels gequetscht.
+ *
+ * Gratis-Grenze: Die Prüfung des Anschreibens folgt dem Anschreiben selbst
+ * (billing/freeTier.ts, `coverLetter`). Ohne Pass steht dort der Pass-Hinweis,
+ * der Lebenslauf bleibt frei.
+ */
+export default function AtsCheckModal({ data, coverLetter, exportConfig, initialDoc = 'resume', onClose }: Props) {
+  const ui = useUiLang();
+  const t = PRUEFEN_I18N[ui];
+  const ft = useFreeTier();
+  const [doc, setDoc] = useState<CheckDoc>(initialDoc);
+  const [tab, setTab] = useState<Tab>(TABS[initialDoc][0]);
+  const [jd, setJd] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const coverAllowed = ft.coverLetter && !!coverLetter;
+  const needsCover = doc !== 'resume';
+  const report = useCoverReport(data, coverLetter, exportConfig, needsCover && coverAllowed);
+  const cvText = useMemo(() => {
+    if (!exportConfig || doc !== 'both') return '';
+    try { return extractExportText(data, exportConfig); } catch { return ''; }
+  }, [data, exportConfig, doc]);
+
+  const chooseDoc = (d: CheckDoc) => { setDoc(d); setTab(TABS[d][0]); };
+
+  // Fokus: in den Dialog, Escape schließt, Tab bleibt drin, danach zurück.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const f = [...dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, textarea, select, summary, [tabindex]:not([tabindex="-1"])')]
+        .filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); before?.focus?.(); };
+  }, [onClose]);
+
+  const tabLabel: Record<Tab, string> = { text: t.tabText, job: t.tabJob, style: t.tabStyle, match: t.tabMatch };
+
+  let body: React.ReactNode;
+  if (needsCover && !coverAllowed) {
+    body = (
+      <div data-cover-locked>
+        <p className="ck-intro">{t.passBody}</p>
+        <PassNote feature="coverLetter" label={t.passLabel} />
+      </div>
+    );
+  } else if (doc === 'resume') {
+    body = tab === 'text'
+      ? <NotepadView data={data} exportConfig={exportConfig} />
+      : <KeywordMatchView data={data} jd={jd} setJd={setJd} />;
+  } else if (doc === 'cover' && report && coverLetter) {
+    body = tab === 'text' ? <CoverReadView report={report} />
+      : tab === 'job' ? <CoverJobView cl={coverLetter} jd={jd} setJd={setJd} />
+      : <StyleView cl={coverLetter} lang={docLang(data)} />;
+  } else if (doc === 'both' && report && coverLetter) {
+    body = <BothView cv={data} cl={coverLetter} cvText={cvText} clText={report.text} jd={jd} setJd={setJd} />;
+  }
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(28,25,23,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-      <div onClick={stop} style={{ background: C.paper, border: B.inkStrong, width: '100%', maxWidth: '820px', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '24px 28px 18px', borderBottom: B.hairline }}>
-          <div style={{ ...TYPE.micromono, color: C.gold, marginBottom: '8px' }}>ATS · APPLICANT TRACKING SYSTEM</div>
-          <div style={{ fontFamily: F.display, fontSize: '30px', fontWeight: 400, color: C.ink, lineHeight: 1, letterSpacing: '-0.02em', marginBottom: '14px' }}>
-            {t.titleLead}<em style={{ fontStyle: 'italic', color: C.gold }}>{t.titleEm}</em>
+    <Portal>
+      <div className="ck-backdrop" onClick={onClose} aria-hidden />
+      <div ref={dialogRef} className="ck-dialog" role="dialog" aria-modal="true" aria-labelledby="ck-title" tabIndex={-1} data-check-dialog={doc}>
+        <div className="ck-head">
+          <div className="ck-head-row">
+            <div>
+              <p className="ck-overline">{t.overline}</p>
+              <h2 id="ck-title" className="ck-title">{t.title[doc]}</h2>
+            </div>
+            <button type="button" className="ui-btn ui-icon-btn ck-close" onClick={onClose} aria-label={t.close}>×</button>
           </div>
-          <div style={{ display: 'flex', gap: '24px' }}>
-            {(['notepad', 'keywords'] as const).map(tt => (
-              <button key={tt} type="button" onClick={() => setTab(tt)}
-                style={{
-                  padding: '4px 2px', background: 'transparent', border: 'none',
-                  borderBottom: tab === tt ? `2px solid ${C.ink}` : '2px solid transparent',
-                  fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-                  color: tab === tt ? C.ink : C.fade,
-                  cursor: 'pointer', fontFamily: F.ui,
-                }}>
-                {tt === 'notepad' ? t.tabNotepad : t.tabKeywords}
-              </button>
+          <div className="ui-seg ck-docs" role="radiogroup" aria-label={t.docLabel}>
+            {(['resume', 'cover', 'both'] as const).map(d => (
+              <button key={d} type="button" role="radio" aria-checked={doc === d} onClick={() => chooseDoc(d)} data-doc={d}>{t.doc[d]}</button>
+            ))}
+          </div>
+          <div className="ck-tabs" role="tablist" aria-label={t.title[doc]}>
+            {TABS[doc].map(x => (
+              <button key={x} type="button" role="tab" id={`ck-tab-${x}`} aria-selected={tab === x} aria-controls="ck-panel"
+                className="ck-tab" onClick={() => setTab(x)} data-tab={x}>{tabLabel[x]}</button>
             ))}
           </div>
         </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
-          {tab === 'notepad' ? <NotepadView data={data} coverLetter={coverLetter} exportConfig={exportConfig} /> : <KeywordMatchView data={data} />}
-        </div>
-
-        <div style={{ padding: '14px 28px', borderTop: B.hairline, display: 'flex', justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose}
-            style={{ padding: '11px 22px', background: C.ink, color: C.paper, border: 'none', fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: F.ui }}>
-            {t.close}
-          </button>
+        <div className="ck-body" id="ck-panel" role="tabpanel" aria-labelledby={`ck-tab-${tab}`}>
+          {body}
         </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 
-// ── Tab 1: Notepad-Vorschau ─────────────────────────────────────────────────
+// ── Lebenslauf: Textansicht ─────────────────────────────────────────────────
 
-function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverLetter?: CoverLetterData; exportConfig?: ExportRenderConfig }) {
+function NotepadView({ data, exportConfig }: { data: CVData; exportConfig?: ExportRenderConfig }) {
   const t = ATS_I18N[useUiLang()];
-  void coverLetter; // currently CV-only — cover letter is plain prose anyway
 
   /* Der Text kommt aus dem tatsächlich exportierten Dokument. Vorher wurde er
      aus den Eingabefeldern neu zusammengesetzt — damit konnte der Check per
@@ -130,27 +188,16 @@ function NotepadView({ data, coverLetter, exportConfig }: { data: CVData; coverL
 
   return (
     <>
-      <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '16px', maxWidth: '60ch' }}>
-        {fromExport ? t.notepadIntroExport : t.notepadIntroFallback}
-      </div>
-
+      <p className="ck-intro">{fromExport ? t.notepadIntroExport : t.notepadIntroFallback}</p>
       {issues.length > 0 && (
-        <div style={{ background: '#fff5f3', border: B.hairline, padding: '12px 14px', marginBottom: '16px' }}>
-          <div style={{ ...TYPE.overline, color: C.error, marginBottom: '6px' }}>{t.issuesHeading(issues.length)}</div>
-          <ul style={{ margin: 0, paddingLeft: '18px', fontFamily: F.ui, fontSize: '12.5px', color: C.pencil, lineHeight: 1.55 }}>
-            {issues.map((m, i) => <li key={i}>{m}</li>)}
+        <section className="ck-group" aria-label={t.issuesHeading(issues.length)}>
+          <h3 className="ck-group-title">{t.issuesHeading(issues.length)}</h3>
+          <ul className="ck-list">
+            {issues.map((m, i) => <li key={i} className="ck-item" data-sev="fehler"><span className="ck-mark" data-sev="fehler" aria-hidden>!</span><span>{m}</span></li>)}
           </ul>
-        </div>
+        </section>
       )}
-
-      <pre style={{
-        background: C.ink, color: C.paper,
-        padding: '18px 22px',
-        fontFamily: F.mono, fontSize: '12.5px',
-        lineHeight: 1.65, margin: 0,
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        maxHeight: '52vh', overflow: 'auto',
-      }}>{text}</pre>
+      <pre className="ck-pre" data-resume-text tabIndex={0}>{text}</pre>
     </>
   );
 }
@@ -207,82 +254,17 @@ function buildNotepadText(data: CVData, t: AtsStrings): string {
   return out.join('\n');
 }
 
-// ── Tab 2: Keyword-Match ────────────────────────────────────────────────────
-
-// Lowercased, deduplicated, accent-insensitive stoplist for German + English.
-// Anything in here is NOT considered a "hard skill" candidate.
-const STOPWORDS = new Set<string>(`
-a an the and or but if then else for to of in on at by from with without about into
-ist sind das der die den dem des ein eine einen einer eines auf in mit von zu für aus
-am im uns euch wir ihr du sie er es seine ihre sein dass ob nicht keine kein
-und oder aber wenn dann sonst also wie sowie sowohl als wenn auch nur noch nun
-sehr mehr meisten viel viele etwa ungefähr ungefaehr ca circa über ueber unter
-durch nach vor jeder jede jedes alle alles man wer was wann wo warum weil dass
-unsere unseres unserer unserem unseren ihres ihrer
-position rolle role job stelle bewerbung verantwortung verantwortlich aufgaben
-sie sind wir suchen wir bieten profil anforderungen erfahrung kenntnisse
-über über uns ueber uns about us we are looking for we offer profile requirements experience knowledge
-m w d
-years jahre jahren months monate tag tage week wochen
-gut good very strong stark fließend fliessend
-ausgezeichnete excellent exzellent excellent
-deine dein dein deinem ihrem ihres your you
-team teams projekt projekte unternehmen company firma firmen
-neue new aktuelle current bisherige past
-have has hatte habe haben besitzen verfügen verfuegen
-should sollte soll soll können koennen muss
-mindestens at least minimum minimal
-desirable nice to have wünschenswert wuenschenswert
-benefits vorteile angebot stellenangebot
-bewerben bewerbung apply application interview
-de en english englisch german
-title titel
-`.split(/\s+/).filter(Boolean));
+// ── Lebenslauf: Stellenanzeige ──────────────────────────────────────────────
 
 interface MatchResult { skill: string; foundInResume: boolean; foundInJd: number }
 
-function tokenize(text: string): Set<string> {
-  // Lowercase, fold accents, remove punctuation, drop stopwords + single chars.
-  const folded = text.toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[äöüß]/g, ch => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' } as Record<string, string>)[ch] || ch);
-  // Bindestrich steht am Ende der Klasse und braucht dort keine Maskierung.
-  const tokens = folded.split(/[^a-z0-9+#./-]+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
-  return new Set(tokens);
-}
-
-function extractCandidates(jd: string): string[] {
-  // Multi-pass extraction:
-  //   1. Capitalised multi-word phrases (Adobe Photoshop, Microsoft Excel)
-  //   2. Single capitalised tech words (React, Python, Salesforce, GA4)
-  //   3. Acronyms (SEO, CRM, ATS) — 2-4 uppercase letters
-  const phrases = new Set<string>();
-  // Multi-word capitalised phrases — naive but good enough for hard skills
-  const phraseRe = /\b([A-Z][a-zA-Z0-9+]+(?:\s+[A-Z][a-zA-Z0-9+]+){0,2})\b/g;
-  let m;
-  while ((m = phraseRe.exec(jd))) phrases.add(m[1]);
-  // Acronyms (2-5 uppercase letters/digits)
-  const acronymRe = /\b[A-Z][A-Z0-9]{1,4}\b/g;
-  while ((m = acronymRe.exec(jd))) phrases.add(m[0]);
-  // Tech-stack identifiers with dots / pluses / hashes
-  const techRe = /\b[A-Za-z][a-zA-Z0-9]*(?:[+#.][a-zA-Z0-9]+)+\b/g;
-  while ((m = techRe.exec(jd))) phrases.add(m[0]);
-
-  return Array.from(phrases)
-    .filter(p => {
-      const folded = p.toLowerCase().replace(/[^a-z0-9]/g, '');
-      return folded.length >= 2 && !STOPWORDS.has(folded);
-    })
-    .sort()
-    .slice(0, 80);
-}
-
-function KeywordMatchView({ data }: { data: CVData }) {
-  const t = ATS_I18N[useUiLang()];
-  const [jd, setJd] = useState('');
+function KeywordMatchView({ data, jd, setJd }: { data: CVData; jd: string; setJd: (v: string) => void }) {
+  const ui = useUiLang();
+  const t = ATS_I18N[ui];
+  const tp = PRUEFEN_I18N[ui];
 
   const result = useMemo<MatchResult[] | null>(() => {
-    if (jd.trim().length < 60) return null;
+    if (jd.trim().length < JD_MIN) return null;
     const cvText = [
       data.personal.title, data.profile?.text || '',
       ...data.experience.flatMap(e => [e.role, e.company, ...(e.bullets || [])]),
@@ -290,27 +272,10 @@ function KeywordMatchView({ data }: { data: CVData }) {
       ...data.education.map(e => `${e.degree} ${e.institution}`),
       extraSectionsText(data),
     ].join(' ');
-    const cvTokens = tokenize(cvText);
-    const cvLower = cvText.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
-    const candidates = extractCandidates(jd);
-    const seen = new Set<string>();
-    const matches: MatchResult[] = [];
-    for (const cand of candidates) {
-      const key = cand.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      // Verbatim match: substring of CV (case-insensitive) OR token match
-      const inText = cvLower.includes(key.replace(/[äöüß]/g, ch => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' } as Record<string, string>)[ch] || ch));
-      const tokens = tokenize(cand);
-      const inTokens = Array.from(tokens).every(t => cvTokens.has(t));
-      const foundInResume = inText || inTokens;
-      const foundInJd = (jd.match(new RegExp(`\\b${cand.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'gi')) || []).length;
-      matches.push({ skill: cand, foundInResume, foundInJd });
-    }
-    return matches
-      .sort((a, b) => Number(b.foundInJd > 0) - Number(a.foundInJd > 0) || b.foundInJd - a.foundInJd)
-      .slice(0, 40);
+    const h = haystack(cvText);
+    return jobTerms(jd)
+      .map(x => ({ skill: x.term, foundInResume: contains(h, x.term), foundInJd: x.inJd }))
+      .sort((a, b) => Number(b.foundInJd > 0) - Number(a.foundInJd > 0) || b.foundInJd - a.foundInJd);
   }, [data, jd]);
 
   const hits = result?.filter(r => r.foundInResume).length ?? 0;
@@ -347,64 +312,35 @@ function KeywordMatchView({ data }: { data: CVData }) {
 
   return (
     <>
-      <div style={{ fontFamily: F.ui, fontSize: '13px', color: C.pencil, lineHeight: 1.55, marginBottom: '12px', maxWidth: '60ch' }}>
-        {t.keywordIntro}
-      </div>
-      <textarea value={jd} onChange={e => setJd(e.target.value)} rows={8}
-        placeholder={t.jdPlaceholder}
-        style={{
-          width: '100%', padding: '12px 14px',
-          fontFamily: F.ui, fontSize: '13px', color: C.ink,
-          background: C.white, border: B.hairline,
-          outline: 'none', boxSizing: 'border-box',
-          resize: 'vertical', lineHeight: 1.55, marginBottom: '12px',
-        }} />
-      <div style={{ fontFamily: F.ui, fontSize: '11px', color: C.fade, marginBottom: '18px' }}>
-        {t.charCount(jd.length)}
-      </div>
+      <p className="ck-intro">{t.keywordIntro}</p>
+      <JdBox jd={jd} setJd={setJd} t={tp} id="ck-jd-resume" />
 
       {result && (
         <>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '14px' }}>
-            <Counter label={t.counterHits} value={hits} color={C.success} />
-            <Counter label={t.counterMisses} value={misses} color={C.error} />
-            <Counter label={t.counterSkills} value={result.length} color={C.gold} />
+          <div style={{ display: 'flex', gap: '24px', margin: '18px 0 12px' }}>
+            <Counter label={t.counterHits} value={hits} tone="high" />
+            <Counter label={t.counterMisses} value={misses} tone="low" />
+            <Counter label={t.counterSkills} value={result.length} tone="ink" />
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div className="ck-chips" data-resume-terms>
             {result.map(r => (
-              <span key={r.skill}
-                title={r.foundInResume ? t.chipFound : t.chipMissing}
-                style={{
-                  padding: '5px 11px',
-                  background: r.foundInResume ? '#f0f7f0' : '#fff5f3',
-                  border: `1px solid ${r.foundInResume ? C.success : C.error}`,
-                  color: r.foundInResume ? C.success : C.error,
-                  fontSize: '12px', fontWeight: 600,
-                  fontFamily: F.ui,
-                }}>
+              <span key={r.skill} className="ck-chip" data-hit={r.foundInResume} title={r.foundInResume ? t.chipFound : t.chipMissing}>
                 {r.foundInResume ? '✓' : '○'} {r.skill}{r.foundInJd > 1 ? ` ×${r.foundInJd}` : ''}
               </span>
             ))}
           </div>
 
           {punkte && (punkte.mit.length > 0 || punkte.ohne.length > 0) && (
-            <div style={{ marginTop: '26px', borderTop: B.hairline, paddingTop: '18px' }}>
-              <div style={{ ...TYPE.overline, color: C.fade, marginBottom: '4px' }}>{t.contribOverline}</div>
-              <div style={{ fontFamily: F.ui, fontSize: '12px', color: C.pencil, lineHeight: 1.55, marginBottom: '14px', maxWidth: '62ch' }}>
+            <div style={{ marginTop: '24px', borderTop: '1px solid var(--hair)', paddingTop: '16px' }}>
+              <h3 className="ck-label">{t.contribOverline}</h3>
+              <p className="ck-meta" style={{ margin: '0 0 12px', maxWidth: '62ch' }}>
                 {t.contribBody1}<em>{t.contribBodyEm}</em>{t.contribBody2}
-              </div>
-
-              <Punkteliste
-                titel={t.listWithMatches(punkte.mit.length)}
-                farbe={C.success}
-                eintraege={punkte.mit.map(p => ({ rolle: p.rolle, text: p.text, zusatz: p.treffer.join(' · ') }))}
-              />
-              <Punkteliste
-                titel={t.listWithoutMatches(punkte.ohne.length)}
-                farbe={C.fade}
-                eintraege={punkte.ohne.map(p => ({ rolle: p.rolle, text: p.text }))}
-              />
+              </p>
+              <Punkteliste titel={t.listWithMatches(punkte.mit.length)}
+                eintraege={punkte.mit.map(p => ({ rolle: p.rolle, text: p.text, zusatz: p.treffer.join(' · ') }))} />
+              <Punkteliste titel={t.listWithoutMatches(punkte.ohne.length)}
+                eintraege={punkte.ohne.map(p => ({ rolle: p.rolle, text: p.text }))} />
             </div>
           )}
         </>
@@ -414,40 +350,31 @@ function KeywordMatchView({ data }: { data: CVData }) {
 }
 
 /** Aufzählungspunkte mit ihrer Station, zusammengeklappt hinter einer Zeile. */
-function Punkteliste({ titel, farbe, eintraege }: {
-  titel: string; farbe: string; eintraege: { rolle: string; text: string; zusatz?: string }[];
-}) {
-  const [offen, setOffen] = useState(false);
+function Punkteliste({ titel, eintraege }: { titel: string; eintraege: { rolle: string; text: string; zusatz?: string }[] }) {
   if (!eintraege.length) return null;
   return (
-    <div style={{ marginBottom: '10px' }}>
-      <button type="button" onClick={() => setOffen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '6px 0', cursor: 'pointer', fontFamily: F.ui, fontSize: '12.5px', fontWeight: 700, color: farbe }}>
-        <span style={{ fontSize: '10px' }}>{offen ? '▾' : '▸'}</span>{titel}
-      </button>
-      {offen && (
-        <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', listStyle: 'disc' }}>
-          {eintraege.map((e, i) => (
-            <li key={i} style={{ fontFamily: F.ui, fontSize: '12px', color: C.ink, lineHeight: 1.5, marginBottom: '7px' }}>
-              {e.text}
-              <span style={{ display: 'block', color: C.fade, fontSize: '10.5px', marginTop: '2px' }}>
-                {e.rolle}{e.zusatz ? ` — ${e.zusatz}` : ''}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <details className="ck-passed" style={{ marginBottom: 8 }}>
+      <summary style={{ color: 'var(--ink)' }}>{titel}</summary>
+      <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px' }}>
+        {eintraege.map((e, i) => (
+          <li key={i} style={{ fontSize: 'var(--t-xs)', color: 'var(--ink)', lineHeight: 1.5, marginBottom: 7 }}>
+            {e.text}
+            <span style={{ display: 'block', color: 'var(--ink-2)', marginTop: 2 }}>
+              {e.rolle}{e.zusatz ? ` · ${e.zusatz}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
-function Counter({ label, value, color }: { label: string; value: number; color: string }) {
+function Counter({ label, value, tone }: { label: string; value: number; tone: 'high' | 'low' | 'ink' }) {
+  const color = tone === 'high' ? 'var(--ats-high-ink)' : tone === 'low' ? 'var(--ats-low-ink)' : 'var(--ink)';
   return (
     <div>
-      <div style={{ ...TYPE.overline, color: C.fade, marginBottom: '2px' }}>{label}</div>
-      <div style={{ fontFamily: F.display, fontSize: '32px', fontWeight: 400, color, lineHeight: 1, letterSpacing: '-0.02em' }}>
-        {value}
-      </div>
+      <div style={{ fontSize: 'var(--t-xs)', fontWeight: 600, color: 'var(--ink-2)', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 640, color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
   );
 }

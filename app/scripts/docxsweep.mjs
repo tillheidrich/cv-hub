@@ -26,7 +26,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { join } from 'path';
-import { pruefeReihenfolge } from './_abschnitte.mjs';
+import { pruefeReihenfolge, markenFuer } from './_abschnitte.mjs';
 const PERSONA = process.env.DOCX_PERSONA || 'marketing';
 let schlecht = 0;
 const ids = process.argv.slice(2);
@@ -51,7 +51,13 @@ for (const t of ids) {
       /* Absätze als Zeilen, Läufe darin aneinander — so liest ein Parser. */
       const text = xml.replace(/<\/w:p>/g, '\n').replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '')
         .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-      const { fehlt, falsch } = pruefeReihenfolge(text);
+      /* Die Design-Fassung folgt der Reihenfolge der Vorlage (`mainOrder`),
+       * die ATS-Fassung immer der üblichen. */
+      const order = v === 'design' ? await p.evaluate(async id => {
+        const th = (await import('/src/templates/theme.ts')).THEMES.find(x => x.id === id);
+        return th && th.mainOrder && !/sidebar/.test(th.layout) ? th.mainOrder : null;
+      }, t) : null;
+      const { fehlt, falsch } = pruefeReihenfolge(text, markenFuer(order));
       if (fehlt.length) flags.push(`FEHLT: ${fehlt.slice(0, 3).join(' | ')}${fehlt.length > 3 ? ` (+${fehlt.length - 3})` : ''}`);
       if (falsch.length) flags.push(`REIHENFOLGE: ${falsch.slice(0, 3).join(' | ')}`);
     }

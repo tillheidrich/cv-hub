@@ -287,7 +287,7 @@ const de: BillingStrings = {
   extendPass: 'Pass verlängern',
   continueFree: 'Weiter ohne Konto',
   features: {
-    sync: { title: 'Speichern über Geräte', body: 'Deine Lebensläufe liegen auf unserem Server in Deutschland und sind an jedem Gerät da, an dem du angemeldet bist.' },
+    sync: { title: 'Speichern über Geräte', body: 'Deine Lebensläufe liegen auf unserem Server und sind an jedem Gerät da, an dem du angemeldet bist.' },
     share: { title: 'Sharelinks', body: 'Ein Link statt Anhang. Mit Ablaufdatum, jederzeit widerrufbar, und du siehst, wie oft er aufgerufen wurde.' },
     versions: { title: 'Versionen am Server', body: 'Bis zu 25 ältere Stände je Lebenslauf, auf jedem Gerät abrufbar.' },
     mcp: { title: 'KI verbinden (MCP)', body: 'Claude, ChatGPT oder Cursor lesen und ändern deinen Lebenslauf direkt, ohne Kopieren und Einfügen.' },
@@ -317,7 +317,7 @@ const de: BillingStrings = {
   tableRows: (n, price, d) => [
     { label: `Alle ${n} Vorlagen, Anschreiben`, free: true, pass: true },
     { label: 'PDF, Word, ATS-Fassung, HTML, JSON', free: true, pass: true },
-    { label: 'Wo deine Daten liegen', free: 'In deinem Browser', pass: 'Server in Deutschland' },
+    { label: 'Wo deine Daten liegen', free: 'In deinem Browser', pass: 'Auf dem Server' },
     { label: 'Versionen', free: 'Im Browser (20)', pass: 'Am Server (25)' },
     { label: 'Speichern über Geräte', free: 'Mit Sicherungsdatei', pass: true },
     { label: 'Sharelinks mit Ablauf, Widerruf und Aufrufzählung', free: false, pass: true },
@@ -340,7 +340,7 @@ const de: BillingStrings = {
     { q: 'Brauche ich den Pass für PDF oder Word?', a: 'Nein. Export ist nie Teil des Passes. Ohne Konto bekommst du alle Vorlagen, PDF, beide Word-Fassungen und die übrigen Formate, und deine Daten bleiben in deinem Browser.' },
     { q: 'Wie bezahle ich?', a: 'Über Mollie, einen Zahlungsdienstleister aus den Niederlanden. Die Zahlungsart wählst du auf der Bezahlseite von Mollie. Karten- oder Kontodaten sehen wir nicht.' },
     { q: 'Bekomme ich eine Rechnung?', a: 'Ja. Sie kommt als PDF mit der Bestellbestätigung per E-Mail und liegt in deinem Konto unter „Mein Pass".' },
-    { q: 'Warum kostet das überhaupt etwas?', a: 'Speicher, Sharelinks und die KI-Verbindung laufen auf einem Server in Deutschland, und der kostet Geld. Was in deinem Browser läuft, kostet uns nichts. Deshalb ist es kostenlos.' },
+    { q: 'Warum kostet das überhaupt etwas?', a: 'Speicher, Sharelinks und die KI-Verbindung laufen auf einem Server, und der kostet Geld. Was in deinem Browser läuft, kostet uns nichts. Deshalb ist es kostenlos.' },
   ],
   closing: 'Fang ohne Konto an. Den Pass kannst du später immer noch holen.',
   pricingSoon: 'Der Verkauf ist noch nicht geöffnet. Ohne Konto kannst du schon jetzt alles nutzen, was im Browser läuft.',
@@ -349,7 +349,7 @@ const de: BillingStrings = {
   landingLede: 'Vorlagen, PDF und Word sind ohne Konto frei. Der Bewerbungs-Pass bringt Speichern über Geräte, Sharelinks, Versionen am Server und die KI-Verbindung.',
   landingMore: 'Alles zu den Preisen',
   unlock: {
-    sync: { title: 'Speichern über Geräte gibt es mit dem Pass.', body: 'Dein Lebenslauf liegt dann auf unserem Server in Deutschland und ist an jedem Gerät da, an dem du angemeldet bist.' },
+    sync: { title: 'Speichern über Geräte gibt es mit dem Pass.', body: 'Dein Lebenslauf liegt dann auf unserem Server und ist an jedem Gerät da, an dem du angemeldet bist.' },
     share: { title: 'Sharelinks gibt es mit dem Pass.', body: 'Ein Link statt Anhang: mit Ablaufdatum, jederzeit widerrufbar, und du siehst, wie oft er aufgerufen wurde.' },
     versions: { title: 'Versionen am Server gibt es mit dem Pass.', body: 'Bis zu 25 ältere Stände je Lebenslauf, auf jedem Gerät. Im Browser hast du weiterhin die letzten 20.' },
     mcp: { title: 'KI verbinden gibt es mit dem Pass.', body: 'Claude, ChatGPT oder Cursor lesen und ändern deinen Lebenslauf direkt. Die Markdown-Brücke funktioniert auch ohne Pass.' },
@@ -560,7 +560,7 @@ const en: BillingStrings = {
   extendPass: 'Extend the pass',
   continueFree: 'Continue without an account',
   features: {
-    sync: { title: 'Save across devices', body: 'Your résumés are stored on our server in Germany and are there on every device you sign in on.' },
+    sync: { title: 'Save across devices', body: 'Your résumés are stored on our server and are there on every device you sign in on.' },
     share: { title: 'Share links', body: 'A link instead of an attachment. With an expiry date, revocable at any time, and you see how often it was opened.' },
     versions: { title: 'Versions on the server', body: 'Up to 25 earlier states per résumé, available on every device.' },
     mcp: { title: 'Connect AI (MCP)', body: 'Claude, ChatGPT or Cursor read and edit your résumé directly, without copy and paste.' },
@@ -590,7 +590,7 @@ const en: BillingStrings = {
   tableRows: (n, price, d) => [
     { label: `All ${n} templates, cover letter`, free: true, pass: true },
     { label: 'PDF, Word, ATS version, HTML, JSON', free: true, pass: true },
-    { label: 'Where your data lives', free: 'In your browser', pass: 'Server in Germany' },
+    { label: 'Where your data lives', free: 'In your browser', pass: 'On the server' },
     { label: 'Versions', free: 'In the browser (20)', pass: 'On the server (25)' },
     { label: 'Save across devices', free: 'With a backup file', pass: true },
     { label: 'Share links with expiry, revocation and view count', free: false, pass: true },
@@ -613,7 +613,7 @@ const en: BillingStrings = {
     { q: 'Do I need the pass for PDF or Word?', a: 'No. Export is never part of the pass. Without an account you get every template, PDF, both Word versions and the other formats, and your data stays in your browser.' },
     { q: 'How do I pay?', a: 'Through Mollie, a payment provider based in the Netherlands. You choose the payment method on the Mollie checkout page. We never see card or bank details.' },
     { q: 'Do I get an invoice?', a: 'Yes. It comes as a PDF with the order confirmation by e-mail and is in your account under "My pass".' },
-    { q: 'Why does it cost anything?', a: 'Storage, share links and the AI connection run on a server in Germany, and that costs money. What runs in your browser costs us nothing, which is why it is free.' },
+    { q: 'Why does it cost anything?', a: 'Storage, share links and the AI connection run on a server, and that costs money. What runs in your browser costs us nothing, which is why it is free.' },
   ],
   closing: 'Start without an account. You can still get the pass later.',
   pricingSoon: 'Sales are not open yet. Without an account you can already use everything that runs in the browser.',
@@ -622,7 +622,7 @@ const en: BillingStrings = {
   landingLede: 'Templates, PDF and Word are free without an account. The Application Pass adds saving across devices, share links, versions on the server and the AI connection.',
   landingMore: 'See pricing',
   unlock: {
-    sync: { title: 'Saving across devices comes with the pass.', body: 'Your résumé is then stored on our server in Germany and is there on every device you sign in on.' },
+    sync: { title: 'Saving across devices comes with the pass.', body: 'Your résumé is then stored on our server and is there on every device you sign in on.' },
     share: { title: 'Share links come with the pass.', body: 'A link instead of an attachment: with an expiry date, revocable at any time, and you see how often it was opened.' },
     versions: { title: 'Versions on the server come with the pass.', body: 'Up to 25 earlier states per résumé, on every device. In the browser you keep the last 20.' },
     mcp: { title: 'Connecting AI comes with the pass.', body: 'Claude, ChatGPT or Cursor read and edit your résumé directly. The Markdown bridge works without the pass too.' },
@@ -833,7 +833,7 @@ const fr: BillingStrings = {
   extendPass: 'Prolonger le pass',
   continueFree: 'Continuer sans compte',
   features: {
-    sync: { title: 'Enregistrer sur plusieurs appareils', body: 'Vos CV sont stockés sur notre serveur en Allemagne et disponibles sur chaque appareil où vous êtes connecté.' },
+    sync: { title: 'Enregistrer sur plusieurs appareils', body: 'Vos CV sont stockés sur notre serveur et disponibles sur chaque appareil où vous êtes connecté.' },
     share: { title: 'Liens de partage', body: 'Un lien au lieu d’une pièce jointe. Avec date d’expiration, révocable à tout moment, et vous voyez combien de fois il a été ouvert.' },
     versions: { title: 'Versions sur le serveur', body: 'Jusqu’à 25 états antérieurs par CV, accessibles sur chaque appareil.' },
     mcp: { title: 'Connecter une IA (MCP)', body: 'Claude, ChatGPT ou Cursor lisent et modifient directement votre CV, sans copier-coller.' },
@@ -863,7 +863,7 @@ const fr: BillingStrings = {
   tableRows: (n, price, d) => [
     { label: `Les ${n} modèles, lettre de motivation`, free: true, pass: true },
     { label: 'PDF, Word, version ATS, HTML, JSON', free: true, pass: true },
-    { label: 'Où sont vos données', free: 'Dans votre navigateur', pass: 'Serveur en Allemagne' },
+    { label: 'Où sont vos données', free: 'Dans votre navigateur', pass: 'Sur le serveur' },
     { label: 'Versions', free: 'Dans le navigateur (20)', pass: 'Sur le serveur (25)' },
     { label: 'Enregistrer sur plusieurs appareils', free: 'Avec fichier de sauvegarde', pass: true },
     { label: 'Liens de partage avec expiration, révocation et compteur', free: false, pass: true },
@@ -886,7 +886,7 @@ const fr: BillingStrings = {
     { q: 'Ai-je besoin du pass pour le PDF ou Word ?', a: 'Non. L’export ne fait jamais partie du pass. Sans compte, vous avez tous les modèles, le PDF, les deux versions Word et les autres formats, et vos données restent dans votre navigateur.' },
     { q: 'Comment payer ?', a: 'Via Mollie, un prestataire de paiement basé aux Pays-Bas. Vous choisissez le moyen de paiement sur la page de Mollie. Nous ne voyons ni carte ni coordonnées bancaires.' },
     { q: 'Est-ce que je reçois une facture ?', a: 'Oui. Elle arrive en PDF avec la confirmation de commande par e-mail et se trouve dans votre compte sous « Mon pass ».' },
-    { q: 'Pourquoi est-ce payant ?', a: 'Le stockage, les liens de partage et la connexion IA tournent sur un serveur en Allemagne, et il coûte de l’argent. Ce qui tourne dans votre navigateur ne nous coûte rien, c’est pourquoi c’est gratuit.' },
+    { q: 'Pourquoi est-ce payant ?', a: 'Le stockage, les liens de partage et la connexion IA tournent sur un serveur, et il coûte de l’argent. Ce qui tourne dans votre navigateur ne nous coûte rien, c’est pourquoi c’est gratuit.' },
   ],
   closing: 'Commencez sans compte. Vous pourrez toujours prendre le pass plus tard.',
   pricingSoon: 'La vente n’est pas encore ouverte. Sans compte, vous pouvez déjà utiliser tout ce qui tourne dans le navigateur.',
@@ -895,7 +895,7 @@ const fr: BillingStrings = {
   landingLede: 'Modèles, PDF et Word sont gratuits sans compte. Le Pass candidature ajoute l’enregistrement sur plusieurs appareils, les liens de partage, les versions sur le serveur et la connexion IA.',
   landingMore: 'Voir les tarifs',
   unlock: {
-    sync: { title: 'L’enregistrement sur plusieurs appareils est inclus dans le pass.', body: 'Votre CV est alors stocké sur notre serveur en Allemagne et disponible sur chaque appareil où vous êtes connecté.' },
+    sync: { title: 'L’enregistrement sur plusieurs appareils est inclus dans le pass.', body: 'Votre CV est alors stocké sur notre serveur et disponible sur chaque appareil où vous êtes connecté.' },
     share: { title: 'Les liens de partage sont inclus dans le pass.', body: 'Un lien au lieu d’une pièce jointe : avec date d’expiration, révocable à tout moment, et vous voyez combien de fois il a été ouvert.' },
     versions: { title: 'Les versions sur le serveur sont incluses dans le pass.', body: 'Jusqu’à 25 états antérieurs par CV, sur chaque appareil. Dans le navigateur, vous gardez les 20 derniers.' },
     mcp: { title: 'La connexion IA est incluse dans le pass.', body: 'Claude, ChatGPT ou Cursor lisent et modifient directement votre CV. Le pont Markdown fonctionne aussi sans pass.' },
@@ -1106,7 +1106,7 @@ const es: BillingStrings = {
   extendPass: 'Ampliar el pase',
   continueFree: 'Seguir sin cuenta',
   features: {
-    sync: { title: 'Guardar en varios dispositivos', body: 'Tus currículums se guardan en nuestro servidor en Alemania y están en cada dispositivo en el que inicies sesión.' },
+    sync: { title: 'Guardar en varios dispositivos', body: 'Tus currículums se guardan en nuestro servidor y están en cada dispositivo en el que inicies sesión.' },
     share: { title: 'Enlaces para compartir', body: 'Un enlace en lugar de un adjunto. Con fecha de caducidad, revocable en cualquier momento, y ves cuántas veces se abrió.' },
     versions: { title: 'Versiones en el servidor', body: 'Hasta 25 estados anteriores por currículum, disponibles en cada dispositivo.' },
     mcp: { title: 'Conectar IA (MCP)', body: 'Claude, ChatGPT o Cursor leen y editan tu currículum directamente, sin copiar y pegar.' },
@@ -1136,7 +1136,7 @@ const es: BillingStrings = {
   tableRows: (n, price, d) => [
     { label: `Las ${n} plantillas, carta de presentación`, free: true, pass: true },
     { label: 'PDF, Word, versión ATS, HTML, JSON', free: true, pass: true },
-    { label: 'Dónde están tus datos', free: 'En tu navegador', pass: 'Servidor en Alemania' },
+    { label: 'Dónde están tus datos', free: 'En tu navegador', pass: 'En el servidor' },
     { label: 'Versiones', free: 'En el navegador (20)', pass: 'En el servidor (25)' },
     { label: 'Guardar en varios dispositivos', free: 'Con archivo de copia', pass: true },
     { label: 'Enlaces con caducidad, revocación y contador de visitas', free: false, pass: true },
@@ -1159,7 +1159,7 @@ const es: BillingStrings = {
     { q: '¿Necesito el pase para el PDF o Word?', a: 'No. La exportación nunca forma parte del pase. Sin cuenta tienes todas las plantillas, el PDF, las dos versiones de Word y los demás formatos, y tus datos se quedan en tu navegador.' },
     { q: '¿Cómo pago?', a: 'Con Mollie, un proveedor de pagos de los Países Bajos. Eliges el medio de pago en la página de Mollie. Nunca vemos datos de tarjeta ni de cuenta.' },
     { q: '¿Recibo una factura?', a: 'Sí. Llega en PDF con la confirmación del pedido por correo y está en tu cuenta en «Mi pase».' },
-    { q: '¿Por qué cuesta algo?', a: 'El almacenamiento, los enlaces y la conexión con IA funcionan en un servidor en Alemania, y eso cuesta dinero. Lo que funciona en tu navegador no nos cuesta nada, por eso es gratis.' },
+    { q: '¿Por qué cuesta algo?', a: 'El almacenamiento, los enlaces y la conexión con IA funcionan en un servidor, y eso cuesta dinero. Lo que funciona en tu navegador no nos cuesta nada, por eso es gratis.' },
   ],
   closing: 'Empieza sin cuenta. El pase lo puedes conseguir más tarde.',
   pricingSoon: 'La venta aún no está abierta. Sin cuenta ya puedes usar todo lo que funciona en el navegador.',
@@ -1168,7 +1168,7 @@ const es: BillingStrings = {
   landingLede: 'Plantillas, PDF y Word son gratis sin cuenta. El Pase de candidatura añade guardar en varios dispositivos, enlaces para compartir, versiones en el servidor y la conexión con IA.',
   landingMore: 'Ver precios',
   unlock: {
-    sync: { title: 'Guardar en varios dispositivos viene con el pase.', body: 'Tu currículum se guarda entonces en nuestro servidor en Alemania y está en cada dispositivo en el que inicies sesión.' },
+    sync: { title: 'Guardar en varios dispositivos viene con el pase.', body: 'Tu currículum se guarda entonces en nuestro servidor y está en cada dispositivo en el que inicies sesión.' },
     share: { title: 'Los enlaces para compartir vienen con el pase.', body: 'Un enlace en lugar de un adjunto: con fecha de caducidad, revocable en cualquier momento, y ves cuántas veces se abrió.' },
     versions: { title: 'Las versiones en el servidor vienen con el pase.', body: 'Hasta 25 estados anteriores por currículum, en cada dispositivo. En el navegador conservas los últimos 20.' },
     mcp: { title: 'Conectar IA viene con el pase.', body: 'Claude, ChatGPT o Cursor leen y editan tu currículum directamente. El puente Markdown funciona también sin pase.' },

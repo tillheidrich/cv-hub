@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PICKABLE_THEMES, ACCENTS, PAPERS, FONT_PAIRING_LIST, getTheme, resolveThemeId, templateStructure } from '../templates/theme';
 import { atsLevelForLayout, atsLabel } from '../templates/atsScore';
 import { USER_SCALE, FS, FLOOR, MIN_FONT_PX } from '../templates/metrics';
-import { PAGE_FORMAT_LIST } from '../data/pageFormats';
+import { PAGE_FORMAT_LIST, LONG_CV_HINT, MAX_CV_PAGES } from '../data/pageFormats';
 import type { AppProfile, CVData, PageMode, PageFormat, SectionKey, FontPairingId } from '../data/types';
 import type { FitInfo, EditorTab } from '../preview/DocumentPreview';
 import { suggestCuts } from '../preview/shorten';
@@ -204,7 +204,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
           <div className="ui-section">
             <div className="ui-label">{d.pageCount}</div>
             <div className="ui-seg" role="radiogroup" aria-label={d.pageCount} style={{ background: 'oklch(0.30 0.02 250 / 0.06)', width: '100%' }}>
-              {(['one', 'two', 'three', 'auto'] as PageMode[]).map(m => (
+              {(['one', 'two', 'three', 'four', 'auto'] as PageMode[]).map(m => (
                 <button key={m} type="button" role="radio" aria-checked={pageMode === m} title={d.pageModeHelp[m]}
                   onClick={() => onSettings({ pageMode: m })} style={{ flex: m === 'one' || m === 'two' ? 1.5 : 1 }}>
                   {d.pageModes[m]}
@@ -292,7 +292,7 @@ export function FitSummary({ fit, pageMode, data, onJump, uiLang }: {
     [data, fit],
   );
   if (!fit) return null;
-  const wishN = pageMode === 'one' ? 1 : pageMode === 'two' ? 2 : 3;
+  const wishN = pageMode === 'one' ? 1 : pageMode === 'two' ? 2 : pageMode === 'three' ? 3 : MAX_CV_PAGES;
   const floor = pt(Math.max(MIN_FONT_PX, FS.body * FLOOR.t));
   const tone = fit.overflow ? 'low' : fit.condense > 0.05 ? 'medium' : 'high';
   const text = fit.overflow
@@ -319,6 +319,10 @@ export function FitSummary({ fit, pageMode, data, onJump, uiLang }: {
           <p style={{ margin: '6px 0 0' }}>{cuts.hopeless ? d.cutsHopeless : cuts.covered >= fit.overflowLines ? et.spEnough : et.spPartly}</p>
         </div>
       )}
+      {/* Ab Seite drei: was in Deutschland üblich ist (data/pageFormats.ts). */}
+      {fit.pages >= 3 && (
+        <p className="ui-hint" style={{ margin: 0 }} data-long-cv>{LONG_CV_HINT[uiLang](fit.pages)}</p>
+      )}
       {!fit.overflow && fit.pages > 1 && fit.lastPageFill < 0.25 && (
         <p className="ui-hint" style={{ margin: 0, color: 'var(--ats-mid-ink)' }}>{d.lastPageThin(fit.pages, Math.round(fit.lastPageFill * 100))}</p>
       )}
@@ -335,8 +339,8 @@ function SectionsEditor({ settings, onSettings, d, data, uiLang }: {
   const hidden = settings.hiddenSections ?? [];
   const pages = settings.sectionPages ?? {};
   const pageMode = settings.pageMode ?? 'one';
-  const showPagePicker = pageMode === 'two' || pageMode === 'three';
-  const maxPage = pageMode === 'three' ? 3 : 2;
+  const showPagePicker = pageMode === 'two' || pageMode === 'three' || pageMode === 'four';
+  const maxPage = pageMode === 'four' ? 4 : pageMode === 'three' ? 3 : 2;
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const name = (k: SectionKey) => (d.sectionNames as Partial<Record<SectionKey, string>>)[k] ?? extraSectionUiName(k, uiLang) ?? k;

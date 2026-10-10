@@ -36,6 +36,12 @@ export interface Offer {
    *  ohne aktiven Zugang nur das PDF, eine Fassung, eine Sprache. Fehlt das
    *  Feld (älterer Dienst, selbst gehostet), ist nichts begrenzt. */
   freeTier?: { limited: boolean };
+  /** Länder, in die der Pass gerade verkauft wird (ISO 3166-1, DE zuerst).
+   *  Einzige Quelle ist der Server (billing.js, EU_COUNTRIES; ohne Länder im
+   *  EU-Ausland, solange die Umsatzsperre P7 greift). Fehlt das Feld, nur DE. */
+  countries?: string[];
+  /** true, solange der Verkauf ins EU-Ausland wegen der Umsatzschwelle ruht. */
+  euAbroadPaused?: boolean;
 }
 
 export type OrderStatus =
@@ -51,6 +57,8 @@ export interface OrderSummary {
   invoiceNo: string | null;
   withdrawableUntil: string | null;
   refund: { status: string } | null;
+  /** P6: Nummer des Stornobelegs nach Widerruf, sonst null. */
+  creditNoteNo?: string | null;
 }
 
 export interface CheckoutResult { orderId: string; orderNo: string; checkoutUrl: string }
@@ -101,19 +109,24 @@ export function resetOfferCache(): void { offerPromise = null; }
 
 export const billingApi = {
   altchaChallengeUrl: () => `${BASE}/api/altcha/challenge`,
-  register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string }) =>
+  /** art9Consent: Einwilligung nach Art. 9 DSGVO mit der Fassung, die das
+   *  Formular gezeigt hat (legal/einwilligung.ts). */
+  register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string; art9Consent?: { version: string } }) =>
     req<RegisterResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(p) }),
   /** Bestätigt Registrierung oder (kind 'change', M2) eine neue Adresse. */
   confirmEmail: (token: string) =>
     req<{ ok: boolean; kind?: 'change' | string; email?: string }>('/api/auth/confirm-email', { method: 'POST', body: JSON.stringify({ token }) }),
   resendConfirmation: () =>
     req<{ ok: boolean }>('/api/auth/resend-confirmation', { method: 'POST' }),
-  checkout: (p: { sku: string; country: string; billingName: string; acceptTerms: true; ageConfirmed18: true }) =>
+  /** consumer: Bestätigung „Kauf als Privatperson“ (Pflicht außerhalb von DE, P1). */
+  checkout: (p: { sku: string; country: string; billingName: string; acceptTerms: true; ageConfirmed18: true; consumer: boolean }) =>
     req<CheckoutResult>('/api/billing/checkout', { method: 'POST', body: JSON.stringify(p) }),
   orderStatus: (id: string) =>
     req<{ status: OrderStatus; orderNo: string; passUntil: string | null }>(`/api/billing/orders/${encodeURIComponent(id)}/status`),
   orders: () => req<{ orders: OrderSummary[] }>('/api/billing/orders'),
   invoiceUrl: (id: string) => `${BASE}/api/billing/orders/${encodeURIComponent(id)}/invoice.pdf`,
+  /** P6: Stornobeleg nach Widerruf (eigener Beleg, die Rechnung bleibt unverändert). */
+  creditNoteUrl: (id: string) => `${BASE}/api/billing/orders/${encodeURIComponent(id)}/credit-note.pdf`,
   withdraw: (orderId: string) =>
     req<WithdrawResult>('/api/billing/withdraw', { method: 'POST', body: JSON.stringify({ orderId }) }),
   withdrawPublic: (p: { name: string; email: string; orderNo: string; altcha: string }) =>

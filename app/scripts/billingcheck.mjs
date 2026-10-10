@@ -202,11 +202,29 @@ check(/mindestens 16|ab 16/.test(await page.locator('.bl-error').innerText()), '
 check(!st.calls.some(c => c.path === '/api/auth/register'), '… und kein Aufruf am Server');
 await page.check('text=Ich bin mindestens 16 Jahre alt.');
 await solveAltcha(page);
-check(await page.locator('a[href="/datenschutz"]', { hasText: 'Datenschutzerklärung' }).count() === 1, 'Link zur Datenschutzerklärung im Formular');
+check(await page.locator('a[href="/datenschutz"]', { hasText: 'Datenschutzerklärung' }).count() >= 1, 'Link zur Datenschutzerklärung im Formular');
+// P8 (B4, 10.10.2026): Hinweis unter dem Knopf, AGB und Datenschutzerklärung verlinkt.
+const notice = page.locator('[data-register-notice]');
+check(await notice.count() === 1 && /Mit dem Konto gelten unsere AGB und die Datenschutzerklärung\./.test(await notice.innerText())
+  && await notice.locator('a[href="/agb"]').count() === 1 && await notice.locator('a[href="/datenschutz"]').count() === 1, 'P8: AGB-Hinweis unter dem Registrieren-Knopf');
+const noticeBelow = await page.evaluate(() => {
+  const b = document.querySelector('form button[type="submit"]'); const n = document.querySelector('[data-register-notice]');
+  return !!b && !!n && n.getBoundingClientRect().top >= b.getBoundingClientRect().bottom - 1;
+});
+check(noticeBelow, 'P8: Hinweis steht unter dem Knopf');
+// P9: Einwilligung Art. 9 — nicht vorangekreuzt, ohne sie keine Registrierung.
+const a9box = page.locator('[data-art9-fields] input[type="checkbox"]');
+check(await a9box.count() === 1 && !(await a9box.isChecked()), 'P9: Einwilligungshäkchen vorhanden, nicht vorangekreuzt');
+await page.click('button[type="submit"]:has-text("Konto anlegen")');
+check(/Einwilligung/.test(await page.locator('.bl-error').innerText()) && !st.calls.some(c => c.path === '/api/auth/register'), 'P9: ohne Einwilligung keine Registrierung');
+await page.locator('[data-art9-fields] summary').click();
+check(/Art\. 9 DSGVO/.test(await page.locator('[data-art9-fields]').innerText()) && /Lokalmodus/.test(await page.locator('[data-art9-fields]').innerText()), 'P9: Text zum Aufklappen (Zweck, Freiwilligkeit, Widerruf, Lokalmodus)');
+await a9box.check();
 await page.click('button[type="submit"]:has-text("Konto anlegen")');
 await page.waitForSelector('#bl-co-h', { timeout: 10000 });
 const reg = st.calls.find(c => c.path === '/api/auth/register');
 check(reg && reg.body.ageConfirmed16 === true && typeof reg.body.altcha === 'string' && reg.body.email === EMAIL, 'Registrierung: E-Mail, Passwort, ALTCHA, ageConfirmed16');
+check(typeof reg?.body?.art9Consent?.version === 'string' && /^\d{4}-\d{2}-\d{2}/.test(reg.body.art9Consent.version), 'P9: Einwilligung mit Fassung an den Server', JSON.stringify(reg?.body?.art9Consent));
 check(st.altchaFailures === 0, 'ALTCHA-Lösung vom Server angenommen');
 check(await page.locator('[data-band="confirm-email"]').count() === 1, 'Band „Bitte E-Mail bestätigen"');
 await page.locator('[data-band="confirm-email"] button', { hasText: 'Erneut senden' }).click();
@@ -243,6 +261,8 @@ await page.check('input[name="acceptTerms"]');
 await page.check('input[name="ageConfirmed18"]');
 await btn.click();
 check(/Privatpersonen/.test(await page.locator('.bl-error').innerText()) && !st.calls.some(c => c.path === '/api/billing/checkout'), 'Ausland: ohne „als Privatperson" kein Absenden');
+// P1: Länderliste aus dem Angebot (Server), EU-27 plus „anderes Land“.
+check(await page.locator('#bl-country option').count() === 28, 'P1: Länder aus offer.countries (27 + anderes Land)', String(await page.locator('#bl-country option').count()));
 await page.selectOption('#bl-country', 'XX');
 check(await btn.isDisabled() && /nicht verkaufen/.test(await text(page)), 'Land außerhalb der EU: Hinweis, Knopf gesperrt');
 await page.selectOption('#bl-country', 'DE');
@@ -261,6 +281,7 @@ await page.waitForURL(/\/kauf\/danke\?order=/, { timeout: 10000 });
 const posts = st.calls.filter(c => c.path === '/api/billing/checkout');
 check(posts.length === 1, 'Doppelklick erzeugt genau eine Bestellung', `${posts.length}`);
 check(posts[0]?.body.country === 'DE' && posts[0]?.body.billingName === 'Prüf Person' && posts[0]?.body.acceptTerms === true && posts[0]?.body.ageConfirmed18 === true && posts[0]?.body.sku === 'pass90', 'Bestellung: sku, Land, Name, acceptTerms, ageConfirmed18');
+check(posts[0]?.body.consumer === false, 'P1: consumer mitgeschickt (DE: false)', JSON.stringify(posts[0]?.body.consumer));
 ev = await events(page);
 const leak = JSON.stringify(ev);
 check(!leak.includes(EMAIL) && !leak.includes('Prüf Person'), 'keine personenbezogenen Daten in Ereignissen');

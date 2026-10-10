@@ -1,4 +1,4 @@
-// cv-api — CV-Tool backend
+// cv-api — CV-Hub backend
 // Invite-only auth (username + password), résumé storage, admin, PDF rendering.
 
 import express from 'express';
@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { readFileSync } from 'node:fs';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl, MAX_MARKDOWN_CHARS } from './markdown.js';
-import { sendMail, mailConfigured, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplPasswordResetByAdmin, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
+import { sendMail, mailConfigured, onMailResult, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
 import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError, originGuard, subnetOf, clientKey } from './guards.js';
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
@@ -22,6 +22,9 @@ import { addGrant, planDetails } from './grants.js';
 import { createVouchers } from './vouchers.js';
 import { createAltcha } from './altcha.js';
 import { tplConfirmEmail, tplConfirmEmailChange, tplEmailChangeTaken, tplEmailChangeRequested, tplRegisterExisting } from './mailtexts/index.js';
+import { createAdmin, adminConfig } from './admin.js';
+import { ART9_VERSION, art9Info, hasArt9Consent, requireArt9Consent, legalVersions } from './consent.js';
+import { createStats } from './stats.js';
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -149,6 +152,16 @@ const TEMPLATE_DATA = JSON.parse(readFileSync(new URL('./templates.json', import
 const TEMPLATES = TEMPLATE_DATA.templates;
 const FONT_PAIRING_IDS = TEMPLATE_DATA.fontPairings;
 
+/* Admin-Bereich auf eigener Adresse und Nutzungszähler (Runde 8b,
+ * 10.10.2026; admin.js, stats.js, ADMIN.md). `admin` entsteht weiter unten,
+ * wenn Bezahlung und Gutscheine stehen; die Host-Weiche greift erst bei
+ * Anfragen darauf zu. */
+const ADMIN_CFG = adminConfig();
+let admin = null;
+const STARTED_AT = new Date().toISOString();
+const stats = createStats({ pool, templateIds: new Set(TEMPLATES.map(t => t.id)), flushMs: process.env.NODE_ENV === 'test' ? 0 : 15_000 });
+onMailResult(ok => stats.count(ok ? 'mail_sent' : 'mail_failed'));
+
 const app = express();
 // Kein „x-powered-by: Express" (N5) — verrät nur die Angriffsfläche.
 app.disable('x-powered-by');
@@ -194,7 +207,10 @@ const PUBLIC_CORS_PATHS = new Set([
   '/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/mcp',
 ]);
 const guardOrigin = originGuard(ALLOWLIST);
-app.use((req, res, next) => (PUBLIC_CORS_PATHS.has(req.path) ? next() : guardOrigin(req, res, next)));
+/* Host-Weiche für den Admin-Bereich VOR der allgemeinen Ursprungsprüfung:
+ * Auf dem Admin-Host gilt nur dessen eigener Ursprung (admin.js). */
+app.use((req, res, next) => admin.gate(req, res, next));
+app.use((req, res, next) => (PUBLIC_CORS_PATHS.has(req.path) || req.adminScope === 'separate' ? next() : guardOrigin(req, res, next)));
 app.use(cors({
   // Same-origin requests (no Origin header) always pass — they're either
   // server-to-server, curl, or the SPA itself hitting its own backend. Ein
@@ -217,6 +233,8 @@ app.use((req, res, next) => {
   if (req.method === 'POST' && req.path === '/api/pdf') return jsonPdf(req, res, next);
   return jsonDefault(req, res, next);
 });
+// Tageszähler ohne Personenbezug (stats.js). Zählt erst nach der Antwort.
+app.use(stats.middleware);
 
 /* Hosts, unter denen dieser Dienst wirklich erreichbar ist.
  *
@@ -273,6 +291,12 @@ function publicUser(u) {
     emailConfirmed: emailConfirmed(u),
     // M2: angeforderte neue Adresse, bis sie bestätigt ist. Bis dahin gilt `email`.
     pendingEmail: u.pending_email ?? null,
+    // P9 (B4, 10.10.2026): Einwilligung Art. 9 DSGVO — ohne sie speichert das Konto nicht.
+    art9: art9Info(u),
+    // P8: Fassung der AGB, die bei der Registrierung galt (null bei Bestandskonten).
+    termsAcceptedVersion: u.terms_accepted_version ?? null,
+    // Runde 8b: Admins sehen in der App nur noch einen Link zum Admin-Bereich.
+    ...(u.role === 'admin' ? { adminUrl: ADMIN_CFG.url ? `${ADMIN_CFG.url}/` : '/admin/' } : {}),
   };
 }
 
@@ -366,6 +390,9 @@ async function loadUser(req) {
 }
 
 async function requireAuth(req, res, next) {
+  // /api/admin/*: eigene Anmeldung (admin.js). Mit ADMIN_HOST zählt dort nur
+  // die Admin-Sitzung, nie das Cookie der Hauptdomain oder ein API-Schlüssel.
+  if (req.adminScope) return admin.authenticate(req, res, next);
   const u = await loadUser(req);
   if (!u) return res.status(401).json({ error: 'Nicht angemeldet.' });
   req.user = u;
@@ -374,8 +401,9 @@ async function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Nur für Administratoren.' });
-  next();
+  if (req.adminScope) return admin.needAdmin(req, res, next);
+  // Außerhalb von /api/admin/* gibt es keine Admin-Routen; zur Sicherheit 403.
+  return res.status(403).json({ error: 'Nur für Administratoren.' });
 }
 
 // ── OAuth 2.1 für den MCP-Endpunkt ──────────────────────────────────────────
@@ -633,6 +661,16 @@ async function generateUsername(client, email) {
   return `konto-${crypto.randomBytes(6).toString('hex')}`;
 }
 
+/* P8/P9 (B4, 10.10.2026): Bei der Registrierung merkt sich das Konto die
+ * Fassung der AGB, die in diesem Moment galt (Hinweis unter dem Knopf,
+ * § 305 Abs. 2 BGB), und — wenn das Formular sie mitschickt — die
+ * Einwilligung nach Art. 9 DSGVO in genau der Textfassung, die der Server
+ * kennt. Eine andere Fassung zählt nicht; dann fragt der Dialog in der App. */
+function signupArt9Version(body) {
+  return String(body?.art9Consent?.version || '') === ART9_VERSION ? ART9_VERSION : null;
+}
+const signupTermsVersion = () => legalVersions().terms;
+
 async function registerOpen(req, res) {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
@@ -679,9 +717,11 @@ async function registerOpen(req, res) {
      * Kauf setzt die Laufzeit ab jetzt. */
     const { rows } = await client.query(
       `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until,
-                          signup_source, plan_kind, age_confirmed_16_at)
-       VALUES ($1, $2, 'user', $3, now(), now(), 'self', 'none', now()) RETURNING *`,
-      [username, hash, email],
+                          signup_source, plan_kind, age_confirmed_16_at,
+                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at)
+       VALUES ($1, $2, 'user', $3, now(), now(), 'self', 'none', now(),
+               $4, now(), $5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END) RETURNING *`,
+      [username, hash, email, signupTermsVersion(), signupArt9Version(req.body)],
     );
     user = rows[0];
     await client.query('COMMIT');
@@ -775,9 +815,10 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
 
     const hash = await bcrypt.hash(password, 10);
     const { rows: created } = await client.query(
-      `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until)
-       VALUES ($1, $2, $3, $4, now(), NULL) RETURNING *`,
-      [username, hash, role, email || null],
+      `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until,
+                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at)
+       VALUES ($1, $2, $3, $4, now(), NULL, $5, now(), $6::text, CASE WHEN $6::text IS NULL THEN NULL ELSE now() END) RETURNING *`,
+      [username, hash, role, email || null, signupTermsVersion(), signupArt9Version(req.body)],
     );
     let user = created[0];
     /* Laufzeit aus dem Code als Berechtigung (grants.js); die Neuberechnung
@@ -950,6 +991,40 @@ app.get('/api/me', requireAuth, async (req, res) => {
   const user = publicUser(req.user);
   user.plan = await planDetails(pool, req.user);
   res.json({ user, access: user.access, plan: user.plan, emailConfirmed: user.emailConfirmed, pendingEmail: user.pendingEmail });
+});
+
+/* Einwilligung Art. 9 DSGVO erteilen oder widerrufen (P9, B4 10.10.2026).
+ * Erteilen nur mit der Textfassung, die der Server kennt (sonst 409 — die
+ * App lädt dann neu und zeigt den aktuellen Text). Widerruf leert Zeitpunkt
+ * und Fassung, merkt sich den Widerruf und löscht nichts: Ab dann speichert
+ * das Konto nicht mehr, Lesen, Export und Löschen gehen weiter. Beides steht
+ * im Ereignisprotokoll (events: art9_consent / art9_withdraw). */
+app.post('/api/me/consent/art9', rateLimit({ route: 'consent', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+  const give = req.body?.consent === true;
+  const take = req.body?.consent === false;
+  if (!give && !take) return res.status(400).json({ error: 'Bitte consent: true oder false angeben.', code: 'consent_invalid' });
+  // Einwilligen nur im Browser (Dialog mit Text), nicht über API-Schlüssel oder KI-Verbindung.
+  if (give && req.user.authVia && req.user.authVia !== 'session') {
+    return res.status(403).json({ error: 'Die Einwilligung können Sie nur in der App erteilen.', code: 'consent_session_only' });
+  }
+  if (give && String(req.body?.version || '') !== ART9_VERSION) {
+    return res.status(409).json({ error: 'Der Einwilligungstext hat sich geändert. Bitte laden Sie die Seite neu.', code: 'consent_version_mismatch', version: ART9_VERSION });
+  }
+  const { rows } = give
+    ? await pool.query(
+      `UPDATE users SET art9_consent_at = now(), art9_consent_version = $2, art9_withdrawn_at = NULL WHERE id = $1 RETURNING *`,
+      [req.user.id, ART9_VERSION])
+    : await pool.query(
+      `UPDATE users SET art9_consent_at = NULL, art9_consent_version = NULL,
+              art9_withdrawn_at = CASE WHEN art9_consent_at IS NOT NULL THEN now() ELSE art9_withdrawn_at END
+        WHERE id = $1 RETURNING *`,
+      [req.user.id]);
+  const u = rows[0];
+  if (!u) return res.status(404).json({ error: 'Konto nicht gefunden.' });
+  logEvent(u.id, give ? 'art9_consent' : 'art9_withdraw');
+  const user = publicUser(u);
+  user.plan = await planDetails(pool, u);
+  res.json({ ok: true, consent: hasArt9Consent(u), user });
 });
 
 /* Double-Opt-in: Token aus der Mail (nur sein Hash liegt in der Datenbank).
@@ -1189,31 +1264,39 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
     );
     const user = rows[0];
     if (!user || user.disabled || !user.email) return;   // ohne hinterlegte Mail kein Reset
-    // Offene Registrierung: Reset erst, wenn die Adresse bestätigt ist —
-    // sonst wäre ein Konto mit fremder Adresse über deren Postfach übernehmbar.
-    if (!emailConfirmed(user)) return;
-    /* M3: höchstens drei Reset-Mails je Adresse und Stunde — unabhängig
-     * davon, von wie vielen Adressen die Anfragen kommen. */
-    const toKey = `forgot:to:${String(user.email).toLowerCase()}`;
-    if (bucketBlocked(toKey, 3)) return;
-    bucketHit(toKey, 60 * 60 * 1000);
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 60 min
-    /* N6: gespeichert wird nur der SHA-256 des Tokens (wie bei Bestätigung,
-     * API-Schlüssel und OAuth). Ein Datenbankauszug enthält damit keinen
-     * benutzbaren Reset-Link mehr. Alte Klartext-Token sind nach dem Deploy
-     * wertlos — sie gelten ohnehin nur 60 Minuten. */
-    await pool.query(
-      'INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)',
-      [sha256(token), user.id, expires],
-    );
-    logEvent(user.id, 'password_reset_requested');
-    const m = tplPasswordReset({ token, base });
-    await sendMail({ to: user.email, ...m });
+    await issuePasswordReset(user, { base });
   } catch (err) {
     console.error('forgot-password failed:', err?.message || err);
   }
 });
+
+/* Reset-Mail ausstellen (Selbstbedienung und Admin-Bereich, Runde 8b).
+ * Offene Registrierung: erst nach bestätigter Adresse — sonst wäre ein Konto
+ * mit fremder Adresse über deren Postfach übernehmbar. Höchstens drei Mails
+ * je Adresse und Stunde (M3), auch auf Admin-Wunsch. */
+async function issuePasswordReset(user, { base = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null } = {}) {
+  if (!user?.email || user.disabled) return { ok: false, status: 409, error: 'Konto ohne Adresse oder gesperrt.' };
+  if (!emailConfirmed(user)) return { ok: false, status: 409, error: 'Die Adresse ist noch nicht bestätigt.' };
+  if (!base) return { ok: false, status: 503, error: 'PUBLIC_BASE_URL fehlt.' };
+  /* M3: höchstens drei Reset-Mails je Adresse und Stunde — unabhängig
+   * davon, von wie vielen Adressen die Anfragen kommen. */
+  const toKey = `forgot:to:${String(user.email).toLowerCase()}`;
+  if (bucketBlocked(toKey, 3)) return { ok: false, status: 429, error: 'Für diese Adresse gingen in der letzten Stunde schon drei Mails raus.' };
+  bucketHit(toKey, 60 * 60 * 1000);
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + 60 * 60 * 1000); // 60 min
+  /* N6: gespeichert wird nur der SHA-256 des Tokens (wie bei Bestätigung,
+   * API-Schlüssel und OAuth). Ein Datenbankauszug enthält damit keinen
+   * benutzbaren Reset-Link mehr. */
+  await pool.query(
+    'INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)',
+    [sha256(token), user.id, expires],
+  );
+  logEvent(user.id, 'password_reset_requested');
+  const m = tplPasswordReset({ token, base });
+  const sent = await sendMail({ to: user.email, ...m });
+  return sent ? { ok: true } : { ok: false, status: 502, error: 'Mailversand fehlgeschlagen.' };
+}
 
 // Setzt das Passwort per Token. Token: einmalig, 60 min gültig.
 app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, windowMs: 30 * 60 * 1000 }), async (req, res) => {
@@ -1302,7 +1385,7 @@ function imageMagicMatches(buf, mime) {
 
 const MAX_PHOTOS_PER_USER = 50;
 const MAX_PHOTO_BYTES_PER_USER = 100 * 1024 * 1024;
-app.post('/api/photos', requireAuth, requireWritable, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
+app.post('/api/photos', requireAuth, requireWritable, requireArt9Consent, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   const mime = String(req.body?.mime || '');
   const b64 = String(req.body?.dataBase64 || '');
   if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return res.status(400).json({ error: 'Nur JPEG, PNG, WebP oder GIF.' });
@@ -1404,7 +1487,7 @@ function recordShareView(token, variant, ua) {
   ).catch(() => {});
 }
 
-app.post('/api/resumes/:id/share', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/resumes/:id/share', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const id = req.params.id;
   const { rows } = await pool.query('SELECT 1 FROM resumes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
   if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
@@ -1454,7 +1537,7 @@ app.post('/api/shares/:token/revoke', requireAuth, async (req, res) => {
 /* Den festen Stand eines Links auf den aktuellen Stand des Profils bringen —
  * für den Fall, dass der Inhaber nach dem Verschicken noch etwas korrigiert
  * hat und denselben Link behalten will. */
-app.post('/api/shares/:token/refresh', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/shares/:token/refresh', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT r.payload FROM share_links s JOIN resumes r ON r.id = s.resume_id
       WHERE s.token = $1 AND s.created_by = $2`,
@@ -1616,7 +1699,7 @@ app.get(/^\/api\/resumes\/([^/]+)\.md$/, requireAuth, async (req, res) => {
 // Import a corrected Markdown back into the user's profile (auth)
 // Pass dryRun:true to receive the parsed payload without persisting — used by
 // the Diff-Preview modal in the client.
-app.post('/api/resumes/:id/import-md', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/resumes/:id/import-md', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 20) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
@@ -1645,7 +1728,7 @@ app.get(/^\/api\/resumes\/([^/]+)\/cover-letter\.md$/, requireAuth, async (req, 
   res.type('text/markdown; charset=utf-8').send(clToMarkdown(rows[0].payload, wantedLang(req.query.lang)));
 });
 
-app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
   if (md.length < 10) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
@@ -1688,7 +1771,7 @@ app.get('/api/resumes/:id/versions/:vid', requireAuth, async (req, res) => {
   res.json({ version: rows[0] });
 });
 
-app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
   const { rows } = await pool.query(
     `SELECT v.payload FROM resume_versions v
@@ -1732,12 +1815,12 @@ app.get('/api/resumes/:id', requireAuth, async (req, res) => {
  *  resumes long before they make a dent. */
 const MAX_RESUMES_PER_USER = 50;
 
-app.post('/api/resumes', requireAuth, requireWritable, async (req, res) => {
+app.post('/api/resumes', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const id = String(req.body?.id || crypto.randomUUID());
   // Profil-IDs sind kurz und schlicht (App: Base36, MCP: UUID). Alles andere
   // ist kein Profil, sondern ein Versuch.
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) return res.status(400).json({ error: 'Ungültige Profil-ID.' });
-  const displayName = String(req.body?.displayName || 'Profil').slice(0, 120);
+  const displayName = String(req.body?.displayName || 'Profil').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').slice(0, 120);
   const payload = req.body?.payload;
   if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
   if (assertPayloadSize(res, payload)) return;
@@ -1777,8 +1860,8 @@ app.post('/api/resumes', requireAuth, requireWritable, async (req, res) => {
   res.json({ id });
 });
 
-app.put('/api/resumes/:id', requireAuth, requireWritable, async (req, res) => {
-  const displayName = String(req.body?.displayName || 'Profil').slice(0, 120);
+app.put('/api/resumes/:id', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
+  const displayName = String(req.body?.displayName || 'Profil').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').slice(0, 120);
   const payload = req.body?.payload;
   if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
   if (assertPayloadSize(res, payload)) return;
@@ -1795,8 +1878,8 @@ app.put('/api/resumes/:id', requireAuth, requireWritable, async (req, res) => {
  *
  * PUT verlangt den vollständigen Payload — wer bloß den Namen ändern will,
  * müsste das ganze Profil durchreichen und könnte es dabei beschädigen. */
-app.patch('/api/resumes/:id', requireAuth, requireWritable, async (req, res) => {
-  const displayName = String(req.body?.displayName || '').trim().slice(0, 120);
+app.patch('/api/resumes/:id', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
+  const displayName = String(req.body?.displayName || '').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 120);
   if (!displayName) return res.status(400).json({ error: 'displayName fehlt.' });
   const { rowCount } = await pool.query(
     'UPDATE resumes SET display_name = $1, updated_at = now() WHERE id = $2 AND user_id = $3',
@@ -1822,7 +1905,7 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
     const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions, declarations] = await Promise.all([
-      pool.query('SELECT id, username, email, pending_email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at FROM users WHERE id = $1', [req.user.id]),
+      pool.query('SELECT id, username, email, pending_email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at, terms_accepted_version, terms_accepted_at, art9_consent_at, art9_consent_version, art9_withdrawn_at FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
                     FROM resume_versions v JOIN resumes r ON r.id = v.resume_id
@@ -1833,7 +1916,7 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       pool.query('SELECT id, kind, created_at FROM events WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1000', [req.user.id]),
       pool.query('SELECT id, name, prefix, created_at, last_used_at, revoked FROM api_keys WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT order_no, email, billing_name, country, sku, amount_cents, currency, status, created_at, paid_at,
-                         terms_version, withdrawal_version, age_confirmed_18, pass_days, pass_from, pass_until, invoice_no,
+                         terms_version, withdrawal_version, age_confirmed_18, consumer_confirmed, pass_days, pass_from, pass_until, invoice_no,
                          refund_status, withdrawn_at, withdraw_channel, withdraw_statement,
                          cancelled_at, cancel_kind, cancel_reason, cancel_effective_at, cancel_channel
                     FROM orders WHERE user_id = $1 ORDER BY created_at`, [req.user.id]),
@@ -1880,6 +1963,70 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
   }
 });
 
+/* Konto löschen (Selbstbedienung und Admin-Bereich, Runde 8b): eine
+ * Transaktion, dieselben Regeln für beide Wege. Gibt die Zahl der
+ * aufbewahrten bezahlten Bestellungen zurück. */
+async function deleteAccount({ id: userId, email: emailRaw }) {
+  /* Befund 7: Die Kaskaden erfassen Profile, Versionen, Fotos, Schlüssel,
+   * OAuth, Sharelinks samt Aufrufen und alle Codes. Nicht erfasst waren:
+   * die Zugangsanfrage (Name, Mail, Freitext), Mail und Notiz am
+   * Einladungscode („Zugangsanfrage #id · Name") und die Ereignisse (nur
+   * auf NULL gesetzt). Alles in einer Transaktion: halb gelöscht gibt es
+   * nicht. */
+  const email = String(emailRaw || '').trim().toLowerCase();
+  let retainedOrders;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (email) {
+      await client.query('DELETE FROM access_requests WHERE lower(email) = $1', [email]);
+      await client.query('UPDATE invite_codes SET email = NULL, note = NULL WHERE lower(email) = $1', [email]);
+    }
+    /* Nur Codes für genau eine Person tragen deren Namen in der Notiz. Ein
+     * Code mit mehreren Plätzen (Pilot) trägt den Namen des Pakets — der
+     * gehört nicht zur löschenden Person und bleibt stehen. */
+    await client.query(
+      `UPDATE invite_codes SET email = NULL, note = NULL
+        WHERE code IN (SELECT code FROM invite_redemptions WHERE user_id = $1)
+          AND (max_uses <= 1 OR email IS NOT NULL)`,
+      [userId],
+    );
+    await client.query('DELETE FROM events WHERE user_id = $1', [userId]);
+    /* Bestellungen (09.10.2026): nie bezahlte gehen mit, bezahlte bleiben
+     * mit Minimaldaten stehen (Aufbewahrungspflicht, Art. 17 Abs. 3 lit. b
+     * DSGVO); user_id wird über den Fremdschlüssel NULL. Was an einer
+     * bezahlten Bestellung nicht zur Rechnung gehört, kommt weg. */
+    /* N3: Eine Zahlung, die bei Mollie noch offen ist, kann nach der
+     * Löschung noch eingehen. Ihre Bestellung bleibt deshalb stehen (ohne
+     * Konto, user_id wird NULL); kommt die Zahlung, meldet billing.js das
+     * dem Betreiber zur Erstattung. Den Rest räumt der Aufräumjob nach 30
+     * Tagen ab. Gelöscht werden sofort nur Bestellungen ohne Zahlung oder
+     * mit Endstatus. */
+    await client.query(
+      `DELETE FROM orders WHERE user_id = $1 AND paid_at IS NULL
+          AND NOT (mollie_payment_id IS NOT NULL AND status IN ('open', 'pending', 'authorized'))`,
+      [userId],
+    );
+    await client.query(
+      `UPDATE orders SET checkout_url = NULL WHERE user_id = $1 AND paid_at IS NULL`,
+      [userId],
+    );
+    const kept = await client.query(
+      'UPDATE orders SET checkout_url = NULL, locale = NULL WHERE user_id = $1 AND paid_at IS NOT NULL',
+      [userId],
+    );
+    retainedOrders = kept.rowCount;
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { retainedOrders };
+}
+
 /**
  * Permanently deletes the calling user's account. Requires the current
  * password as a confirmation factor so a stolen session can't wipe data.
@@ -1899,63 +2046,7 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
 
     // Kontaktdaten vor dem Löschen sichern (für die Offboarding-Mail).
     const { rows: info } = await pool.query('SELECT username, email FROM users WHERE id = $1', [req.user.id]);
-    /* Befund 7: Die Kaskaden erfassen Profile, Versionen, Fotos, Schlüssel,
-     * OAuth, Sharelinks samt Aufrufen und alle Codes. Nicht erfasst waren:
-     * die Zugangsanfrage (Name, Mail, Freitext), Mail und Notiz am
-     * Einladungscode („Zugangsanfrage #id · Name") und die Ereignisse (nur
-     * auf NULL gesetzt). Alles in einer Transaktion: halb gelöscht gibt es
-     * nicht. */
-    const email = (info[0]?.email || '').trim().toLowerCase();
-    let retainedOrders = 0;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      if (email) {
-        await client.query('DELETE FROM access_requests WHERE lower(email) = $1', [email]);
-        await client.query('UPDATE invite_codes SET email = NULL, note = NULL WHERE lower(email) = $1', [email]);
-      }
-      /* Nur Codes für genau eine Person tragen deren Namen in der Notiz. Ein
-       * Code mit mehreren Plätzen (Pilot) trägt den Namen des Pakets — der
-       * gehört nicht zur löschenden Person und bleibt stehen. */
-      await client.query(
-        `UPDATE invite_codes SET email = NULL, note = NULL
-          WHERE code IN (SELECT code FROM invite_redemptions WHERE user_id = $1)
-            AND (max_uses <= 1 OR email IS NOT NULL)`,
-        [req.user.id],
-      );
-      await client.query('DELETE FROM events WHERE user_id = $1', [req.user.id]);
-      /* Bestellungen (09.10.2026): nie bezahlte gehen mit, bezahlte bleiben
-       * mit Minimaldaten stehen (Aufbewahrungspflicht, Art. 17 Abs. 3 lit. b
-       * DSGVO); user_id wird über den Fremdschlüssel NULL. Was an einer
-       * bezahlten Bestellung nicht zur Rechnung gehört, kommt weg. */
-      /* N3: Eine Zahlung, die bei Mollie noch offen ist, kann nach der
-       * Löschung noch eingehen. Ihre Bestellung bleibt deshalb stehen (ohne
-       * Konto, user_id wird NULL); kommt die Zahlung, meldet billing.js das
-       * dem Betreiber zur Erstattung. Den Rest räumt der Aufräumjob nach 30
-       * Tagen ab. Gelöscht werden sofort nur Bestellungen ohne Zahlung oder
-       * mit Endstatus. */
-      await client.query(
-        `DELETE FROM orders WHERE user_id = $1 AND paid_at IS NULL
-            AND NOT (mollie_payment_id IS NOT NULL AND status IN ('open', 'pending', 'authorized'))`,
-        [req.user.id],
-      );
-      await client.query(
-        `UPDATE orders SET checkout_url = NULL WHERE user_id = $1 AND paid_at IS NULL`,
-        [req.user.id],
-      );
-      const kept = await client.query(
-        'UPDATE orders SET checkout_url = NULL, locale = NULL WHERE user_id = $1 AND paid_at IS NOT NULL',
-        [req.user.id],
-      );
-      retainedOrders = kept.rowCount;
-      await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
+    const { retainedOrders } = await deleteAccount({ id: req.user.id, email: info[0]?.email });
     res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
     res.json({ ok: true });
     if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true, retainedOrders }); sendMail({ to: info[0].email, ...m }); }
@@ -1971,7 +2062,7 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
  * Nur angemeldet, nur die Arten aus der Liste, gespeichert wird Art und
  * Zeitpunkt am Konto, sonst nichts. Für die Demo ohne Konto gibt es diesen
  * Weg nicht. Auch nach Ablauf der Laufzeit erlaubt: Exportieren bleibt. */
-const CLIENT_EVENTS = new Set(['docx', 'pdf_local', 'share_create']);
+const CLIENT_EVENTS = new Set(['docx', 'pdf_local', 'share_create', 'latex']);
 app.post('/api/events', rateLimit({ route: 'events', max: 120, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
   const kind = String(req.body?.kind || '');
   if (!CLIENT_EVENTS.has(kind)) return res.status(400).json({ error: 'Unbekannte Ereignisart.' });
@@ -2078,37 +2169,10 @@ app.post('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req, 
   if (disabled && rows[0]?.email) { const m = tplOffboarding({ username: rows[0].username, deleted: false }); sendMail({ to: rows[0].email, ...m }); }
 });
 
-app.post('/api/admin/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Ungültige Nutzer-ID.' });
-  const nxt = String(req.body?.newPassword || '');
-  if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.' });
-  const hash = await bcrypt.hash(nxt, 10);
-  const client = await pool.connect();
-  let target, revoked;
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      'UPDATE users SET password_hash = $1, password_changed_at = now() WHERE id = $2 RETURNING username, email',
-      [hash, id],
-    );
-    if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Nutzer nicht gefunden.' }); }
-    target = rows[0];
-    revoked = await revokeAllCredentials(client, id);
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('admin reset-password failed:', err?.message || err);
-    return res.status(500).json({ error: 'Zurücksetzen fehlgeschlagen.' });
-  } finally {
-    client.release();
-  }
-  logEvent(req.user.id, 'admin_password_reset');
-  // Der Betroffene erfährt es — vorher geschah das ohne jede Nachricht.
-  let notified = false;
-  if (target.email) notified = await sendMail({ to: target.email, ...tplPasswordResetByAdmin({ username: target.username }) });
-  res.json({ ok: true, revoked, notified });
-});
+/* Direktes Setzen eines Kundenpassworts durch den Admin gibt es seit dem
+ * Audit vom 10.10.2026 (S2) nicht mehr: Damit hätte sich ein Admin in fremde
+ * Konten einloggen und Art.-9-Daten lesen können. Der Admin-Bereich schickt
+ * stattdessen eine Reset-Mail (admin.js, password-reset-mail). */
 
 /* Laufzeit eines Kontos ändern (Pilot).
  *
@@ -2163,10 +2227,6 @@ app.post('/api/admin/users/:id/access', requireAuth, requireAdmin, async (req, r
     await addGrant(client, id, grant);
     const { rows } = await client.query('SELECT access_until FROM users WHERE id = $1', [id]);
     accessUntil = rows[0].access_until;
-    await client.query(
-      'INSERT INTO admin_audit (admin_id, action, target, details) VALUES ($1, $2, $3, $4)',
-      [req.user.id, 'user_access', String(id), JSON.stringify({ days: grant.days ?? null, until: grant.kind === 'set' ? grant.untilAt : undefined, accessUntil })],
-    );
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2175,6 +2235,8 @@ app.post('/api/admin/users/:id/access', requireAuth, requireAdmin, async (req, r
     client.release();
   }
   logEvent(req.user.id, 'admin_access_change');
+  // Protokoll über admin.js (gekürzte Adresse, Weg der Anmeldung).
+  res.locals.audit = { action: 'user_access', target: id, details: { days: grant.days ?? null, until: grant.kind === 'set' ? grant.untilAt : undefined, accessUntil } };
   res.json({ ok: true, accessUntil });
 });
 
@@ -2395,6 +2457,32 @@ const vouchers = createVouchers({
 });
 vouchers.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, loadUser });
 
+// ── Admin-Bereich (Runde 8b, 10.10.2026; admin.js, ADMIN.md) ────────────────
+function systemInfo() {
+  return {
+    version: {
+      commit: (process.env.SOURCE_COMMIT || process.env.GIT_COMMIT || '').trim().slice(0, 40) || null,
+      package: process.env.npm_package_version || null,
+      node: process.version,
+      startedAt: STARTED_AT,
+    },
+    registration: { openVar: OPEN_REGISTRATION, botProtection: altcha.configured, open: OPEN_REGISTRATION && altcha.configured },
+    sale: { enabled: BILLING.enabled, ready: BILLING.ready },
+    // P5: wirksame Fassungen der Vertragstexte und woher sie kommen (Datei oder Übersteuerung).
+    legal: {
+      terms: BILLING.legalVersions.terms, withdrawal: BILLING.legalVersions.withdrawal,
+      source: BILLING.legalVersions.source, file: BILLING.legalVersions.file, warnings: BILLING.legalVersions.warnings,
+      art9Consent: ART9_VERSION,
+    },
+  };
+}
+admin = createAdmin({
+  pool, cfg: ADMIN_CFG, rateLimit, subnetLimit, bucketBlocked, bucketHit, loadUser, markAuth,
+  sendMail, mailConfigured, billing, billingConfig: BILLING, stats, publicBaseUrl, art9Version: ART9_VERSION,
+  issueEmailConfirmation, issuePasswordReset, deleteAccount, revokeAllCredentials, systemInfo, summarizeUa, tplOffboarding,
+});
+admin.mount(app);
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 // Bootstrap admin account from env vars. Source of truth is Coolify env, not
@@ -2495,6 +2583,9 @@ initDb()
       startAccessNotices(pool, { base });
     }
     console.log(`pdf: Renderer löst nur diese Hosts auf: ${RENDER_HOSTS.join(', ') || '(keine)'}`);
+    // P5: Fassung der Vertragstexte; eine abweichende Übersteuerung steht als Warnung im Log.
+    for (const w of BILLING.legalVersions.warnings) console.warn(`legal: ${w}`);
+    console.log(`legal: AGB-Fassung ${BILLING.termsVersion || '(keine)'} (${BILLING.legalVersions.source.terms}), Widerrufsbelehrung ${BILLING.withdrawalVersion || '(keine)'} (${BILLING.legalVersions.source.withdrawal}), Einwilligung Art. 9 ${ART9_VERSION}`);
     // Bezahlung: was fehlt, sagt der Dienst beim Start — ohne Werte.
     if (BILLING.enabled) {
       if (BILLING.missing.length) console.warn(`billing: BILLING_ENABLED=1, aber es fehlt: ${BILLING.missing.join(', ')} — der Kauf bleibt aus.`);
@@ -2507,6 +2598,10 @@ initDb()
       billing.startJobs({ onlyDeclarations: true });
     }
     if (OPEN_REGISTRATION && !altcha.configured) console.warn('register: OPEN_REGISTRATION=1 ohne ALTCHA_HMAC_KEY — offene Registrierung bleibt zu.');
+    if (ADMIN_CFG.separate) console.log(`admin: eigener Host ${ADMIN_CFG.host} (Ursprung ${ADMIN_CFG.origin})${ADMIN_CFG.allowedIps.length ? `, nur ${ADMIN_CFG.allowedIps.length} Netz(e)` : ''}`);
+    else console.log('admin: kein ADMIN_HOST — Admin-Rechte über die normale Anmeldung (Selbsthoster-Weg, ADMIN.md)');
+    if (ADMIN_CFG.invalidIps.length) console.warn(`admin: ADMIN_ALLOWED_IPS enthält ungültige Einträge, die nicht gelten: ${ADMIN_CFG.invalidIps.join(', ')}`);
+    if (ADMIN_CFG.separate && !ADMIN_CFG.email) console.warn('admin: ADMIN_EMAIL fehlt — die Admin-Codes gehen an die Adresse im Admin-Konto.');
     app.listen(port, () => console.log(`cv-api listening on :${port}`));
   })
   .catch(err => { console.error('FATAL: db init failed', err); process.exit(1); });

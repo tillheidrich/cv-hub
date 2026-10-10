@@ -15,7 +15,18 @@ const USER = process.env.SMTP_USER || '';
 const PASS = process.env.SMTP_PASS || '';
 const APP_NAME = process.env.APP_NAME || 'CV-Hub';
 const FROM = process.env.SMTP_FROM || (USER ? `${APP_NAME} <${USER}>` : '');
-export const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://cv.example.com').replace(/\/$/, '');
+/* PUBLIC_BASE_URL zuerst, wie überall sonst im Dienst; bei einem
+ * Domainwechsel reicht es, PUBLIC_BASE_URL zu ändern. */
+export const APP_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || 'https://cv.example.com').trim().replace(/\/+$/, '');
+/** Host für den Mail-Fuß, aus derselben Adresse. */
+const APP_HOST = (() => { try { return new URL(APP_BASE_URL).host; } catch { return 'cv.example.com'; } })();
+
+/* Zähler für das Admin-Dashboard (Mailfehler). Wer zählen will, meldet sich
+ * hier an; mail.js selbst kennt keine Datenbank. Übergeben wird nur, ob es
+ * geklappt hat — keine Adresse, kein Betreff. */
+const mailHooks = new Set();
+export function onMailResult(fn) { mailHooks.add(fn); return () => mailHooks.delete(fn); }
+function reportMail(ok) { for (const fn of mailHooks) { try { fn(ok); } catch { /* egal */ } } }
 
 /* Nur für Tests (billing.test.mjs): statt SMTP jede Mail als JSON-Zeile in
  * diese Datei schreiben, Anhänge als Base64. In der Produktion ignoriert —
@@ -40,7 +51,13 @@ function getTransport() {
 
 /** Send an email. Never throws — returns true on success, false otherwise.
  *  attachments: [{ filename, content: Buffer|string, contentType }] (nodemailer). */
-export async function sendMail({ to, subject, html, text, attachments }) {
+export async function sendMail(args) {
+  const ok = await sendMailInner(args);
+  reportMail(ok);
+  return ok;
+}
+
+async function sendMailInner({ to, subject, html, text, attachments }) {
   if (CAPTURE) {
     try {
       appendFileSync(CAPTURE, JSON.stringify({
@@ -98,7 +115,7 @@ export function layout(bodyHtml) {
       </td></tr>
       <tr><td style="padding:28px;">${bodyHtml}</td></tr>
       <tr><td style="padding:18px 28px;border-top:1px solid ${LINE};color:#9aa;font-size:11px;">
-        CV-Hub · <a href="${APP_BASE_URL}" style="color:${SOFT};text-decoration:none;">cv.example.com</a><br/>
+        ${APP_NAME} · <a href="${APP_BASE_URL}" style="color:${SOFT};text-decoration:none;">${APP_HOST}</a><br/>
         Diese Nachricht wurde automatisch versendet.
       </td></tr>
     </table>

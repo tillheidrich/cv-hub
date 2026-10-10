@@ -19,18 +19,19 @@ import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { pruefeReihenfolge, ABSCHNITT_TITEL } from './_abschnitte.mjs';
+import { pruefeReihenfolge, markenFuer, titelFuer } from './_abschnitte.mjs';
 
 const BASE = process.env.HARNESS_BASE || 'http://localhost:5199';
 const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-/* „three/long" statt „auto/long": Im Modus „auto" begrenzt die Vorschau auf
- * drei Seiten und meldet einen Rest nicht als Überlauf (DocumentPreview,
- * Zweig `want === null`) — das ist ein eigener Befund und hier nicht Thema.
- * Mit „three" greift der ehrliche Weg: reicht das Ziel nicht, kommt eine
- * Seite dazu, und der Prüfstand sagt es. */
+/* „auto/long" ist seit dem 10.10.2026 dabei: Bis dahin begrenzte „auto" die
+ * Vorschau auf drei Seiten und schnitt den Rest still ab (DocumentPreview,
+ * Zweig `want === null`). Jetzt setzt „auto" weiter und meldet ab der
+ * fünften Seite einen Überlauf; „four" ist das neue größte Seitenziel. */
 const FAELLE = [
   { mode: 'two', len: 'normal' },
   { mode: 'three', len: 'long' },
+  { mode: 'four', len: 'long' },
+  { mode: 'auto', len: 'long' },
 ];
 
 const out = join(process.cwd(), 'tmp-preview');
@@ -93,10 +94,15 @@ for (const tpl of ids) {
     const roh = execFileSync('pdftotext', ['-raw', pdfPath, '-'], { encoding: 'utf8' });
     const pdfSeiten = (roh.match(/\f/g) || []).length;
     if (pdfSeiten !== vorschauSeiten) probleme.push(`Seitenzahl: Vorschau ${vorschauSeiten}, PDF ${pdfSeiten}`);
-    const { fehlt, falsch } = pruefeReihenfolge(roh);
+    /* Reihenfolge, die die Vorlage setzt (eigene `mainOrder` oder Vorgabe). */
+    const order = await page.evaluate(async t => {
+      const th = (await import('/src/templates/theme.ts')).THEMES.find(x => x.id === t);
+      return th && th.mainOrder && !/sidebar/.test(th.layout) ? th.mainOrder : null;
+    }, tpl);
+    const { fehlt, falsch } = pruefeReihenfolge(roh, markenFuer(order));
     if (fehlt.length) probleme.push(`fehlt im PDF-Text: ${fehlt.slice(0, 4).map(m => `„${m}"`).join(', ')}${fehlt.length > 4 ? ` (+${fehlt.length - 4})` : ''}`);
     if (falsch.length) probleme.push(`falsche Reihenfolge: ${falsch.slice(0, 4).map(m => `„${m}"`).join(', ')}`);
-    const titel = pruefeReihenfolge(roh, ABSCHNITT_TITEL);
+    const titel = pruefeReihenfolge(roh, titelFuer(order));
     if (titel.fehlt.length || titel.falsch.length) probleme.push(`Überschriften: ${[...titel.fehlt, ...titel.falsch].join(', ')}`);
 
     const ok = !probleme.length;

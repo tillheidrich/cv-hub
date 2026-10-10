@@ -1,5 +1,5 @@
 /**
- * Rechtstexte rund um den Bewerbungs-Pass (Stand 2026-10-09).
+ * Rechtstexte rund um den Bewerbungs-Pass (Stand 2026-10-10, Prüfteam J1).
  * KEINE RECHTSBERATUNG — vor Livegang anwaltlich prüfen lassen.
  * Belege: Recherche des ursprünglichen Betreibers, nicht Teil dieses Repositorys.
  */

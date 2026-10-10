@@ -147,6 +147,13 @@ export async function installVoucherMock(page, state) {
         return json(route, 200, { campaigns: [...rows.values()], byKind, vouchers: [], notes: ['Gezählt wird je Einlösung (= je Konto), nicht je Mensch.', 'Gutscheine erzeugen keine Bestellung und keinen Umsatz.'] });
       }
     }
+    // Admin-Bereich (admin.html, Runde 8b): Stand der Anmeldung wie ohne ADMIN_HOST.
+    if (path === '/api/admin/auth/session') {
+      return json(route, 200, user?.role === 'admin'
+        ? { mode: 'legacy', authenticated: true, via: 'app-session', user: { id: user.id, username: user.username }, idleMinutes: 30 }
+        : { mode: 'legacy', authenticated: false });
+    }
+    if (path === '/api/admin/overview') return json(route, 404, { error: 'Nicht im Mock.' });
     // Admin-Panel lädt beim Öffnen auch diese
     if (path === '/api/admin/stats') return json(route, 200, { users: 3, resumes: 2, invitesActive: 0, pdfExports: 0, registrations7d: 1, accessPending: 0, accessAccepted: 0, accessRejected: 0, accessRequests7d: 0 });
     if (path === '/api/admin/invites') return json(route, 200, { invites: [] });

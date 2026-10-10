@@ -1,6 +1,6 @@
 // ── Die Vorlage ohne die Daten ──────────────────────────────────────────────
 //
-// Till: „Ich möchte halt wirklich die größtmögliche Freiheit haben."
+// Vorgabe: „Ich möchte halt wirklich die größtmögliche Freiheit haben."
 //
 // Dieser Export ist der Ausgang aus dem Editor. Er liefert das Design als
 // eigenständige Dateien, mit Platzhaltern statt Inhalt, plus alles, was eine
