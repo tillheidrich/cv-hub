@@ -114,7 +114,10 @@ check(/Nur-Lesen/.test(body) && /nichts, ohne es dir vorher per E-Mail anzukünd
 check(/Privatpersonen aus Deutschland und den anderen Ländern der Europäischen Union/.test(body) && /Mollie/.test(await page.locator('.bl-card-accent [data-k="start"]').innerText()), '§ 312j Abs. 1: Lieferbeschränkung und Zahlungsmittel auf /preise');
 check(await page.locator('footer a[href="/kuendigen"]', { hasText: 'Verträge hier kündigen' }).count() === 1, 'Fußzeile: „Verträge hier kündigen" (§ 312k)');
 check(!BANNED.test(body), 'keine Countdowns, Konkurrenznamen, Siegel oder offenen Platzhalter', (body.match(BANNED) || [''])[0]);
-check(/Export ist nie Teil des Passes/.test(await page.locator('.bl-faq').textContent()), 'Export ausdrücklich nicht hinter der Bezahlschranke');
+// Bis 10.10.2026 stand hier die Zusage „Export ist nie Teil des Passes". Die
+// Die Vorlagen-Staffel nimmt sie zurück: keine „nie/immer"-
+// Zusagen; was kostenlos ist, steht vorher auf der Preisseite und am Knopf.
+check(!/Export ist nie Teil des Passes|machen wir nie vom Kauf abhängig/.test(await page.locator('.bl-faq').textContent()), 'Keine „nie"-Zusage zum Export mehr (Vorlagen-Staffel, 10.10.2026)');
 check(await page.locator('footer a[href="/widerruf"]').count() === 1, 'Fußzeile: „Vertrag widerrufen"');
 for (const h of ['/impressum', '/datenschutz', '/agb', '/widerrufsbelehrung', '/kuendigen']) check(await page.locator(`footer a[href="${h}"]`).count() === 1, `Fußzeile: ${h}`);
 check((await events(page)).some(([e]) => e === 'preise_view'), 'Ereignis preise_view');

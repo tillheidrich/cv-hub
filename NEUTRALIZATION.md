@@ -3,6 +3,53 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-10-10, template tier and mail workflows)
+
+Mirrored diff-based (`git merge-file`, base = the private tool's previous
+revision); conflicts resolved in favour of the neutral CV-Hub wording, new
+files taken over and neutralized.
+
+- **Template tier off by default.** `freeTemplates.ts`, `freeTier.ts`, the
+  unlock window and the "Pass" tags only act when the server reports
+  `freeTier.limited` (paid mode ready to sell plus `FREE_TIER_LIMITS`), which
+  `docker-compose.yml` does not pass. `TEMPLATE_TIER_SINCE` is documented in
+  `.env.example` (commented out) and the README only. The magazine texts took
+  the new AI paragraphs but keep the pass conditional ("if the instance offers
+  the optional pass") instead of naming free templates; the pricing FAQ and
+  comparison table keep "on the server" without a location.
+- **Mail workflows.** `mailflows.js`, `mailqueue.js`, `mailsettings.js`,
+  `mailadmin.js`, the admin page `Mails.tsx`, `MailPrefs.tsx`,
+  `UnsubscribePage.tsx` and `MAILS.md` came over. Product name from
+  `APP_NAME`/`PRODUCT_NAME` (default `CV-Hub`) in mail headings, sender
+  fallback and the unsubscribe page title; mail subjects use `productName` or
+  `CV-Hub`. `MAILS.md` and code comments no longer quote the operator's
+  request, name the original mail provider or a private legal reviewer; the
+  hosting tool's name is gone from the new admin texts ("Umgebung"). Test
+  fixtures use `Testverkäufer` / `Testweg 1, 12345 Teststadt` and
+  `ops@example.test`. `MAIL_SETTINGS_KEY` was added to `.env.example`
+  (optional, empty) and `docker-compose.yml` (`${MAIL_SETTINGS_KEY:-}`).
+- **Legal texts version 2026-10-10.2** merged into the placeholder templates;
+  the privacy policy's new section "E-Mails an Ihr Konto" / "E-mails to your
+  account" came over, the sending service stays `[Mail-Provider]` /
+  `[mail provider]` with `[Land]` / `[country]`. The terms no longer say the
+  service runs "on servers in Germany" (left over from earlier rounds).
+  `legal-texts.json` regenerated with `sync-legal.mjs`. The private
+  `mailtexts/archiv/` is not mirrored.
+- **Repository links.** The private tool hard-coded its repository in
+  `LandingScreen.tsx`, `ssr.tsx` and `LegalPages.tsx` and switched the imprint
+  link text to its own git host. Here all of them use `SOURCE_REPO_URL` again
+  (link text `shortUrl(SOURCE_REPO_URL)`), and the new `sourceFileUrl()` builds
+  GitHub paths (`/tree/<branch>/…`) instead of Forgejo's `/src/branch/…`, so
+  the start page's link to `pdfcheck.mjs` resolves on GitHub.
+- **No server location** in the new landing FAQ, the pricing FAQ ("Why does it
+  cost anything?") or the tier comparison table, in all four languages.
+- **Comments** no longer attribute the tier to an "advisor decision" or a
+  numbered variant of a private planning document.
+- **Start-page photos not re-taken.** The photographed views (editor, design
+  panel, check, export menu, phone, thumbnails) only change when the tier is
+  active; the new AI section is text only. The existing `app/public/landing/`
+  stays as it is.
+
 ## Done (2026-10-10, round 8)
 
 Mirrored diff-based (`git merge-file`, base = the private tool's previous

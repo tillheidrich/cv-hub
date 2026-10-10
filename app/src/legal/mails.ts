@@ -40,7 +40,7 @@ export interface MailTexts {
 }
 
 export const MAILS: Bilingual<MailTexts> = {
-  version: '2026-10-10',
+  version: '2026-10-10.2',
   de: {
     orderConfirmation: {
       subject: 'Bestellbestätigung {{ORDER_NO}} – Ihr Bewerbungs-Pass für {{PRODUCT_NAME}}',
@@ -52,7 +52,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Bestellnummer: {{ORDER_NO}}',
         'Vertragsschluss: {{ORDER_DATE}}',
         'Produkt: {{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
-        'Leistungen: Word-Export (gestaltet und als ATS-Fassung) und LaTeX-Quelltext, Anschreiben, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
+        'Leistungen: PDF und HTML in allen Vorlagen, Word-Export (gestaltet und als ATS-Fassung) und LaTeX-Quelltext, Anschreiben samt Prüfung, mehrere Fassungen und alle vier Dokumentsprachen, Speichern auf unserem Server und Zugriff von mehreren Geräten, Sharelinks, Versionen am Server, KI-Verbindung per MCP, API-Schlüssel',
         'Preis: {{PRICE}} einmalig (Endpreis; gemäß § 19 UStG wird keine Umsatzsteuer berechnet)',
         'Pass gültig bis: {{PASS_UNTIL}}',
         'Ende: automatisch, kein Abo, keine Verlängerung, keine weitere Abbuchung',
@@ -87,7 +87,7 @@ export const MAILS: Bilingual<MailTexts> = {
         '',
         'Erstattung: {{PRICE}}, vollständig, auf dasselbe Zahlungsmittel, mit dem Sie bezahlt haben. Stand: {{REFUND_STATUS}}. Wir zahlen spätestens innerhalb von 14 Tagen ab heute zurück; meist geht es schneller. Ihnen entstehen dafür keine Kosten.',
         '',
-        'Der Pass aus dieser Bestellung ist beendet. Ihr Konto und Ihre Inhalte bleiben erhalten; Sie können sie weiter lesen, exportieren und löschen.',
+        'Der Pass aus dieser Bestellung ist beendet. Ihr Konto und Ihre Inhalte bleiben erhalten; Sie können sie weiter lesen, als Datenexport (JSON, Markdown) herunterladen und löschen. Word, LaTeX und die Pass-Vorlagen gibt es danach wieder mit einem neuen Pass.',
         '',
         'Bitte heben Sie diese Mail als Beleg auf.',
       ],
@@ -168,7 +168,7 @@ export const MAILS: Bilingual<MailTexts> = {
         'Order number: {{ORDER_NO}}',
         'Contract concluded: {{ORDER_DATE}}',
         'Product: {{PRODUCT_NAME}} – application pass, {{DAYS}} days',
-        'Features: Word export (designed and as the ATS version) and LaTeX source, cover letters, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
+        'Features: PDF and HTML in all templates, Word export (designed and as the ATS version) and LaTeX source, cover letters with check, several versions and all four document languages, storage on our server and access from several devices, share links, server-side versions, AI connection via MCP, API keys',
         'Price: {{PRICE}} once (final price; no VAT charged under § 19 UStG)',
         'Pass valid until: {{PASS_UNTIL}}',
         'End: automatic, no subscription, no renewal, no further charge',
@@ -205,7 +205,7 @@ export const MAILS: Bilingual<MailTexts> = {
         '',
         'Refund: {{PRICE}}, in full, to the same means of payment you used. Status: {{REFUND_STATUS}}. We refund within 14 days from today at the latest; usually faster. You incur no costs for this.',
         '',
-        'The pass from this order has ended. Your account and your content remain; you can still read, export and delete them.',
+        'The pass from this order has ended. Your account and your content remain; you can still read them, download them as a data export (JSON, Markdown) and delete them. Word, LaTeX and the pass templates are available again with a new pass.',
         '',
         'Please keep this e-mail as a record.',
       ],

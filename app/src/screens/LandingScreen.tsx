@@ -28,7 +28,9 @@ import { track } from '../data/track';
 import './landing.css';
 import { PricingCards } from '../billing/PricingPage';
 import { billingFor, priceOf } from '../billing/format';
-import { SOURCE_REPO_URL } from '../data/urls';
+import { SOURCE_REPO_URL, sourceFileUrl } from '../data/urls';
+import { freeTierLimited } from '../billing/freeTier';
+import { FREE_TEMPLATE_IDS } from '../templates/freeTemplates';
 import { useOffer, salesOpen, registrationOpen } from '../billing/hooks';
 import { PATHS, linkClick } from '../billing/route';
 import { cancelUi } from '../billing/legalTexts';
@@ -67,7 +69,9 @@ interface Props {
 const UI_LANG_KEY = 'appstudio-ui-lang';
 const NAV_DEMO: Record<UiLang, string> = { de: 'Demo starten', en: 'Try the demo', fr: 'Essayer la démo', es: 'Probar la demo' };
 const LANG_SHORT: Record<UiLang, string> = { de: 'DE', en: 'EN', fr: 'FR', es: 'ES' };
-const SCRIPTS_URL = `${SOURCE_REPO_URL}/blob/main/app/scripts/pdfcheck.mjs`;
+const SCRIPTS_URL = sourceFileUrl('app/scripts/pdfcheck.mjs');
+/** Magazin-Artikel, auf den der KI-Abschnitt verweist. */
+const AI_ARTICLE = '/magazin/lebenslauf-mit-ki-schreiben-ohne-erfindungen/';
 const MD_SNIPPET: Record<UiLang, string> = {
   de: '---\nlang: de\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Berufserfahrung\n\n### Senior Product Designer\nNordhub GmbH · Hamburg · 01/2023 – heute\n- Design System für vier Produktbereiche',
   en: '---\nlang: en\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Experience\n\n### Senior Product Designer\nNordhub GmbH · Hamburg · 01/2023 – present\n- Design system for four product areas',
@@ -105,6 +109,8 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
   const bt = billingFor(pageLang, offer);
   const articles = useMagazinArticles(isSsr ? ssr.articles : (embedded ? embedded.articles : null)).slice(0, 6);
   const faq = faqFor(pageLang, offer);
+  // Vorlagen-Staffel: Kennzeichen „Pass" nur bei aktiver Gratis-Grenze.
+  const limited = freeTierLimited(offer);
 
   const [requestOpen, setRequestOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -298,12 +304,35 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           </div>
         </section>
 
+        {/* ── Mit KI arbeiten ──────────────────────────────────────────── */}
+        <section id="ki" className="lp-sect lp-sect-alt" aria-labelledby="lp-ai-h">
+          <div className="lp-wrap">
+            <SectHead eyebrow={t.ai.eyebrow} id="lp-ai-h" h={t.ai.h} lede={t.ai.intro} split />
+            <ul className="lp-ai-grid">
+              <li className="lp-ai-card" data-rv data-ai="bridge">
+                <p className="lp-feat-tag">{t.ai.bridge.tag}</p>
+                <h3>{t.ai.bridge.title}</h3>
+                <p>{t.ai.bridge.body}</p>
+              </li>
+              <li className="lp-ai-card" data-rv data-ai="mcp" style={{ ['--i' as string]: 1 }}>
+                <p className="lp-feat-tag">{offer ? t.ai.mcp.tagPass : t.ai.mcp.tagAccount}</p>
+                <h3>{t.ai.mcp.title}</h3>
+                <p>{t.ai.mcp.body}</p>
+              </li>
+            </ul>
+            <p className="lp-ai-foot" data-rv>
+              {t.ai.foot}{' '}
+              <a className="lp-arrow-link" href={AI_ARTICLE} lang={pageLang === 'de' ? undefined : 'de'}>{t.ai.footLink}<Arrow /></a>
+            </p>
+          </div>
+        </section>
+
         {/* ── Vorlagen ─────────────────────────────────────────────────── */}
         <section id="vorlagen" className="lp-sect" aria-labelledby="lp-gal-h">
           <div className="lp-wrap">
             <SectHead eyebrow={t.gallery.eyebrow} id="lp-gal-h" h={t.gallery.h(n)} lede={t.gallery.lede} split />
-            <Gallery lang={pageLang} showAll={t.gallery.showAll(n)} />
-            <p className="lp-note">{t.gallery.legend}</p>
+            <Gallery lang={pageLang} showAll={t.gallery.showAll(n)} passTag={limited ? t.gallery.passTag : undefined} />
+            <p className="lp-note">{t.gallery.legend}{limited && <> {t.gallery.passLegend(FREE_TEMPLATE_IDS.length)}</>}</p>
           </div>
         </section>
 
@@ -360,7 +389,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               {faq.map((q, i) => (
                 <details key={q.id} className="lp-qa" open={i === 0} data-faq={q.id}>
                   <summary><span>{q.q}</span><span className="lp-qa-sign" aria-hidden /></summary>
-                  <div className="lp-qa-a"><p>{q.a}</p></div>
+                  <div className="lp-qa-a"><p>{linkify(q.a)}</p></div>
                 </details>
               ))}
             </div>
@@ -520,6 +549,16 @@ function Features({ t, lang }: { t: LandingCopy; lang: UiLang }) {
       </div>
     </>
   );
+}
+
+/** Adressen in FAQ-Antworten als Link zeigen. Der sichtbare Text bleibt
+ *  derselbe wie im FAQPage-Datenblock (seocheck vergleicht beides). */
+function linkify(text: string): React.ReactNode {
+  const parts = text.split(/(https:\/\/[^\s,;)]*[^\s,;.)])/);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => (i % 2
+    ? <a key={i} href={part} target="_blank" rel="noopener noreferrer">{part}</a>
+    : part));
 }
 
 function formatDate(iso: string, lang: UiLang): string {

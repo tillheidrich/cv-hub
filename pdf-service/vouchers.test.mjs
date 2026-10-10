@@ -122,7 +122,31 @@ describe('Laufzeitregeln mit konkreten Daten (computeAccess)', () => {
     const order = g({ source: 'order', kind: 'days', days: 90, granted_at: D('2026-11-01T10:00:00Z'), revoked_at: D('2026-11-05T12:00:00Z'), effective_from: D('2026-11-01T10:00:00Z'), effective_until: D('2027-01-30T10:00:00Z') });
     const r = computeAccess(self, [order]);
     assert.equal(r.until.toISOString(), '2026-11-05T12:00:00.000Z');
+    // Seit 10.10.2026: nur widerrufene Bestellungen → „ohne Pass", nicht
+    // „Pass abgelaufen" (das gäbe dauerhaft Word und LaTeX frei).
+    assert.equal(r.planKind, 'none');
+    assert.equal(r.withdrawnOnly, true);
+  });
+
+  test('Widerruf-Regel (10.10.2026): Pilot bleibt Pilot, ein Gutschein zählt weiter als Pass, eine zweite bezahlte Bestellung auch', () => {
+    const revoked = g({ source: 'order', kind: 'days', days: 90, granted_at: D('2026-11-01T10:00:00Z'), revoked_at: D('2026-11-05T12:00:00Z'), effective_from: D('2026-11-01T10:00:00Z'), effective_until: D('2027-01-30T10:00:00Z') });
+    // Eingeladen mit Pilot-Laufzeit, gekauft, widerrufen: zurück zum Pilot (nicht „Pass abgelaufen").
+    const pilot = g({ source: 'pilot', kind: 'days', days: 30, granted_at: D('2026-10-20T08:00:00Z') });
+    let r = computeAccess({ ...invite, plan_kind: 'pass' }, [pilot, revoked]);
+    assert.equal(r.planKind, null);
+    assert.equal(r.withdrawnOnly, true);
+    // Selbst registriert mit Gutschein (auch widerrufen) und widerrufener Bestellung: Pass.
+    const voucher = g({ source: 'voucher', kind: 'days', days: 30, granted_at: D('2026-10-25T08:00:00Z') });
+    r = computeAccess(self, [voucher, revoked]);
     assert.equal(r.planKind, 'pass');
+    assert.equal(r.withdrawnOnly, false);
+    r = computeAccess(self, [{ ...voucher, revoked_at: D('2026-10-26T08:00:00Z') }, revoked]);
+    assert.equal(r.planKind, 'pass', 'Gutschein-Widerruf (nur Betreiber) ändert die Einordnung nicht');
+    // Zweite, nicht widerrufene Bestellung: Pass.
+    const paid = g({ source: 'order', kind: 'days', days: 90, granted_at: D('2026-11-10T10:00:00Z') });
+    r = computeAccess(self, [revoked, paid]);
+    assert.equal(r.planKind, 'pass');
+    assert.equal(r.withdrawnOnly, false);
   });
 
   test('Kündigung zum 12.11. mit Gutschein vom 10.11.: Gratiszeit hängt an das Kündigungsende → 12.12.', () => {

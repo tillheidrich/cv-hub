@@ -1,6 +1,6 @@
 /**
  * FAQ der Startseite mit den Werten, die gerade gelten (Vorlagenzahl, Preis,
- * Gratis-Grenze, offene Registrierung). Eine Funktion für die sichtbare FAQ
+ * Gratis-Grenze mit Zahl der kostenlosen Vorlagen, offene Registrierung). Eine Funktion für die sichtbare FAQ
  * und für den FAQPage-Datenblock der vorgerenderten Seite.
  */
 import type { Offer } from '../billing/api';
@@ -8,6 +8,7 @@ import { priceOf } from '../billing/format';
 import { freeTierLimited } from '../billing/freeTier';
 import { registrationOpen } from '../billing/hooks';
 import { PICKABLE_THEMES } from '../templates/theme';
+import { FREE_TEMPLATE_IDS } from '../templates/freeTemplates';
 import { FREETIER_I18N } from '../ui/i18n/freetier';
 import type { UiLang } from '../ui/i18n';
 import { BRAND } from './brand.js';
@@ -23,5 +24,6 @@ export function faqFor(lang: UiLang, offer: Offer | null) {
     registrationOpen: registrationOpen(offer),
     limitedAccess: freeTierLimited(offer) ? FREETIER_I18N[lang].landingFaqAccess : null,
     limited: freeTierLimited(offer),
+    free: FREE_TEMPLATE_IDS.length,
   });
 }

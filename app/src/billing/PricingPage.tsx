@@ -76,6 +76,9 @@ export function PricingCards({ lang, offer, onFree, headingLevel = 2 }: { lang: 
           </>
         ) : <p className="bl-hint">{t.pricingSoon}</p>}
         <ul className="bl-list" data-pass-features>
+          {limited && (
+            <li data-ft="templates"><CheckGlyph /><div><strong>{ftt.featureTemplates(PICKABLE_THEMES.length).title}</strong><span>{ftt.featureTemplates(PICKABLE_THEMES.length).body}</span></div></li>
+          )}
           {limited && FREE_TIER_FEATURES.map(f => (
             <li key={f} data-ft={f}><CheckGlyph /><div><strong>{ftt.features[f].title}</strong><span>{ftt.features[f].body}</span></div></li>
           ))}

@@ -48,6 +48,9 @@ export interface ExportRenderConfig {
   /** Skill-Gruppen in der Seitenspalte — aus der Vorschau übernommen, sonst
    *  läuft die Spalte im PDF über und der Inhalt fehlt kommentarlos. */
   asideSkillCap?: number;
+  /** ATS-Fassung: Versalzeilen ohne Sperrung (ResumeRenderer `flatCaps`).
+   *  Setzt nur App.tsx `exportAtsPdf`, zusammen mit dem Messlauf. */
+  flatCaps?: boolean;
   /** @deprecated Altlast aus der Zeit vor dem Metrik-System. */
   density?: number;
   /** @deprecated Seitenzahl kommt jetzt aus `pageBlocks`. */
@@ -202,6 +205,20 @@ ${jsonLd || ''}
   text-align: inherit;
   vertical-align: baseline;
 }
+
+/* Glyphen an ihrer genauen Position, nicht auf ganze Pixel gerundet.
+   Befund 10.10.2026: Chromium ab m148 (Playwright 1.60, der PDF-Dienst)
+   rundet im Druck die Vorschubbreite jedes Zeichens auf ganze CSS-Pixel,
+   schreibt in die PDF-Textebene aber die ungerundeten Breiten. Der Rest
+   (bis 0,5 px je Zeichen) kommt zur Sperrung hinzu, und pdftotext trennt
+   gesperrte Versalien danach in Bruchstücke: „SE NIOR PRODUCT DE SIGNE R",
+   „BE RUFSPROFIL". geometricPrecision schaltet die Rundung ab; Chromium bis
+   m141 setzte ohnehin so (Wortkästen in der Textebene sind dort identisch).
+   Steht bewusst NUR hier, nicht in index.css: In der Vorschau am Bildschirm
+   (Linux) verschiebt die Regel die Messung und damit bei 16 von 100
+   Prüffällen die Verdichtung; so bleibt die Vorschau Byte für Byte, wie sie
+   war, und das PDF setzt wie bis m141. Prüfung: scripts/capscheck.mjs. */
+.cv-page { text-rendering: geometricPrecision; }
 
   /* Nur für Screenreader und Textextraktion sichtbar — trägt u. a. das
      Sprachniveau, das visuell als Punkteskala erscheint. */
@@ -366,6 +383,7 @@ function resumeBody(data: CVData, cfg: ExportRenderConfig): string {
       pageFormat: cfg.pageFormat,
       forcedBreaks: cfg.forcedBreaks,
       asideSkillCap: cfg.asideSkillCap,
+      ...(cfg.flatCaps ? { flatCaps: true } : {}),
     }),
   );
 }

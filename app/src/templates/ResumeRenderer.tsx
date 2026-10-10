@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import type { CVData, SocialLink, SectionKey, PageFormat } from '../data/types';
 import { getPageFormat } from '../data/pageFormats';
 import type { ResumeTheme, ThemeColors, FontPairing, BulletStyle } from './theme';
@@ -14,6 +14,14 @@ import {
   type FixedExtraKey,
 } from '../data/extraSections';
 export type { InlineEditApi };
+
+/* Sperrung der Versalzeilen (Überschriften, Titelzeile, Feldbezeichnungen).
+ * Sonst TRACK_CAPS (0,08 em), in der ATS-Fassung 0 (`flatCaps`, seit
+ * 10.10.2026): Ein Parser bekommt dort Versalien ohne jeden Zwischenraum
+ * zwischen den Buchstaben. Über einen Kontext statt über jede Signatur, weil
+ * die Werte tief unten in den Bausteinen gesetzt werden. Ohne `flatCaps`
+ * kommt Zeichen für Zeichen dasselbe Markup heraus wie vorher. */
+const CapsTrack = createContext<string>(TRACK_CAPS);
 
 // ── Social rendering helpers ────────────────────────────────────────────────
 const SOCIAL_META: Record<string, { label: string; prefix: string }> = {
@@ -237,6 +245,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
    *  Konstanten. Ohne ihn (Export, Messlauf) bleibt es gewöhnlicher Text. */
   path?: string;
 }) {
+  const TC = useContext(CapsTrack);
   const L = <Ed path={path}>{label}</Ed>;
   /* In der Seitenspalte braucht ein Sektionstitel deutlich mehr Luft nach
    * unten als in der Hauptspalte. Grund: dort folgt als Nächstes ein
@@ -266,7 +275,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
   if (T.heading === 'block' && group && T.groupHeads === 'small') {
     return (
       <h2 style={{
-        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 700, letterSpacing: TC,
         textTransform: 'uppercase', color: accent, marginBottom: sp(headGap, M), overflowWrap: 'normal', wordBreak: 'normal',
       }}>{L}</h2>
     );
@@ -275,7 +284,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
     return (
       <h2 style={{
         ...H2, display: 'inline-block', marginBottom: sp(headGap, M), background: accent, color: onPanel ? C.panelBg : C.accentInk,
-        fontFamily: P.body, fontSize: fs(FS.label * 1.02, M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+        fontFamily: P.body, fontSize: fs(FS.label * 1.02, M), fontWeight: 700, letterSpacing: TC,
         textTransform: 'uppercase', padding: `${4 * M.t}px ${9 * M.t}px`,
         whiteSpace: 'nowrap',
       }}>{L}</h2>
@@ -285,7 +294,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: sp(6, M), marginBottom: sp(headGap, M), minWidth: 0 }}>
         <div style={{ width: `${12 * M.t}px`, height: `${3 * M.t}px`, background: accent, flexShrink: 0 }} />
-        <h2 style={{ ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: ink, minWidth: 0, overflowWrap: 'normal' }}>{L}</h2>
+        <h2 style={{ ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TC, textTransform: 'uppercase', color: ink, minWidth: 0, overflowWrap: 'normal' }}>{L}</h2>
       </div>
     );
   }
@@ -295,7 +304,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
   if (T.heading === 'caps-plain') {
     return (
       <h2 style={{
-        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TC,
         textTransform: 'uppercase', color: ink, marginBottom: sp(headGap, M),
         overflowWrap: 'normal', wordBreak: 'normal', display: 'block',
       }}>{L}</h2>
@@ -340,7 +349,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
            * wie der Text darunter — das trennt die Register erst wirklich.
            * In der Seitenspalte bleibt es kleiner, dort ist die Spalte schmal. */
           ...H2, fontFamily: P.body, fontSize: fs(FS.body * (aside ? 1.02 : 1.45), M), fontWeight: 700,
-          letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: ink,
+          letterSpacing: TC, textTransform: 'uppercase', color: ink,
           overflowWrap: 'normal', wordBreak: 'normal',
         }}>{L}</h2>
       </div>
@@ -377,7 +386,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
    * überschriften der Kenntnisse) bleibt nur die Versalzeile. */
   if (T.heading === 'numbered') {
     const caps: React.CSSProperties = {
-      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TC,
       textTransform: 'uppercase', color: ink, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
     };
     if (num == null) return <h2 style={{ ...caps, marginBottom: sp(headGap, M) }}>{L}</h2>;
@@ -396,7 +405,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
    * Linie, sonst stünden drei Linien nebeneinander. */
   if (T.heading === 'caps-full') {
     const caps: React.CSSProperties = {
-      ...H2, fontFamily: P.heading, fontSize: fs(FS.meta * (group || aside ? 1 : 1.12), M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+      ...H2, fontFamily: P.heading, fontSize: fs(FS.meta * (group || aside ? 1 : 1.12), M), fontWeight: 700, letterSpacing: TC,
       textTransform: 'uppercase', color: ink, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
     };
     if (group || aside) return <h2 style={{ ...caps, marginBottom: sp(headGap, M) }}>{L}</h2>;
@@ -412,7 +421,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
    * schlichte Versalzeile in ihrer Spalte. */
   if (T.heading === 'label') {
     const caps: React.CSSProperties = {
-      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+      ...H2, fontFamily: P.body, fontSize: fs(FS.micro * 1.06, M), fontWeight: 600, letterSpacing: TC,
       textTransform: 'uppercase', color: accent, overflowWrap: 'normal', wordBreak: 'normal', minWidth: 0,
     };
     if (group || aside) return <h2 style={{ ...caps, color: ink, marginBottom: sp(headGap, M) }}>{L}</h2>;
@@ -445,7 +454,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
     return (
       <div style={{ marginBottom: sp(headGap, M), minWidth: 0 }}>
         <h2 style={{
-          ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+          ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TC,
           textTransform: 'uppercase', color: ink, marginBottom: sp(4, M),
           overflowWrap: 'normal', wordBreak: 'normal',
         }}>{L}</h2>
@@ -458,7 +467,7 @@ function SectionTitle({ label, T, C, P, M, onPanel, path, aside, num, group }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: sp(6, M), marginBottom: sp(headGap, M), minWidth: 0 }}>
       <div style={{ width: `${3 * M.t}px`, height: `${10 * M.t}px`, background: accent, flexShrink: 0 }} />
       <h2 style={{
-        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+        ...H2, fontFamily: P.body, fontSize: fs(FS.micro, M), fontWeight: 600, letterSpacing: TC,
         textTransform: 'uppercase', color: ink, minWidth: 0,
         overflowWrap: 'normal', wordBreak: 'normal',
       }}>{L}</h2>
@@ -496,7 +505,7 @@ function BulletLine({ text, C, T, M, onPanel, path }: {
  * Sperrung. Das kostet nichts an Lesbarkeit — es ist die Beschriftung, nicht
  * der Inhalt — und verhindert den Bruch zuverlässig.
  */
-function labelStyle(label: string, color: string, P: FontPairing, M: Metrics): React.CSSProperties {
+function labelStyle(label: string, color: string, P: FontPairing, M: Metrics, TC: string = TRACK_CAPS): React.CSSProperties {
   const long = label.length > 14;
   /* Gemessen am 14.09.2026: „STAATSANGEHÖRIGKEIT" braucht in Lilles 54-mm-
    * Spalte 142 px, zur Verfügung stehen 136 — es brach als
@@ -508,7 +517,7 @@ function labelStyle(label: string, color: string, P: FontPairing, M: Metrics): R
     fontFamily: P.body,
     fontSize: fs(FS.label * (long ? 0.88 : 1), M),
     fontWeight: 700,
-    letterSpacing: sehrLang ? '0' : long ? '0.04em' : TRACK_CAPS,
+    letterSpacing: sehrLang ? '0' : long ? '0.04em' : TC,
     textTransform: 'uppercase',
     color,
     marginBottom: sp(2, M),
@@ -531,7 +540,8 @@ function FieldLabel({ label, path, color, P, M, bracket }: {
   label: string; path?: string; color: string; P: FontPairing; M: Metrics; bracket?: boolean;
 }) {
   const inner = <Ed path={path as never}>{label}</Ed>;
-  return <div style={labelStyle(label, color, P, M)}>{bracket ? <>{'['}{inner}{']'}</> : inner}</div>;
+  const TC = useContext(CapsTrack);
+  return <div style={labelStyle(label, color, P, M, TC)}>{bracket ? <>{'['}{inner}{']'}</> : inner}</div>;
 }
 
 function ContactBlock({ data, C, P, M, onPanel, bracket, availPx, wide }: {
@@ -1137,6 +1147,7 @@ function NameText({ name }: { name: string }) {
 function NameBlock({ data, T, C, P, M, big, onPanel }: {
   data: CVData; T: ResumeTheme; C: ThemeColors; P: FontPairing; M: Metrics; big?: boolean; onPanel?: boolean;
 }) {
+  const TC = useContext(CapsTrack);
   const ink = onPanel ? C.panelInk : (T.accentName ? C.accent : C.ink);
   const titleColor = onPanel ? C.panelAccent : C.accent;
   return (
@@ -1171,12 +1182,12 @@ function NameBlock({ data, T, C, P, M, big, onPanel }: {
         // 0,08 em ist keine Geschmacksentscheidung: ab 0,11 em zerlegt die
         // PDF-Textebene den Namen in Einzelbuchstaben, unabhängig vom
         // Schriftgrad (scripts/measure-tracking.mjs).
-        letterSpacing: T.trackedName ? TRACK_CAPS : (T.uppercaseName ? '0.02em' : TRACK_NAME),
+        letterSpacing: T.trackedName ? TC : (T.uppercaseName ? '0.02em' : TRACK_NAME),
         textTransform: (T.uppercaseName || T.trackedName) ? 'uppercase' : 'none',
       }}><Ed path="personal.name"><NameText name={data.personal.name} /></Ed></h1>
       )}
       <div style={{
-        fontFamily: P.body, fontSize: fs(FS.meta * 0.9, M), fontWeight: 600, letterSpacing: TRACK_CAPS,
+        fontFamily: P.body, fontSize: fs(FS.meta * 0.9, M), fontWeight: 600, letterSpacing: TC,
         textTransform: 'uppercase', color: titleColor, marginTop: sp(8, M),
       }}><Ed path="personal.title">{data.personal.title}</Ed></div>
     </div>
@@ -1188,13 +1199,14 @@ function NameBlock({ data, T, C, P, M, big, onPanel }: {
 function ContinuationHead({ data, C, P, M, pageIndex, pageCount }: {
   data: CVData; C: ThemeColors; P: FontPairing; M: Metrics; pageIndex: number; pageCount: number;
 }) {
+  const TC = useContext(CapsTrack);
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
       borderBottom: `${0.9 * M.t}px solid ${C.rule}`, paddingBottom: sp(8, M), marginBottom: sp(4, M),
     }}>
       <span style={{ fontFamily: P.heading, fontSize: fs(FS.entry, M), fontWeight: 600, color: C.ink }}>{data.personal.name}</span>
-      <span style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+      <span style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkSoft, letterSpacing: TC, textTransform: 'uppercase' }}>
         <Ed path="labels.misc.cvLabel">{data.labels.misc.cvLabel}</Ed> · {pageIndex + 1}/{pageCount}
       </span>
     </div>
@@ -1261,12 +1273,17 @@ interface Props {
    *  diesen Wert (2 → 1 → 0), bis sie passt — die übrigen Gruppen wandern in die
    *  Hauptspalte, wo sie ganz normal umbrechen. */
   asideSkillCap?: number;
+  /** ATS-Fassung (export/AtsPdfRunner.tsx, exportPdf mit variant 'ats'):
+   *  Versalzeilen ohne Sperrung. Messlauf und PDF setzen es beide, sonst
+   *  stimmte die Seitenaufteilung nicht. */
+  flatCaps?: boolean;
 }
 
 export default function ResumeRenderer({
   data, theme: T, pairing: P, metrics: metricsIn, hiddenSections = [], sectionOrder,
-  pageFormat = 'a4', pageBlocks, measure, forcedBreaks = [], asideSkillCap = 2, inlineEdit,
+  pageFormat = 'a4', pageBlocks, measure, forcedBreaks = [], asideSkillCap = 2, inlineEdit, flatCaps = false,
 }: Props) {
+  const TC = flatCaps ? '0' : TRACK_CAPS;
   /* Optischer Ausgleich zwischen den Schriftpaarungen: die Skala wird mit dem
      gemessenen x-Höhen-Faktor multipliziert, damit ein Lebenslauf in EB
      Garamond genauso groß wirkt wie einer in Inter — und nicht ein Fünftel
@@ -1856,7 +1873,7 @@ export default function ResumeRenderer({
     if (measure && ids.length === 0) {
       return (
         <div data-cv-caption-stub="1" style={{ marginBottom: sp(8, M) }} aria-hidden>
-          <div style={{ fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: C.inkSoft }}>&nbsp;</div>
+          <div style={{ fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TC, textTransform: 'uppercase', color: C.inkSoft }}>&nbsp;</div>
           <div style={{ fontFamily: P.body, fontSize: fs(FS.meta, M), fontWeight: 600, color: C.accent, marginTop: sp(3, M) }}>&nbsp;</div>
         </div>
       );
@@ -1876,7 +1893,7 @@ export default function ResumeRenderer({
     return (
       <div style={{ marginBottom: sp(8, M) }}>
         <div style={{
-          fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TRACK_CAPS,
+          fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TC,
           textTransform: 'uppercase', color: C.inkSoft,
         }}>{label} — Fortsetzung</div>
         {entry && (
@@ -2064,7 +2081,7 @@ export default function ResumeRenderer({
          * sie wieder zuordnen und den Absender anrufen. */
         <div style={{ display: 'flex', flexDirection: 'column', gap: sp(14, M) }}>
           <div style={{
-            fontFamily: P.body, fontSize: fs(FS.micro, M), letterSpacing: TRACK_CAPS, textTransform: 'uppercase',
+            fontFamily: P.body, fontSize: fs(FS.micro, M), letterSpacing: TC, textTransform: 'uppercase',
             fontWeight: 600, color: C.panelInk,
           }}>{data.personal.name}</div>
           {/* Nur, was am Stück in die Spalte passt: eine E-Mail, die hier
@@ -2249,7 +2266,7 @@ export default function ResumeRenderer({
               }}>
                 {rows.map((r, i) => (
                   <React.Fragment key={i}>
-                    <div style={{ fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TRACK_CAPS, textTransform: 'uppercase', color: C.accent, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontFamily: P.body, fontSize: fs(FS.label, M), fontWeight: 700, letterSpacing: TC, textTransform: 'uppercase', color: C.accent, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {r.lp ? <Ed path={r.lp}>{r.l}</Ed> : r.l}
                     </div>
                     <div style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.inkMid, whiteSpace: 'nowrap', lineHeight: lh(LH.tight, M) }}>
@@ -2380,7 +2397,7 @@ export default function ResumeRenderer({
               borderBottom: T.bandRule ? `${1.6 * M.t}px solid ${C.accent}` : undefined,
             }}>
               <span style={{ fontFamily: P.heading, fontSize: fs(FS.entry, M), fontWeight: 600 }}>{data.personal.name}</span>
-              <span style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.panelInkSoft, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              <span style={{ fontFamily: P.body, fontSize: fs(FS.micro, M), color: C.panelInkSoft, letterSpacing: TC, textTransform: 'uppercase' }}>
                 <Ed path="labels.misc.cvLabel">{data.labels.misc.cvLabel}</Ed> · {pageIndex + 1}/{pageCount}
               </span>
             </div>
@@ -2483,7 +2500,8 @@ export default function ResumeRenderer({
   }
 
   const doc = <>{pages.map((ids, i) => renderPage(ids, i))}</>;
-  return inlineEdit ? <InlineEditCtx.Provider value={inlineEdit}>{doc}</InlineEditCtx.Provider> : doc;
+  const inner = inlineEdit ? <InlineEditCtx.Provider value={inlineEdit}>{doc}</InlineEditCtx.Provider> : doc;
+  return flatCaps ? <CapsTrack.Provider value={TC}>{inner}</CapsTrack.Provider> : inner;
 }
 
 /** Baut dieselbe Blockliste wie der Renderer, ohne zu rendern — der

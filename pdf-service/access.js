@@ -110,9 +110,16 @@ export function planInfo(user, now = Date.now()) {
 }
 
 /** Klartext für die 403 bei plan.kind 'none'. */
-export function passRequiredMessage() {
-  return 'Für Speichern im Konto, Sharelinks, Versionen und die KI-Verbindung brauchst du einen aktiven Bewerbungs-Pass. '
-    + 'Ohne Konto kostenlos: alle Vorlagen und das PDF deines Lebenslaufs, die Daten bleiben in deinem Browser. '
+/** Vorlagen-Staffel (10.10.2026): Mit Gratis-Grenze
+ *  (FREE_TIER_LIMITS) ist das gestaltete PDF nur in den kostenlosen Vorlagen
+ *  frei, die ATS-Fassung in jeder. Ohne Grenze gilt der bisherige Satz.
+ *  Keine „nie/immer"-Zusagen, MCP ohne Programmnamen außer Claude. */
+export function passRequiredMessage(env = process.env) {
+  const limited = /^(1|true|yes|on)$/i.test(String(env.FREE_TIER_LIMITS ?? '').trim());
+  return 'Für Speichern im Konto, Sharelinks, Versionen und die direkte Verbindung zu Claude und anderen MCP-Programmen brauchst du einen aktiven Bewerbungs-Pass. '
+    + (limited
+      ? 'Ohne Konto kostenlos: alle Vorlagen ansehen und gestalten, das PDF deines Lebenslaufs in den kostenlosen Vorlagen und als ATS-Fassung in jeder Vorlage, die Daten bleiben in deinem Browser. '
+      : 'Ohne Konto kostenlos: alle Vorlagen und das PDF deines Lebenslaufs, die Daten bleiben in deinem Browser. ')
     + 'Was schon im Konto liegt, bleibt erhalten: Lesen, Exportieren und Löschen gehen weiter.';
 }
 
@@ -158,33 +165,56 @@ export function requireWritable(req, res, next) {
  * auch bei zwei gleichzeitig laufenden Instanzen keine Mail doppelt hinaus.
  *
  * Konten ohne E-Mail-Adresse bekommen keine Mail, aber das Banner (accessInfo).
+ *
+ * E-Mail-Workflows (10.10.2026): `timing` stellt je Workflow (pass_ending für
+ * Pass-Inhaber, access_ending für Einladungen mit Laufzeit) die Tage ein und
+ * schaltet ihn ab ({ soonDays, finalDays, enabled }; finalDays 0 = kein
+ * letzter Hinweis). `deliver(user, { workflow, kind, daysLeft })` ersetzt das
+ * direkte Senden: Der Dienst legt die Mail damit in die Warteschlange
+ * (mailqueue.js), die ohne SMTP wartet statt sie zu verlieren.
  */
-export async function runAccessNotices(db, { send = sendMail, base = null } = {}) {
+export async function runAccessNotices(db, { send = sendMail, base = null, timing = {}, deliver = null } = {}) {
+  const cfgOf = wf => {
+    const t = timing[wf] || {};
+    return { soon: Number.isInteger(t.soonDays) ? t.soonDays : NOTICE_DAYS.soon, final: Number.isInteger(t.finalDays) ? t.finalDays : NOTICE_DAYS.final, enabled: t.enabled !== false };
+  };
+  const pc = cfgOf('pass_ending');
+  const ac = cfgOf('access_ending');
+  const maxSoon = Math.max(pc.enabled ? pc.soon : 0, ac.enabled ? ac.soon : 0);
+  if (maxSoon <= 0) return [];
   const { rows } = await db.query(
-    `SELECT id, username, email, access_until, access_notice14_at, access_notice3_at, plan_kind
+    `SELECT id, username, email, access_until, access_notice14_at, access_notice3_at, plan_kind, mail_lang
        FROM users
       WHERE access_until IS NOT NULL AND access_until > now()
         AND NOT disabled AND role <> 'admin' AND email IS NOT NULL
-        AND (
-          (access_until <= now() + make_interval(days => $1) AND access_notice3_at IS NULL)
-          OR (access_until <= now() + make_interval(days => $2) AND access_until > now() + make_interval(days => $1)
-              AND access_notice14_at IS NULL)
-        )`,
-    [NOTICE_DAYS.final, NOTICE_DAYS.soon],
+        AND access_until <= now() + make_interval(days => $1)
+        AND (access_notice3_at IS NULL OR access_notice14_at IS NULL)
+      ORDER BY id`,
+    [maxSoon],
   );
   const out = [];
   for (const u of rows) {
-    const daysLeft = Math.max(1, Math.ceil((new Date(u.access_until).getTime() - Date.now()) / DAY_MS));
-    const kind = daysLeft <= NOTICE_DAYS.final ? 'final' : 'soon';
+    const workflow = u.plan_kind === 'pass' ? 'pass_ending' : 'access_ending';
+    const c = workflow === 'pass_ending' ? pc : ac;
+    if (!c.enabled) continue;
+    const msLeft = new Date(u.access_until).getTime() - Date.now();
+    const daysLeft = Math.max(1, Math.ceil(msLeft / DAY_MS));
+    let kind = null;
+    if (c.final > 0 && msLeft <= c.final * DAY_MS && !u.access_notice3_at) kind = 'final';
+    else if (msLeft <= c.soon * DAY_MS && (c.final <= 0 || msLeft > c.final * DAY_MS) && !u.access_notice14_at) kind = 'soon';
+    if (!kind) continue;
     const col = kind === 'final' ? 'access_notice3_at' : 'access_notice14_at';
     const claim = await db.query(`UPDATE users SET ${col} = now() WHERE id = $1 AND ${col} IS NULL RETURNING id`, [u.id]);
     if (!claim.rowCount) continue;
     let sent;
     try {
-      // Pass-Inhaber bekommen den Hinweis mit „Pass verlängern“, Pilot-Konten
-      // den bisherigen mit „wende dich an die Person …“.
-      const tpl = u.plan_kind === 'pass' ? tplPassEnding : tplAccessEnding;
-      sent = await send({ to: u.email, ...tpl({ username: u.username, until: u.access_until, daysLeft, base }) });
+      if (deliver) sent = await deliver(u, { workflow, kind, daysLeft });
+      else {
+        // Pass-Inhaber bekommen den Hinweis mit „Pass verlängern“, Pilot-Konten
+        // den bisherigen mit „wende dich an die Person …“.
+        const tpl = u.plan_kind === 'pass' ? tplPassEnding : tplAccessEnding;
+        sent = await send({ to: u.email, ...tpl({ username: u.username, until: u.access_until, daysLeft, base }) });
+      }
     } catch { sent = false; }
     if (sent) {
       // Der letzte Hinweis ersetzt den ersten, falls der nie verschickt wurde.
@@ -192,15 +222,16 @@ export async function runAccessNotices(db, { send = sendMail, base = null } = {}
     } else {
       await db.query(`UPDATE users SET ${col} = NULL WHERE id = $1`, [u.id]);
     }
-    out.push({ userId: u.id, kind, daysLeft, sent });
+    out.push({ userId: u.id, kind, daysLeft, sent, workflow });
   }
   return out;
 }
 
 /** Startet den Hinweis-Job: sofort, dann alle `everyMs` (Standard 6 h). */
-export function startAccessNotices(db, { everyMs = 6 * 60 * 60 * 1000, base = null, log = console.log } = {}) {
+/** `options()` liefert je Lauf { timing, deliver } (E-Mail-Workflows). */
+export function startAccessNotices(db, { everyMs = 6 * 60 * 60 * 1000, base = null, log = console.log, options = null } = {}) {
   const tick = async () => {
-    const r = await runAccessNotices(db, { base });
+    const r = await runAccessNotices(db, { base, ...(options ? await options() : {}) });
     if (r.length) log(`access-notices: ${r.map(x => `#${x.userId}:${x.kind}:${x.sent ? 'ok' : 'nicht gesendet'}`).join(' ')}`);
   };
   tick().catch(err => console.error('access-notices failed:', err?.message || err));

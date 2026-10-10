@@ -11,6 +11,10 @@ const ACTION_DE: Record<string, string> = {
   customer_delete: 'Konto gelöscht', payment_sync: 'Zahlung abgeglichen', refund_retry: 'Erstattung neu', invoices_csv: 'CSV-Export',
   invoice_pdf: 'Rechnung geladen', test_mail: 'Testmail', user_access: 'Laufzeit geändert',
   voucher_create: 'Gutschein angelegt', voucher_deactivate: 'Gutschein deaktiviert',
+  mail_smtp_save: 'SMTP gespeichert', mail_smtp_enable: 'SMTP aktiviert', mail_smtp_disable: 'SMTP deaktiviert', mail_smtp_delete: 'SMTP gelöscht',
+  mail_workflow_save: 'Mail-Workflow geändert', mail_queue_send: 'Mail gesendet (von Hand)', mail_queue_discard: 'Mail verworfen',
+  mail_queue_send_waiting: 'Wartende Mails gesendet', mail_queue_discard_waiting: 'Wartende Mails verworfen', mail_queue_run: 'Warteschlange abgearbeitet',
+  mail_log_view: 'Versandprotokoll angesehen', mail_queue_view: 'Warteschlange angesehen',
 };
 
 export default function System() {
@@ -45,7 +49,7 @@ export default function System() {
                 sub={s.registration?.openVar && !s.registration.botProtection ? 'OPEN_REGISTRATION an, aber Bot-Schutz fehlt' : 'OPEN_REGISTRATION'} />
               <Stat label="Gratis-Grenze" value={s.billing.freeTierLimits ? 'an' : 'aus'} sub="FREE_TIER_LIMITS" />
               <Stat label="Preis" value={s.billing.priceCents ? fmtEur(s.billing.priceCents) : '–'} sub={s.billing.days ? `${s.billing.days} Tage` : undefined} />
-              <Stat label="Mail" value={s.mail.configured ? 'eingerichtet' : 'fehlt'} tone={s.mail.configured ? undefined : 'danger'} />
+              <Stat label="Mail" value={s.mail.configured ? 'eingerichtet' : 'fehlt'} tone={s.mail.configured ? undefined : 'danger'} sub={<a href="#/emails">Einstellungen unter E-Mails</a>} />
               <Stat label="Aufräumjob" value={s.janitor.lastRunAt ? fmtDateTime(s.janitor.lastRunAt) : 'noch nicht'} tone={s.janitor.lastError ? 'danger' : undefined} sub={s.janitor.lastError || 'beim Start und täglich'} />
             </div>
           </Section>

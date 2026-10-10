@@ -35,7 +35,13 @@ export interface Offer {
   /** Gratis-Grenze (09.10.2026, Env FREE_TIER_LIMITS): `limited: true` =
    *  ohne aktiven Zugang nur das PDF, eine Fassung, eine Sprache. Fehlt das
    *  Feld (älterer Dienst, selbst gehostet), ist nichts begrenzt. */
-  freeTier?: { limited: boolean };
+  freeTier?: {
+    limited: boolean;
+    /** Vorlagen-Staffel (10.10.2026): Zeitpunkt, an dem der Dienst die Grenze
+     *  zum ersten Mal gemeldet hat (ISO). Bestandsregel für Konten
+     *  (billing/freeTier.ts). Fehlt er, gilt jede Fassung als Bestand. */
+    templatesSince?: string | null;
+  };
   /** Länder, in die der Pass gerade verkauft wird (ISO 3166-1, DE zuerst).
    *  Einzige Quelle ist der Server (billing.js, EU_COUNTRIES; ohne Länder im
    *  EU-Ausland, solange die Umsatzsperre P7 greift). Fehlt das Feld, nur DE. */
@@ -111,7 +117,7 @@ export const billingApi = {
   altchaChallengeUrl: () => `${BASE}/api/altcha/challenge`,
   /** art9Consent: Einwilligung nach Art. 9 DSGVO mit der Fassung, die das
    *  Formular gezeigt hat (legal/einwilligung.ts). */
-  register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string; art9Consent?: { version: string } }) =>
+  register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string; art9Consent?: { version: string }; tipsConsent?: { version: string }; lang?: string }) =>
     req<RegisterResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(p) }),
   /** Bestätigt Registrierung oder (kind 'change', M2) eine neue Adresse. */
   confirmEmail: (token: string) =>

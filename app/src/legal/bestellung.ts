@@ -114,7 +114,7 @@ export interface OrderTexts {
 }
 
 export const BESTELLUNG: Bilingual<OrderTexts> = {
-  version: '2026-10-10',
+  version: '2026-10-10.2',
   de: {
     start: {
       restriction: 'Den Pass können Privatpersonen aus Deutschland und den anderen Ländern der Europäischen Union kaufen, Unternehmen nur mit Sitz in Deutschland.',
@@ -135,8 +135,9 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – Bewerbungs-Pass, {{DAYS}} Tage',
       featuresTitle: 'Das schaltet der Pass frei:',
       features: [
+        'PDF und HTML Ihres Lebenslaufs in allen Vorlagen, auch in den Pass-Vorlagen',
         'Word-Export (DOCX), gestaltet und als ATS-Fassung, dazu LaTeX-Quelltext',
-        'Anschreiben erstellen, bearbeiten und exportieren',
+        'Anschreiben erstellen, bearbeiten, prüfen und exportieren',
         'Mehrere Fassungen und alle vier Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch)',
         'Lebensläufe, Anschreiben und Fotos auf unserem Server speichern und von mehreren Geräten aus bearbeiten',
         'Sharelinks zum Teilen eines Lebenslaufs, jederzeit widerrufbar',
@@ -144,7 +145,7 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
         'KI-Programme per MCP verbinden',
         'API-Schlüssel für eigene Programme',
       ],
-      freeStays: 'Alle Vorlagen und das PDF Ihres Lebenslaufs (auch als ATS-Fassung) bleiben ohne Pass kostenlos. Nach dem Ende des Passes können Sie weiter alles exportieren, auch als Word-Datei.',
+      freeStays: 'Ohne Pass bleiben kostenlos: schreiben, alle Vorlagen ansehen, das PDF in den kostenlosen Vorlagen und als ATS-Fassung, prüfen und der Datenexport. Nach dem Ende des Passes können Sie weiter alles exportieren, auch als Word-Datei; nach einem Widerruf erhalten Sie Ihre Inhalte als Datenexport.',
       priceLabel: 'Preis',
       priceValue: '{{PRICE}} einmalig',
       priceNote: 'Endpreis. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. Keine weiteren Kosten.',
@@ -224,8 +225,9 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
       productLine: '{{PRODUCT_NAME}} – application pass, {{DAYS}} days',
       featuresTitle: 'The pass unlocks:',
       features: [
+        'PDF and HTML of your CV in all templates, including the pass templates',
         'Word export (DOCX), designed and as the ATS version, plus LaTeX source',
-        'Create, edit and export cover letters',
+        'Create, edit, check and export cover letters',
         'Several versions and all four document languages (German, English, French, Spanish)',
         'Save CVs, cover letters and photos on our server and edit them from several devices',
         'Share links to share a CV, revocable at any time',
@@ -233,7 +235,7 @@ export const BESTELLUNG: Bilingual<OrderTexts> = {
         'Connect AI programs via MCP',
         'API keys for your own programs',
       ],
-      freeStays: 'All templates and the PDF of your CV (also as the ATS version) stay free without a pass. After the pass ends you can still export everything, including as a Word file.',
+      freeStays: 'Free without a pass: writing, viewing all templates, the PDF in the free templates and as the ATS version, the check and the data export. After the pass ends you can still export everything, including as a Word file; after a withdrawal you receive your content as a data export.',
       priceLabel: 'Price',
       priceValue: '{{PRICE}} once',
       priceNote: 'Final price. No VAT is charged under § 19 of the German VAT Act (small business scheme). No further costs.',

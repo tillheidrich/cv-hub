@@ -122,6 +122,9 @@ export function billingConfig(env = process.env, legal = undefined) {
     // Greift nur zusammen mit einem verkaufsbereiten Dienst (cfg.ready), sonst
     // bleibt alles frei — so auch jede selbst gehostete Instanz.
     freeTierLimits: truthy(env.FREE_TIER_LIMITS),
+    // Vorlagen-Staffel (10.10.2026): Bestandsregel für Konten. Übersteuerung
+    // des gemerkten Zeitpunkts (ISO), sonst gilt der erste Start mit Grenze.
+    templateTierSince: (() => { const v = String(env.TEMPLATE_TIER_SINCE || '').trim(); const t = v ? Date.parse(v) : NaN; return Number.isNaN(t) ? null : new Date(t).toISOString(); })(),
     priceCents: envInt(env, 'PASS_PRICE_CENTS', 900, 100, 100_000),
     currency: 'EUR',
     days,
@@ -268,6 +271,22 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return paused ? ['DE'] : ['DE', ...[...EU_COUNTRIES].filter(c => c !== 'DE').sort()];
   }
 
+  /* Vorlagen-Staffel, Bestandsregel für Konten (app/src/billing/freeTier.ts):
+   * Fassungen, die vor diesem Zeitpunkt am Server angelegt wurden, behalten
+   * ihre Vorlage frei. Gemerkt wird der erste Start, an dem der Dienst die
+   * Grenze meldet (schema_migrations, Name template_tier_since), damit ein
+   * Neustart den Zeitpunkt nicht verschiebt. TEMPLATE_TIER_SINCE übersteuert. */
+  let templatesSince = cfg.templateTierSince || null;
+  async function ensureTemplateTierSince() {
+    if (cfg.templateTierSince || !(cfg.ready && cfg.freeTierLimits === true)) return templatesSince;
+    try {
+      await pool.query(`INSERT INTO schema_migrations (name) VALUES ('template_tier_since') ON CONFLICT DO NOTHING`);
+      const { rows } = await pool.query(`SELECT ran_at FROM schema_migrations WHERE name = 'template_tier_since'`);
+      if (rows[0]?.ran_at) templatesSince = new Date(rows[0].ran_at).toISOString();
+    } catch (err) { log(`billing: Beginn der Vorlagen-Staffel nicht gemerkt (${err?.message || err})`); }
+    return templatesSince;
+  }
+
   function offer() {
     return {
       enabled: cfg.ready,
@@ -275,7 +294,8 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
       // Die Oberfläche sperrt nur, wenn hier limited: true steht. Durchsetzen
       // lässt sich das nicht (Word entsteht im Browser, der Code ist offen),
       // es ist eine Angebotsgrenze, keine Sicherheitsgrenze.
-      freeTier: { limited: cfg.ready && cfg.freeTierLimits === true },
+      // templatesSince nur mit Grenze: Beginn der Vorlagen-Staffel (Bestandsregel).
+      freeTier: cfg.ready && cfg.freeTierLimits === true ? { limited: true, templatesSince } : { limited: false },
       sku: cfg.sku,
       priceCents: cfg.priceCents,
       currency: cfg.currency,
@@ -1491,7 +1511,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
 
   return {
-    config: cfg, offer, offerFresh, euAbroadStatus, invoicePdf, creditNotePdf, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
+    config: cfg, offer, offerFresh, ensureTemplateTierSince, euAbroadStatus, invoicePdf, creditNotePdf, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
     sendConfirmation, report, runJobs, startJobs, mount, orderSummary,
   };
 }

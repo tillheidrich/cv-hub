@@ -35,6 +35,18 @@
  * - Neuer § 15: Zugangscodes und Gratiszugang (Gutscheine gab es bisher nur
  *   auf der Code-Seite, ohne Vertragsgrundlage; „dauerhaft" ohne Grenze war
  *   ein Versprechen ohne Ende).
+ *
+ * Fassung 2026-10-10.2 (10.10.2026,
+ * „Vorlagen-Staffel", keine Rechtsberatung):
+ * - § 2 Abs. 1: kostenlos sind mindestens alle Vorlagen ansehen und
+ *   gestalten, das PDF in den als kostenlos gekennzeichneten Vorlagen und in
+ *   jeder Vorlage als einspaltige ATS-Fassung (Anhang Nr. 20 UWG: „kostenlos"
+ *   nur, wo es stimmt).
+ * - § 2 Abs. 3: Zusage „PDF nie vom Kauf abhängig" ersetzt durch die Pflicht,
+ *   vor der Arbeit zu kennzeichnen (§ 5a Abs. 2 Nr. 3 UWG).
+ * - § 5 Abs. 1: PDF und HTML in allen Vorlagen gehören zum Pass.
+ * - § 7 Abs. 5: nach Widerruf Datenexport statt Export in allen Formaten
+ *   (§ 357 Abs. 8 i. V. m. § 327p Abs. 1 S. 2 BGB).
  */
 import type { Bilingual, LegalSection } from './types';
 
@@ -45,7 +57,7 @@ export interface TermsTexts {
 }
 
 export const AGB: Bilingual<TermsTexts> = {
-  version: '2026-10-10',
+  version: '2026-10-10.2',
   de: {
     title: 'Allgemeine Geschäftsbedingungen',
     subtitle: 'für den Bewerbungs-Pass von {{PRODUCT_NAME}} · Fassung {{TERMS_VERSION}}',
@@ -64,9 +76,9 @@ export const AGB: Bilingual<TermsTexts> = {
         id: 'kostenlos',
         title: '§ 2 Kostenlose Nutzung',
         paragraphs: [
-          '(1) Das Werkzeug lässt sich ohne Konto und ohne Pass kostenlos nutzen („lokaler Modus"), mindestens mit allen Vorlagen, dem PDF Ihres Lebenslaufs (auch als ATS-Fassung), dem Import und dem Datenexport sowie der Speicherung der Daten in Ihrem Browser. Welche Funktionen darüber hinaus kostenlos sind, steht auf der Preisseite. Der lokale Modus ist nicht Gegenstand des Vertrags über den Pass. Für ihn gelten die gesetzlichen Regeln für unentgeltliche Leistungen.',
+          '(1) Das Werkzeug lässt sich ohne Konto und ohne Pass kostenlos nutzen („lokaler Modus"). Kostenlos sind dabei mindestens: alle Vorlagen mit Ihrem Inhalt ansehen und gestalten, das PDF Ihres Lebenslaufs in den als kostenlos gekennzeichneten Vorlagen sowie in jeder Vorlage als einspaltige ATS-Fassung, die Prüfung, der Import, der Datenexport und die Speicherung der Daten in Ihrem Browser. Welche Funktionen darüber hinaus kostenlos sind, steht auf der Preisseite. Der lokale Modus ist nicht Gegenstand des Vertrags über den Pass. Für ihn gelten die gesetzlichen Regeln für unentgeltliche Leistungen.',
           '(2) Ein Konto können Sie kostenlos anlegen. Ohne aktiven Pass können Sie darin gespeicherte Inhalte lesen, exportieren und löschen, aber nicht ändern oder neu anlegen. Für das Konto gelten §§ 3, 9, 10, 11, 13, 14 und 15 dieser AGB entsprechend, wenn wir Sie bei der Registrierung auf diese AGB hingewiesen haben.',
-          '(3) Der Kauf eines Passes schränkt die kostenlosen Funktionen nicht ein. Das PDF Ihres Lebenslaufs machen wir nie vom Kauf abhängig, und was zum Pass gehört, steht vor jeder Arbeit sichtbar am jeweiligen Knopf, nicht erst beim Herunterladen.',
+          '(3) Der Kauf eines Passes schränkt die kostenlosen Funktionen nicht ein. Was zum Pass gehört und was kostenlos ist, steht vor jeder Arbeit sichtbar auf der Preisseite und am jeweiligen Knopf, nicht erst beim Herunterladen.',
         ],
       },
       {
@@ -111,8 +123,9 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) Während der Laufzeit schaltet der Pass in Ihrem Konto frei:',
         ],
         list: [
+          'PDF und HTML Ihrer Lebensläufe in allen Vorlagen,',
           'Export Ihrer Lebensläufe als Word-Datei (DOCX), gestaltet nach der gewählten Vorlage und als einspaltige ATS-Fassung, sowie als LaTeX-Quelltext,',
-          'Anschreiben: erstellen, bearbeiten und exportieren,',
+          'Anschreiben: erstellen, bearbeiten, prüfen und exportieren,',
           'mehrere Fassungen Ihres Lebenslaufs (weitere anlegen, duplizieren, als neue Fassung importieren) und weitere Dokumentsprachen (Deutsch, Englisch, Französisch, Spanisch),',
           'Speichern Ihrer Lebensläufe, Anschreiben und Fotos auf unserem Server und Zugriff darauf von mehreren Geräten,',
           'Sharelinks: Links, über die Sie einen Lebenslauf mit anderen teilen und die Sie jederzeit widerrufen können,',
@@ -121,7 +134,7 @@ export const AGB: Bilingual<TermsTexts> = {
           'API-Schlüssel für eigene Programme.',
         ],
         after: [
-          '(2) Wir betreiben den Dienst auf Servern in Deutschland mit der Sorgfalt, die für ein Angebot dieser Art üblich ist, und sichern die Daten regelmäßig. Eine bestimmte Verfügbarkeit in Prozent sagen wir nicht zu. Kurze Unterbrechungen für Wartung und Aktualisierungen sind möglich; wir halten sie so kurz wie möglich und kündigen geplante längere Unterbrechungen vorher an. Für Verbraucher bleiben die gesetzlichen Anforderungen an digitale Dienstleistungen (§§ 327e ff. BGB) unberührt.',
+          '(2) Wir betreiben den Dienst mit der Sorgfalt, die für ein Angebot dieser Art üblich ist, und sichern die Daten regelmäßig. Eine bestimmte Verfügbarkeit in Prozent sagen wir nicht zu. Kurze Unterbrechungen für Wartung und Aktualisierungen sind möglich; wir halten sie so kurz wie möglich und kündigen geplante längere Unterbrechungen vorher an. Für Verbraucher bleiben die gesetzlichen Anforderungen an digitale Dienstleistungen (§§ 327e ff. BGB) unberührt.',
           '(3) Technische Voraussetzungen: ein aktueller Browser (Chrome, Edge, Firefox oder Safari in einer der beiden neuesten Hauptversionen) mit eingeschaltetem JavaScript. Für die KI-Verbindung brauchen Sie ein Programm, das MCP unterstützt; für dessen Funktionsweise sind wir nicht verantwortlich. Exporte liegen in offenen Formaten vor (PDF, DOCX, HTML, Markdown, JSON, JSON Resume, LaTeX, RenderCV-YAML); welche davon ohne Pass kostenlos sind, steht auf der Preisseite.',
           '(4) Tipps, Prüfungen und der ATS-Abgleich im Werkzeug sind Hinweise. Ob eine Bewerbung Erfolg hat, hängt von vielen Dingen ab, die wir nicht beeinflussen; einen Erfolg schulden wir nicht.',
         ],
@@ -145,7 +158,7 @@ export const AGB: Bilingual<TermsTexts> = {
           '(2) Sie können jederzeit einen weiteren Pass kaufen. Jeder Kauf ist ein eigener Vertrag. Die Laufzeit des neuen Passes schließt an das Ende eines noch laufenden Passes an; läuft keiner, beginnt sie mit dem Kauf.',
           '(3) Sie können den Pass jederzeit über die Schaltfläche „Verträge hier kündigen" (in der Fußzeile jeder Seite, ohne Anmeldung), per E-Mail oder per Post kündigen. Eine ordentliche Kündigung wirkt zu dem Zeitpunkt, den Sie angeben; ohne Angabe sofort. Den bereits gezahlten Preis erstatten wir bei einer ordentlichen Kündigung nicht anteilig. Innerhalb der Widerrufsfrist ist der Widerruf für Sie günstiger (§ 8).',
           '(4) Das Recht beider Seiten zur außerordentlichen Kündigung aus wichtigem Grund bleibt unberührt. Kündigen Sie berechtigt aus wichtigem Grund, den wir zu vertreten haben, erstatten wir den Preis für die restliche Laufzeit anteilig. Ihre gesetzlichen Rechte bei Mängeln bleiben unberührt.',
-          '(5) Nach dem Ende des Passes bleibt Ihr Konto bestehen. Sie können Ihre Inhalte weiter lesen, als Datei exportieren (in allen Formaten einschließlich Word und auch als vollständigen Datenexport) und löschen, aber nicht mehr ändern oder neu anlegen; neue Sharelinks lassen sich nicht anlegen, bestehende können Sie jederzeit widerrufen. Wir löschen Ihre Inhalte nach dem Ende des Passes nicht von uns aus, sondern wenn Sie das Konto oder einzelne Inhalte löschen oder uns darum bitten.',
+          '(5) Nach dem Ende des Passes bleibt Ihr Konto bestehen. Sie können Ihre Inhalte weiter lesen, als Datei exportieren (in allen Formaten und Vorlagen einschließlich Word und auch als vollständigen Datenexport) und löschen, aber nicht mehr ändern oder neu anlegen; neue Sharelinks lassen sich nicht anlegen, bestehende können Sie jederzeit widerrufen. Das gilt nicht nach einem Widerruf; dann stellen wir Ihre Inhalte als Datenexport bereit (§ 357 Abs. 8, § 327p BGB). Wir löschen Ihre Inhalte nach dem Ende des Passes nicht von uns aus, sondern wenn Sie das Konto oder einzelne Inhalte löschen oder uns darum bitten.',
         ],
       },
       {
@@ -241,9 +254,9 @@ export const AGB: Bilingual<TermsTexts> = {
         id: 'kostenlos',
         title: '§ 2 Free use',
         paragraphs: [
-          '(1) The tool can be used free of charge without an account and without a pass ("local mode"), at least with all templates, the PDF of your CV (also as the ATS version), import and data export, and data stored in your browser. Which further features are free is shown on the pricing page. Local mode is not part of the contract for the pass. The statutory rules for services provided free of charge apply to it.',
+          '(1) The tool can be used free of charge without an account and without a pass ("local mode"). Free of charge are at least: viewing and designing all templates with your content, the PDF of your CV in the templates marked as free and in every template as the single-column ATS version, the check, import, data export and data stored in your browser. Which further features are free is shown on the pricing page. Local mode is not part of the contract for the pass. The statutory rules for services provided free of charge apply to it.',
           '(2) You can create an account free of charge. Without an active pass you can read, export and delete content stored in it, but not change it or create new content. §§ 3, 9, 10, 11, 13, 14 and 15 of these Terms apply to the account accordingly where we referred you to these Terms when you registered.',
-          '(3) Buying a pass does not restrict the free features. We never make the PDF of your CV depend on a purchase, and what belongs to the pass is shown on the respective button before any work, not only at download.',
+          '(3) Buying a pass does not restrict the free features. What belongs to the pass and what is free is shown visibly on the pricing page and on the respective button before any work, not only at download.',
         ],
       },
       {
@@ -288,8 +301,9 @@ export const AGB: Bilingual<TermsTexts> = {
           '(1) During its term, the pass unlocks in your account:',
         ],
         list: [
+          'PDF and HTML of your CVs in all templates,',
           'exporting your CVs as Word files (DOCX), designed after the chosen template and as a single-column ATS version, and as LaTeX source,',
-          'cover letters: create, edit and export,',
+          'cover letters: create, edit, check and export,',
           'several versions of your CV (create more, duplicate, import as a new version) and further document languages (German, English, French, Spanish),',
           'saving your CVs, cover letters and photos on our server and accessing them from several devices,',
           'share links: links you can use to share a CV with others and revoke at any time,',
@@ -298,7 +312,7 @@ export const AGB: Bilingual<TermsTexts> = {
           'API keys for your own programs.',
         ],
         after: [
-          '(2) We run the service on servers in Germany with the care customary for an offer of this kind and back up the data regularly. We do not promise a specific availability percentage. Short interruptions for maintenance and updates are possible; we keep them as short as possible and announce planned longer interruptions in advance. For consumers, the statutory requirements for digital services (§§ 327e et seq. BGB) remain unaffected.',
+          '(2) We run the service with the care customary for an offer of this kind and back up the data regularly. We do not promise a specific availability percentage. Short interruptions for maintenance and updates are possible; we keep them as short as possible and announce planned longer interruptions in advance. For consumers, the statutory requirements for digital services (§§ 327e et seq. BGB) remain unaffected.',
           '(3) Technical requirements: a current browser (Chrome, Edge, Firefox or Safari in one of the two latest major versions) with JavaScript enabled. For the AI connection you need a program that supports MCP; we are not responsible for how it works. Exports are provided in open formats (PDF, DOCX, HTML, Markdown, JSON, JSON Resume, LaTeX, RenderCV YAML); which of them are free without a pass is shown on the pricing page.',
           '(4) Tips, checks and the ATS comparison in the tool are guidance. Whether an application succeeds depends on many things we cannot influence; we do not owe any success.',
         ],
@@ -322,7 +336,7 @@ export const AGB: Bilingual<TermsTexts> = {
           '(2) You can buy another pass at any time. Each purchase is a separate contract. The term of the new pass follows on from the end of a pass that is still running; if none is running, it starts with the purchase.',
           '(3) You can cancel the pass at any time via the "Cancel contracts here" button (in the footer of every page, no sign-in needed), by e-mail or by post. An ordinary cancellation takes effect at the time you specify; without a date, immediately. We do not refund the price already paid pro rata on ordinary cancellation. During the withdrawal period, withdrawal is the better option for you (§ 8).',
           '(4) Both parties\' right to extraordinary termination for good cause remains unaffected. If you justifiably terminate for good cause for which we are responsible, we refund the price for the remaining term pro rata. Your statutory rights in case of defects remain unaffected.',
-          '(5) After the pass ends, your account remains. You can still read your content, export it as files (in all formats including Word, and also as a full data export) and delete it, but you can no longer change it or create new content; new share links cannot be created, existing ones can be revoked at any time. We do not delete your content on our own initiative after the pass ends, but when you delete the account or individual content or ask us to.',
+          '(5) After the pass ends, your account remains. You can still read your content, export it as files (in all formats and templates including Word, and also as a full data export) and delete it, but you can no longer change it or create new content; new share links cannot be created, existing ones can be revoked at any time. This does not apply after a withdrawal; in that case we provide your content as a data export (§ 357(8), § 327p BGB). We do not delete your content on our own initiative after the pass ends, but when you delete the account or individual content or ask us to.',
         ],
       },
       {

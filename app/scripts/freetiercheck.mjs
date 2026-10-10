@@ -21,6 +21,15 @@
 //      Konto ohne je einen Zugang → Word gesperrt.
 //   F. Seiten: /preise und Startseite mit und ohne Grenze (Tabelle, FAQ,
 //      Selbst-hosten-Hinweis), Freischalt-Paneel in vier Sprachen, axe.
+//   H. Vorlagen-Staffel (10.10.2026): Kennzeichen „Pass" VOR der
+//      Wahl (Gestaltungs-Paneel, Karussell, Nachbarn); Auswählen und Ansehen
+//      frei; PDF und HTML einer Pass-Vorlage (PDF-Knopf, Menü, Export-Paneel,
+//      Telefon, Profilübersicht) öffnen das Paneel `template` mit Preis und
+//      gleichwertigem „Gratis als PDF in Vorlage X"; der wechselt die Vorlage,
+//      danach lädt das PDF; ATS-PDF bleibt frei; Strg+P und handlePrint
+//      drucken nicht; Hinweis beim ersten Öffnen, schließbar; Bestandsregel
+//      (lokal und Konto); ohne Grenze und mit abgelaufenem Pass alles frei;
+//      Zähler template_lock_view und unlock_panel_view{reason}.
 //   G. LIVE=1: gegen den echten cv-api mit FREE_TIER_LIMITS=1 (Vite mit Proxy):
 //      Angebot meldet limited, echtes PDF ohne Konto, Word gesperrt; Admin
 //      angemeldet → Word lädt.
@@ -481,7 +490,7 @@ for (const limited of [true, false]) {
       check(!/Alles im Browser ist kostenlos/.test(txt) && !/Export ist nie Teil des Passes/.test(txt), `/preise ${tag}: keine überholten Versprechen`);
       const sh = page.locator('[data-selfhost] a');
       check(await sh.count() === 1 && /github\.com\/tillheidrich\/cv-hub/.test(await sh.getAttribute('href') || ''), `/preise ${tag}: Selbst-hosten-Hinweis mit Repo`);
-      check(await page.locator('[data-pass-features] [data-ft]').count() === 4, `/preise ${tag}: Pass-Karte nennt Word, Anschreiben, Fassungen, Sprachen`);
+      check(await page.locator('[data-pass-features] [data-ft]').count() === 5, `/preise ${tag}: Pass-Karte nennt alle Vorlagen, Word, Anschreiben, Fassungen, Sprachen`);
     } else {
       check(/Alles im Browser ist kostenlos/.test(txt) && /Brauche ich den Pass für PDF oder Word\?/.test(txt), `/preise ${tag}: bisherige Texte`);
       check(await page.locator('[data-selfhost]').count() === 0 && await page.locator('[data-ft]').count() === 0, `/preise ${tag}: kein Grenzen-Zusatz`);
@@ -552,6 +561,208 @@ check(await page.locator('#ui-mpanel-export [data-locked]').count() === 0, 'Tele
 await shot(page, 'export-paneel-frei-390');
 await ctx.close();
 
+/* ═══ H. Vorlagen-Staffel ════════════════════════════════════════════════ */
+step('H. Vorlagen-Staffel: 10 Vorlagen als PDF frei, ATS-Fassung in jeder');
+const eventsOf = (st, kind) => st.calls.filter(c => c.path === '/api/events' && c.body?.kind === kind).map(c => c.body);
+async function pickTemplate(page, name) {
+  await ensurePanel(page, 'Gestaltung');
+  await page.locator(`.ui-card[aria-label^="${name},"]`).first().click();
+  await page.waitForTimeout(900);
+}
+const stH = createBillingState({ offer: { ...OFFER(true), freeTier: { limited: true, templatesSince: new Date(Date.now() - 86_400_000).toISOString() } } });
+({ ctx, page } = await open({ state: stH }));
+await page.addInitScript(() => { window.__prints = 0; window.print = () => { window.__prints++; }; });
+await startLocal(page);
+// Hinweis beim ersten Öffnen.
+const intro = page.locator('[data-tier-intro]');
+check(await intro.isVisible(), 'Hinweis beim ersten Öffnen des Editors sichtbar');
+const introText = norm(await intro.innerText());
+check(/Schreiben, Vorschau und alle Vorlagen ansehen sind kostenlos/.test(introText) && /10 Vorlagen und die ATS-Fassung jeder Vorlage/.test(introText) && /9 € einmalig, 90 Tage, kein Abo/.test(introText), 'Hinweis nennt kostenlose Teile, Preis, Laufzeit, kein Abo', introText.slice(0, 120));
+check(!/[–—]/.test(introText.replace(/9 €/, '')), 'Hinweis ohne Gedankenstriche');
+await shot(page, 'vorlagen-hinweis-1440');
+// Kennzeichen vor der Wahl: Gestaltungs-Paneel.
+await ensurePanel(page, 'Gestaltung');
+await page.waitForTimeout(500);
+const cards = page.locator('.ui-card');
+const nCards = await cards.count();
+const lockedCards = await page.locator('.ui-card[data-pass-locked]').count();
+check(nCards === 40 && lockedCards === 30, 'Gestaltungs-Paneel: 30 von 40 Karten mit Kennzeichen „Pass"', `${lockedCards}/${nCards}`);
+const hamCard = page.locator('.ui-card[aria-label^="Hamburg,"]').first();
+check(await hamCard.locator('[data-pass-tag]').count() === 1 && /Pass/.test(await hamCard.getAttribute('aria-label') || ''), 'Hamburg: Kennzeichen sichtbar und im Vorlesetext');
+check(await page.locator('.ui-card[aria-label^="Espoo,"] [data-pass-tag]').count() === 0, 'Espoo (Gratis): kein Kennzeichen');
+for (const nm of ['Zürich', 'Uppsala', 'Bamberg', 'Dublin', 'Weimar', 'Lübeck', 'Bergen', 'Linz', 'Freiburg']) {
+  check(await page.locator(`.ui-card[aria-label^="${nm},"] [data-pass-tag]`).count() === 0, `${nm}: frei`);
+}
+check(await page.locator('[data-tier-note]').isVisible(), 'Satz über den Karten erklärt das Kennzeichen');
+const tagTitle = await hamCard.locator('[data-pass-tag]').getAttribute('title');
+check(/ATS-Fassung als PDF sind kostenlos/.test(tagTitle || ''), 'Tooltip am Kennzeichen', tagTitle || '');
+await shot(page, 'vorlagen-kennzeichen-1440');
+// Karussell: Nachbar mit Kennzeichen, bevor man hinblättert.
+check(await page.locator('.ui-neighbour[data-pass-locked]').count() >= 1 && await page.locator('[data-neighbour-tag] [data-pass-tag]').count() >= 1, 'Karussell: Nachbarvorlage trägt das Kennzeichen vor dem Blättern');
+// Auswählen und Ansehen bleiben frei.
+const pdfH0 = page.__pdf;
+await pickTemplate(page, 'Hamburg');
+let psH = await localProfiles(page);
+check(psH[0].settings.template === 'hamburg' && await page.locator('[data-unlock]').count() === 0, 'Pass-Vorlage auswählen: ohne Paneel, Vorschau steht');
+check(await page.locator('.ui-carousel-bar [data-pass-tag]').count() === 1, 'Karussell-Leiste zeigt das Kennzeichen der gewählten Vorlage');
+// PDF-Knopf → Paneel `template`.
+const pdfBtn = page.locator('.ui-split button').first();
+check(await pdfBtn.getAttribute('data-locked') === 'true', 'PDF-Knopf trägt das Schloss');
+await pdfBtn.click();
+check(await unlockOpen(page) === 'template', 'PDF in Hamburg → Freischalt-Paneel „template"');
+const ut = norm(await page.locator('[data-unlock]').innerText());
+check(/Diese Vorlage gehört zum Pass/.test(ut) && /9 €/.test(ut), 'Paneel: „Diese Vorlage gehört zum Pass", Preis', ut.split('\n').slice(0, 3).join(' / '));
+const useFree = page.locator('[data-unlock] [data-use-free]');
+check(/Gratis als PDF in Vorlage Lübeck/.test(await useFree.innerText()), 'Gratis-Knopf nennt die nächste Gratis-Vorlage (Hamburg → Lübeck)', await useFree.innerText());
+const primClass = await page.locator('[data-unlock] .bl-actions button').evaluateAll(bs => bs.map(b => b.className));
+check(primClass.length === 2 && primClass[0] === primClass[1], 'Pass holen und Gratis-Weg gleichwertig (gleiche Knopfart)', primClass.join(' | '));
+check(/ATS-Fassung als PDF bleibt in jeder Vorlage kostenlos/.test(ut), 'Paneel: ATS-Fassung als PDF bleibt kostenlos');
+await shot(page, 'freischalt-vorlage-1440');
+await axe(page, 'Freischalt-Paneel Vorlage');
+await closeUnlock(page);
+await page.waitForTimeout(400);
+check(page.__pdf === pdfH0, 'kein PDF-Auftrag für die Pass-Vorlage');
+// Menü: PDF und Webseite gesperrt, ATS-PDF frei.
+await openMenu(page);
+check(await menuItem(page, 'PDF herunterladen').locator('[data-lock]').count() === 1 && hasPrice(await menuItem(page, 'PDF herunterladen').innerText()), 'Menü: PDF mit Schloss und Preiszeile');
+const htmlBefore = downloads(page, '.html');
+await menuItem(page, 'Webseite').click();
+check(await unlockOpen(page) === 'template', 'Menü: Webseite (HTML) → Paneel');
+await closeUnlock(page);
+await page.waitForTimeout(500);
+check(downloads(page, '.html') === htmlBefore, 'keine HTML-Datei der Pass-Vorlage');
+const pdfDlH = downloads(page, '.pdf');
+await openMenu(page);
+await menuItem(page, 'PDF – ATS-Fassung').click();
+await page.waitForTimeout(3500);
+check(downloads(page, '.pdf') === pdfDlH + 1 && await page.locator('[data-unlock]').count() === 0, 'ATS-Fassung als PDF lädt in der Pass-Vorlage');
+// Export-Paneel.
+await ensurePanel(page, 'Export');
+await page.locator('#ui-panel button', { hasText: 'als PDF herunterladen' }).first().click();
+check(await unlockOpen(page) === 'template', 'Export-Paneel: PDF → Paneel');
+await closeUnlock(page);
+await page.locator('#ui-panel details summary', { hasText: 'Weitere Formate' }).first().click().catch(() => {});
+await page.locator('#ui-panel button[data-locked]', { hasText: 'Webseite' }).first().click();
+check(await unlockOpen(page) === 'template', 'Export-Paneel: Webseite → Paneel');
+await closeUnlock(page);
+// Druckweg: Strg+P und handlePrint.
+await page.locator('.ui-canvas').click({ position: { x: 10, y: 10 } }).catch(() => {});
+await page.keyboard.press('Control+p');
+check(await unlockOpen(page) === 'template', 'Strg+P → Paneel statt Druck');
+await closeUnlock(page);
+check(await page.evaluate(() => window.__prints) === 0, 'window.print nicht aufgerufen');
+check(await page.locator('[data-print-locked] .cv-print-locked').count() === 1, 'Druck über das Browsermenü zeigt nur den Hinweis (data-print-locked)');
+// Zähler.
+const reasons = eventsOf(stH, 'unlock_panel_view').map(b => b.reason);
+check(reasons.filter(r => r === 'template').length >= 4, 'Zähler unlock_panel_view{reason: template}', reasons.join(','));
+check(eventsOf(stH, 'template_lock_view').some(b => b.template === 'hamburg'), 'Zähler template_lock_view{template: hamburg}');
+// Gratis-Knopf: wechselt, dann lädt das PDF.
+await pdfBtn.click();
+await page.locator('[data-unlock] [data-use-free]').click();
+await page.waitForTimeout(1200);
+psH = await localProfiles(page);
+check(psH[0].settings.template === 'luebeck' && await page.locator('[data-unlock]').count() === 0, 'Gratis-Knopf wechselt auf Lübeck und schließt', psH[0].settings.template);
+check(await page.locator('.ui-toast', { hasText: 'Lübeck' }).count() >= 1, 'Meldung mit Rückgängig nach dem Wechsel');
+const pdfH1 = downloads(page, '.pdf');
+await pdfBtn.click();
+await page.waitForTimeout(1800);
+check(downloads(page, '.pdf') === pdfH1 + 1 && await page.locator('[data-unlock]').count() === 0, 'Danach lädt das PDF in Lübeck kostenlos');
+// Hinweis schließen bleibt geschlossen.
+await page.locator('[data-tier-intro] button[aria-label="Hinweis schließen"]').click();
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1500);
+check(await page.locator('[data-tier-intro]').count() === 0, 'Hinweis bleibt nach dem Schließen weg');
+// Profilübersicht „PDF" mit Pass-Vorlage → Paneel.
+await pickTemplate(page, 'Oslo');
+await goHome(page);
+await page.getByRole('button', { name: /^PDF von/ }).first().click().catch(() => {});
+await page.waitForTimeout(2500);
+check(await unlockOpen(page) === 'template', 'Profilübersicht „PDF" in Pass-Vorlage → Paneel');
+await closeUnlock(page);
+await ctx.close();
+
+// Telefon.
+({ ctx, page } = await open({ state: createBillingState({ offer: OFFER(true) }), viewport: { width: 390, height: 844 } }));
+await startLocal(page);
+await page.locator('.ui-bottom-bar button', { hasText: 'Gestaltung' }).click();
+await page.waitForTimeout(600);
+check(await page.locator('#ui-mpanel-design .ui-card[data-pass-locked]').count() === 30, 'Telefon: Kennzeichen im Gestaltungs-Paneel');
+await page.locator('#ui-mpanel-design .ui-card[aria-label^="Hamburg,"]').click();
+await page.waitForTimeout(800);
+await page.locator('.ui-bottom-bar button.ui-bottom-primary').click();
+await page.waitForTimeout(500);
+await page.locator('#ui-mpanel-export button', { hasText: 'als PDF herunterladen' }).first().click();
+check(await unlockOpen(page) === 'template', 'Telefon: PDF in Pass-Vorlage → Paneel');
+await shot(page, 'freischalt-vorlage-390');
+await closeUnlock(page);
+const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+check(sw <= 390, 'Telefon: kein waagerechtes Scrollen', String(sw));
+await ctx.close();
+
+// Bestandsregel lokal: Fassung mit Hamburg von vor der Grenze bleibt frei.
+const stHB = createBillingState({ offer: OFFER(false) });
+({ ctx, page } = await open({ state: stHB }));
+await startLocal(page);
+await importOwn(page, 'HB');
+await pickTemplate(page, 'Hamburg');
+check(await page.locator('.ui-card[data-pass-locked]').count() === 0, 'Ohne Grenze: kein Kennzeichen');
+let pdfHB = downloads(page, '.pdf');
+await page.locator('.ui-split button').first().click();
+await page.waitForTimeout(1500);
+check(downloads(page, '.pdf') === pdfHB + 1, 'Ohne Grenze: PDF in Hamburg lädt');
+stHB.offer = OFFER(true);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(2000);
+const psB = await localProfiles(page);
+check(psB[0].settings.grandfatheredTemplate === 'hamburg', 'Erstes Laden mit Grenze: Bestand markiert (grandfatheredTemplate)', String(psB[0].settings.grandfatheredTemplate));
+pdfHB = downloads(page, '.pdf');
+await page.locator('.ui-split button').first().click();
+await page.waitForTimeout(1500);
+check(downloads(page, '.pdf') === pdfHB + 1 && await page.locator('[data-unlock]').count() === 0, 'Bestand: PDF in Hamburg weiter kostenlos');
+await ensurePanel(page, 'Gestaltung');
+check(await page.locator('.ui-card[aria-label^="Hamburg,"] [data-pass-tag]').count() === 0 && await page.locator('.ui-card[aria-label^="Oslo,"] [data-pass-tag]').count() === 1, 'Bestand: Hamburg ohne, Oslo mit Kennzeichen');
+await pickTemplate(page, 'Oslo');
+await page.locator('.ui-split button').first().click();
+check(await unlockOpen(page) === 'template', 'Bestand: andere Pass-Vorlage gesperrt');
+await closeUnlock(page);
+// Neue Fassung nach dem Start (hier: per Sicherung zurückgesetzt) bekommt keine Markierung mehr.
+await page.evaluate(() => localStorage.getItem('cv-tpl-tier-v1')).then(v => check(!!v, 'Merker cv-tpl-tier-v1 gesetzt'));
+await ctx.close();
+
+// Konten: abgelaufener Pass exportiert alles; ohne Pass mit Bestand vor templatesSince frei, danach gesperrt.
+const sinceH = new Date(Date.now() - 86_400_000).toISOString();
+const acc = (plan, createdAt, template = 'hamburg') => createBillingState({
+  offer: { ...OFFER(true), freeTier: { limited: true, templatesSince: sinceH } },
+  user: { id: 11, username: 'k@example.org', email: 'k@example.org', role: 'user', plan, emailConfirmed: true },
+  resumes: [{ id: 'r1', displayName: 'Konto r1', createdAt, payload: { ...cvPayload('r1'), settings: { ...cvPayload('r1').settings, template } } }],
+});
+for (const [label, plan, created, expect] of [
+  ['abgelaufener Pass', { kind: 'none', until: until(-3), daysLeft: 0, notice: 'expired', hasPaid: true }, new Date().toISOString(), 'free'],
+  ['ohne Pass, Fassung vor dem Beginn', { kind: 'none', until: null, daysLeft: null, notice: null }, new Date(Date.now() - 5 * 86_400_000).toISOString(), 'free'],
+  ['nach Widerruf, Fassung nach dem Beginn', { kind: 'none', until: null, daysLeft: null, notice: null, withdrawn: true }, new Date().toISOString(), 'locked'],
+  ['aktiver Pass', passPlan(30), new Date().toISOString(), 'free'],
+]) {
+  const st = acc(plan, created);
+  ({ ctx, page } = await open({ state: st }));
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  const before = page.__pdf;
+  await page.locator('.ui-split button').first().click();
+  await page.waitForTimeout(1500);
+  const panel = await unlockOpen(page);
+  if (expect === 'free') check(!panel && page.__pdf === before + 1, `Konto ${label}: PDF in Hamburg lädt`, `panel=${panel}`);
+  else check(panel === 'template' && page.__pdf === before, `Konto ${label}: Hamburg gesperrt`, `panel=${panel}`);
+  if (label.startsWith('nach Widerruf')) {
+    await closeUnlock(page);
+    const band = await page.locator('.ui-access-banner').innerText().catch(() => '');
+    check(/widerrufen/.test(band) && /JSON oder Markdown/.test(band), 'Konto nach Widerruf: Band erklärt den Datenexport', band.slice(0, 100));
+    await openMenu(page);
+    check(await menuItem(page, 'Word – ATS-Fassung').locator('[data-lock]').count() === 1, 'Konto nach Widerruf: Word gesperrt');
+    await page.keyboard.press('Escape');
+  }
+  await ctx.close();
+}
+
 /* ═══ G. Live gegen cv-api ══════════════════════════════════════════════ */
 if (LIVE) {
   step('G. Live: echter cv-api mit FREE_TIER_LIMITS=1');
@@ -573,11 +784,31 @@ if (LIVE) {
   await menuItem(page, 'Word – ATS-Fassung').click();
   check(await unlockOpen(page) === 'docx' && downloads(page, '.docx') === 0, 'Word ohne Konto gesperrt');
   await closeUnlock(page);
+  // Vorlagen-Staffel live: Beginn gemerkt, Pass-Vorlage gesperrt, Zähler kommen an (204).
+  check(!Number.isNaN(Date.parse(o2?.freeTier?.templatesSince || '')), 'Angebot meldet templatesSince', String(o2?.freeTier?.templatesSince));
+  let evStatus = [];
+  page.on('response', r => { if (/\/api\/events$/.test(r.url())) evStatus.push(r.status()); });
+  await ensurePanel(page, 'Gestaltung');
+  await page.locator('.ui-card[aria-label^="Hamburg,"]').first().click();
+  await page.waitForTimeout(900);
+  const pdfL = page.__pdf;
+  await page.locator('.ui-split button').first().click();
+  check(await unlockOpen(page) === 'template' && page.__pdf === pdfL, 'live: Hamburg ohne Konto → Paneel, kein PDF-Auftrag');
+  await closeUnlock(page);
+  await page.waitForTimeout(800);
+  check(evStatus.length >= 2 && evStatus.every(x => x === 204), 'live: Zähler ohne Konto angenommen (204)', evStatus.join(','));
   await ctx.close();
   // Admin angemeldet: alles frei.
   ({ ctx, page } = await open({}));
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
   const login = await page.evaluate(async ([u, p]) => (await fetch('/pdfapi/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })).status, [ADMIN_USER, ADMIN_PASS]);
+  // Einwilligung Art. 9 (seit Runde 8b Schreibsperre ohne sie): für das
+  // frisch angelegte Admin-Konto einmal erteilen, sonst verdeckt der Dialog alles.
+  await page.evaluate(async () => {
+    const r = await fetch('/pdfapi/api/me/consent/art9', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent: true, version: 'x' }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 409 && j.version) await fetch('/pdfapi/api/me/consent/art9', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent: true, version: j.version }) });
+  });
   await page.evaluate(() => localStorage.removeItem('appstudio-demo-mode'));
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);

@@ -7,6 +7,9 @@ import type { UiLang } from '../ui/i18n';
 import { DESIGN_I18N } from '../ui/i18n/design';
 import AtsLine from '../ui/AtsLine';
 import { pageSizePx } from './scale';
+import { useFreeTier } from '../billing/freeTier';
+import { TEMPLATE_LOCK_I18N } from '../ui/i18n/templateLock';
+import { PassTag } from '../billing/PassLock';
 
 /**
  * Vorlagen-Karussell: links und rechts der Seite die Nachbarvorlagen mit dem
@@ -44,6 +47,8 @@ export function CarouselNeighbours({ scale, pageFormat, prevId, nextId, renderTe
   uiLang: UiLang;
 }) {
   const d = DESIGN_I18N[uiLang];
+  const ft = useFreeTier();
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
   const page = pageSizePx(pageFormat);
   const s = scale * 0.9;
   const w = page.w * s;
@@ -53,7 +58,8 @@ export function CarouselNeighbours({ scale, pageFormat, prevId, nextId, renderTe
     <div
       key={`${dir}-${id}`}
       className="ui-neighbour"
-      title={d.neighbour(getTheme(id).name)}
+      title={`${d.neighbour(getTheme(id).name)}${ft.templateAllowed(id) ? '' : ` · ${TL.badge}`}`}
+      data-pass-locked={ft.templateAllowed(id) ? undefined : true}
       onClick={() => onPick(id, dir)}
       style={{
         top: `${top}px`, width: `${w}px`, height: `${h}px`,
@@ -64,10 +70,23 @@ export function CarouselNeighbours({ scale, pageFormat, prevId, nextId, renderTe
       <StaticPage render={() => renderTemplate(id)} scale={s} pageFormat={pageFormat} />
     </div>
   );
+  /* Kennzeichen „Pass" über dem Nachbarn, aber nicht in ihm: Der Nachbar ist
+   * absichtlich blass (opacity), das Kennzeichen soll lesbar bleiben. */
+  const tag = (id: string, dir: -1 | 1) => (ft.templateAllowed(id) ? null : (
+    <div key={`t${dir}-${id}`} aria-hidden data-neighbour-tag
+      style={{
+        position: 'absolute', top: `${top + 10}px`, width: `${w}px`, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 3,
+        ...(dir < 0 ? { right: `calc(100% + ${Math.round(28 * scale + 12)}px)` } : { left: `calc(100% + ${Math.round(28 * scale + 12)}px)` }),
+      }}>
+      <PassTag title={TL.badgeTitle} label={TL.badge} />
+    </div>
+  ));
   return (
     <>
       {side(prevId, -1)}
       {side(nextId, 1)}
+      {tag(prevId, -1)}
+      {tag(nextId, 1)}
     </>
   );
 }
@@ -81,9 +100,13 @@ export function CarouselBar({ current, onStep, uiLang, onLoadAts, onLoadAtsPdf, 
   const nav = useTemplateNav(current);
   const theme = nav.list[nav.idx];
   const level = atsLevelForLayout(theme.layout);
+  const ft = useFreeTier();
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
+  const locked = !ft.templateAllowed(theme.id);
+  const tag = locked ? <PassTag title={TL.badgeTitle} label={TL.badge} /> : null;
   const live = useMemo(
-    () => d.carouselLive(theme.name, nav.idx + 1, nav.n, atsLabel(level, uiLang)),
-    [d, theme.name, nav.idx, nav.n, level, uiLang],
+    () => `${d.carouselLive(theme.name, nav.idx + 1, nav.n, atsLabel(level, uiLang))}${locked ? ` ${TL.badge}: ${TL.badgeTitle}` : ''}`,
+    [d, theme.name, nav.idx, nav.n, level, uiLang, locked, TL],
   );
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') { e.preventDefault(); onStep(-1); }
@@ -105,6 +128,7 @@ export function CarouselBar({ current, onStep, uiLang, onLoadAts, onLoadAtsPdf, 
       {compact ? (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', rowGap: '2px' }}>
           <span style={{ fontWeight: 650, fontSize: 'var(--t-md)', color: 'var(--ink)' }}>{theme.name}</span>
+          {tag}
           <span className="ui-num" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)' }}>{nav.idx + 1}/{nav.n}</span>
           <AtsLine level={level} uiLang={uiLang} compact />
         </div>
@@ -112,6 +136,7 @@ export function CarouselBar({ current, onStep, uiLang, onLoadAts, onLoadAtsPdf, 
         <div style={{ flex: 1, minWidth: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', justifyContent: 'center' }}>
             <span style={{ fontWeight: 650, fontSize: 'var(--t-lg)', color: 'var(--ink)' }}>{theme.name}</span>
+            {tag}
             <span className="ui-num" style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)' }}>{nav.idx + 1} / {nav.n}</span>
           </div>
           <div style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

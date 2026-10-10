@@ -95,6 +95,14 @@ its source in a comment next to it:
   on the main address. Optionally it moves to its own host (`ADMIN_HOST`) with
   its own sign-in (password + e-mail code, separate cookie, strict CSP); see
   `pdf-service/ADMIN.md`.
+- **E-mail workflows** (`pdf-service/MAILS.md`): welcome after confirmation,
+  notices before and after the end of a pass, voucher redeemed, and up to three
+  tips only with explicit double-opt-in consent (unsubscribe link,
+  `List-Unsubscribe`, page `/mail/abmelden`). Mails go through a Postgres queue
+  and wait instead of getting lost while SMTP is missing. SMTP comes from
+  `.env` or from the admin area under "E-Mails"; a password stored there is
+  encrypted with `MAIL_SETTINGS_KEY` (optional, derived from `JWT_SECRET` when
+  empty). Name your actual mail provider in the privacy policy placeholder.
 - **Start page and magazine, prerendered.** `npm run build` renders `/`,
   `/en/`, `/fr/`, `/es/` and `/preise` with `react-dom/server` (JSON-LD,
   hreflang, sitemap, `llms.txt`) and builds the static articles under
@@ -121,7 +129,12 @@ its source in a comment next to it:
   and cancellation buttons. Local use and export stay free. The contract
   texts in `app/src/legal/` are templates written for German law and must be
   reviewed before you sell anything; seller details come from `SELLER_*` in
-  `.env` and `app/src/data/operator.ts`.
+  `.env` and `app/src/data/operator.ts`. With the paid mode ready to sell,
+  `FREE_TIER_LIMITS=1` additionally moves Word, cover letters, more versions
+  and languages and the designed PDF of all but ten templates
+  (`app/src/templates/freeTemplates.ts`) into the pass; the ATS PDF stays free
+  in every template, and résumés created before the limit started keep their
+  template (`TEMPLATE_TIER_SINCE` overrides the start). Off by default.
 - Self-hosted fonts (no Google Fonts calls), sane security headers, rate limiting.
 - **Hardening:** the PDF renderer cannot reach the internal network, is limited
   to six pages, 30 seconds and a small queue; share links serve a frozen

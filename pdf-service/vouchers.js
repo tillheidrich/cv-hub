@@ -128,7 +128,7 @@ class VoucherError extends Error {
  * @param emailConfirmed (user) => boolean — dieselbe Regel wie server.js
  * @param baseUrl       PUBLIC_BASE_URL (für die Einlöseadresse) oder null
  */
-export function createVouchers({ pool, registrationOpen = () => false, emailConfirmed = () => true, baseUrl = null, log = console.log }) {
+export function createVouchers({ pool, registrationOpen = () => false, emailConfirmed = () => true, baseUrl = null, log = console.log, onRedeemed = null }) {
 
   async function findByCode(db, norm, { lock = false } = {}) {
     if (!isCodeShape(norm)) return null;
@@ -219,6 +219,7 @@ export function createVouchers({ pool, registrationOpen = () => false, emailConf
         ok: true,
         grant: { kind: v.kind, days: v.kind === 'days' ? v.days : null, from: grant.effective_from, until: v.kind === 'lifetime' ? null : grant.effective_until },
       };
+      result.redemptionId = redemptionId;
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       if (err instanceof VoucherError) return { ok: false, code: err.code };
@@ -234,6 +235,9 @@ export function createVouchers({ pool, registrationOpen = () => false, emailConf
     const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [user.id]);
     result.plan = await planDetails(pool, rows[0]);
     log(`vouchers: Einlösung für Konto #${user.id} (${result.grant.kind})`);
+    // Bestätigungsmail (E-Mail-Workflows); Fehler dort ändern nichts an der Einlösung.
+    if (onRedeemed) { try { onRedeemed({ userId: user.id, redemptionId: result.redemptionId, grant: result.grant }); } catch { /* egal */ } }
+    delete result.redemptionId;
     return result;
   }
 

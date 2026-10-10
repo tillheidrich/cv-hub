@@ -193,3 +193,76 @@ Länderliste der Oberfläche kommt aus `GET /api/billing/offer` (`countries`).
   die fremde Bestellung (Adresse, Betrag, Datum, Link).
 - `security.test.mjs` „Bestätigungslink abgelaufen“: Kündigung ohne
   Bestellnummer, weil sie mit Nummer seit P4 sofort wirkt.
+
+# Nachtrag (10.10.2026) — Vorlagen-Staffel, Lücke nach Widerruf, Zähler ohne Konto
+
+Grundlage: die optionale „Vorlagen-Staffel“ (greift nur mit Verkauf und
+`FREE_TIER_LIMITS`, ab Werk aus).
+Tests: `billing.test.mjs` („Widerruf ohne andere Berechtigung …“, „Normal
+abgelaufener Pass …“, „Migration: Bestandskonto nur mit widerrufener
+Bestellung …“, „Client-Zähler ohne Konto …“), `vouchers.test.mjs`
+(„Widerruf-Regel …“); Oberfläche `app/scripts/freetiercheck.mjs` (Abschnitt H),
+`app/scripts/capscheck.mjs`.
+
+## Vorlagen-Staffel ist eine Angebotsgrenze, keine Sicherheitsgrenze
+
+- Ohne Pass gibt es das gestaltete PDF und HTML nur in den 10 Gratis-Vorlagen
+  (`app/src/templates/freeTemplates.ts`), die ATS-Fassung als PDF in jeder.
+  Gesperrt wird in der Oberfläche an allen Ausgängen gleich: PDF-Knopf,
+  Export-Menü, Export-Paneel (auch am Telefon), „PDF“ auf der
+  Profilübersicht, Browser-Druckweg (`App.tsx handlePrint`), Strg/Cmd+P im
+  Editor und der Druck über das Browsermenü (CSS `[data-print-locked]`).
+- **`/api/pdf` sperrt nicht nach Vorlage.** Ohne Konto (Lokalmodus) weiß der
+  Server nicht, wer anfragt und welche Fassung Bestand ist; das HTML entsteht
+  im Browser, der Code ist offen (AGPL), und wer will, druckt das HTML selbst.
+  Eine Sperre am Server wäre nur Schein und würde bei Konten ohne Pass die
+  Bestandsregel brechen. `meta.template` bleibt reines Zählmerkmal.
+- Bestandsregel: lokal über `settings.grandfatheredTemplate` (einmal je
+  Browser gesetzt, Merker `cv-tpl-tier-v1`), für Konten über
+  `resumes.created_at` < `freeTier.templatesSince` (erster Start mit Grenze,
+  `schema_migrations` „template_tier_since“, übersteuerbar mit
+  `TEMPLATE_TIER_SINCE`). Beides lässt sich im Browser fälschen; das ist bei
+  einer Angebotsgrenze hingenommen.
+
+## Lücke nach Widerruf (grants.js)
+
+- Vorher: Nach einem Widerruf blieb `plan_kind = 'pass'` stehen, das Konto galt
+  als „Pass abgelaufen“ und durfte nach AGB § 7 Abs. 5 dauerhaft Word, LaTeX
+  und (seit der Staffel) die Pass-Vorlagen exportieren.
+- Jetzt: Stammen die Pass-Berechtigungen nur aus widerrufenen Bestellungen
+  (kein Gutschein, keine weitere bezahlte Bestellung), rechnet `computeAccess`
+  `plan_kind = 'none'` (selbst registriert) bzw. die Pilot-Einordnung
+  (eingeladen). `/api/me` meldet `plan.kind = 'none'`, `until = null`,
+  `withdrawn = true`. Lesen, `/api/me/export`, Markdown-Abruf und Löschen
+  bleiben, Schreibwege antworten 403 `pass_required`. Die Laufzeit
+  (`access_until`) ändert sich nicht. Grundlage: § 357 Abs. 8 i. V. m. § 327p
+  Abs. 1 S. 2 BGB.
+- Bestand: `migrateWithdrawnOnly` (einmal, `schema_migrations`
+  „withdrawn_only_v1“, Sperre 7322/2) rechnet solche Konten beim Start neu und
+  meldet die Zahl im Log („access-grants: Widerruf-Regel“).
+- Ein normal abgelaufener Pass bleibt unverändert (Export in allen Formaten).
+
+## Zähler ohne Konto (`POST /api/events`)
+
+- Fünf Bedienereignisse (`template_lock_view`, `unlock_panel_view`,
+  `export_markdown`, `import_markdown`, `ai_open`) gehen jetzt auch ohne
+  Anmeldung. Sie werden **nur** als Tageszähler in `usage_daily` gezählt
+  (stats.js), nie in `events` (dort steht eine Nutzer-ID), auch nicht mit
+  Konto. Merkmale nur aus festen Listen (Vorlagen-ID aus templates.json,
+  Sperrgründe, KI-Ziele, lokal/Konto); alles andere fällt weg.
+- Rate-Limit wie bisher 120/h je Adresse (IPv6 je /64). Die übrigen
+  Ereignisse (Word, Browser-PDF, Sharelink, LaTeX) brauchen weiter ein Konto
+  (401 ohne).
+- Die Oberfläche schickt sie nicht, wenn `umami.disabled` gesetzt ist
+  (Widerspruch in der Datenschutzerklärung), ohne Cookies (`credentials:
+  'omit'`). Die Datenschutzerklärung (`LegalPages.tsx`, Abschnitt „Ohne Konto“) sollte
+  diese Zähler nennen, wenn eine Instanz sie nutzt.
+
+## Textebene der PDFs (kein Sicherheitsthema, der Vollständigkeit halber)
+
+Chromium m148 (Playwright 1.60, Image des Dienstes) rundet im Druck die
+Zeichenvorschübe auf ganze CSS-Pixel; gesperrte Versalien zerfielen in
+pdftotext („SE NIOR“, „BE RUFSPROFIL“). Behoben mit `text-rendering:
+geometricPrecision` auf `.cv-page` im Export-HTML (nicht in der Vorschau) und Sperrung 0
+in der ATS-Fassung. Prüfung: `app/scripts/capscheck.mjs` mit
+`CAPS_CHROMIUM=<chrome-headless-shell 148>`.

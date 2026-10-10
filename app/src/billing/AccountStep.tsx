@@ -21,6 +21,7 @@ import { registrationOpen } from './hooks';
 import { PATHS, linkClick } from './route';
 import { Art9ConsentFields, RegisterNotice } from '../screens/Art9Consent';
 import { art9Texts, ART9_CONSENT_VERSION } from '../legal/einwilligung';
+import { TipsConsentField, TIPS_CONSENT_VERSION } from '../screens/MailPrefs';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -39,6 +40,8 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
   const [age16, setAge16] = useState(false);
   /** Einwilligung Art. 9 DSGVO (P9): Ohne sie speichert das Konto nichts. */
   const [art9, setArt9] = useState(false);
+  /** Tipps per E-Mail: freiwillig, nicht vorangekreuzt (§ 7 UWG). */
+  const [tips, setTips] = useState(false);
   const [altcha, setAltcha] = useState<string | null>(null);
   const [identifier, setIdentifier] = useState('');
   const [challenge, setChallenge] = useState<string | null>(null);
@@ -62,7 +65,7 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
     if (!altcha) { setInvalid('altcha'); setErr(t.errAltcha); return; }
     busyRef.current = true; setBusy(true);
     try {
-      const r = withPlan(await billingApi.register({ email: mail, password, altcha, ageConfirmed16: true, art9Consent: { version: ART9_CONSENT_VERSION } }));
+      const r = withPlan(await billingApi.register({ email: mail, password, altcha, ageConfirmed16: true, art9Consent: { version: ART9_CONSENT_VERSION }, lang, ...(tips ? { tipsConsent: { version: TIPS_CONSENT_VERSION } } : {}) }));
       track('register_done');
       const user: AuthUser = { ...r.user, emailConfirmed: r.user.emailConfirmed ?? r.emailConfirmed ?? false, email: r.user.email ?? mail };
       onDone(user, true);
@@ -154,6 +157,7 @@ export default function AccountStep({ lang, offer, onDone, initialMode }: {
       </label>
       <Art9ConsentFields lang={lang} checked={art9} invalid={invalid === 'art9'}
         onChange={v => { setArt9(v); if (v && invalid === 'art9') { setInvalid(null); setErr(null); } }} />
+      <TipsConsentField lang={lang} checked={tips} onChange={setTips} />
       <div data-invalid={invalid === 'altcha' || undefined}>
         <AltchaField lang={lang} onChange={p => { setAltcha(p); if (p && invalid === 'altcha') { setInvalid(null); setErr(null); } }} />
       </div>

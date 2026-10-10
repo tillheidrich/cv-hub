@@ -328,6 +328,10 @@ export type PaperId = 'auto' | 'weiss' | 'creme' | 'sand' | 'leinen' | 'nebel';
 
 export interface ProfileSettings {
   template: TemplateName;
+  /** Bestandsregel der Vorlagen-Staffel (billing/freeTier.ts): Vorlage, die
+   *  diese Fassung ohne Pass als gestaltetes PDF behält, weil sie schon da
+   *  war, bevor die Grenze in diesem Browser zum ersten Mal galt. */
+  grandfatheredTemplate?: string;
   /** Akzentfarbe der Vorlage. Fehlt sie oder steht sie auf 'auto', gilt die
    *  Farbe der Vorlage selbst. Ersetzt die früheren Farbvarianten-Vorlagen. */
   accent?: AccentId;

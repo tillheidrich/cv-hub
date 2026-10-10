@@ -44,6 +44,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      MAIL_SETTINGS_KEY: ${MAIL_SETTINGS_KEY:-}
       # Public address of the OAuth endpoints. Empty is correct for this stack
       # (nginx routes /oauth here); set it when a proxy strips a path prefix,
       # because then this service cannot know its own public address.

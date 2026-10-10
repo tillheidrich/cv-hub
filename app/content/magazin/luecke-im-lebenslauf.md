@@ -80,7 +80,7 @@ Manche Formulare fragen nach einem lückenlosen Werdegang oder verlangen zu jede
 
 ## So geht es mit CV-Hub
 
-In CV-Hub kannst du oben ein Berufsprofil setzen und neben Berufserfahrung und Ausbildung eigene Abschnitte wie Ehrenamt, Projekte und Zertifikate anlegen oder einen Abschnitt selbst benennen. Eine Auszeit trägst du als eigene Station mit Zeitraum ein. Unter „Prüfen“ meldet die Textansicht, wenn bei einer Station das Startdatum fehlt. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+In CV-Hub kannst du oben ein Berufsprofil setzen und neben Berufserfahrung und Ausbildung eigene Abschnitte wie Ehrenamt, Projekte und Zertifikate anlegen oder einen Abschnitt selbst benennen. Eine Auszeit trägst du als eigene Station mit Zeitraum ein. Unter „Prüfen“ meldet die Textansicht, wenn bei einer Station das Startdatum fehlt. Willst du die Formulierung der Auszeit mit einer KI überarbeiten, gibst du den Lebenslauf als Markdown an das Modell deiner Wahl und holst ihn zurück; ob danach jede Angabe noch stimmt, entscheidest du. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Häufige Fragen
 

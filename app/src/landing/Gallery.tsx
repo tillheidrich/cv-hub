@@ -7,9 +7,15 @@
  * Zahl, Namen, Aufbau und Marke kommen aus templates/theme.ts und
  * templates/atsScore.ts, nicht aus dem Foto-Lauf: Eine neue Vorlage erscheint
  * sofort, ihr Foto mit dem nächsten Lauf.
+ *
+ * Vorlagen-Staffel (10.10.2026): Mit `passTag` (nur bei aktiver
+ * Gratis-Grenze gesetzt) tragen Vorlagen, deren gestaltetes PDF zum Pass
+ * gehört, ein Kennzeichen neben der Marke. Welche gratis sind, steht an einer
+ * Stelle: templates/freeTemplates.ts.
  */
 import { PICKABLE_THEMES, type ResumeTheme } from '../templates/theme';
 import { atsLabel, atsLevelForLayout, type AtsLevel } from '../templates/atsScore';
+import { isFreeTemplate } from '../templates/freeTemplates';
 import { shot } from './shot';
 import type { UiLang } from '../ui/i18n';
 
@@ -26,7 +32,7 @@ function mixed(themes: ResumeTheme[]): ResumeTheme[] {
   return out;
 }
 
-export default function Gallery({ lang, showAll }: { lang: UiLang; showAll: string }) {
+export default function Gallery({ lang, showAll, passTag }: { lang: UiLang; showAll: string; passTag?: string }) {
   const list = mixed(PICKABLE_THEMES);
   const tl = lang === 'de' ? 'de' : 'en';
   const card = (t: ResumeTheme, i: number) => {
@@ -48,6 +54,7 @@ export default function Gallery({ lang, showAll }: { lang: UiLang; showAll: stri
           <h3 className="lp-tpl-name">{t.name}</h3>
           {structure && <p className="lp-tpl-struct">{structure}</p>}
           <span className={`lp-mark lp-mark-${level}`}><span aria-hidden className="lp-mark-dot" />{atsLabel(level, lang)}</span>
+          {passTag && !isFreeTemplate(t.id) && <span className="lp-tpl-pass" data-pass-tag>{passTag}</span>}
         </div>
       </li>
     );

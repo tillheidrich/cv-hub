@@ -77,7 +77,7 @@ Gegen solche Verzerrungen kannst du deinen Lebenslauf nicht optimieren, aber du 
 
 ## So geht es mit CV-Hub
 
-In CV-Hub fügst du unter „Prüfen“ die Stellenanzeige ein und siehst, welche Fachbegriffe, Programme und Abkürzungen aus der Anzeige wörtlich in deinem Lebenslauf stehen und welche fehlen. Die Textansicht daneben zeigt den Text deiner exportierten Datei in der Reihenfolge, in der er im PDF steht. Dasselbe geht fürs Anschreiben, und unter „Beides“ siehst du, welcher Begriff der Anzeige in welcher der beiden Unterlagen vorkommt. Eine Punktzahl gibt es bewusst nicht. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+In CV-Hub fügst du unter „Prüfen“ die Stellenanzeige ein und siehst, welche Fachbegriffe, Programme und Abkürzungen aus der Anzeige wörtlich in deinem Lebenslauf stehen und welche fehlen. Die Textansicht daneben zeigt den Text deiner exportierten Datei in der Reihenfolge, in der er im PDF steht. Dasselbe geht fürs Anschreiben, und unter „Beides“ siehst du, welcher Begriff der Anzeige in welcher der beiden Unterlagen vorkommt. Eine Punktzahl gibt es bewusst nicht. Eine eingebaute KI, die deinen Text umschreibt, gibt es ebenfalls nicht: Willst du Formulierungen mit einer KI überarbeiten, gibst du den Lebenslauf als Markdown an das Modell deiner Wahl und holst ihn zurück. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Häufige Fragen
 

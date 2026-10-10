@@ -22,6 +22,8 @@ export type BillingRoute =
   | { page: 'terms' }
   | { page: 'withdrawalPolicy' }
   | { page: 'confirmEmail'; token: string | null }
+  /** Tipps abbestellen ohne Anmeldung (E-Mail-Workflows, 10.10.2026). */
+  | { page: 'unsubscribe'; token: string | null }
   | { page: 'code' }
   | { page: 'imprint' }
   | { page: 'privacy' };
@@ -42,6 +44,8 @@ export const PATHS = {
   terms: '/agb',
   withdrawalPolicy: '/widerrufsbelehrung',
   confirmEmail: '/email-bestaetigen',
+  /** Abmeldelink aus Tipps-Mails. Der Server meldet erst beim POST ab. */
+  unsubscribe: '/mail/abmelden',
   /** Zugangscode einlösen (Gutscheine). Bewusst ohne Code-Parameter: Codes
    *  stehen nie in einer Adresse. */
   code: '/code',
@@ -66,6 +70,7 @@ export function matchBillingRoute(pathname: string, search: string): BillingRout
     case PATHS.privacy: return { page: 'privacy' };
     case PATHS.confirmEmail: return { page: 'confirmEmail', token: q.get('token') };
     case PATHS.code: return { page: 'code' };
+    case PATHS.unsubscribe: return { page: 'unsubscribe', token: q.get('token') };
   }
   // Bestätigungslink auch als Pfad: /email-bestaetigen/<token>
   const m = /^\/email-bestaetigen\/([A-Za-z0-9_-]{8,200})$/.exec(p);

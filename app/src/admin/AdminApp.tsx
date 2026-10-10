@@ -8,6 +8,7 @@ import CustomerDetail from './pages/CustomerDetail';
 import Customers from './pages/Customers';
 import Declarations from './pages/Declarations';
 import Invoices from './pages/Invoices';
+import Mails from './pages/Mails';
 import Overview from './pages/Overview';
 import Payments from './pages/Payments';
 import System from './pages/System';
@@ -26,6 +27,7 @@ const PAGES: [string, string][] = [
   ['erklaerungen', 'Widerrufe'],
   ['gutscheine', 'Gutscheine'],
   ['zugang', 'Einladungen'],
+  ['emails', 'E-Mails'],
   ['system', 'System'],
 ];
 
@@ -106,6 +108,7 @@ export default function AdminApp() {
     case 'erklaerungen': page = <Declarations />; break;
     case 'gutscheine': page = (<><PageHead title="Gutscheine und Kampagnen" sub="Anlegen, Einlösungen je Kampagne, deaktivieren." /><AdminVouchers /></>); break;
     case 'zugang': page = <Access />; break;
+    case 'emails': page = <Mails />; break;
     case 'system': page = <System />; break;
     default: page = <Overview />;
   }

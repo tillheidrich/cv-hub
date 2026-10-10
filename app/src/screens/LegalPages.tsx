@@ -564,8 +564,39 @@ function PrivacyDE({ billing, open }: { billing?: React.ReactNode; open?: boolea
         Eingangsbestätigungen von Widerruf und Kündigung, Erinnerung vor dem Ende des Passes,
         Hinweise zum Konto), verschicken wir über <strong>[Mail-Provider]</strong>,
         mit Servern in [Land], ebenfalls als Auftragsverarbeiter. Wir schicken nur an die
-        Adresse, die Sie hinterlegt haben, und keine Werbung. Darüber hinaus geben wir keine Daten
+        Adresse, die Sie hinterlegt haben. Werbung (Tipps zur Nutzung) schicken wir nur mit Ihrer
+        Einwilligung, siehe „E-Mails an Ihr Konto“. Darüber hinaus geben wir keine Daten
         weiter und übermitteln nichts in Drittländer.
+      </p>
+
+      <h2 style={h2}>E-Mails an Ihr Konto</h2>
+      <p style={p}>
+        <strong>Servicemails.</strong> Zu Ihrem Konto schicken wir E-Mails, die zur Nutzung und zum
+        Vertrag gehören: Bestätigung der Adresse, eine Willkommensmail mit ersten Schritten,
+        Sicherheitshinweise (Passwort oder Adresse geändert, Zwei-Faktor-Code, Passwort-Reset),
+        Bestellbestätigung und Rechnung, die Bestätigung eines eingelösten Gutscheins, Hinweise vor und
+        nach dem Ende des Passes sowie Eingangsbestätigungen von Widerruf und Kündigung.
+        Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Vertrag), für Bestellbestätigung und
+        Eingangsbestätigungen zusätzlich Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;c DSGVO (§&nbsp;312f, §&nbsp;356a,
+        §&nbsp;312k BGB) und für Sicherheitshinweise Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO (Schutz Ihres
+        Kontos). Diese Mails lassen sich nicht abbestellen, solange das Konto besteht.
+      </p>
+      <p style={p}>
+        <strong>Tipps per E-Mail (freiwillig).</strong> Nur wenn Sie bei der Registrierung oder in den
+        Kontoeinstellungen ausdrücklich zustimmen, schicken wir Ihnen in den ersten zwei Wochen bis zu
+        drei Mails mit Tipps zur Nutzung. Die Einwilligung wird erst wirksam, wenn Sie Ihre Adresse über
+        den Bestätigungslink bestätigt haben. Zeitpunkt und Fassung der Einwilligung und eines Widerrufs
+        speichern wir als Nachweis (Art.&nbsp;7 Abs.&nbsp;1 DSGVO). Rechtsgrundlage ist Art.&nbsp;6
+        Abs.&nbsp;1 lit.&nbsp;a DSGVO. Sie können jederzeit mit Wirkung für die Zukunft widerrufen: über den
+        Abmeldelink in jeder dieser Mails (ein Klick, ohne Anmeldung), über die Abmeldefunktion Ihres
+        Mailprogramms oder in den Kontoeinstellungen unter „E-Mails“. Außerdem speichern wir, in welcher
+        Sprache Sie Mails bekommen.
+      </p>
+      <p style={p}>
+        <strong>Versandprotokoll.</strong> Zu jeder Mail speichern wir Zeitpunkt, Art der Mail, Ergebnis des
+        Versands und eine gekürzte Empfängeradresse, um Zustellprobleme zu erkennen und nachweisen zu
+        können, dass Pflichtmails verschickt wurden (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO). Den Inhalt
+        der Mails speichern wir nicht. Das Protokoll löschen wir nach 90 Tagen.
       </p>
 
       <h2 style={h2}>Zwei-Faktor-Login (optional)</h2>
@@ -598,6 +629,8 @@ function PrivacyDE({ billing, open }: { billing?: React.ReactNode; open?: boolea
         <li>Nie bezahlte Bestellungen: 30 Tage. Bezahlte Bestellungen samt Rechnungsangaben: zehn Jahre ab Ende des Zahlungsjahres.</li>
         <li>Widerrufs- und Kündigungserklärungen: mit der Bestellung; nicht zuzuordnende drei Jahre.</li>
         <li>Protokoll der Verwaltung: ein Jahr.</li>
+        <li>Einwilligung in Tipps per E-Mail und ihr Widerruf: solange das Konto besteht (Nachweis).</li>
+        <li>Versandprotokoll der E-Mails: 90 Tage. Mails, die mangels eingerichtetem Versand warten: höchstens 30 Tage.</li>
         <li>Proxy-Protokolle: höchstens 14 Tage. Zähler zur Begrenzung von Anfragen: höchstens 60 Minuten, nur im Arbeitsspeicher.</li>
         <li>Sicherungen der Datenbank: 14 Tage, danach unwiderruflich gelöscht. Gelöschtes verschwindet aus den Sicherungen also spätestens nach 14 Tagen.</li>
         <li>Inaktive Konten löschen wir auf Anfrage; eine automatische Löschung gibt es derzeit nicht.</li>
@@ -818,8 +851,36 @@ function PrivacyEN({ billing, open }: { billing?: React.ReactNode; open?: boolea
         that belong to running the service (address confirmation, invitation, password reset, two-factor
         code, order confirmation and invoice, acknowledgements of withdrawal and cancellation, reminder
         before the pass ends, account notices) are sent via <strong>[mail provider]</strong>,
-        with servers in [country], also as a processor. We only send to the address you stored, and
-        never advertising. Beyond that we pass on no data and transfer nothing to third countries.
+        with servers in [country], also as a processor. We only send to the address you stored.
+        Advertising (tips on using the tool) is only sent with your consent, see "E-mails to your account".
+        Beyond that we pass on no data and transfer nothing to third countries.
+      </p>
+
+      <h2 style={h2}>E-mails to your account</h2>
+      <p style={p}>
+        <strong>Service e-mails.</strong> We send e-mails that belong to using the account and to the
+        contract: address confirmation, a welcome e-mail with first steps, security notices (password or
+        address changed, two-factor code, password reset), order confirmation and invoice, confirmation of a
+        redeemed voucher, notices before and after the end of the pass, and acknowledgements of withdrawal
+        and cancellation. Legal basis: Art. 6(1)(b) GDPR (contract), for order confirmations and
+        acknowledgements also Art. 6(1)(c) GDPR (sections 312f, 356a and 312k of the German Civil Code), for
+        security notices Art. 6(1)(f) GDPR (protecting your account). These e-mails cannot be unsubscribed
+        while the account exists.
+      </p>
+      <p style={p}>
+        <strong>Tips by e-mail (optional).</strong> Only if you explicitly agree when registering or in the
+        account settings do we send you up to three e-mails with tips during the first two weeks. The consent
+        only takes effect once you have confirmed your address via the confirmation link. We store the time
+        and version of the consent and of a withdrawal as proof (Art. 7(1) GDPR). Legal basis: Art. 6(1)(a)
+        GDPR. You can withdraw at any time with effect for the future: via the unsubscribe link in each of
+        these e-mails (one click, no login), via your e-mail program's unsubscribe function or in the account
+        settings under "E-mails". We also store the language in which you receive e-mails.
+      </p>
+      <p style={p}>
+        <strong>Sending log.</strong> For every e-mail we store the time, the type of e-mail, the result of
+        sending and a shortened recipient address, to detect delivery problems and to be able to show that
+        mandatory e-mails were sent (Art. 6(1)(f) GDPR). We do not store the content. The log is deleted
+        after 90 days.
       </p>
 
       <h2 style={h2}>Two-factor login (optional)</h2>
@@ -851,6 +912,8 @@ function PrivacyEN({ billing, open }: { billing?: React.ReactNode; open?: boolea
         <li>Orders never paid: 30 days. Paid orders including invoice details: ten years from the end of the year of payment.</li>
         <li>Withdrawal and cancellation declarations: with the order; unmatched ones three years.</li>
         <li>Administration log: one year.</li>
+        <li>Consent to tips by e-mail and its withdrawal: as long as the account exists (proof).</li>
+        <li>E-mail sending log: 90 days. E-mails waiting because sending is not set up: 30 days at most.</li>
         <li>Proxy logs: 14 days at most. Rate-limit counters: 60 minutes at most, in memory only.</li>
         <li>Database backups: 14 days, then irreversibly deleted. Deleted data therefore disappears from backups within 14 days.</li>
         <li>We delete inactive accounts on request; there is currently no automatic deletion.</li>

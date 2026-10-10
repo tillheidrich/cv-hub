@@ -11,11 +11,27 @@
 //
 // Was der Server nicht sieht, zählt er nicht: Der Lokalmodus (IndexedDB) und
 // die Demo ohne Konto melden nichts. Das steht so auch im Dashboard.
+// Ausnahme seit 10.10.2026 (Vorlagen-Staffel, Entscheidungsregel 31.01.2027):
+// fünf Bedienereignisse kommen auch ohne Konto über POST /api/events
+// (CLIENT_COUNTS unten). Sie landen nur hier als Tageszähler, nie in der
+// Tabelle events (die hat eine Nutzer-ID), und nur mit Merkmalen aus festen
+// Listen. Wer der Reichweitenmessung widersprochen hat, schickt sie nicht
+// (app/src/data/track.ts, countEvent).
 
 const LANGS = new Set(['de', 'en', 'fr', 'es']);
 const FORMATS = new Set(['a4', 'letter', 'legal', 'a5']);
 const VARIANTS = new Set(['standard', 'ats']);
 const PAGE_MODES = new Set(['one', 'two', 'three', 'four', 'auto']);
+/** Sperrgründe des Freischalt-Paneels (app/src/billing/UnlockPanel.tsx). */
+export const UNLOCK_REASONS = new Set(['template', 'docx', 'coverLetter', 'profiles', 'langs', 'share', 'mcp', 'versions', 'sync', 'account', 'apiKeys']);
+/** Ziele des KI-Knopfs (app/src/export/ExportPanel.tsx). */
+export const AI_TARGETS = new Set(['chatgpt', 'claude', 'gemini', 'clipboard']);
+/** Woher eine Markdown-Ausgabe kam. */
+const MODES = new Set(['local', 'account']);
+
+/** Bedienereignisse aus der Oberfläche, die nur gezählt werden (auch ohne
+ *  Konto). Kennzahl = Ereignisart. */
+export const CLIENT_COUNTS = new Set(['template_lock_view', 'unlock_panel_view', 'export_markdown', 'import_markdown', 'ai_open']);
 
 /** Kennzahlen, die es gibt. Alles andere wird nicht gezählt. */
 export const METRICS = new Set([
@@ -29,6 +45,12 @@ export const METRICS = new Set([
   'api_call',       // Aufrufe mit KI-Verbindung (OAuth/MCP) oder API-Schlüssel
   'mail_sent',
   'mail_failed',
+  // Vorlagen-Staffel und KI-Knopf (10.10.2026), Client-Ereignisse:
+  'template_lock_view', // Pass-Vorlage mit eigenem Inhalt angesehen (Merkmal Vorlage)
+  'unlock_panel_view',  // Freischalt-Paneel geöffnet (Merkmal Sperrgrund)
+  'export_markdown',    // Markdown heruntergeladen (Merkmal lokal/Konto)
+  'import_markdown',    // Markdown übernommen (Merkmal lokal/Konto)
+  'ai_open',            // KI-Knopf benutzt (Merkmal Ziel)
 ]);
 
 /** Kalendertag in Berlin als JJJJ-MM-TT. */
@@ -73,6 +95,26 @@ export function cleanDims(src, templateIds) {
   if (FORMATS.has(s(src.format ?? src.pageFormat))) out.format = s(src.format ?? src.pageFormat);
   if (VARIANTS.has(s(src.variant))) out.variant = s(src.variant);
   if (PAGE_MODES.has(s(src.pageMode))) out.pages = s(src.pageMode);
+  return out;
+}
+
+/** Merkmale eines Bedienereignisses (CLIENT_COUNTS), nur aus festen Listen.
+ *  Sperrgründe sind gemischt geschrieben (coverLetter), daher ohne
+ *  Kleinschreibung verglichen. */
+export function cleanClientDims(kind, src, templateIds) {
+  const out = {};
+  if (!src || typeof src !== 'object') return out;
+  const raw = v => String(v ?? '').trim();
+  if (kind === 'template_lock_view') {
+    const t = raw(src.template).toLowerCase();
+    if (templateIds?.has(t)) out.template = t;
+  } else if (kind === 'unlock_panel_view') {
+    if (UNLOCK_REASONS.has(raw(src.reason))) out.reason = raw(src.reason);
+  } else if (kind === 'ai_open') {
+    if (AI_TARGETS.has(raw(src.target))) out.target = raw(src.target);
+  } else if (kind === 'export_markdown' || kind === 'import_markdown') {
+    if (MODES.has(raw(src.mode))) out.mode = raw(src.mode);
+  }
   return out;
 }
 
@@ -153,6 +195,7 @@ export function createStats({ pool, templateIds = new Set(), flushMs = 15_000, l
           const kind = String(body.kind || '');
           const metric = kind === 'pdf_local' ? 'pdf_browser' : kind === 'docx' ? 'docx' : kind === 'latex' ? 'latex' : null;
           if (metric) count(metric, cleanDims(body, templateIds));
+          else if (CLIENT_COUNTS.has(kind)) count(kind, cleanClientDims(kind, body, templateIds));
         } else if (m === 'POST' && /^\/api\/resumes\/[^/]+\/share$/.test(p)) {
           count('share_link');
         } else if (m === 'POST' && /^\/api\/resumes\/[^/]+\/import-md$/.test(p)) {

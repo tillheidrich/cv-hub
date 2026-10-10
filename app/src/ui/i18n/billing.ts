@@ -5,8 +5,15 @@
  *
  * Grundsatz aus dem Reddit-Bericht vom 08.10.2026: Die Klage Nummer eins in
  * diesem Markt sind Abo-Fallen und Download-Schranken. Deshalb steht der Preis
- * früh und vollständig da, Export ist nie Teil des Angebots, und es gibt keine
- * Countdowns, keine erfundenen Zahlen, keine Siegel.
+ * früh und vollständig da, was zum Pass gehört, steht vor der Arbeit am Knopf,
+ * und es gibt keine Countdowns, keine erfundenen Zahlen, keine Siegel.
+ *
+ * Diese Texte gelten OHNE Gratis-Grenze (Verkauf zu oder FREE_TIER_LIMITS aus).
+ * Mit Grenze ersetzt billing/format.ts → billingFor() die betroffenen Stellen
+ * durch ui/i18n/freetier.ts (Vorlagen-Staffel, 10.10.2026). Deshalb hier keine
+ * „nie/immer"-Zusagen zum Export: Sie würden der Fassung mit Grenze
+ * widersprechen. MCP heißt „Claude und andere MCP-Programme"; ChatGPT steht
+ * nur bei der Markdown-Brücke.
  *
  * Preise und Tage kommen als fertige Zeichenketten aus /api/billing/offer
  * (formatPrice in billing/api.ts); hier steht nur der Satz drumherum.
@@ -290,7 +297,7 @@ const de: BillingStrings = {
     sync: { title: 'Speichern über Geräte', body: 'Deine Lebensläufe liegen auf unserem Server und sind an jedem Gerät da, an dem du angemeldet bist.' },
     share: { title: 'Sharelinks', body: 'Ein Link statt Anhang. Mit Ablaufdatum, jederzeit widerrufbar, und du siehst, wie oft er aufgerufen wurde.' },
     versions: { title: 'Versionen am Server', body: 'Bis zu 25 ältere Stände je Lebenslauf, auf jedem Gerät abrufbar.' },
-    mcp: { title: 'KI verbinden (MCP)', body: 'Claude, ChatGPT oder Cursor lesen und ändern deinen Lebenslauf direkt, ohne Kopieren und Einfügen.' },
+    mcp: { title: 'KI verbinden (MCP)', body: 'Claude und andere MCP-Programme lesen und ändern deinen Lebenslauf direkt, ohne Kopieren und Einfügen.' },
     apiKeys: { title: 'API-Schlüssel', body: 'Für eigene Skripte und Werkzeuge, die mit deinem Konto arbeiten.' },
   },
   freeList: n => [
@@ -302,7 +309,7 @@ const de: BillingStrings = {
   pEyebrow: 'Preise',
   pH1a: 'Alles im Browser ist kostenlos.',
   pH1b: p => `Der Pass kostet ${p} einmalig.`,
-  pLede: 'Schreiben, gestalten, PDF und Word: ohne Konto und ohne Bezahlschranke. Der Bewerbungs-Pass bringt dazu, was einen Server braucht, für die Zeit deiner Bewerbungen.',
+  pLede: 'Schreiben, gestalten, PDF und Word: ohne Konto. Der Bewerbungs-Pass bringt dazu, was einen Server braucht, für die Zeit deiner Bewerbungen.',
   freeTitle: 'Ohne Konto',
   freePrice: '0 €',
   freeSub: 'Ohne Anmeldung, ohne Ablaufdatum',
@@ -336,11 +343,11 @@ const de: BillingStrings = {
     { q: `Was passiert nach ${d} Tagen?`, a: 'Der Pass endet, und dein Konto wechselt auf Nur-Lesen. Du kannst weiter alles lesen, exportieren (PDF, Word, JSON, Datenexport) und löschen. Ändern und neue Sharelinks gehen erst wieder mit einem neuen Pass. Wir löschen nichts, ohne es dir vorher per E-Mail anzukündigen.' },
     { q: 'Ist das ein Abo?', a: `Nein. Du zahlst einmal ${price}. Es gibt keine Testphase, die in ein Abo übergeht, und keine gespeicherte Zahlungsart für spätere Abbuchungen.` },
     { q: 'Kann ich verlängern?', a: `Ja, mit einem neuen Kauf, auch vor dem Ende. Die neuen ${d} Tage hängen sich an das bisherige Ende an, es geht kein Tag verloren.` },
-    { q: 'Wie widerrufe ich?', a: `Innerhalb von 14 Tagen nach dem Kauf: im Konto unter „Mein Pass" mit „Vertrag widerrufen" oder ohne Anmeldung über den Link „Vertrag widerrufen" unten auf jeder Seite; dann bestätigst du den Widerruf noch über einen Link, den wir an die E-Mail-Adresse der Bestellung schicken. Du bekommst die vollen ${price} zurück, auch wenn du den Pass schon genutzt hast.` },
-    { q: 'Brauche ich den Pass für PDF oder Word?', a: 'Nein. Export ist nie Teil des Passes. Ohne Konto bekommst du alle Vorlagen, PDF, beide Word-Fassungen und die übrigen Formate, und deine Daten bleiben in deinem Browser.' },
+    { q: 'Wie widerrufe ich?', a: `Innerhalb von 14 Tagen nach dem Kauf: im Konto unter „Mein Pass" mit „Vertrag widerrufen" oder ohne Anmeldung über den Link „Vertrag widerrufen" unten auf jeder Seite; dann bestätigst du den Widerruf noch über einen Link, den wir an die E-Mail-Adresse der Bestellung schicken. Du bekommst die vollen ${price} zurück, auch wenn du den Pass schon genutzt hast. Dein Konto und deine Inhalte bleiben; du kannst sie lesen, als Datenexport herunterladen und löschen.` },
+    { q: 'Brauche ich den Pass für PDF oder Word?', a: 'Nein. Ohne Konto bekommst du alle Vorlagen, PDF, beide Word-Fassungen und die übrigen Formate, und deine Daten bleiben in deinem Browser. Was zum Pass gehört, steht hier und am jeweiligen Knopf, bevor du anfängst.' },
     { q: 'Wie bezahle ich?', a: 'Über Mollie, einen Zahlungsdienstleister aus den Niederlanden. Die Zahlungsart wählst du auf der Bezahlseite von Mollie. Karten- oder Kontodaten sehen wir nicht.' },
     { q: 'Bekomme ich eine Rechnung?', a: 'Ja. Sie kommt als PDF mit der Bestellbestätigung per E-Mail und liegt in deinem Konto unter „Mein Pass".' },
-    { q: 'Warum kostet das überhaupt etwas?', a: 'Speicher, Sharelinks und die KI-Verbindung laufen auf einem Server, und der kostet Geld. Was in deinem Browser läuft, kostet uns nichts. Deshalb ist es kostenlos.' },
+    { q: 'Warum kostet das überhaupt etwas?', a: 'Speicher, Sharelinks und die MCP-Verbindung laufen auf einem Server, und der kostet Geld. Deshalb gehören sie zum Pass. Die quelloffene Fassung kannst du auch selbst betreiben.' },
   ],
   closing: 'Fang ohne Konto an. Den Pass kannst du später immer noch holen.',
   pricingSoon: 'Der Verkauf ist noch nicht geöffnet. Ohne Konto kannst du schon jetzt alles nutzen, was im Browser läuft.',
@@ -352,7 +359,7 @@ const de: BillingStrings = {
     sync: { title: 'Speichern über Geräte gibt es mit dem Pass.', body: 'Dein Lebenslauf liegt dann auf unserem Server und ist an jedem Gerät da, an dem du angemeldet bist.' },
     share: { title: 'Sharelinks gibt es mit dem Pass.', body: 'Ein Link statt Anhang: mit Ablaufdatum, jederzeit widerrufbar, und du siehst, wie oft er aufgerufen wurde.' },
     versions: { title: 'Versionen am Server gibt es mit dem Pass.', body: 'Bis zu 25 ältere Stände je Lebenslauf, auf jedem Gerät. Im Browser hast du weiterhin die letzten 20.' },
-    mcp: { title: 'KI verbinden gibt es mit dem Pass.', body: 'Claude, ChatGPT oder Cursor lesen und ändern deinen Lebenslauf direkt. Die Markdown-Brücke funktioniert auch ohne Pass.' },
+    mcp: { title: 'KI verbinden gibt es mit dem Pass.', body: 'Claude und andere MCP-Programme lesen und ändern deinen Lebenslauf direkt. Die Markdown-Brücke zu ChatGPT, Claude oder einem anderen Modell funktioniert auch ohne Pass.' },
     apiKeys: { title: 'API-Schlüssel gibt es mit dem Pass.', body: 'Für eigene Skripte und Werkzeuge, die mit deinem Konto arbeiten.' },
     account: { title: 'Ein Konto mit dem Bewerbungs-Pass', body: 'Speichern über Geräte, Sharelinks, Versionen am Server und die KI-Verbindung, für die Zeit deiner Bewerbungen.' },
   },
@@ -563,7 +570,7 @@ const en: BillingStrings = {
     sync: { title: 'Save across devices', body: 'Your résumés are stored on our server and are there on every device you sign in on.' },
     share: { title: 'Share links', body: 'A link instead of an attachment. With an expiry date, revocable at any time, and you see how often it was opened.' },
     versions: { title: 'Versions on the server', body: 'Up to 25 earlier states per résumé, available on every device.' },
-    mcp: { title: 'Connect AI (MCP)', body: 'Claude, ChatGPT or Cursor read and edit your résumé directly, without copy and paste.' },
+    mcp: { title: 'Connect AI (MCP)', body: 'Claude and other MCP programs read and edit your résumé directly, without copy and paste.' },
     apiKeys: { title: 'API keys', body: 'For your own scripts and tools that work with your account.' },
   },
   freeList: n => [
@@ -575,7 +582,7 @@ const en: BillingStrings = {
   pEyebrow: 'Pricing',
   pH1a: 'Everything in the browser is free.',
   pH1b: p => `The pass costs ${p}, once.`,
-  pLede: 'Writing, design, PDF and Word: no account and no paywall. The Application Pass adds what needs a server, for as long as you are applying.',
+  pLede: 'Writing, design, PDF and Word: no account needed. The Application Pass adds what needs a server, for as long as you are applying.',
   freeTitle: 'Without an account',
   freePrice: '€0',
   freeSub: 'No sign-up, no expiry',
@@ -609,11 +616,11 @@ const en: BillingStrings = {
     { q: `What happens after ${d} days?`, a: 'The pass ends and your account switches to read-only. You can still read, export (PDF, Word, JSON, data export) and delete everything. Editing and new share links need a new pass. We never delete anything without telling you by e-mail first.' },
     { q: 'Is this a subscription?', a: `No. You pay ${price} once. There is no trial that turns into a subscription and no stored payment method for later charges.` },
     { q: 'Can I extend it?', a: `Yes, with another purchase, also before it ends. The new ${d} days are added to the current end date, so you lose no days.` },
-    { q: 'How do I withdraw?', a: `Within 14 days of buying: in your account under "My pass" with "Withdraw from contract", or without signing in via the "Withdraw from contract" link at the bottom of every page; then you confirm the withdrawal via a link we send to the e-mail address of the order. You get the full ${price} back, even if you have already used the pass.` },
-    { q: 'Do I need the pass for PDF or Word?', a: 'No. Export is never part of the pass. Without an account you get every template, PDF, both Word versions and the other formats, and your data stays in your browser.' },
+    { q: 'How do I withdraw?', a: `Within 14 days of buying: in your account under "My pass" with "Withdraw from contract", or without signing in via the "Withdraw from contract" link at the bottom of every page; then you confirm the withdrawal via a link we send to the e-mail address of the order. You get the full ${price} back, even if you have already used the pass. Your account and your content stay; you can read them, download them as a data export and delete them.` },
+    { q: 'Do I need the pass for PDF or Word?', a: 'No. Without an account you get every template, PDF, both Word versions and the other formats, and your data stays in your browser. What belongs to the pass is shown here and on the button before you start.' },
     { q: 'How do I pay?', a: 'Through Mollie, a payment provider based in the Netherlands. You choose the payment method on the Mollie checkout page. We never see card or bank details.' },
     { q: 'Do I get an invoice?', a: 'Yes. It comes as a PDF with the order confirmation by e-mail and is in your account under "My pass".' },
-    { q: 'Why does it cost anything?', a: 'Storage, share links and the AI connection run on a server, and that costs money. What runs in your browser costs us nothing, which is why it is free.' },
+    { q: 'Why does it cost anything?', a: 'Storage, share links and the MCP connection run on a server, and that costs money. That is why they are part of the pass. You can also run the open-source version yourself.' },
   ],
   closing: 'Start without an account. You can still get the pass later.',
   pricingSoon: 'Sales are not open yet. Without an account you can already use everything that runs in the browser.',
@@ -625,7 +632,7 @@ const en: BillingStrings = {
     sync: { title: 'Saving across devices comes with the pass.', body: 'Your résumé is then stored on our server and is there on every device you sign in on.' },
     share: { title: 'Share links come with the pass.', body: 'A link instead of an attachment: with an expiry date, revocable at any time, and you see how often it was opened.' },
     versions: { title: 'Versions on the server come with the pass.', body: 'Up to 25 earlier states per résumé, on every device. In the browser you keep the last 20.' },
-    mcp: { title: 'Connecting AI comes with the pass.', body: 'Claude, ChatGPT or Cursor read and edit your résumé directly. The Markdown bridge works without the pass too.' },
+    mcp: { title: 'Connecting AI comes with the pass.', body: 'Claude and other MCP programs read and edit your résumé directly. The Markdown bridge to ChatGPT, Claude or another model works without the pass too.' },
     apiKeys: { title: 'API keys come with the pass.', body: 'For your own scripts and tools that work with your account.' },
     account: { title: 'An account with the Application Pass', body: 'Save across devices, share links, versions on the server and the AI connection, for as long as you are applying.' },
   },
@@ -836,7 +843,7 @@ const fr: BillingStrings = {
     sync: { title: 'Enregistrer sur plusieurs appareils', body: 'Vos CV sont stockés sur notre serveur et disponibles sur chaque appareil où vous êtes connecté.' },
     share: { title: 'Liens de partage', body: 'Un lien au lieu d’une pièce jointe. Avec date d’expiration, révocable à tout moment, et vous voyez combien de fois il a été ouvert.' },
     versions: { title: 'Versions sur le serveur', body: 'Jusqu’à 25 états antérieurs par CV, accessibles sur chaque appareil.' },
-    mcp: { title: 'Connecter une IA (MCP)', body: 'Claude, ChatGPT ou Cursor lisent et modifient directement votre CV, sans copier-coller.' },
+    mcp: { title: 'Connecter une IA (MCP)', body: 'Claude et d’autres programmes MCP lisent et modifient directement votre CV, sans copier-coller.' },
     apiKeys: { title: 'Clés API', body: 'Pour vos propres scripts et outils qui travaillent avec votre compte.' },
   },
   freeList: n => [
@@ -848,7 +855,7 @@ const fr: BillingStrings = {
   pEyebrow: 'Tarifs',
   pH1a: 'Tout ce qui tourne dans le navigateur est gratuit.',
   pH1b: p => `Le pass coûte ${p}, une seule fois.`,
-  pLede: 'Rédiger, mettre en page, PDF et Word : sans compte et sans paiement obligatoire. Le Pass candidature ajoute ce qui a besoin d’un serveur, le temps de vos candidatures.',
+  pLede: 'Rédiger, mettre en page, PDF et Word : sans compte. Le Pass candidature ajoute ce qui a besoin d’un serveur, le temps de vos candidatures.',
   freeTitle: 'Sans compte',
   freePrice: '0 €',
   freeSub: 'Sans inscription, sans date de fin',
@@ -882,11 +889,11 @@ const fr: BillingStrings = {
     { q: `Que se passe-t-il après ${d} jours ?`, a: 'Le pass prend fin et votre compte passe en lecture seule. Vous pouvez toujours tout lire, exporter (PDF, Word, JSON, export des données) et supprimer. Modifier et créer de nouveaux liens de partage demandent un nouveau pass. Nous ne supprimons rien sans vous prévenir d’abord par e-mail.' },
     { q: 'Est-ce un abonnement ?', a: `Non. Vous payez ${price} une seule fois. Pas de période d’essai qui devient un abonnement, pas de moyen de paiement enregistré pour des prélèvements ultérieurs.` },
     { q: 'Puis-je prolonger ?', a: `Oui, avec un nouvel achat, aussi avant la fin. Les ${d} nouveaux jours s’ajoutent à la date de fin actuelle, vous ne perdez aucun jour.` },
-    { q: 'Comment me rétracter ?', a: `Dans les 14 jours suivant l’achat : dans votre compte sous « Mon pass » avec « Se rétracter du contrat », ou sans connexion via le lien « Se rétracter du contrat » en bas de chaque page ; vous confirmez alors la rétractation via un lien envoyé à l’adresse e-mail de la commande. Vous récupérez les ${price}, même si vous avez déjà utilisé le pass.` },
-    { q: 'Ai-je besoin du pass pour le PDF ou Word ?', a: 'Non. L’export ne fait jamais partie du pass. Sans compte, vous avez tous les modèles, le PDF, les deux versions Word et les autres formats, et vos données restent dans votre navigateur.' },
+    { q: 'Comment me rétracter ?', a: `Dans les 14 jours suivant l’achat : dans votre compte sous « Mon pass » avec « Se rétracter du contrat », ou sans connexion via le lien « Se rétracter du contrat » en bas de chaque page ; vous confirmez alors la rétractation via un lien envoyé à l’adresse e-mail de la commande. Vous récupérez les ${price}, même si vous avez déjà utilisé le pass. Votre compte et vos contenus restent ; vous pouvez les lire, les télécharger sous forme d’export de données et les supprimer.` },
+    { q: 'Ai-je besoin du pass pour le PDF ou Word ?', a: 'Non. Sans compte, vous avez tous les modèles, le PDF, les deux versions Word et les autres formats, et vos données restent dans votre navigateur. Ce qui relève du pass est indiqué ici et sur le bouton avant que vous ne commenciez.' },
     { q: 'Comment payer ?', a: 'Via Mollie, un prestataire de paiement basé aux Pays-Bas. Vous choisissez le moyen de paiement sur la page de Mollie. Nous ne voyons ni carte ni coordonnées bancaires.' },
     { q: 'Est-ce que je reçois une facture ?', a: 'Oui. Elle arrive en PDF avec la confirmation de commande par e-mail et se trouve dans votre compte sous « Mon pass ».' },
-    { q: 'Pourquoi est-ce payant ?', a: 'Le stockage, les liens de partage et la connexion IA tournent sur un serveur, et il coûte de l’argent. Ce qui tourne dans votre navigateur ne nous coûte rien, c’est pourquoi c’est gratuit.' },
+    { q: 'Pourquoi est-ce payant ?', a: 'Le stockage, les liens de partage et la connexion MCP tournent sur un serveur, et il coûte de l’argent. C’est pourquoi ils font partie du pass. Vous pouvez aussi héberger vous-même la version open source.' },
   ],
   closing: 'Commencez sans compte. Vous pourrez toujours prendre le pass plus tard.',
   pricingSoon: 'La vente n’est pas encore ouverte. Sans compte, vous pouvez déjà utiliser tout ce qui tourne dans le navigateur.',
@@ -898,7 +905,7 @@ const fr: BillingStrings = {
     sync: { title: 'L’enregistrement sur plusieurs appareils est inclus dans le pass.', body: 'Votre CV est alors stocké sur notre serveur et disponible sur chaque appareil où vous êtes connecté.' },
     share: { title: 'Les liens de partage sont inclus dans le pass.', body: 'Un lien au lieu d’une pièce jointe : avec date d’expiration, révocable à tout moment, et vous voyez combien de fois il a été ouvert.' },
     versions: { title: 'Les versions sur le serveur sont incluses dans le pass.', body: 'Jusqu’à 25 états antérieurs par CV, sur chaque appareil. Dans le navigateur, vous gardez les 20 derniers.' },
-    mcp: { title: 'La connexion IA est incluse dans le pass.', body: 'Claude, ChatGPT ou Cursor lisent et modifient directement votre CV. Le pont Markdown fonctionne aussi sans pass.' },
+    mcp: { title: 'La connexion IA est incluse dans le pass.', body: 'Claude et d’autres programmes MCP lisent et modifient directement votre CV. Le pont Markdown vers ChatGPT, Claude ou un autre modèle fonctionne aussi sans pass.' },
     apiKeys: { title: 'Les clés API sont incluses dans le pass.', body: 'Pour vos propres scripts et outils qui travaillent avec votre compte.' },
     account: { title: 'Un compte avec le Pass candidature', body: 'Enregistrement sur plusieurs appareils, liens de partage, versions sur le serveur et connexion IA, le temps de vos candidatures.' },
   },
@@ -1109,7 +1116,7 @@ const es: BillingStrings = {
     sync: { title: 'Guardar en varios dispositivos', body: 'Tus currículums se guardan en nuestro servidor y están en cada dispositivo en el que inicies sesión.' },
     share: { title: 'Enlaces para compartir', body: 'Un enlace en lugar de un adjunto. Con fecha de caducidad, revocable en cualquier momento, y ves cuántas veces se abrió.' },
     versions: { title: 'Versiones en el servidor', body: 'Hasta 25 estados anteriores por currículum, disponibles en cada dispositivo.' },
-    mcp: { title: 'Conectar IA (MCP)', body: 'Claude, ChatGPT o Cursor leen y editan tu currículum directamente, sin copiar y pegar.' },
+    mcp: { title: 'Conectar IA (MCP)', body: 'Claude y otros programas MCP leen y editan tu currículum directamente, sin copiar y pegar.' },
     apiKeys: { title: 'Claves API', body: 'Para tus propios scripts y herramientas que trabajan con tu cuenta.' },
   },
   freeList: n => [
@@ -1121,7 +1128,7 @@ const es: BillingStrings = {
   pEyebrow: 'Precios',
   pH1a: 'Todo lo que funciona en el navegador es gratis.',
   pH1b: p => `El pase cuesta ${p}, una sola vez.`,
-  pLede: 'Escribir, diseñar, PDF y Word: sin cuenta y sin muro de pago. El Pase de candidatura añade lo que necesita un servidor, mientras dure tu búsqueda.',
+  pLede: 'Escribir, diseñar, PDF y Word: sin cuenta. El Pase de candidatura añade lo que necesita un servidor, mientras dure tu búsqueda.',
   freeTitle: 'Sin cuenta',
   freePrice: '0 €',
   freeSub: 'Sin registro, sin fecha de fin',
@@ -1155,11 +1162,11 @@ const es: BillingStrings = {
     { q: `¿Qué pasa después de ${d} días?`, a: 'El pase termina y tu cuenta pasa a solo lectura. Puedes seguir leyendo, exportando (PDF, Word, JSON, exportación de datos) y borrando todo. Editar y crear enlaces nuevos requiere un pase nuevo. No borramos nada sin avisarte antes por correo.' },
     { q: '¿Es una suscripción?', a: `No. Pagas ${price} una vez. No hay periodo de prueba que se convierta en suscripción ni un medio de pago guardado para cargos posteriores.` },
     { q: '¿Puedo ampliarlo?', a: `Sí, con otra compra, también antes de que termine. Los ${d} días nuevos se suman a la fecha de fin actual, no pierdes ningún día.` },
-    { q: '¿Cómo desisto?', a: `En los 14 días siguientes a la compra: en tu cuenta en «Mi pase» con «Desistir del contrato», o sin iniciar sesión con el enlace «Desistir del contrato» al pie de cada página; entonces confirmas el desistimiento con un enlace que enviamos al correo del pedido. Recibes los ${price} completos, aunque ya hayas usado el pase.` },
-    { q: '¿Necesito el pase para el PDF o Word?', a: 'No. La exportación nunca forma parte del pase. Sin cuenta tienes todas las plantillas, el PDF, las dos versiones de Word y los demás formatos, y tus datos se quedan en tu navegador.' },
+    { q: '¿Cómo desisto?', a: `En los 14 días siguientes a la compra: en tu cuenta en «Mi pase» con «Desistir del contrato», o sin iniciar sesión con el enlace «Desistir del contrato» al pie de cada página; entonces confirmas el desistimiento con un enlace que enviamos al correo del pedido. Recibes los ${price} completos, aunque ya hayas usado el pase. Tu cuenta y tus contenidos se quedan; puedes leerlos, descargarlos como exportación de datos y borrarlos.` },
+    { q: '¿Necesito el pase para el PDF o Word?', a: 'No. Sin cuenta tienes todas las plantillas, el PDF, las dos versiones de Word y los demás formatos, y tus datos se quedan en tu navegador. Lo que forma parte del pase se indica aquí y en el botón antes de empezar.' },
     { q: '¿Cómo pago?', a: 'Con Mollie, un proveedor de pagos de los Países Bajos. Eliges el medio de pago en la página de Mollie. Nunca vemos datos de tarjeta ni de cuenta.' },
     { q: '¿Recibo una factura?', a: 'Sí. Llega en PDF con la confirmación del pedido por correo y está en tu cuenta en «Mi pase».' },
-    { q: '¿Por qué cuesta algo?', a: 'El almacenamiento, los enlaces y la conexión con IA funcionan en un servidor, y eso cuesta dinero. Lo que funciona en tu navegador no nos cuesta nada, por eso es gratis.' },
+    { q: '¿Por qué cuesta algo?', a: 'El almacenamiento, los enlaces y la conexión MCP funcionan en un servidor, y eso cuesta dinero. Por eso forman parte del pase. También puedes alojar tú mismo la versión de código abierto.' },
   ],
   closing: 'Empieza sin cuenta. El pase lo puedes conseguir más tarde.',
   pricingSoon: 'La venta aún no está abierta. Sin cuenta ya puedes usar todo lo que funciona en el navegador.',
@@ -1171,7 +1178,7 @@ const es: BillingStrings = {
     sync: { title: 'Guardar en varios dispositivos viene con el pase.', body: 'Tu currículum se guarda entonces en nuestro servidor y está en cada dispositivo en el que inicies sesión.' },
     share: { title: 'Los enlaces para compartir vienen con el pase.', body: 'Un enlace en lugar de un adjunto: con fecha de caducidad, revocable en cualquier momento, y ves cuántas veces se abrió.' },
     versions: { title: 'Las versiones en el servidor vienen con el pase.', body: 'Hasta 25 estados anteriores por currículum, en cada dispositivo. En el navegador conservas los últimos 20.' },
-    mcp: { title: 'Conectar IA viene con el pase.', body: 'Claude, ChatGPT o Cursor leen y editan tu currículum directamente. El puente Markdown funciona también sin pase.' },
+    mcp: { title: 'Conectar IA viene con el pase.', body: 'Claude y otros programas MCP leen y editan tu currículum directamente. El puente Markdown a ChatGPT, Claude u otro modelo funciona también sin pase.' },
     apiKeys: { title: 'Las claves API vienen con el pase.', body: 'Para tus propios scripts y herramientas que trabajan con tu cuenta.' },
     account: { title: 'Una cuenta con el Pase de candidatura', body: 'Guardar en varios dispositivos, enlaces para compartir, versiones en el servidor y la conexión con IA, mientras dure tu búsqueda.' },
   },

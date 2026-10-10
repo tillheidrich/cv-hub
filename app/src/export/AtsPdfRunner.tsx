@@ -41,7 +41,7 @@ export function AtsPdfRunner({ job }: { job: AtsPdfJob }) {
   const render = useCallback((M: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) => (
     <ResumeRenderer data={job.data} theme={theme} pairing={pairing} metrics={M} measure={measure} pageBlocks={pageBlocks}
       hiddenSections={job.hiddenSections} sectionOrder={job.sectionOrder} pageFormat={job.pageFormat}
-      forcedBreaks={job.forcedBreaks} asideSkillCap={asideCap} />
+      forcedBreaks={job.forcedBreaks} asideSkillCap={asideCap} flatCaps />
   ), [job, theme, pairing]);
 
   const onFit = useCallback((info: FitInfo) => {

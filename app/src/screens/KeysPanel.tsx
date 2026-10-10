@@ -5,6 +5,7 @@ import { useUiLang } from '../ui/useUiLang';
 import { KEYS_I18N } from '../ui/i18n/keys';
 import PassSection from '../billing/PassSection';
 import { Art9ConsentSettings } from './Art9Consent';
+import { MailSettings } from './MailPrefs';
 
 const UI = "'Inter', sans-serif";
 const SERIF = "'Space Grotesk', serif";
@@ -383,6 +384,9 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
           </div>
 
           <Art9ConsentSettings lang={uiLang} />
+
+          {/* E-Mails: Tipps an/aus, Sprache der Mails (E-Mail-Workflows). */}
+          <MailSettings lang={uiLang} />
 
           {/* ── DSGVO: Konto löschen ────────────────────────────────────── */}
           <div style={{ ...sectionH, marginTop: '28px', color: '#a1322b' }}>{t.sectionDelete}</div>

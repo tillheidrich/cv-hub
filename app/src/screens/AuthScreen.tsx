@@ -16,6 +16,7 @@ import { metricsFor } from '../templates/metrics';
 import { StaticPage } from '../preview/TemplateCarousel';
 import { Art9ConsentFields, RegisterNotice } from './Art9Consent';
 import { art9Texts, ART9_CONSENT_VERSION } from '../legal/einwilligung';
+import { TipsConsentField, TIPS_CONSENT_VERSION } from './MailPrefs';
 import './auth.css';
 
 /**
@@ -210,6 +211,7 @@ export default function AuthScreen({
   const [code, setCode] = useState('');
   /** Einwilligung Art. 9 DSGVO (P9) — Pflicht, damit das Konto speichert. */
   const [art9, setArt9] = useState(false);
+  const [tips, setTips] = useState(false);
   const [art9Invalid, setArt9Invalid] = useState(false);
   const { offer } = useOffer();
   const open = registrationOpen(offer);
@@ -257,7 +259,8 @@ export default function AuthScreen({
     if (!art9) { setArt9Invalid(true); setError(art9Texts(lang).errRegisterConsent); window.requestAnimationFrame(() => errorRef.current?.focus()); return; }
     setBusy(true); setError(null);
     try {
-      const { user } = await api.register(username.trim(), password, invite.trim(), email.trim() || undefined);
+      const { user } = await api.register(username.trim(), password, invite.trim(), email.trim() || undefined,
+        { lang, ...(tips && email.trim() ? { tipsConsent: { version: TIPS_CONSENT_VERSION } } : {}) });
       /* Einwilligung gleich danach speichern (eigener Aufruf, die Registrierung
        * bleibt unverändert). Scheitert er, fragt der Dialog im Editor erneut. */
       let next = user;
@@ -318,6 +321,8 @@ export default function AuthScreen({
       </Field>
       <Art9ConsentFields lang={lang} checked={art9} invalid={art9Invalid}
         onChange={v => { setArt9(v); if (v) { setArt9Invalid(false); setError(null); } }} />
+      {/* Tipps per E-Mail nur mit Adresse; freiwillig, nicht vorangekreuzt. */}
+      {email.trim() && <TipsConsentField lang={lang} checked={tips} onChange={setTips} />}
       {errorBox}
       <SubmitButton busy={busy} label={t.submit.register} x={x} />
       <RegisterNotice lang={lang} />

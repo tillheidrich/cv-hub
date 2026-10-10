@@ -62,7 +62,7 @@ Verlangt die Anzeige eine Gehaltsvorstellung, nenn sie. Gibt es im Bewerbungsfor
 
 ## So geht es mit CV-Hub
 
-In CV-Hub schreibst du das Anschreiben im selben Werkzeug wie den Lebenslauf, mit derselben Gestaltung. Die Gehaltsvorstellung schreibst du in den letzten Absatz und passt sie je Bewerbung an, ohne den Rest neu zu setzen. Bietet die Instanz den optionalen Bewerbungs-Pass an, gehören Anschreiben und seine Prüfung dazu; Lebenslauf und PDF bleiben immer kostenlos. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+In CV-Hub schreibst du das Anschreiben im selben Werkzeug wie den Lebenslauf, mit derselben Gestaltung. Die Gehaltsvorstellung schreibst du in den letzten Absatz und passt sie je Bewerbung an, ohne den Rest neu zu setzen. Lässt du den Absatz von einer KI formulieren, gib ihr die Spanne aus der Anzeige und deine eigene Zahl vor, damit sie keine erfindet. Bietet die Instanz den optionalen Bewerbungs-Pass an, gehören Anschreiben und seine Prüfung dazu; den Lebenslauf bekommst du immer als PDF. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Häufige Fragen
 

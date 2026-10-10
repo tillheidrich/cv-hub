@@ -25,6 +25,7 @@ Datenbank (nur neue Tabellen bzw. Spalten an `admin_audit`): `admin_sessions`, `
 | `ADMIN_ALLOWED_IPS` | cv-api | Optional, CIDR-Liste (`203.0.113.0/24, 2001:db8::/48`). Leer = alle Netze. Ungültige Einträge gelten nicht, der Dienst warnt beim Start. Braucht hinter dem Proxy `TRUST_PROXY=1`. |
 | `UMAMI_DASHBOARD_URL` | cv-api | Optional, nur `https://`. Link für Besucherzahlen im Bereich „Nutzung“. |
 | `SOURCE_COMMIT` | cv-api | Optional. Coolify setzt sie, wenn „Include Source Commit in Build“ an ist; dann zeigt der Überblick den Commit. |
+| `TEMPLATE_TIER_SINCE` | cv-api | Optional (ISO-Zeitpunkt). Beginn der Vorlagen-Staffel für die Bestandsregel der Konten. Leer = erster Start mit `FREE_TIER_LIMITS=1` bei verkaufsbereitem Dienst (gemerkt in `schema_migrations`). |
 
 Unverändert gebraucht: `ADMIN_USERNAME`, `ADMIN_PASSWORD`, SMTP, `TRUST_PROXY`, `PUBLIC_BASE_URL`.
 
@@ -72,3 +73,19 @@ Ohne `ADMIN_HOST` bleibt alles wie vorher: Admin-Rechte über die normale Anmeld
 5. Prüfen: `https://admin.example.com/` zeigt die Anmeldung; `https://cv.example.com/pdfapi/api/admin/stats` → 404; Anmeldung mit Code; System → Testmail.
 
 Zurück auf den einfachen Weg: `ADMIN_HOST` in beiden Diensten leeren und neu starten.
+
+### Nachtrag (10.10.2026, Vorlagen-Staffel)
+
+- **Nutzung:** neue Tageszähler `template_lock_view` (Pass-Vorlage mit eigenem Inhalt angesehen, nach Vorlage), `unlock_panel_view` (Freischalt-Paneel, nach Sperrgrund: Pass-Vorlage, Word und LaTeX, Anschreiben, Fassungen, Sprachen, Sharelink, MCP …), `export_markdown`/`import_markdown` (nach lokal/Konto) und `ai_open` (nach Ziel). Sie kommen auch aus dem Lokalmodus, ohne Personenbezug (SICHERHEIT.md, Nachtrag 8c). Eigener Abschnitt „Vorlagen-Staffel und Sperrgründe“ mit der Entscheidungsregel vom 31.01.2027.
+- Ein Konto nur mit widerrufenen Bestellungen steht jetzt als „ohne Pass“ (plan_kind `none`), nicht mehr als „Pass abgelaufen“.
+
+### Nachtrag E-Mail-Workflows (10.10.2026)
+
+Neuer Bereich **E-Mails** (`app/src/admin/pages/Mails.tsx`, Routen in `pdf-service/mailadmin.js`, Einzelheiten in `pdf-service/MAILS.md`):
+
+- **Versand (SMTP):** Stand (eingerichtet ja/nein, Quelle Admin-Bereich oder Umgebung, Host, Absender, Benutzer gekürzt, nie ein Passwort). Host, Port, Sicherheit (TLS, STARTTLS, unverschlüsselt), Benutzer, Passwort, Absender und Antwortadresse lassen sich speichern; das Passwort verschlüsselt (AES-256-GCM, `MAIL_SETTINGS_KEY`), das Feld setzt oder ersetzt nur. Aktiv wird nur, was die Verbindungsprüfung besteht. **Vorrang:** gespeicherte und aktivierte Einstellungen vor der Umgebung; `SMTP_FORCE_ENV=1` schaltet sie ab. Der Admin-Code geht bei einem Fehler der gespeicherten Einstellungen noch einmal über die Umgebung, damit eine falsche Eingabe nicht aussperrt. „Testmail an mich“.
+- **Workflows:** acht Stück mit Schalter, Zeitpunkt, Zählern (90 Tage), Vorschau je Sprache (Text im Bereich, gestaltet in neuem Tab mit eigener CSP) und Textanpassung (Betreff, Überschrift, Text; nur bekannte Platzhalter, alles escaped; „Auf Standard zurücksetzen“).
+- **Warteschlange:** offen, ohne SMTP, fehlgeschlagen, gesendet; einzeln oder alle senden bzw. verwerfen, „Jetzt abarbeiten“.
+- **Versandprotokoll:** letzte 200 Mails mit Zeit, Workflow, gekürzter Adresse, Status, Fehler; 90 Tage.
+- **Protokoll:** jede Aktion als `mail_*` im Admin-Protokoll (auch eine gescheiterte SMTP-Prüfung), nie mit Passwort. Neue Variablen: `MAIL_SETTINGS_KEY`, optional `SMTP_REPLY_TO`, `SMTP_FORCE_ENV`, `MAIL_JOBS`, `MAIL_API_BASE`.
+

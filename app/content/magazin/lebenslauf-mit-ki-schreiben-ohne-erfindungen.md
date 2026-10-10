@@ -97,7 +97,9 @@ Ein Text, der flüssig klingt, ist außerdem nicht automatisch ein guter Lebensl
 
 ## So geht es mit CV-Hub
 
-Eine eingebaute KI hat CV-Hub nicht. Du exportierst deinen Lebenslauf als Markdown, gibst ihn an ein Sprachmodell deiner Wahl und liest die überarbeitete Fassung wieder ein. Bevor etwas übernommen wird, zeigt das Werkzeug jede Änderung, damit du sie mit deiner Faktenliste abgleichen kannst. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+Eine eingebaute KI hat CV-Hub nicht, und deshalb auch keine Guthaben. Du exportierst deinen Lebenslauf als Markdown, gibst ihn an ein Sprachmodell deiner Wahl und liest die überarbeitete Fassung wieder ein. Bevor etwas übernommen wird, zeigt das Werkzeug, welche Felder sich geändert haben: Name, Kontakt und Profiltext im Wortlaut, dazu die Zahl der Stationen, Stichpunkte, Ausbildungen und Kenntnisgruppen vorher und nachher. Eine hinzugedichtete Station fällt dort also auf. Einzelne Formulierungen in den Stichpunkten gleichst du wie in Schritt 4 mit einem Vergleichswerkzeug und deiner Faktenliste ab.
+
+Über den MCP-Server verbindest du Claude oder ein anderes Programm mit MCP-Unterstützung direkt mit deinem Konto, ohne Kopieren. Vor jeder Änderung legt der Server eine Version an, zu der du zurückkehren kannst. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Quellen
 

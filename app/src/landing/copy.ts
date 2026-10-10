@@ -17,8 +17,22 @@ import type { UiLang } from '../ui/i18n';
 export interface Problem { title: string; body: string; src: string }
 export interface Feature { id: 'editor' | 'design' | 'check' | 'export' | 'phone' | 'bridge' | 'open'; tag: string; title: string; body: string; alt: string }
 export interface Qa { q: string; a: string }
-/** Platzhalter in FAQ-Texten: {brand}, {n}, {price}, {days}. */
-export interface FaqDef { id: string; q: string; a: string; aOpen?: string; aNoOffer?: string; /** Fassung bei aktiver Gratis-Grenze (Pass). */ aLimited?: string }
+/** Platzhalter in FAQ-Texten: {brand}, {n}, {free}, {price}, {days}. */
+export interface FaqDef {
+  id: string; q: string; a: string; aOpen?: string; aNoOffer?: string;
+  /** Fassung bei aktiver Gratis-Grenze (Pass, „Vorlagen-Staffel"). */
+  aLimited?: string;
+  /** Frage nur zeigen, wenn es ein Angebot mit Preis gibt (sonst gibt es nichts zu bezahlen). */
+  needsOffer?: boolean;
+}
+/** Abschnitt „Mit KI arbeiten" (zwischen „So liest ein ATS" und „Vorlagen"). */
+export interface AiCopy {
+  eyebrow: string; h: string; intro: string;
+  bridge: { tag: string; title: string; body: string };
+  /** `tag` mit Angebot (Pass) oder ohne (Konto per Einladung, selbst betrieben). */
+  mcp: { tagPass: string; tagAccount: string; title: string; body: string };
+  foot: string; footLink: string;
+}
 
 export interface LandingCopy {
   meta: { title: (n: number) => string; description: (n: number) => string; ogAlt: string };
@@ -38,7 +52,14 @@ export interface LandingCopy {
     honestTitle: string; honest: string; scriptsLink: string;
     sourcesLabel: string; sources: { label: string; url: string }[];
   };
-  gallery: { eyebrow: string; h: (n: number) => string; lede: string; showAll: (n: number) => string; legend: string };
+  ai: AiCopy;
+  gallery: {
+    eyebrow: string; h: (n: number) => string; lede: string; showAll: (n: number) => string; legend: string;
+    /** Kennzeichen an Vorlagen, deren gestaltetes PDF zum Pass gehört (nur bei aktiver Gratis-Grenze). */
+    passTag: string;
+    /** Zusatz zur Legende bei aktiver Gratis-Grenze; `free` = Zahl der kostenlosen Vorlagen. */
+    passLegend: (free: number) => string;
+  };
   features: { eyebrow: string; h: string; items: Feature[]; bridgeCaption: string };
   magazin: { eyebrow: string; h: string; lede: string; all: string; minutes: (n: number) => string };
   faq: { eyebrow: string; h: string; items: FaqDef[] };
@@ -58,8 +79,8 @@ const SRC_HBS = 'https://www.hbs.edu/managing-the-future-of-work/research/Pages/
 
 const DE: LandingCopy = {
   meta: {
-    title: () => 'Lebenslauf erstellen, maschinenlesbar gesetzt',
-    description: n => `Lebenslauf im Browser schreiben: ${n} Vorlagen, PDF mit echter Textebene, ATS-Fassung als PDF oder Word mit einem Klick, vier Sprachen. Ohne Konto, kein Abo.`,
+    title: () => 'Lebenslauf mit deiner KI, maschinenlesbar gesetzt',
+    description: n => `Lebenslauf im Browser schreiben, allein oder mit ChatGPT, Claude oder einem anderen Modell: ${n} Vorlagen, PDF mit echter Textebene, ATS-Fassung mit einem Klick.`,
     ogAlt: 'Der Editor mit einem Lebenslauf in der Vorschau und dem Gestaltungs-Paneel',
   },
   langName: 'Deutsch',
@@ -68,13 +89,13 @@ const DE: LandingCopy = {
   skip: 'Zum Inhalt springen',
   nav: { label: 'Hauptnavigation', ats: 'So liest ein ATS', templates: 'Vorlagen', features: 'Funktionen', magazin: 'Magazin', faq: 'Fragen', signin: 'Anmelden', cta: 'Zugang anfragen', source: 'Quelltext', home: 'Startseite', lang: 'Sprache der Seite', menu: 'Menü', close: 'Menü schließen' },
   hero: {
-    eyebrow: 'Lebenslauf und Anschreiben im Browser',
-    h1a: 'Dein Lebenslauf,',
+    eyebrow: 'Lebenslauf und Anschreiben im Browser, mit der KI deiner Wahl',
+    h1a: 'Mit deiner KI geschrieben,',
     h1b: 'maschinenlesbar gesetzt.',
-    lede: 'Was du in der Vorschau siehst, ist das PDF, das du herunterlädst. Es hat eine echte Textebene, und darin steht dein Lebenslauf in der Reihenfolge, in der man ihn liest. Für Bewerbungsportale gibt es dieselbe Fassung einspaltig als PDF oder Word, mit einem Klick.',
+    lede: 'Du schreibst direkt auf der Seite oder gibst deinen Lebenslauf als Markdown an ChatGPT, Claude oder ein anderes Modell und holst die überarbeitete Fassung zurück. Vor dem Übernehmen zeigt das Werkzeug, was sich geändert hat. Das PDF hat genau die Seiten der Vorschau und eine echte Textebene, und für Bewerbungsportale gibt es dieselbe Fassung einspaltig.',
     ctaPrimary: 'Direkt ausprobieren',
     ctaSecondary: 'So liest ein Portal deinen Lebenslauf',
-    proof: ['Ohne Konto starten', 'Gespeichert in deinem Browser', 'Kein Abo', 'Quelloffene Fassung'],
+    proof: ['KI deiner Wahl, keine eingebaute', 'Ohne Konto starten', 'Kein Abo', 'Quelloffene Fassung'],
     shotAlt: 'Der Editor in der Demo: links das Gestaltungs-Paneel mit Vorlagen, in der Mitte der Lebenslauf von Lena Brandt, unten das Karussell mit der Marke der Vorlage',
     chipText: 'PDF mit Textebene',
     chipAts: 'ATS-Fassung mit einem Klick',
@@ -84,7 +105,7 @@ const DE: LandingCopy = {
     items: n => [
       { value: String(n), label: 'Vorlagen, einspaltig, mit Kopfband oder Seitenspalte' },
       { value: '4', label: 'Sprachen für Dokument und Oberfläche' },
-      { value: '1 Klick', label: 'zur ATS-Fassung als PDF oder Word' },
+      { value: '1 Klick', label: 'zur einspaltigen ATS-Fassung, in jeder Vorlage' },
       { value: '0', label: 'Werbe-Tracker, keine Cookies zum Zählen' },
     ],
   },
@@ -127,12 +148,32 @@ const DE: LandingCopy = {
       { label: 'Harvard Business School und Accenture: Hidden Workers (2021)', url: SRC_HBS },
     ],
   },
+  ai: {
+    eyebrow: 'Mit KI arbeiten',
+    h: 'Deine KI schreibt mit, du entscheidest, was bleibt.',
+    intro: 'Eine eingebaute KI gibt es nicht, deshalb auch keine Guthaben und keine Wortgrenzen. Du arbeitest mit dem Modell, das du ohnehin nutzt, und das Werkzeug setzt das Ergebnis als PDF mit echter Textebene und als einspaltige Fassung für Bewerbungsportale. Dein Text geht nur dann an einen KI-Anbieter, wenn du ihn selbst dorthin gibst.',
+    bridge: {
+      tag: 'Ohne Konto · Markdown hin und zurück',
+      title: 'In jeden Chat und wieder zurück.',
+      body: 'Du lädst deinen Lebenslauf als Markdown herunter, fügst ihn in ChatGPT, Claude, Gemini oder einen anderen Chat ein und holst die überarbeitete Fassung zurück. Vor dem Übernehmen zeigt das Werkzeug, was sich ändert: Name, Kontakt und Profiltext im direkten Vergleich, dazu die Zahl der Stationen, Stichpunkte und Kenntnisgruppen. Ob die Stichpunkte noch stimmen, liest du danach in der Vorschau nach.',
+    },
+    mcp: {
+      tagPass: 'Mit dem Pass · direkt verbinden',
+      tagAccount: 'Mit Konto · direkt verbinden',
+      title: 'Claude und andere MCP-Programme direkt am Lebenslauf.',
+      body: 'Mit Konto verbindest du Claude oder ein anderes Programm, das MCP unterstützt, mit deinem Lebenslauf. Angemeldet wird über OAuth, kopieren musst du nichts. Bevor die KI Inhalt oder Gestaltung ändert, legt der Server den bisherigen Stand als Version ab, und die letzten 25 Versionen kannst du wiederherstellen.',
+    },
+    foot: 'Ob eine Formulierung zu dir passt und ob jede Angabe stimmt, entscheidest du. Wie das gelingt, steht im Magazin:',
+    footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
   gallery: {
     eyebrow: 'Vorlagen',
     h: n => `${n} Vorlagen. Dein Inhalt bleibt beim Wechsel.`,
     lede: 'Einspaltig, mit Kopfband oder mit Seitenspalte, jede mit eigener Schriftpaarung. Die Marke an jeder Vorlage sagt, ob sie für Bewerbungsportale gemacht ist oder für Mail und Druck.',
     showAll: n => `Alle ${n} Vorlagen zeigen`,
     legend: 'Gezeigt mit dem Demo-Lebenslauf, so wie die Vorlage im Werkzeug aussieht.',
+    passTag: 'Pass',
+    passLegend: free => `Ohne Kennzeichen: ${free} Vorlagen, deren gestaltetes PDF kostenlos ist. Mit „Pass“: Das gestaltete PDF gehört zum Bewerbungs-Pass, ansehen und gestalten kannst du sie ohne. Die einspaltige ATS-Fassung als PDF ist in jeder Vorlage kostenlos.`,
   },
   features: {
     eyebrow: 'Funktionen',
@@ -143,7 +184,7 @@ const DE: LandingCopy = {
       { id: 'check', tag: 'Prüfen', title: 'Lebenslauf und Anschreiben, so wie ein Parser sie liest.', body: 'Das Prüfen-Paneel zeigt den Text in der Reihenfolge, in der ein System ihn liest, und meldet Lücken wie eine fehlende E-Mail-Adresse oder eine Station ohne Startdatum. Beim Anschreiben kommen Betreff, Datum, Anrede und Länge dazu, und beide Unterlagen zusammen prüfst du auf denselben Namen, denselben Kontakt und dieselbe Sprache. Mit einer Stellenanzeige daneben siehst du, welche Begriffe vorkommen und welche fehlen.', alt: 'Das Prüfen-Paneel mit der Textansicht des Lebenslaufs' },
       { id: 'export', tag: 'Exportieren', title: 'PDF, Word und die Fassung für Portale.', body: 'Das PDF hat genau die Seiten der Vorschau. Word gibt es mit dem Design deiner Vorlage und einspaltig ohne Tabellen. Die ATS-Fassung setzt denselben Inhalt einspaltig, als PDF oder Word, ohne dass sich an deinem Profil etwas ändert. Dazu kommen LaTeX zum Weiterbearbeiten und RenderCV-YAML, das du auch wieder einlesen kannst.', alt: 'Das Export-Menü mit PDF, Word und der ATS-Fassung' },
       { id: 'phone', tag: 'Telefon', title: 'Auf dem Telefon genauso.', body: 'Auf dem Telefon startest du im Dokument. Inhalt, Gestaltung, Prüfen und Export liegen in der Leiste unten, und das PDF ist dasselbe wie am Schreibtisch.', alt: 'Der Editor auf dem Telefon mit der Leiste am unteren Rand' },
-      { id: 'bridge', tag: 'KI-Brücke', title: 'Deine KI schreibt mit, das Werkzeug setzt.', body: 'Eine eingebaute KI gibt es nicht. Du gibst den Lebenslauf als Markdown an ChatGPT, Claude oder ein anderes Modell und importierst die überarbeitete Fassung. Vor dem Übernehmen zeigt das Werkzeug jede Änderung. Mit Konto verbindet sich ein KI-Assistent direkt über einen MCP-Server.', alt: '' },
+      { id: 'bridge', tag: 'KI-Brücke', title: 'Deine KI schreibt mit, das Werkzeug setzt.', body: 'Eine eingebaute KI gibt es nicht. Du gibst den Lebenslauf als Markdown an ChatGPT, Claude oder ein anderes Modell und importierst die überarbeitete Fassung. Vor dem Übernehmen zeigt das Werkzeug eine Übersicht der Änderungen. Mit Konto verbinden sich Claude und andere MCP-Programme direkt über einen MCP-Server.', alt: '' },
       { id: 'open', tag: 'Offen', title: 'Ohne Konto, ohne Abo, quelloffen.', body: 'Ohne Konto bleibt alles in deinem Browser, eine Sicherungsdatei nimmst du mit. Den LinkedIn-Datenexport liest das Werkzeug ebenfalls im Browser ein. Der Quelltext steht unter AGPL-3.0 öffentlich, und wer will, betreibt das Werkzeug auf dem eigenen Server.', alt: '' },
     ],
     bridgeCaption: 'Ausschnitt aus dem Markdown-Export',
@@ -163,16 +204,17 @@ const DE: LandingCopy = {
       { id: 'machine', q: 'Was heißt maschinenlesbar?', a: 'Ein Programm kann den Text aus deinem PDF vollständig und in der richtigen Reihenfolge herausholen: erst Name und Kontakt, dann Profil, Stationen und Kenntnisse. Dafür braucht das PDF eine echte Textebene statt eines Bildes, und die Reihenfolge darin muss stimmen. Beides prüfen hier Skripte bei jeder Vorlage.' },
       { id: 'ats', q: 'Was ist ein ATS?', a: 'Ein Applicant Tracking System, auf Deutsch Bewerbermanagement-System, nimmt Bewerbungen für Arbeitgeber entgegen. Es liest den Lebenslauf aus, legt Name, Stationen und Kenntnisse als Felder an und hilft beim Sortieren. Automatische Absagen beschreibt etwa Greenhouse in seiner Hilfe nur für Ausschlussfragen, die der Arbeitgeber im Formular anlegt, zum Beispiel nach der Arbeitserlaubnis. Den Lebenslauf lesen Menschen.' },
       { id: 'safe', q: 'Ist mein Lebenslauf damit ATS-tauglich?', a: 'Eine Garantie kann niemand geben, weil jedes System seinen eigenen Parser hat. Was sich prüfen lässt, prüfen wir: Textebene vorhanden, Reihenfolge wie in der Vorschau, keine zerfallenen Wörter, keine eingefügten Trennstriche. Für Portale nimmst du die einspaltige ATS-Fassung. Ob du eingeladen wirst, entscheidet der Inhalt.' },
-      { id: 'access', q: 'Brauche ich ein Konto?', a: 'Nein. Ohne Konto hast du den Editor, alle Vorlagen und alle Exporte, und deine Daten bleiben dabei in deinem Browser. Ein Konto bringt Speichern über Geräte, Sharelinks, Versionen am Server und die KI-Anbindung per MCP. Konten gibt es vorerst mit Einladung: Du fragst an und bekommst einen Link per E-Mail.', aOpen: 'Nein. Ohne Konto hast du den Editor, alle Vorlagen und alle Exporte, und deine Daten bleiben dabei in deinem Browser. Ein Konto bringt Speichern über Geräte, Sharelinks, Versionen am Server und die KI-Anbindung per MCP. Es gehört zum Bewerbungs-Pass, den Preis siehst du vorher.' },
-      { id: 'price', q: 'Was kostet das?', a: 'Im Browser ist das Werkzeug kostenlos, das PDF deines Lebenslaufs auch. Der Bewerbungs-Pass kostet {price} einmalig für {days} Tage. Er ist kein Abo und endet von selbst.', aNoOffer: 'Das Werkzeug ist quelloffen. Wer es selbst betreibt, zahlt dafür nichts und legt die Grenzen selbst fest.' },
-      { id: 'formats', q: 'Welche Formate kann ich exportieren?', a: 'PDF mit echter Textebene, Word in zwei Fassungen (mit dem Design deiner Vorlage und einspaltig für Portale), dazu HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) und RenderCV-YAML. Die ATS-Fassung gibt es als PDF und als Word. RenderCV-YAML liest das Werkzeug auch wieder ein, eine .tex-Datei dann, wenn sie von hier stammt.', aLimited: 'PDF mit echter Textebene, auch als einspaltige ATS-Fassung, dazu HTML, JSON, JSON Resume, Markdown und RenderCV-YAML. Word in zwei Fassungen (mit dem Design deiner Vorlage und einspaltig für Portale) und LaTeX (.tex) gehören zum Bewerbungs-Pass. RenderCV-YAML liest das Werkzeug auch wieder ein, eine .tex-Datei dann, wenn sie von hier stammt.' },
+      { id: 'access', q: 'Brauche ich ein Konto?', a: 'Nein. Ohne Konto hast du den Editor, alle Vorlagen, alle Exporte und die Markdown-Brücke zu deiner KI, und deine Daten bleiben dabei in deinem Browser. Ein Konto bringt Speichern über Geräte, Sharelinks, Versionen am Server und die direkte Verbindung per MCP. Konten gibt es vorerst mit Einladung: Du fragst an und bekommst einen Link per E-Mail.', aOpen: 'Nein. Ohne Konto hast du den Editor, alle Vorlagen, alle Exporte und die Markdown-Brücke zu deiner KI, und deine Daten bleiben dabei in deinem Browser. Ein Konto bringt Speichern über Geräte, Sharelinks, Versionen am Server und die direkte Verbindung per MCP. Es gehört zum Bewerbungs-Pass, den Preis siehst du vorher.' },
+      { id: 'price', q: 'Was kostet das?', a: 'Im Browser ist das Werkzeug kostenlos, das PDF deines Lebenslaufs auch. Der Bewerbungs-Pass kostet {price} einmalig für {days} Tage. Er ist kein Abo und endet von selbst.', aNoOffer: 'Das Werkzeug ist quelloffen. Wer es selbst betreibt, zahlt dafür nichts und legt die Grenzen selbst fest.', aLimited: 'Im Browser ist das Werkzeug kostenlos, das PDF deines Lebenslaufs auch: gestaltet in {free} Vorlagen und einspaltig als ATS-Fassung in jeder Vorlage. Der Bewerbungs-Pass kostet {price} einmalig für {days} Tage und endet von selbst. Mit ihm lädst du alle {n} Vorlagen als PDF, schreibst zu jeder Stelle ein eigenes Anschreiben samt Prüfung, lädst Word für Portale, legst weitere Fassungen und Sprachen an und verbindest Claude direkt mit deinem Lebenslauf.' },
+      { id: 'funding', needsOffer: true, q: 'Übernehmen Arbeitsagentur oder Jobcenter die Kosten?', a: 'Das ist möglich, aber nicht sicher. Arbeitsagentur und Jobcenter können Bewerbungskosten aus dem Vermittlungsbudget übernehmen (§ 44 SGB III, beim Jobcenter über § 16 SGB II). Einen Rechtsanspruch darauf gibt es nicht, und den Antrag stellst du vorher, also bevor du den Pass kaufst. Die Rechnung kommt als PDF per E-Mail.' },
+      { id: 'formats', q: 'Welche Formate kann ich exportieren?', a: 'PDF mit echter Textebene, Word in zwei Fassungen (mit dem Design deiner Vorlage und einspaltig für Portale), dazu HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) und RenderCV-YAML. Die ATS-Fassung gibt es als PDF und als Word. RenderCV-YAML liest das Werkzeug auch wieder ein, eine .tex-Datei dann, wenn sie von hier stammt.', aLimited: 'Kostenlos: das PDF mit echter Textebene, gestaltet in {free} Vorlagen und als einspaltige ATS-Fassung in jeder Vorlage, HTML in diesen Vorlagen, dazu JSON, JSON Resume, Markdown und RenderCV-YAML. Zum Bewerbungs-Pass gehören das gestaltete PDF und HTML der übrigen Vorlagen, Word in zwei Fassungen (mit dem Design deiner Vorlage und einspaltig für Portale) und LaTeX (.tex). RenderCV-YAML liest das Werkzeug auch wieder ein, eine .tex-Datei dann, wenn sie von hier stammt.' },
       { id: 'pages', q: 'Wie viele Seiten kann mein Lebenslauf haben?', a: 'Bis zu vier. Du stellst eine bis vier Seiten ein oder lässt den Satz selbst umbrechen. In Deutschland sind ein bis zwei Seiten üblich, in Wissenschaft und Technik mit Publikationen oder Projektliste auch mehr. Ab der dritten Seite steht unter „Prüfen“ ein Hinweis dazu.' },
       { id: 'check', q: 'Kann ich auch das Anschreiben prüfen?', a: 'Ja. Das Prüfen-Paneel liest Lebenslauf und Anschreiben so, wie sie im PDF stehen. Beim Anschreiben achtet es auf Betreff, Datum, Anrede, Länge und vergessene Platzhalter, mit einer Stellenanzeige auch darauf, ob Stellentitel und Firma vorkommen. Unter „Beides“ vergleicht es Name, Kontakt und Sprache der beiden Unterlagen und zeigt, welche Begriffe der Anzeige wo stehen. Eine Punktzahl gibt es absichtlich nicht.', aLimited: 'Ja, mit dem Bewerbungs-Pass, zu dem auch das Anschreiben gehört. Das Prüfen-Paneel liest Lebenslauf und Anschreiben so, wie sie im PDF stehen. Beim Anschreiben achtet es auf Betreff, Datum, Anrede, Länge und vergessene Platzhalter, mit einer Stellenanzeige auch darauf, ob Stellentitel und Firma vorkommen. Unter „Beides“ vergleicht es Name, Kontakt und Sprache der beiden Unterlagen. Den Lebenslauf prüfst du ohne Pass.' },
       { id: 'langs', q: 'In welchen Sprachen gibt es das Werkzeug?', a: 'Lebenslauf, Anschreiben und Oberfläche gibt es auf Deutsch, Englisch, Französisch und Spanisch. Überschriften, Datumsformate und Feldnamen stellen sich mit der Sprache um, und alle vier Fassungen leben im selben Profil.' },
-      { id: 'ai', q: 'Kann ich eine KI verwenden?', a: 'Ja, aber keine eingebaute. Du exportierst den Lebenslauf als Markdown, lässt ihn von einem Sprachmodell deiner Wahl überarbeiten und importierst ihn wieder. Vor dem Übernehmen siehst du jede Änderung. Mit Konto verbindet sich ein KI-Assistent auch direkt über MCP.' },
+      { id: 'ai', q: 'Kann ich eine KI verwenden?', a: 'Ja, die KI deiner Wahl, aber keine eingebaute. Ohne Konto exportierst du den Lebenslauf als Markdown, lässt ihn von ChatGPT, Claude oder einem anderen Modell überarbeiten und importierst ihn wieder. Vor dem Übernehmen siehst du eine Übersicht der Änderungen. Mit Konto verbindest du Claude oder ein anderes MCP-fähiges Programm direkt mit deinem Lebenslauf. Guthaben oder Wortgrenzen gibt es nicht, weil die KI bei deinem eigenen Anbieter läuft.', aLimited: 'Ja, die KI deiner Wahl, aber keine eingebaute. Ohne Konto exportierst du den Lebenslauf als Markdown, lässt ihn von ChatGPT, Claude oder einem anderen Modell überarbeiten und importierst ihn wieder. Vor dem Übernehmen siehst du eine Übersicht der Änderungen. Mit dem Bewerbungs-Pass verbindest du Claude oder ein anderes MCP-fähiges Programm direkt mit deinem Lebenslauf. Guthaben oder Wortgrenzen gibt es nicht, weil die KI bei deinem eigenen Anbieter läuft.' },
       { id: 'import', q: 'Kann ich meinen bisherigen Lebenslauf übernehmen?', a: 'Ja. Den ZIP-Datenexport von LinkedIn liest das Werkzeug im Browser ein, ohne dass er an einen Server geht, ebenso JSON Resume und RenderCV-YAML. Aus einem bestehenden PDF holst du den Text über den Markdown-Weg: Text in die Vorlage, von einer KI strukturieren lassen, zurückimportieren.' },
-      { id: 'data', q: 'Wo liegen meine Daten?', a: 'Ohne Konto speichert dein Browser sie, eine Sicherungsdatei kannst du jederzeit herunterladen. Mit Konto liegen sie auf dem Server dieser Instanz; wo er steht, sagt die Datenschutzerklärung. Das PDF entsteht in beiden Fällen dort: Für den Export geht das Dokument kurz an den Server und wird danach nicht gespeichert. Werbe-Tracker gibt es nicht.' },
-      { id: 'host', q: 'Kann ich das Werkzeug selbst betreiben?', a: 'Ja. Der Quelltext steht unter der AGPL-3.0 auf GitHub, mit Docker-Dateien für den eigenen Server. Vorlagen, PDF-Dienst und MCP-Server sind dabei.' },
+      { id: 'data', q: 'Wo liegen meine Daten?', a: 'Ohne Konto speichert dein Browser sie, eine Sicherungsdatei kannst du jederzeit herunterladen. Mit Konto liegen sie auf dem Server dieser Instanz; wo er steht, sagt die Datenschutzerklärung. Das PDF entsteht in beiden Fällen dort: Für den Export geht das Dokument kurz an den Server und wird danach nicht gespeichert. An einen KI-Anbieter geht dein Text nur, wenn du ihn selbst über die Markdown-Brücke oder per MCP dorthin gibst. Werbe-Tracker gibt es nicht.' },
+      { id: 'host', q: 'Kann ich das Werkzeug selbst betreiben?', a: 'Ja. Der Quelltext steht unter der AGPL-3.0 öffentlich, mit Docker-Dateien für den eigenen Server: https://github.com/tillheidrich/cv-hub. Vorlagen, PDF-Dienst und MCP-Server sind dabei, und auf einer eigenen Instanz ist alles frei, auch das, was hier zum Bewerbungs-Pass gehört. Dafür brauchst du einen Server und etwas Erfahrung mit Docker. Der Pass bezahlt den Betrieb dieser Instanz, den PDF-Dienst und die Pflege der Vorlagen.', aNoOffer: 'Ja. Der Quelltext steht unter der AGPL-3.0 öffentlich, mit Docker-Dateien für den eigenen Server: https://github.com/tillheidrich/cv-hub. Vorlagen, PDF-Dienst und MCP-Server sind dabei. Dafür brauchst du einen Server und etwas Erfahrung mit Docker.' },
     ],
   },
   closing: { h1: 'Gestaltet für Menschen,', h2: 'lesbar für Software.', lede: 'Fang mit deinem Lebenslauf an, direkt im Browser und ohne Konto.', ctaSecondary: 'Vorlagen ansehen' },
@@ -194,8 +236,8 @@ const DE: LandingCopy = {
 
 const EN: LandingCopy = {
   meta: {
-    title: () => 'Machine-readable CV builder',
-    description: n => `Write your CV in the browser: ${n} templates, a PDF with a real text layer, an ATS version as PDF or Word in one click, four languages. No account, no subscription.`,
+    title: () => 'Your CV with your AI, typeset machine-readable',
+    description: n => `Write your CV in the browser, on your own or with ChatGPT, Claude or another model: ${n} templates, a PDF with a real text layer, an ATS version in one click.`,
     ogAlt: 'The editor with a CV in the preview and the design panel',
   },
   langName: 'English',
@@ -204,14 +246,14 @@ const EN: LandingCopy = {
   skip: 'Skip to content',
   nav: { label: 'Main navigation', ats: 'How an ATS reads', templates: 'Templates', features: 'Features', magazin: 'Magazine', faq: 'FAQ', signin: 'Sign in', cta: 'Request access', source: 'Source code', home: 'Home', lang: 'Page language', menu: 'Menu', close: 'Close menu' },
   hero: {
-    eyebrow: 'CV and cover letter in your browser',
-    h1a: 'Your CV,',
+    eyebrow: 'CV and cover letter in your browser, with the AI of your choice',
+    h1a: 'Written with your AI,',
     // Geschützter Bindestrich (U+2011), damit „machine-readable“ nicht am Bindestrich bricht.
     h1b: 'typeset to be machine\u2011readable.',
-    lede: 'What you see in the preview is the PDF you download. It has a real text layer, and your CV sits in it in the order in which it is meant to be read. For application portals there is the same version in one column, as PDF or Word, in one click.',
+    lede: 'You write right on the page, or you hand your CV as Markdown to ChatGPT, Claude or another model and bring the revised version back. Before anything is applied, the tool shows what has changed. The PDF has exactly the pages of the preview and a real text layer, and for application portals there is the same version in one column.',
     ctaPrimary: 'Try the demo',
     ctaSecondary: 'How a portal reads your CV',
-    proof: ['Start without an account', 'Saved in your browser', 'No subscription', 'Open-source edition'],
+    proof: ['Your choice of AI, none built in', 'Start without an account', 'No subscription', 'Open-source edition'],
     shotAlt: 'The editor in the demo: the design panel with templates on the left, Lena Brandt’s CV in the middle, the carousel with the template’s label below',
     chipText: 'PDF with text layer',
     chipAts: 'ATS version in one click',
@@ -221,7 +263,7 @@ const EN: LandingCopy = {
     items: n => [
       { value: String(n), label: 'templates: one column, header band or sidebar' },
       { value: '4', label: 'languages for document and interface' },
-      { value: '1 click', label: 'to the ATS version as PDF or Word' },
+      { value: '1 click', label: 'to the one-column ATS version, in every template' },
       { value: '0', label: 'ad trackers, no tracking cookies' },
     ],
   },
@@ -264,12 +306,32 @@ const EN: LandingCopy = {
       { label: 'Harvard Business School and Accenture: Hidden Workers (2021)', url: SRC_HBS },
     ],
   },
+  ai: {
+    eyebrow: 'Working with AI',
+    h: 'Your AI helps write, you decide what stays.',
+    intro: 'There is no built-in AI, so there are no credits and no word limits either. You work with the model you already use, and the tool sets the result as a PDF with a real text layer and as a one-column version for application portals. Your text only goes to an AI provider if you send it there yourself.',
+    bridge: {
+      tag: 'No account · Markdown there and back',
+      title: 'Into any chat and back again.',
+      body: 'You download your CV as Markdown, paste it into ChatGPT, Claude, Gemini or another chat and bring the revised version back. Before anything is applied, the tool shows what changes: name, contact details and profile text side by side, plus the number of positions, bullet points and skill groups. Whether the bullet points are still right, you read afterwards in the preview.',
+    },
+    mcp: {
+      tagPass: 'With the pass · connect directly',
+      tagAccount: 'With an account · connect directly',
+      title: 'Claude and other MCP programs working on your CV directly.',
+      body: 'With an account you connect Claude or another program that supports MCP to your CV. Sign-in runs over OAuth, and there is nothing to copy. Before the AI changes content or design, the server saves the previous state as a version, and you can restore the last 25 versions.',
+    },
+    foot: 'Whether a phrase suits you and whether every detail is right is your decision. How to get there is explained in the magazine (in German):',
+    footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
   gallery: {
     eyebrow: 'Templates',
     h: n => `${n} templates. Your content stays when you switch.`,
     lede: 'One column, header band or sidebar, each with its own font pairing. The label on every template tells you whether it is made for application portals or for email and print.',
     showAll: n => `Show all ${n} templates`,
     legend: 'Shown with the demo CV, exactly as the template looks in the tool.',
+    passTag: 'Pass',
+    passLegend: free => `Without a label: ${free} templates whose designed PDF is free. Labelled “Pass”: the designed PDF is part of the Application Pass, and you can view and design with them without it. The one-column ATS version as PDF is free in every template.`,
   },
   features: {
     eyebrow: 'Features',
@@ -280,7 +342,7 @@ const EN: LandingCopy = {
       { id: 'check', tag: 'Check', title: 'CV and cover letter the way a parser reads them.', body: 'The check panel shows the text in the order a system reads it and flags gaps such as a missing email address or a position without a start date. For the cover letter it adds subject line, date, salutation and length, and you can check both documents together for the same name, the same contact details and the same language. With a job ad next to it you see which terms appear and which are missing.', alt: 'The check panel with the plain-text view of the CV' },
       { id: 'export', tag: 'Export', title: 'PDF, Word and the portal version.', body: 'The PDF has exactly the pages of the preview. Word comes with your template’s design and in one column without tables. The ATS version sets the same content in one column, as PDF or Word, without changing anything in your profile. There is also LaTeX to keep editing, and RenderCV YAML, which you can import again.', alt: 'The export menu with PDF, Word and the ATS version' },
       { id: 'phone', tag: 'Phone', title: 'Just the same on your phone.', body: 'On the phone you start in the document. Content, design, check and export sit in the bar at the bottom, and the PDF is the same as on the desktop.', alt: 'The editor on a phone with the bar at the bottom' },
-      { id: 'bridge', tag: 'AI bridge', title: 'Your AI helps write, the tool does the typesetting.', body: 'There is no built-in AI. You hand the CV as Markdown to ChatGPT, Claude or another model and import the revised version. Before anything is applied, the tool shows every change. With an account, an AI assistant connects directly through an MCP server.', alt: '' },
+      { id: 'bridge', tag: 'AI bridge', title: 'Your AI helps write, the tool does the typesetting.', body: 'There is no built-in AI. You hand the CV as Markdown to ChatGPT, Claude or another model and import the revised version. Before anything is applied, the tool shows an overview of the changes. With an account, Claude and other MCP programs connect directly through an MCP server.', alt: '' },
       { id: 'open', tag: 'Open', title: 'No account, no subscription, open source.', body: 'Without an account everything stays in your browser, and you can take a backup file with you. The LinkedIn data export is read in the browser as well. The source code is public under AGPL-3.0, and anyone can run the tool on their own server.', alt: '' },
     ],
     bridgeCaption: 'Excerpt from the Markdown export',
@@ -300,16 +362,17 @@ const EN: LandingCopy = {
       { id: 'machine', q: 'What does machine-readable mean?', a: 'A program can pull the text out of your PDF completely and in the right order: name and contact first, then profile, positions and skills. That needs a real text layer instead of an image, and the order inside it has to be right. Scripts check both for every template.' },
       { id: 'ats', q: 'What is an ATS?', a: 'An applicant tracking system receives applications on behalf of employers. It parses the CV, creates fields for name, positions and skills, and helps with sorting. Greenhouse, for example, describes automatic rejection in its help pages only for screening questions the employer sets up in the form, such as work authorisation. The CV itself is read by people.' },
       { id: 'safe', q: 'Will my CV be ATS-friendly?', a: 'Nobody can guarantee that, because every system has its own parser. What can be checked, we check: a text layer is present, the order matches the preview, no words fall apart, no hyphens are inserted. For portals you use the one-column ATS version. Whether you get invited depends on the content.' },
-      { id: 'access', q: 'Do I need an account?', a: 'No. Without an account you get the editor, all templates and all exports, and your data stays in your browser. An account adds saving across devices, share links, versions on the server and the AI connection via MCP. For now accounts are by invitation: you request access and get a link by email.', aOpen: 'No. Without an account you get the editor, all templates and all exports, and your data stays in your browser. An account adds saving across devices, share links, versions on the server and the AI connection via MCP. It comes with the Application Pass, and you see the price beforehand.' },
-      { id: 'price', q: 'What does it cost?', a: 'The tool is free in the browser, and so is the PDF of your CV. The Application Pass costs {price} once for {days} days. It is not a subscription and ends by itself.', aNoOffer: 'The tool is open source. If you run it yourself, you pay nothing for it and set the limits yourself.' },
-      { id: 'formats', q: 'Which formats can I export?', a: 'PDF with a real text layer, Word in two versions (with your template’s design and in one column for portals), plus HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) and RenderCV YAML. The ATS version is available as PDF and as Word. The tool can also import RenderCV YAML, and a .tex file if it was exported here.', aLimited: 'PDF with a real text layer, also as a one-column ATS version, plus HTML, JSON, JSON Resume, Markdown and RenderCV YAML. Word in two versions (with your template’s design and in one column for portals) and LaTeX (.tex) are part of the Application Pass. The tool can also import RenderCV YAML, and a .tex file if it was exported here.' },
+      { id: 'access', q: 'Do I need an account?', a: 'No. Without an account you get the editor, all templates, all exports and the Markdown bridge to your AI, and your data stays in your browser. An account adds saving across devices, share links, versions on the server and the direct connection via MCP. For now accounts are by invitation: you request access and get a link by email.', aOpen: 'No. Without an account you get the editor, all templates, all exports and the Markdown bridge to your AI, and your data stays in your browser. An account adds saving across devices, share links, versions on the server and the direct connection via MCP. It comes with the Application Pass, and you see the price beforehand.' },
+      { id: 'price', q: 'What does it cost?', a: 'The tool is free in the browser, and so is the PDF of your CV. The Application Pass costs {price} once for {days} days. It is not a subscription and ends by itself.', aNoOffer: 'The tool is open source. If you run it yourself, you pay nothing for it and set the limits yourself.', aLimited: 'The tool is free in the browser, and so is the PDF of your CV: designed in {free} templates and as a one-column ATS version in every template. The Application Pass costs {price} once for {days} days and ends by itself. With it you download all {n} templates as PDF, write a separate cover letter for each job including the check, download Word for portals, add more versions and languages and connect Claude directly to your CV.' },
+      { id: 'funding', needsOffer: true, q: 'Will the employment agency or job centre pay for it?', a: 'Possibly, but not for certain. In Germany the Agentur für Arbeit and the Jobcenter can cover application costs from the placement budget (§ 44 SGB III, at the Jobcenter via § 16 SGB II). There is no legal entitlement, and you apply beforehand, that is before you buy the pass. The invoice arrives as a PDF by email.' },
+      { id: 'formats', q: 'Which formats can I export?', a: 'PDF with a real text layer, Word in two versions (with your template’s design and in one column for portals), plus HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) and RenderCV YAML. The ATS version is available as PDF and as Word. The tool can also import RenderCV YAML, and a .tex file if it was exported here.', aLimited: 'Free: the PDF with a real text layer, designed in {free} templates and as a one-column ATS version in every template, HTML in those templates, plus JSON, JSON Resume, Markdown and RenderCV YAML. The Application Pass adds the designed PDF and HTML of the other templates, Word in two versions (with your template’s design and in one column for portals) and LaTeX (.tex). The tool can also import RenderCV YAML, and a .tex file if it was exported here.' },
       { id: 'pages', q: 'How many pages can my CV have?', a: 'Up to four. You set one to four pages or let the typesetting break the pages itself. In Germany one or two pages are usual, in science and engineering more is common when there are publications or a project list. From the third page on, the check panel shows a note about it.' },
       { id: 'check', q: 'Can I check my cover letter too?', a: 'Yes. The check panel reads your CV and cover letter the way they are stored in the PDF. For the cover letter it looks at subject line, date, salutation, length and forgotten placeholders, and with a job ad also at whether the job title and company appear. Under “Both” it compares name, contact details and language of the two documents and shows which terms from the ad appear where. There is deliberately no score.', aLimited: 'Yes, with the Application Pass, which also includes the cover letter. The check panel reads your CV and cover letter the way they are stored in the PDF. For the cover letter it looks at subject line, date, salutation, length and forgotten placeholders, and with a job ad also at whether the job title and company appear. Under “Both” it compares name, contact details and language of the two documents. Checking your CV needs no pass.' },
       { id: 'langs', q: 'Which languages does the tool support?', a: 'CV, cover letter and interface are available in German, English, French and Spanish. Headings, date formats and field names switch with the language, and all four versions live in the same profile.' },
-      { id: 'ai', q: 'Can I use an AI?', a: 'Yes, just not a built-in one. You export the CV as Markdown, let a language model of your choice revise it and import it again. Before anything is applied you see every change. With an account, an AI assistant can also connect directly via MCP.' },
+      { id: 'ai', q: 'Can I use an AI?', a: 'Yes, the AI of your choice, just not a built-in one. Without an account you export the CV as Markdown, let ChatGPT, Claude or another model revise it and import it again. Before anything is applied you see an overview of the changes. With an account you connect Claude or another MCP-capable program directly to your CV. There are no credits or word limits, because the AI runs with your own provider.', aLimited: 'Yes, the AI of your choice, just not a built-in one. Without an account you export the CV as Markdown, let ChatGPT, Claude or another model revise it and import it again. Before anything is applied you see an overview of the changes. With the Application Pass you connect Claude or another MCP-capable program directly to your CV. There are no credits or word limits, because the AI runs with your own provider.' },
       { id: 'import', q: 'Can I bring my existing CV?', a: 'Yes. The tool reads LinkedIn’s ZIP data export in the browser without sending it to a server, and the same goes for JSON Resume and RenderCV YAML. From an existing PDF you take the text via Markdown: paste it into the template, let an AI structure it, import it back.' },
-      { id: 'data', q: 'Where is my data stored?', a: 'Without an account your browser stores it, and you can download a backup file at any time. With an account it is stored on the server that runs this site; the privacy policy says where it is located. Either way the PDF is made there: for the export the document goes to the server briefly and is not stored afterwards. There are no ad trackers.' },
-      { id: 'host', q: 'Can I run the tool myself?', a: 'Yes. The source code is on GitHub under AGPL-3.0, with Docker files for your own server. Templates, the PDF service and the MCP server are included.' },
+      { id: 'data', q: 'Where is my data stored?', a: 'Without an account your browser stores it, and you can download a backup file at any time. With an account it is stored on the server that runs this site; the privacy policy says where it is located. Either way the PDF is made there: for the export the document goes to the server briefly and is not stored afterwards. Your text only goes to an AI provider if you send it there yourself through the Markdown bridge or via MCP. There are no ad trackers.' },
+      { id: 'host', q: 'Can I run the tool myself?', a: 'Yes. The source code is public under AGPL-3.0, with Docker files for your own server: https://github.com/tillheidrich/cv-hub. Templates, the PDF service and the MCP server are included, and on your own instance everything is free, including what belongs to the Application Pass here. You need a server and some experience with Docker. The pass pays for running this instance, the PDF service and the upkeep of the templates.', aNoOffer: 'Yes. The source code is public under AGPL-3.0, with Docker files for your own server: https://github.com/tillheidrich/cv-hub. Templates, the PDF service and the MCP server are included. You need a server and some experience with Docker.' },
     ],
   },
   closing: { h1: 'Designed for people,', h2: 'readable for software.', lede: 'Start with your CV, right in the browser and without an account.', ctaSecondary: 'Browse templates' },
@@ -331,8 +394,8 @@ const EN: LandingCopy = {
 
 const FR: LandingCopy = {
   meta: {
-    title: () => 'Créer un CV lisible par les logiciels',
-    description: n => `Rédigez votre CV dans le navigateur : ${n} modèles, un PDF avec une vraie couche de texte, une version ATS en PDF ou Word en un clic, quatre langues. Sans compte.`,
+    title: () => 'Votre CV avec votre IA, lisible par les logiciels',
+    description: n => `Rédigez votre CV dans le navigateur, seul ou avec ChatGPT, Claude ou un autre modèle : ${n} modèles, un PDF avec une vraie couche de texte, une version ATS en un clic.`,
     ogAlt: 'L’éditeur avec un CV dans l’aperçu et le panneau de mise en page',
   },
   langName: 'Français',
@@ -341,13 +404,13 @@ const FR: LandingCopy = {
   skip: 'Aller au contenu',
   nav: { label: 'Navigation principale', ats: 'Comment lit un ATS', templates: 'Modèles', features: 'Fonctions', magazin: 'Magazine', faq: 'Questions', signin: 'Se connecter', cta: 'Demander l’accès', source: 'Code source', home: 'Accueil', lang: 'Langue de la page', menu: 'Menu', close: 'Fermer le menu' },
   hero: {
-    eyebrow: 'CV et lettre de motivation dans le navigateur',
-    h1a: 'Votre CV,',
+    eyebrow: 'CV et lettre de motivation dans le navigateur, avec l’IA de votre choix',
+    h1a: 'Écrit avec votre IA,',
     h1b: 'composé pour être lu par les machines.',
-    lede: 'Ce que vous voyez dans l’aperçu est le PDF que vous téléchargez. Il a une vraie couche de texte, où votre CV figure dans l’ordre où on le lit. Pour les portails de candidature, la même version existe sur une colonne, en PDF ou en Word, en un clic.',
+    lede: 'Vous écrivez directement sur la page, ou vous confiez votre CV en Markdown à ChatGPT, Claude ou un autre modèle et récupérez la version révisée. Avant de l’appliquer, l’outil montre ce qui a changé. Le PDF a exactement les pages de l’aperçu et une vraie couche de texte, et pour les portails de candidature la même version existe sur une colonne.',
     ctaPrimary: 'Essayer maintenant',
     ctaSecondary: 'Comment un portail lit votre CV',
-    proof: ['Sans compte', 'Enregistré dans votre navigateur', 'Sans abonnement', 'Version open source'],
+    proof: ['L’IA de votre choix, aucune intégrée', 'Sans compte', 'Sans abonnement', 'Version open source'],
     shotAlt: 'L’éditeur en démo : à gauche le panneau de mise en page avec les modèles, au centre le CV de Lena Brandt, en bas le carrousel avec le libellé du modèle',
     chipText: 'PDF avec couche de texte',
     chipAts: 'Version ATS en un clic',
@@ -357,7 +420,7 @@ const FR: LandingCopy = {
     items: n => [
       { value: String(n), label: 'modèles : une colonne, bandeau ou colonne latérale' },
       { value: '4', label: 'langues pour le document et l’interface' },
-      { value: '1 clic', label: 'jusqu’à la version ATS en PDF ou Word' },
+      { value: '1 clic', label: 'jusqu’à la version ATS sur une colonne, pour chaque modèle' },
       { value: '0', label: 'traceur publicitaire, aucun cookie de suivi' },
     ],
   },
@@ -400,12 +463,32 @@ const FR: LandingCopy = {
       { label: 'Harvard Business School et Accenture : Hidden Workers (2021)', url: SRC_HBS },
     ],
   },
+  ai: {
+    eyebrow: 'Travailler avec une IA',
+    h: 'Votre IA aide à écrire, vous décidez de ce qui reste.',
+    intro: 'Il n’y a pas d’IA intégrée, donc ni crédits ni limite de mots. Vous travaillez avec le modèle que vous utilisez déjà, et l’outil compose le résultat en PDF avec une vraie couche de texte et en version sur une colonne pour les portails de candidature. Votre texte ne va chez un fournisseur d’IA que si vous l’y envoyez vous-même.',
+    bridge: {
+      tag: 'Sans compte · Markdown aller et retour',
+      title: 'Dans n’importe quel chat, et retour.',
+      body: 'Vous téléchargez votre CV en Markdown, le collez dans ChatGPT, Claude, Gemini ou un autre chat et récupérez la version révisée. Avant de l’appliquer, l’outil montre ce qui change : nom, coordonnées et texte de profil côte à côte, ainsi que le nombre de postes, de points et de groupes de compétences. Si les points sont toujours exacts, vous le relisez ensuite dans l’aperçu.',
+    },
+    mcp: {
+      tagPass: 'Avec le pass · connexion directe',
+      tagAccount: 'Avec un compte · connexion directe',
+      title: 'Claude et d’autres programmes MCP directement sur votre CV.',
+      body: 'Avec un compte, vous connectez Claude ou un autre programme compatible MCP à votre CV. La connexion passe par OAuth, sans rien copier. Avant que l’IA modifie le contenu ou la mise en page, le serveur enregistre l’état précédent comme version, et vous pouvez restaurer les 25 dernières versions.',
+    },
+    foot: 'C’est vous qui décidez si une formulation vous correspond et si chaque information est exacte. Comment y parvenir, le magazine l’explique (en allemand) :',
+    footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
   gallery: {
     eyebrow: 'Modèles',
     h: n => `${n} modèles. Votre contenu reste quand vous changez.`,
     lede: 'Une colonne, bandeau ou colonne latérale, chacun avec sa propre combinaison de polices. Le libellé de chaque modèle indique s’il est fait pour les portails de candidature ou pour l’e-mail et l’impression.',
     showAll: n => `Afficher les ${n} modèles`,
     legend: 'Montrés avec le CV de démonstration, tels qu’ils apparaissent dans l’outil.',
+    passTag: 'Pass',
+    passLegend: free => `Sans libellé : ${free} modèles dont le PDF mis en page est gratuit. Avec « Pass » : le PDF mis en page fait partie du Pass candidature, et vous pouvez les consulter et les mettre en forme sans lui. La version ATS sur une colonne en PDF est gratuite dans chaque modèle.`,
   },
   features: {
     eyebrow: 'Fonctions',
@@ -416,7 +499,7 @@ const FR: LandingCopy = {
       { id: 'check', tag: 'Vérifier', title: 'CV et lettre de motivation, tels qu’un analyseur les lit.', body: 'Le panneau Vérifier montre le texte dans l’ordre où un système le lit et signale les lacunes, par exemple une adresse e-mail manquante ou un poste sans date de début. Pour la lettre s’ajoutent l’objet, la date, la formule d’appel et la longueur, et vous pouvez vérifier les deux documents ensemble : même nom, mêmes coordonnées, même langue. Avec une offre d’emploi à côté, vous voyez quels termes apparaissent et lesquels manquent.', alt: 'Le panneau Vérifier avec la vue texte du CV' },
       { id: 'export', tag: 'Exporter', title: 'PDF, Word et la version pour les portails.', body: 'Le PDF a exactement les pages de l’aperçu. Word existe avec le design de votre modèle et sur une colonne sans tableaux. La version ATS compose le même contenu sur une colonne, en PDF ou en Word, sans rien changer à votre profil. S’y ajoutent LaTeX, pour continuer à travailler le document, et le YAML RenderCV, que vous pouvez aussi réimporter.', alt: 'Le menu d’export avec PDF, Word et la version ATS' },
       { id: 'phone', tag: 'Téléphone', title: 'Pareil sur le téléphone.', body: 'Sur le téléphone, vous commencez dans le document. Contenu, mise en page, vérification et export se trouvent dans la barre du bas, et le PDF est le même que sur l’ordinateur.', alt: 'L’éditeur sur un téléphone avec la barre en bas' },
-      { id: 'bridge', tag: 'Passerelle IA', title: 'Votre IA aide à écrire, l’outil compose.', body: 'Il n’y a pas d’IA intégrée. Vous donnez le CV en Markdown à ChatGPT, Claude ou un autre modèle et importez la version révisée. Avant de l’appliquer, l’outil montre chaque modification. Avec un compte, un assistant IA se connecte directement via un serveur MCP.', alt: '' },
+      { id: 'bridge', tag: 'Passerelle IA', title: 'Votre IA aide à écrire, l’outil compose.', body: 'Il n’y a pas d’IA intégrée. Vous donnez le CV en Markdown à ChatGPT, Claude ou un autre modèle et importez la version révisée. Avant de l’appliquer, l’outil montre un aperçu des modifications. Avec un compte, Claude et d’autres programmes MCP se connectent directement via un serveur MCP.', alt: '' },
       { id: 'open', tag: 'Ouvert', title: 'Sans compte, sans abonnement, open source.', body: 'Sans compte, tout reste dans votre navigateur, et vous emportez un fichier de sauvegarde. L’export de données LinkedIn est lu lui aussi dans le navigateur. Le code source est public sous AGPL-3.0, et chacun peut faire tourner l’outil sur son propre serveur.', alt: '' },
     ],
     bridgeCaption: 'Extrait de l’export Markdown',
@@ -436,16 +519,17 @@ const FR: LandingCopy = {
       { id: 'machine', q: 'Que veut dire lisible par les machines ?', a: 'Un programme peut extraire le texte de votre PDF en entier et dans le bon ordre : d’abord le nom et les coordonnées, puis le profil, les postes et les compétences. Il faut pour cela une vraie couche de texte plutôt qu’une image, et un ordre correct. Des scripts vérifient les deux pour chaque modèle.' },
       { id: 'ats', q: 'Qu’est-ce qu’un ATS ?', a: 'Un applicant tracking system, ou logiciel de recrutement, reçoit les candidatures pour les employeurs. Il lit le CV, crée des champs pour le nom, les postes et les compétences et aide au tri. Dans son aide, Greenhouse par exemple ne décrit de refus automatique que pour les questions éliminatoires que l’employeur ajoute au formulaire, comme l’autorisation de travail. Le CV, ce sont des personnes qui le lisent.' },
       { id: 'safe', q: 'Mon CV sera-t-il compatible ATS ?', a: 'Personne ne peut le garantir, car chaque système a son propre analyseur. Ce qui peut être vérifié, nous le vérifions : couche de texte présente, ordre identique à l’aperçu, pas de mots désagrégés, pas de traits d’union insérés. Pour les portails, vous prenez la version ATS sur une colonne. C’est le contenu qui décide si vous êtes invité.' },
-      { id: 'access', q: 'Ai-je besoin d’un compte ?', a: 'Non. Sans compte, vous avez l’éditeur, tous les modèles et tous les exports, et vos données restent dans votre navigateur. Un compte ajoute l’enregistrement entre appareils, les liens de partage, les versions sur le serveur et la connexion IA via MCP. Pour l’instant, les comptes sont sur invitation : vous demandez l’accès et recevez un lien par e-mail.', aOpen: 'Non. Sans compte, vous avez l’éditeur, tous les modèles et tous les exports, et vos données restent dans votre navigateur. Un compte ajoute l’enregistrement entre appareils, les liens de partage, les versions sur le serveur et la connexion IA via MCP. Il fait partie du Pass candidature, dont vous voyez le prix à l’avance.' },
-      { id: 'price', q: 'Combien ça coûte ?', a: 'L’outil est gratuit dans le navigateur, tout comme le PDF de votre CV. Le Pass candidature coûte {price} une seule fois pour {days} jours. Ce n’est pas un abonnement, il s’arrête tout seul.', aNoOffer: 'L’outil est open source. Si vous l’hébergez vous-même, vous ne payez rien et fixez vous-même les limites.' },
-      { id: 'formats', q: 'Quels formats puis-je exporter ?', a: 'PDF avec une vraie couche de texte, Word en deux versions (avec le design de votre modèle et sur une colonne pour les portails), ainsi que HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) et YAML RenderCV. La version ATS existe en PDF et en Word. L’outil sait aussi réimporter le YAML RenderCV, et un fichier .tex s’il a été exporté ici.', aLimited: 'PDF avec une vraie couche de texte, aussi en version ATS sur une colonne, ainsi que HTML, JSON, JSON Resume, Markdown et YAML RenderCV. Word en deux versions (avec le design de votre modèle et sur une colonne pour les portails) et LaTeX (.tex) font partie du Pass candidature. L’outil sait aussi réimporter le YAML RenderCV, et un fichier .tex s’il a été exporté ici.' },
+      { id: 'access', q: 'Ai-je besoin d’un compte ?', a: 'Non. Sans compte, vous avez l’éditeur, tous les modèles, tous les exports et la passerelle Markdown vers votre IA, et vos données restent dans votre navigateur. Un compte ajoute l’enregistrement entre appareils, les liens de partage, les versions sur le serveur et la connexion directe via MCP. Pour l’instant, les comptes sont sur invitation : vous demandez l’accès et recevez un lien par e-mail.', aOpen: 'Non. Sans compte, vous avez l’éditeur, tous les modèles, tous les exports et la passerelle Markdown vers votre IA, et vos données restent dans votre navigateur. Un compte ajoute l’enregistrement entre appareils, les liens de partage, les versions sur le serveur et la connexion directe via MCP. Il fait partie du Pass candidature, dont vous voyez le prix à l’avance.' },
+      { id: 'price', q: 'Combien ça coûte ?', a: 'L’outil est gratuit dans le navigateur, tout comme le PDF de votre CV. Le Pass candidature coûte {price} une seule fois pour {days} jours. Ce n’est pas un abonnement, il s’arrête tout seul.', aNoOffer: 'L’outil est open source. Si vous l’hébergez vous-même, vous ne payez rien et fixez vous-même les limites.', aLimited: 'L’outil est gratuit dans le navigateur, tout comme le PDF de votre CV : mis en page dans {free} modèles et en version ATS sur une colonne dans chaque modèle. Le Pass candidature coûte {price} une seule fois pour {days} jours et s’arrête tout seul. Avec lui, vous téléchargez les {n} modèles en PDF, rédigez une lettre de motivation pour chaque poste avec sa vérification, téléchargez Word pour les portails, ajoutez des versions et des langues et connectez Claude directement à votre CV.' },
+      { id: 'funding', needsOffer: true, q: 'L’agence pour l’emploi ou le Jobcenter peuvent-ils payer ?', a: 'C’est possible, mais pas certain. En Allemagne, l’Agentur für Arbeit et le Jobcenter peuvent prendre en charge des frais de candidature sur le budget de placement (§ 44 SGB III, au Jobcenter via § 16 SGB II). Il n’y a pas de droit à cette aide, et la demande se fait avant, donc avant d’acheter le pass. La facture arrive en PDF par e-mail.' },
+      { id: 'formats', q: 'Quels formats puis-je exporter ?', a: 'PDF avec une vraie couche de texte, Word en deux versions (avec le design de votre modèle et sur une colonne pour les portails), ainsi que HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) et YAML RenderCV. La version ATS existe en PDF et en Word. L’outil sait aussi réimporter le YAML RenderCV, et un fichier .tex s’il a été exporté ici.', aLimited: 'Gratuit : le PDF avec une vraie couche de texte, mis en page dans {free} modèles et en version ATS sur une colonne dans chaque modèle, le HTML de ces modèles, ainsi que JSON, JSON Resume, Markdown et YAML RenderCV. Le Pass candidature ajoute le PDF mis en page et le HTML des autres modèles, Word en deux versions (avec le design de votre modèle et sur une colonne pour les portails) et LaTeX (.tex). L’outil sait aussi réimporter le YAML RenderCV, et un fichier .tex s’il a été exporté ici.' },
       { id: 'pages', q: 'Combien de pages mon CV peut-il avoir ?', a: 'Jusqu’à quatre. Vous choisissez une à quatre pages ou laissez la composition couper les pages elle-même. En Allemagne, une ou deux pages sont l’usage ; en sciences et en ingénierie, davantage avec des publications ou une liste de projets. À partir de la troisième page, le panneau Vérifier affiche une remarque à ce sujet.' },
       { id: 'check', q: 'Puis-je aussi vérifier ma lettre de motivation ?', a: 'Oui. Le panneau Vérifier lit le CV et la lettre tels qu’ils figurent dans le PDF. Pour la lettre, il regarde l’objet, la date, la formule d’appel, la longueur et les espaces réservés oubliés, et avec une offre d’emploi aussi si l’intitulé du poste et l’entreprise apparaissent. Sous « Les deux », il compare le nom, les coordonnées et la langue des deux documents et montre quels termes de l’offre figurent où. Il n’y a volontairement pas de score.', aLimited: 'Oui, avec le Pass candidature, qui comprend aussi la lettre de motivation. Le panneau Vérifier lit le CV et la lettre tels qu’ils figurent dans le PDF. Pour la lettre, il regarde l’objet, la date, la formule d’appel, la longueur et les espaces réservés oubliés, et avec une offre d’emploi aussi si l’intitulé du poste et l’entreprise apparaissent. Sous « Les deux », il compare le nom, les coordonnées et la langue des deux documents. La vérification du CV ne demande pas de pass.' },
       { id: 'langs', q: 'Dans quelles langues l’outil existe-t-il ?', a: 'CV, lettre de motivation et interface existent en allemand, anglais, français et espagnol. Titres, formats de date et noms de champs changent avec la langue, et les quatre versions vivent dans le même profil.' },
-      { id: 'ai', q: 'Puis-je utiliser une IA ?', a: 'Oui, mais pas une IA intégrée. Vous exportez le CV en Markdown, le faites réviser par le modèle de langage de votre choix et l’importez à nouveau. Avant de l’appliquer, vous voyez chaque modification. Avec un compte, un assistant IA peut aussi se connecter directement via MCP.' },
+      { id: 'ai', q: 'Puis-je utiliser une IA ?', a: 'Oui, l’IA de votre choix, mais pas une IA intégrée. Sans compte, vous exportez le CV en Markdown, le faites réviser par ChatGPT, Claude ou un autre modèle et l’importez à nouveau. Avant de l’appliquer, vous voyez un aperçu des modifications. Avec un compte, vous connectez Claude ou un autre programme compatible MCP directement à votre CV. Il n’y a ni crédits ni limite de mots, car l’IA tourne chez votre propre fournisseur.', aLimited: 'Oui, l’IA de votre choix, mais pas une IA intégrée. Sans compte, vous exportez le CV en Markdown, le faites réviser par ChatGPT, Claude ou un autre modèle et l’importez à nouveau. Avant de l’appliquer, vous voyez un aperçu des modifications. Avec le Pass candidature, vous connectez Claude ou un autre programme compatible MCP directement à votre CV. Il n’y a ni crédits ni limite de mots, car l’IA tourne chez votre propre fournisseur.' },
       { id: 'import', q: 'Puis-je reprendre mon CV actuel ?', a: 'Oui. L’outil lit l’export de données ZIP de LinkedIn dans le navigateur, sans l’envoyer à un serveur, de même que JSON Resume et le YAML RenderCV. Depuis un PDF existant, vous passez par le Markdown : le texte dans le modèle, une IA le structure, vous le réimportez.' },
-      { id: 'data', q: 'Où sont stockées mes données ?', a: 'Sans compte, votre navigateur les enregistre, et vous pouvez télécharger un fichier de sauvegarde à tout moment. Avec un compte, elles sont sur le serveur qui fait tourner ce site ; la politique de confidentialité indique où il se trouve. Dans les deux cas, le PDF y est créé : pour l’export, le document passe brièvement par le serveur et n’y est pas conservé. Il n’y a pas de traceur publicitaire.' },
-      { id: 'host', q: 'Puis-je héberger l’outil moi-même ?', a: 'Oui. Le code source est sur GitHub sous AGPL-3.0, avec des fichiers Docker pour votre propre serveur. Les modèles, le service PDF et le serveur MCP en font partie.' },
+      { id: 'data', q: 'Où sont stockées mes données ?', a: 'Sans compte, votre navigateur les enregistre, et vous pouvez télécharger un fichier de sauvegarde à tout moment. Avec un compte, elles sont sur le serveur qui fait tourner ce site ; la politique de confidentialité indique où il se trouve. Dans les deux cas, le PDF y est créé : pour l’export, le document passe brièvement par le serveur et n’y est pas conservé. Votre texte ne va chez un fournisseur d’IA que si vous l’y envoyez vous-même, par la passerelle Markdown ou via MCP. Il n’y a pas de traceur publicitaire.' },
+      { id: 'host', q: 'Puis-je héberger l’outil moi-même ?', a: 'Oui. Le code source est public sous AGPL-3.0, avec des fichiers Docker pour votre propre serveur : https://github.com/tillheidrich/cv-hub. Les modèles, le service PDF et le serveur MCP en font partie, et sur votre propre instance tout est gratuit, y compris ce qui relève ici du Pass candidature. Il vous faut un serveur et un peu d’expérience avec Docker. Le pass finance l’exploitation de cette instance, le service PDF et l’entretien des modèles.', aNoOffer: 'Oui. Le code source est public sous AGPL-3.0, avec des fichiers Docker pour votre propre serveur : https://github.com/tillheidrich/cv-hub. Les modèles, le service PDF et le serveur MCP en font partie. Il vous faut un serveur et un peu d’expérience avec Docker.' },
     ],
   },
   closing: { h1: 'Conçu pour les personnes,', h2: 'lisible par les logiciels.', lede: 'Commencez votre CV directement dans le navigateur, sans compte.', ctaSecondary: 'Voir les modèles' },
@@ -467,8 +551,8 @@ const FR: LandingCopy = {
 
 const ES: LandingCopy = {
   meta: {
-    title: () => 'Crear un CV legible por máquinas',
-    description: n => `Escribe tu CV en el navegador: ${n} plantillas, un PDF con capa de texto real, versión ATS en PDF o Word con un clic, cuatro idiomas. Sin cuenta ni suscripción.`,
+    title: () => 'Tu CV con tu IA, legible por máquinas',
+    description: n => `Escribe tu CV en el navegador, solo o con ChatGPT, Claude u otro modelo: ${n} plantillas, un PDF con capa de texto real, versión ATS con un clic. Sin cuenta.`,
     ogAlt: 'El editor con un currículum en la vista previa y el panel de diseño',
   },
   langName: 'Español',
@@ -477,13 +561,13 @@ const ES: LandingCopy = {
   skip: 'Saltar al contenido',
   nav: { label: 'Navegación principal', ats: 'Cómo lee un ATS', templates: 'Plantillas', features: 'Funciones', magazin: 'Revista', faq: 'Preguntas', signin: 'Iniciar sesión', cta: 'Solicitar acceso', source: 'Código fuente', home: 'Inicio', lang: 'Idioma de la página', menu: 'Menú', close: 'Cerrar menú' },
   hero: {
-    eyebrow: 'Currículum y carta de presentación en el navegador',
-    h1a: 'Tu CV,',
+    eyebrow: 'Currículum y carta de presentación en el navegador, con la IA que elijas',
+    h1a: 'Escrito con tu IA,',
     h1b: 'maquetado para que lo lean las máquinas.',
-    lede: 'Lo que ves en la vista previa es el PDF que descargas. Tiene una capa de texto real, y en ella tu currículum está en el orden en que se lee. Para portales de empleo tienes la misma versión a una columna, en PDF o Word, con un clic.',
+    lede: 'Escribes directamente en la página, o pasas tu currículum en Markdown a ChatGPT, Claude u otro modelo y recuperas la versión revisada. Antes de aplicarla, la herramienta muestra qué ha cambiado. El PDF tiene exactamente las páginas de la vista previa y una capa de texto real, y para portales de empleo tienes la misma versión a una columna.',
     ctaPrimary: 'Probar ahora',
     ctaSecondary: 'Cómo lee un portal tu CV',
-    proof: ['Empieza sin cuenta', 'Guardado en tu navegador', 'Sin suscripción', 'Versión de código abierto'],
+    proof: ['La IA que elijas, ninguna integrada', 'Empieza sin cuenta', 'Sin suscripción', 'Versión de código abierto'],
     shotAlt: 'El editor en la demo: a la izquierda el panel de diseño con plantillas, en el centro el currículum de Lena Brandt, abajo el carrusel con la etiqueta de la plantilla',
     chipText: 'PDF con capa de texto',
     chipAts: 'Versión ATS con un clic',
@@ -493,7 +577,7 @@ const ES: LandingCopy = {
     items: n => [
       { value: String(n), label: 'plantillas: una columna, banda superior o barra lateral' },
       { value: '4', label: 'idiomas para documento e interfaz' },
-      { value: '1 clic', label: 'hasta la versión ATS en PDF o Word' },
+      { value: '1 clic', label: 'hasta la versión ATS a una columna, en cada plantilla' },
       { value: '0', label: 'rastreadores publicitarios, sin cookies de seguimiento' },
     ],
   },
@@ -536,12 +620,32 @@ const ES: LandingCopy = {
       { label: 'Harvard Business School y Accenture: Hidden Workers (2021)', url: SRC_HBS },
     ],
   },
+  ai: {
+    eyebrow: 'Trabajar con IA',
+    h: 'Tu IA ayuda a escribir, tú decides qué se queda.',
+    intro: 'No hay IA integrada, así que tampoco créditos ni límites de palabras. Trabajas con el modelo que ya usas, y la herramienta maqueta el resultado como PDF con capa de texto real y como versión a una columna para portales de empleo. Tu texto solo llega a un proveedor de IA si tú lo envías.',
+    bridge: {
+      tag: 'Sin cuenta · Markdown de ida y vuelta',
+      title: 'A cualquier chat y de vuelta.',
+      body: 'Descargas tu currículum en Markdown, lo pegas en ChatGPT, Claude, Gemini u otro chat y recuperas la versión revisada. Antes de aplicarla, la herramienta muestra qué cambia: nombre, contacto y texto de perfil uno al lado del otro, y además el número de puestos, puntos y grupos de competencias. Si los puntos siguen siendo correctos lo compruebas después en la vista previa.',
+    },
+    mcp: {
+      tagPass: 'Con el pase · conexión directa',
+      tagAccount: 'Con cuenta · conexión directa',
+      title: 'Claude y otros programas MCP directamente en tu currículum.',
+      body: 'Con cuenta conectas Claude u otro programa compatible con MCP a tu currículum. El inicio de sesión va por OAuth y no hay que copiar nada. Antes de que la IA cambie contenido o diseño, el servidor guarda el estado anterior como versión, y puedes restaurar las últimas 25.',
+    },
+    foot: 'Si una formulación te encaja y si cada dato es correcto lo decides tú. Cómo conseguirlo lo explica la revista (en alemán):',
+    footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
   gallery: {
     eyebrow: 'Plantillas',
     h: n => `${n} plantillas. Tu contenido se queda al cambiar.`,
     lede: 'Una columna, banda superior o barra lateral, cada una con su propia combinación de fuentes. La etiqueta de cada plantilla dice si está pensada para portales de empleo o para correo e impresión.',
     showAll: n => `Mostrar las ${n} plantillas`,
     legend: 'Mostradas con el CV de demostración, tal como se ven en la herramienta.',
+    passTag: 'Pase',
+    passLegend: free => `Sin etiqueta: ${free} plantillas cuyo PDF con diseño es gratis. Con «Pase»: el PDF con diseño forma parte del Pase de candidatura, y puedes verlas y diseñar con ellas sin él. La versión ATS a una columna en PDF es gratis en cada plantilla.`,
   },
   features: {
     eyebrow: 'Funciones',
@@ -552,7 +656,7 @@ const ES: LandingCopy = {
       { id: 'check', tag: 'Comprobar', title: 'CV y carta, tal como los lee un analizador.', body: 'El panel Comprobar muestra el texto en el orden en que lo lee un sistema y avisa de huecos como un correo que falta o un puesto sin fecha de inicio. En la carta se suman asunto, fecha, saludo y extensión, y puedes comprobar los dos documentos juntos: mismo nombre, mismo contacto, mismo idioma. Con una oferta al lado ves qué términos aparecen y cuáles faltan.', alt: 'El panel Comprobar con la vista de texto del currículum' },
       { id: 'export', tag: 'Exportar', title: 'PDF, Word y la versión para portales.', body: 'El PDF tiene exactamente las páginas de la vista previa. Word viene con el diseño de tu plantilla y a una columna sin tablas. La versión ATS compone el mismo contenido a una columna, en PDF o Word, sin cambiar nada de tu perfil. Además tienes LaTeX para seguir editando y YAML de RenderCV, que puedes volver a importar.', alt: 'El menú de exportación con PDF, Word y la versión ATS' },
       { id: 'phone', tag: 'Móvil', title: 'Igual en el móvil.', body: 'En el móvil empiezas en el documento. Contenido, diseño, comprobación y exportación están en la barra inferior, y el PDF es el mismo que en el ordenador.', alt: 'El editor en un móvil con la barra en la parte inferior' },
-      { id: 'bridge', tag: 'Puente IA', title: 'Tu IA ayuda a escribir, la herramienta maqueta.', body: 'No hay IA integrada. Pasas el currículum en Markdown a ChatGPT, Claude u otro modelo e importas la versión revisada. Antes de aplicarla, la herramienta muestra cada cambio. Con cuenta, un asistente de IA se conecta directamente a través de un servidor MCP.', alt: '' },
+      { id: 'bridge', tag: 'Puente IA', title: 'Tu IA ayuda a escribir, la herramienta maqueta.', body: 'No hay IA integrada. Pasas el currículum en Markdown a ChatGPT, Claude u otro modelo e importas la versión revisada. Antes de aplicarla, la herramienta muestra un resumen de los cambios. Con cuenta, Claude y otros programas MCP se conectan directamente a través de un servidor MCP.', alt: '' },
       { id: 'open', tag: 'Abierto', title: 'Sin cuenta, sin suscripción, código abierto.', body: 'Sin cuenta todo se queda en tu navegador, y te llevas un archivo de copia de seguridad. La exportación de datos de LinkedIn también se lee en el navegador. El código fuente es público bajo AGPL-3.0, y quien quiera puede ejecutar la herramienta en su propio servidor.', alt: '' },
     ],
     bridgeCaption: 'Fragmento de la exportación Markdown',
@@ -572,16 +676,17 @@ const ES: LandingCopy = {
       { id: 'machine', q: '¿Qué significa legible por máquinas?', a: 'Un programa puede sacar el texto de tu PDF completo y en el orden correcto: primero nombre y contacto, luego perfil, puestos y competencias. Para eso el PDF necesita una capa de texto real en lugar de una imagen, y el orden dentro tiene que ser el correcto. Unos scripts comprueban ambas cosas en cada plantilla.' },
       { id: 'ats', q: '¿Qué es un ATS?', a: 'Un applicant tracking system, o sistema de selección, recibe las candidaturas para las empresas. Lee el currículum, crea campos para nombre, puestos y competencias y ayuda a ordenar. Greenhouse, por ejemplo, solo describe en su ayuda rechazos automáticos para preguntas eliminatorias que la empresa añade al formulario, como el permiso de trabajo. El currículum lo leen personas.' },
       { id: 'safe', q: '¿Mi CV será apto para ATS?', a: 'Nadie puede garantizarlo, porque cada sistema tiene su propio analizador. Lo que se puede comprobar, lo comprobamos: hay capa de texto, el orden coincide con la vista previa, no se deshacen palabras, no se insertan guiones. Para portales usas la versión ATS a una columna. Que te inviten depende del contenido.' },
-      { id: 'access', q: '¿Necesito una cuenta?', a: 'No. Sin cuenta tienes el editor, todas las plantillas y todas las exportaciones, y tus datos se quedan en tu navegador. Una cuenta añade guardado entre dispositivos, enlaces compartidos, versiones en el servidor y la conexión con IA por MCP. Por ahora las cuentas son por invitación: solicitas acceso y recibes un enlace por correo.', aOpen: 'No. Sin cuenta tienes el editor, todas las plantillas y todas las exportaciones, y tus datos se quedan en tu navegador. Una cuenta añade guardado entre dispositivos, enlaces compartidos, versiones en el servidor y la conexión con IA por MCP. Forma parte del Pase de candidatura, y ves el precio antes.' },
-      { id: 'price', q: '¿Cuánto cuesta?', a: 'La herramienta es gratis en el navegador, y el PDF de tu currículum también. El Pase de candidatura cuesta {price} una sola vez por {days} días. No es una suscripción y termina solo.', aNoOffer: 'La herramienta es de código abierto. Si la ejecutas tú, no pagas nada y fijas tú los límites.' },
-      { id: 'formats', q: '¿Qué formatos puedo exportar?', a: 'PDF con capa de texto real, Word en dos versiones (con el diseño de tu plantilla y a una columna para portales), además de HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) y YAML de RenderCV. La versión ATS está disponible en PDF y en Word. La herramienta también vuelve a importar el YAML de RenderCV, y un archivo .tex si se exportó aquí.', aLimited: 'PDF con capa de texto real, también como versión ATS a una columna, además de HTML, JSON, JSON Resume, Markdown y YAML de RenderCV. Word en dos versiones (con el diseño de tu plantilla y a una columna para portales) y LaTeX (.tex) forman parte del Pase de candidatura. La herramienta también vuelve a importar el YAML de RenderCV, y un archivo .tex si se exportó aquí.' },
+      { id: 'access', q: '¿Necesito una cuenta?', a: 'No. Sin cuenta tienes el editor, todas las plantillas, todas las exportaciones y el puente Markdown a tu IA, y tus datos se quedan en tu navegador. Una cuenta añade guardado entre dispositivos, enlaces compartidos, versiones en el servidor y la conexión directa por MCP. Por ahora las cuentas son por invitación: solicitas acceso y recibes un enlace por correo.', aOpen: 'No. Sin cuenta tienes el editor, todas las plantillas, todas las exportaciones y el puente Markdown a tu IA, y tus datos se quedan en tu navegador. Una cuenta añade guardado entre dispositivos, enlaces compartidos, versiones en el servidor y la conexión directa por MCP. Forma parte del Pase de candidatura, y ves el precio antes.' },
+      { id: 'price', q: '¿Cuánto cuesta?', a: 'La herramienta es gratis en el navegador, y el PDF de tu currículum también. El Pase de candidatura cuesta {price} una sola vez por {days} días. No es una suscripción y termina solo.', aNoOffer: 'La herramienta es de código abierto. Si la ejecutas tú, no pagas nada y fijas tú los límites.', aLimited: 'La herramienta es gratis en el navegador, y el PDF de tu currículum también: con diseño en {free} plantillas y como versión ATS a una columna en cada plantilla. El Pase de candidatura cuesta {price} una sola vez por {days} días y termina solo. Con él descargas las {n} plantillas en PDF, escribes una carta para cada puesto con su comprobación, descargas Word para portales, añades versiones e idiomas y conectas Claude directamente con tu currículum.' },
+      { id: 'funding', needsOffer: true, q: '¿Lo pagan la agencia de empleo o el Jobcenter?', a: 'Es posible, pero no seguro. En Alemania, la Agentur für Arbeit y el Jobcenter pueden cubrir gastos de candidatura con el presupuesto de colocación (§ 44 SGB III, en el Jobcenter a través del § 16 SGB II). No hay derecho a esa ayuda, y la solicitud va antes, es decir, antes de comprar el pase. La factura llega en PDF por correo.' },
+      { id: 'formats', q: '¿Qué formatos puedo exportar?', a: 'PDF con capa de texto real, Word en dos versiones (con el diseño de tu plantilla y a una columna para portales), además de HTML, JSON, JSON Resume, Markdown, LaTeX (.tex) y YAML de RenderCV. La versión ATS está disponible en PDF y en Word. La herramienta también vuelve a importar el YAML de RenderCV, y un archivo .tex si se exportó aquí.', aLimited: 'Gratis: el PDF con capa de texto real, con diseño en {free} plantillas y como versión ATS a una columna en cada plantilla, el HTML de esas plantillas, además de JSON, JSON Resume, Markdown y YAML de RenderCV. El Pase de candidatura añade el PDF con diseño y el HTML de las demás plantillas, Word en dos versiones (con el diseño de tu plantilla y a una columna para portales) y LaTeX (.tex). La herramienta también vuelve a importar el YAML de RenderCV, y un archivo .tex si se exportó aquí.' },
       { id: 'pages', q: '¿Cuántas páginas puede tener mi currículum?', a: 'Hasta cuatro. Eliges de una a cuatro páginas o dejas que la composición corte las páginas sola. En Alemania lo habitual son una o dos páginas; en ciencia e ingeniería, más si hay publicaciones o una lista de proyectos. A partir de la tercera página, el panel Comprobar muestra una nota al respecto.' },
       { id: 'check', q: '¿Puedo comprobar también la carta de presentación?', a: 'Sí. El panel Comprobar lee el currículum y la carta tal como están en el PDF. En la carta mira el asunto, la fecha, el saludo, la extensión y los marcadores olvidados, y con una oferta también si aparecen el puesto y la empresa. En «Ambos» compara nombre, contacto e idioma de los dos documentos y muestra qué términos de la oferta están en cada uno. A propósito, no hay puntuación.', aLimited: 'Sí, con el Pase de candidatura, que también incluye la carta. El panel Comprobar lee el currículum y la carta tal como están en el PDF. En la carta mira el asunto, la fecha, el saludo, la extensión y los marcadores olvidados, y con una oferta también si aparecen el puesto y la empresa. En «Ambos» compara nombre, contacto e idioma de los dos documentos. El currículum lo compruebas sin pase.' },
       { id: 'langs', q: '¿En qué idiomas está la herramienta?', a: 'Currículum, carta e interfaz están en alemán, inglés, francés y español. Títulos, formatos de fecha y nombres de campos cambian con el idioma, y las cuatro versiones viven en el mismo perfil.' },
-      { id: 'ai', q: '¿Puedo usar una IA?', a: 'Sí, pero no una integrada. Exportas el currículum en Markdown, dejas que lo revise el modelo de lenguaje que prefieras y lo vuelves a importar. Antes de aplicarlo ves cada cambio. Con cuenta, un asistente de IA también puede conectarse directamente por MCP.' },
+      { id: 'ai', q: '¿Puedo usar una IA?', a: 'Sí, la IA que elijas, pero no una integrada. Sin cuenta exportas el currículum en Markdown, dejas que lo revise ChatGPT, Claude u otro modelo y lo vuelves a importar. Antes de aplicarlo ves un resumen de los cambios. Con cuenta conectas Claude u otro programa compatible con MCP directamente con tu currículum. No hay créditos ni límites de palabras, porque la IA funciona con tu propio proveedor.', aLimited: 'Sí, la IA que elijas, pero no una integrada. Sin cuenta exportas el currículum en Markdown, dejas que lo revise ChatGPT, Claude u otro modelo y lo vuelves a importar. Antes de aplicarlo ves un resumen de los cambios. Con el Pase de candidatura conectas Claude u otro programa compatible con MCP directamente con tu currículum. No hay créditos ni límites de palabras, porque la IA funciona con tu propio proveedor.' },
       { id: 'import', q: '¿Puedo traer mi currículum actual?', a: 'Sí. La herramienta lee la exportación de datos ZIP de LinkedIn en el navegador, sin enviarla a ningún servidor, y lo mismo vale para JSON Resume y el YAML de RenderCV. Desde un PDF existente pasas por Markdown: el texto a la plantilla, que una IA lo estructure, y lo reimportas.' },
-      { id: 'data', q: '¿Dónde se guardan mis datos?', a: 'Sin cuenta los guarda tu navegador, y puedes descargar una copia de seguridad cuando quieras. Con cuenta están en el servidor que aloja este sitio; la política de privacidad indica dónde está. En ambos casos el PDF se crea allí: para exportar, el documento pasa un momento por el servidor y no se guarda después. No hay rastreadores publicitarios.' },
-      { id: 'host', q: '¿Puedo alojar la herramienta yo mismo?', a: 'Sí. El código fuente está en GitHub bajo AGPL-3.0, con archivos Docker para tu propio servidor. Incluye las plantillas, el servicio de PDF y el servidor MCP.' },
+      { id: 'data', q: '¿Dónde se guardan mis datos?', a: 'Sin cuenta los guarda tu navegador, y puedes descargar una copia de seguridad cuando quieras. Con cuenta están en el servidor que aloja este sitio; la política de privacidad indica dónde está. En ambos casos el PDF se crea allí: para exportar, el documento pasa un momento por el servidor y no se guarda después. Tu texto solo llega a un proveedor de IA si tú lo envías por el puente Markdown o por MCP. No hay rastreadores publicitarios.' },
+      { id: 'host', q: '¿Puedo alojar la herramienta yo mismo?', a: 'Sí. El código fuente es público bajo AGPL-3.0, con archivos Docker para tu propio servidor: https://github.com/tillheidrich/cv-hub. Incluye las plantillas, el servicio de PDF y el servidor MCP, y en tu propia instancia todo es gratis, también lo que aquí forma parte del Pase de candidatura. Necesitas un servidor y algo de experiencia con Docker. El pase paga el funcionamiento de esta instancia, el servicio de PDF y el mantenimiento de las plantillas.', aNoOffer: 'Sí. El código fuente es público bajo AGPL-3.0, con archivos Docker para tu propio servidor: https://github.com/tillheidrich/cv-hub. Incluye las plantillas, el servicio de PDF y el servidor MCP. Necesitas un servidor y algo de experiencia con Docker.' },
     ],
   },
   closing: { h1: 'Diseñado para personas,', h2: 'legible para el software.', lede: 'Empieza tu currículum directamente en el navegador y sin cuenta.', ctaSecondary: 'Ver las plantillas' },
@@ -628,6 +733,8 @@ export interface FaqContext {
   limitedAccess?: Qa | null;
   /** Gratis-Grenze aktiv: Antworten mit `aLimited` nehmen diese Fassung. */
   limited?: boolean;
+  /** Zahl der kostenlosen Vorlagen (templates/freeTemplates.ts), Platzhalter {free}. */
+  free?: number;
 }
 
 /** Die FAQ mit eingesetzten Werten. Sichtbar auf der Seite UND im JSON-LD. */
@@ -636,13 +743,14 @@ export function faqItems(lang: UiLang, ctx: FaqContext): (Qa & { id: string })[]
   const fill = (s: string) => s
     .replace(/\{brand\}/g, ctx.brand)
     .replace(/\{n\}/g, String(ctx.n))
+    .replace(/\{free\}/g, String(ctx.free ?? ''))
     .replace(/\{price\}/g, ctx.price)
     .replace(/\{days\}/g, String(ctx.days));
-  return t.faq.items.map(f => {
+  return t.faq.items.filter(f => !f.needsOffer || (ctx.hasOffer && !!ctx.price)).map(f => {
     if (f.id === 'access' && ctx.limitedAccess) return { id: f.id, q: ctx.limitedAccess.q, a: ctx.limitedAccess.a };
     let a = f.a;
     if (f.id === 'access' && ctx.registrationOpen && f.aOpen) a = f.aOpen;
-    if (f.id === 'price' && (!ctx.hasOffer || !ctx.price) && f.aNoOffer) a = f.aNoOffer;
+    if ((!ctx.hasOffer || !ctx.price) && f.aNoOffer) a = f.aNoOffer;
     if (ctx.limited && f.aLimited) a = f.aLimited;
     return { id: f.id, q: fill(f.q), a: fill(a) };
   });

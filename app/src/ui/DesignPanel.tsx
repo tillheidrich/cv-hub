@@ -13,6 +13,10 @@ import AtsLine from './AtsLine';
 import { ET } from './editorI18n';
 import { sectionOrderFor } from '../data/extraSections';
 import { extraSectionUiName } from '../editor/extraSectionsText';
+import { useFreeTier } from '../billing/freeTier';
+import { PassTag } from '../billing/PassLock';
+import { FREE_TEMPLATE_IDS } from '../templates/freeTemplates';
+import { TEMPLATE_LOCK_I18N } from './i18n/templateLock';
 
 type Settings = AppProfile['settings'];
 type View = 'main' | 'type' | 'page' | 'sections';
@@ -58,6 +62,12 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
   const hidden = settings.hiddenSections ?? [];
   const list = PICKABLE_THEMES.filter(t => cat === 'all' || t.category === cat);
   const bodyRef = useRef<HTMLDivElement>(null);
+  /* Vorlagen-Staffel: Kennzeichen „Pass" an jeder Karte, deren gestaltetes PDF
+   * zum Pass gehört, und ein Satz darüber, bevor jemand wählt. */
+  const ft = useFreeTier();
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
+  const tierOn = ft.limited && PICKABLE_THEMES.some(t => !ft.templateAllowed(t.id));
+  const curLocked = !ft.templateAllowed(current);
 
   // Unteransicht gewechselt: oben anfangen und den Fokus auf „Zurück".
   useEffect(() => {
@@ -93,11 +103,12 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
             </div>
             <div style={{ padding: '10px 12px', borderRadius: '14px', background: 'oklch(1 0 0 / 0.6)', boxShadow: 'var(--pill-shadow)', marginBottom: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px', alignItems: 'baseline' }}>
-                <strong style={{ fontWeight: 650 }}>{getTheme(current).name}</strong>
+                <strong style={{ fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>{getTheme(current).name}{curLocked && <PassTag title={TL.badgeTitle} label={TL.badge} />}</strong>
                 <span style={{ fontSize: 'var(--t-xs)', color: 'var(--ink-2)', textAlign: 'right' }}>{templateStructure(getTheme(current), uiLang)}</span>
               </div>
               <AtsLine level={level} uiLang={uiLang} onLoadAts={onLoadAts} onLoadAtsPdf={onLoadAtsPdf} />
             </div>
+            {tierOn && <p className="ui-hint" data-tier-note style={{ margin: '0 0 10px', fontSize: 'var(--t-xs)', color: 'var(--ink-2)', lineHeight: 1.5 }}>{TL.panelNote(FREE_TEMPLATE_IDS.length)}</p>}
             <div className="ui-cards" role="radiogroup" aria-label={d.template}>
               {list.map(t => (
                 <TemplateCard key={t.id} themeId={t.id} checked={t.id === current} uiLang={uiLang}
@@ -262,6 +273,9 @@ const TemplateCard = memo(function TemplateCard({ themeId, checked, uiLang, page
   }, []);
   const t = getTheme(themeId);
   const level = atsLevelForLayout(t.layout);
+  const ft = useFreeTier();
+  const locked = !ft.templateAllowed(themeId);
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
   const pagePx = pageFormat === 'letter' || pageFormat === 'legal' ? 816 : pageFormat === 'a5' ? 559 : 794;
   const thumb = useMemo(
     () => (seen ? <StaticPage render={() => renderThumb(themeId)} scale={w / pagePx} pageFormat={pageFormat} height={THUMB_H} /> : null),
@@ -269,8 +283,10 @@ const TemplateCard = memo(function TemplateCard({ themeId, checked, uiLang, page
   );
   return (
     <button ref={ref} type="button" role="radio" aria-checked={checked} className="ui-card" onClick={onPick}
-      aria-label={`${t.name}, ${templateStructure(t, uiLang)}, ${atsLabel(level, uiLang)}`}>
+      aria-label={`${t.name}, ${templateStructure(t, uiLang)}, ${atsLabel(level, uiLang)}${locked ? `. ${TL.badge}: ${TL.badgeTitle}` : ''}`}
+      data-pass-locked={locked || undefined}>
       <div ref={thumbRef} className="ui-card-thumb" style={{ background: t.colors.pageBg }}>{thumb}</div>
+      {locked && <PassTag title={TL.badgeTitle} label={TL.badge} />}
       <span className="ui-card-name">{t.name}</span>
       <span className="ui-card-meta">{templateStructure(t, uiLang)}</span>
       <span className="ui-badge" data-level={level}>{atsLabel(level, uiLang)}</span>

@@ -22,6 +22,12 @@ export const RETENTION = {
   // Admin-Bereich (Runde 8b, 10.10.2026): Protokoll ein Jahr, Sitzungen und
   // Codes sobald abgelaufen.
   adminAuditDays: 365,
+  // E-Mail-Workflows (10.10.2026, MAILS.md): Versandprotokoll und erledigte
+  // Zeilen der Warteschlange 90 Tage; ohne SMTP wartende Mails nach 30 Tagen
+  // verworfen (danach wäre ihr Inhalt veraltet).
+  mailLogDays: 90,
+  mailQueueDays: 90,
+  mailWaitingDays: 30,
 };
 
 /** Letzter Lauf, für das Admin-Dashboard („Janitor-Lauf"). Nur im Speicher:
@@ -111,6 +117,11 @@ export async function runJanitor(db) {
     ['admin_audit', `DELETE FROM admin_audit WHERE created_at < now() - interval '${R.adminAuditDays} days'`],
     ['admin_sessions', `DELETE FROM admin_sessions WHERE expires_at < now() OR revoked_at IS NOT NULL`],
     ['admin_login_codes', `DELETE FROM admin_login_codes WHERE expires_at < now() OR used`],
+    ['mail_log', `DELETE FROM mail_log WHERE created_at < now() - interval '${R.mailLogDays} days'`],
+    ['mail_queue_waiting', `UPDATE mail_queue SET status = 'discarded', last_error = 'ohne SMTP zu lange gewartet', updated_at = now()
+                             WHERE status = 'waiting_smtp' AND created_at < now() - interval '${R.mailWaitingDays} days'`],
+    ['mail_queue', `DELETE FROM mail_queue WHERE status IN ('sent', 'skipped', 'discarded', 'failed')
+                     AND updated_at < now() - interval '${R.mailQueueDays} days'`],
     ['orders_paid', `DELETE FROM orders WHERE paid_at IS NOT NULL
                       AND paid_at < date_trunc('year', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin' - interval '${R.paidOrderYears} years'`],
   ];

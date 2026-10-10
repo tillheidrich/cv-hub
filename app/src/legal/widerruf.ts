@@ -96,7 +96,7 @@ export interface WithdrawalTexts {
 }
 
 export const WIDERRUF: Bilingual<WithdrawalTexts> = {
-  version: '2026-10-10',
+  version: '2026-10-10.2',
   de: {
     policy: {
       title: 'Widerrufsbelehrung',
@@ -115,7 +115,7 @@ export const WIDERRUF: Bilingual<WithdrawalTexts> = {
       voluntaryPromise: [
         'Wir verlangen bei einem Widerruf keinen Wertersatz für die Tage, an denen Sie den Pass schon genutzt haben. Sie erhalten den vollen Preis zurück.',
         'Die Erstattung stoßen wir automatisch an, sobald Ihr Widerruf eingegangen ist. Je nach Zahlungsart dauert es danach einige Tage, bis das Geld auf Ihrem Konto ist.',
-        'Mit dem Widerruf endet der Pass aus dieser Bestellung. Ihr Konto und Ihre Inhalte bleiben erhalten; Sie können sie weiter lesen, exportieren und löschen.',
+        'Mit dem Widerruf endet der Pass aus dieser Bestellung. Ihr Konto und Ihre Inhalte bleiben erhalten; Sie können sie weiter lesen, als Datenexport (JSON, Markdown) herunterladen und löschen. Word, LaTeX und die Pass-Vorlagen gibt es danach wieder mit einem neuen Pass.',
       ],
       noEarlyExpiry: 'Ihr Widerrufsrecht erlischt bei diesem Vertrag nicht vorzeitig. Sie können während der gesamten Widerrufsfrist widerrufen, auch wenn Sie den Pass bereits nutzen.',
       endMarker: 'Ende der Widerrufsbelehrung',
@@ -184,7 +184,7 @@ export const WIDERRUF: Bilingual<WithdrawalTexts> = {
       voluntaryPromise: [
         'If you withdraw, we do not charge you for the days on which you already used the pass. You get the full price back.',
         'We start the refund automatically as soon as your withdrawal reaches us. Depending on the payment method it may take a few days until the money is in your account.',
-        'Withdrawal ends the pass bought with this order. Your account and your content stay; you can still read, export and delete them.',
+        'Withdrawal ends the pass bought with this order. Your account and your content stay; you can still read them, download them as a data export (JSON, Markdown) and delete them. Word, LaTeX and the pass templates are available again with a new pass.',
       ],
       noEarlyExpiry: 'Your right of withdrawal does not expire early under this contract. You can withdraw during the entire withdrawal period, even if you are already using the pass.',
       endMarker: 'End of withdrawal information',

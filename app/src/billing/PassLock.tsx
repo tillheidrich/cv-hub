@@ -6,8 +6,8 @@
  * jemand anfängt.
  */
 import { useUiLang } from '../ui/useUiLang';
-import { FREETIER_I18N, type FreeTierKey } from '../ui/i18n/freetier';
-import { useFreeTier } from './freeTier';
+import { FREETIER_I18N } from '../ui/i18n/freetier';
+import { useFreeTier, type LockKey } from './freeTier';
 
 /** Schloss im Strichstil von ui/Icon (1,6 px). */
 export function LockGlyph({ size = 13 }: { size?: number }) {
@@ -20,8 +20,15 @@ export function LockGlyph({ size = 13 }: { size?: number }) {
   );
 }
 
+/** Kennzeichen „Pass" der Vorlagen-Staffel (templates/freeTemplates.ts):
+ *  Schloss und Wort, die Erklärung im Tooltip und für Vorleseprogramme. Steht
+ *  an der Vorlage, bevor jemand sie wählt (Gestaltungs-Paneel, Karussell). */
+export function PassTag({ title, label }: { title: string; label: string }) {
+  return <span className="ui-pass-tag" title={title} data-pass-tag aria-label={`${label}: ${title}`} role="img"><LockGlyph size={10} />{label}</span>;
+}
+
 /** Hinweiszeile mit Preis und Link auf das Freischalt-Paneel. */
-export function PassNote({ feature, label, style }: { feature: FreeTierKey; label?: string; style?: React.CSSProperties }) {
+export function PassNote({ feature, label, style }: { feature: LockKey; label?: string; style?: React.CSSProperties }) {
   const ft = useFreeTier();
   const t = FREETIER_I18N[useUiLang()];
   return (

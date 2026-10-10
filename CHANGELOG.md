@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-10-10 — e-mail workflows, an optional template tier, AI-first start page
+
+**E-mail workflows.** Until now every mail went straight out through
+`sendMail`, and without SMTP it was simply not sent. There is now a queue in
+Postgres (idempotent per account, workflow and occasion, retries with backoff,
+"waiting for SMTP" instead of lost), a welcome mail after confirmation, notices
+before and after the end of a pass, a voucher confirmation, and up to three
+tips — only with explicit consent, confirmed through the address confirmation
+(double opt-in), with an unsubscribe link and `List-Unsubscribe` /
+`List-Unsubscribe-Post`. The admin area has a new "E-Mails" page: SMTP status
+and settings (the password encrypted with `MAIL_SETTINGS_KEY`, never in a
+response), a test mail, every workflow with switch, timing, preview and text
+override (escaped, known placeholders only), the queue and a 90-day sending
+log. Accounts get an "E-Mails" section and an unsubscribe page that needs no
+sign-in. The privacy template has a new section "E-Mails an Ihr Konto" / "E-mails
+to your account"; the sending service stays a placeholder. Details:
+`pdf-service/MAILS.md`.
+
+**Template tier (optional, off by default).** With a paid mode ready to sell
+and `FREE_TIER_LIMITS=1`, the designed PDF without a pass is available in ten
+templates (`app/src/templates/freeTemplates.ts`); the ATS PDF stays free in
+every template, and every template is marked before anyone picks it, not at
+download. Without both switches nothing changes: every template and export is
+free. The contract templates moved to version 2026-10-10.2 to match.
+
+**A gap after withdrawal is closed.** An account whose pass came only from
+withdrawn orders still counted as "pass expired" and kept exporting in every
+format. `grants.js` now treats it as having no pass; reading, data export and
+deletion stay.
+
+**Spaced capitals no longer fall apart in the PDF text layer.** Chromium
+rounded the letter advance of tracked capitals to whole pixels, so pdftotext
+read "SE NIOR". The export HTML sets `text-rendering: geometricPrecision`, the
+ATS version drops the tracking; `app/scripts/capscheck.mjs` checks it.
+
+**Start page.** A new section "Mit KI arbeiten" explains the Markdown bridge
+and the MCP connection; no new screenshots were needed for it.
+
 ## 2026-09-19 — a pass through the whole app, and four urgent findings
 
 **The service could be stopped by anyone.** `server.js` used two identifiers in

@@ -61,7 +61,7 @@ function diffMaps(before: Record<string, string>, after: Record<string, string>)
 }
 import { exportHtml, exportCoverLetterHtml, exportPdf } from './exportHtml';
 import type { ExportRenderConfig } from './exportHtml';
-import { exportMarkdown } from './exportMarkdown';
+import { exportMarkdown, buildMarkdown } from './exportMarkdown';
 import { exportJson } from './exportJson';
 /* Word, Vorlagen-Paket und LinkedIn-Import laden erst bei Bedarf (Audit 10.10.2026, S15):
  * docx und jszip gehören nicht ins Hauptbündel der Startseite. */
@@ -76,10 +76,11 @@ import { SHARE_SNAPSHOT_I18N } from '../ui/i18n/local';
 import { FASSUNG_I18N } from '../ui/i18n/fassung';
 import { atsPdfTemplateFor } from './atsPdfTemplate';
 import { getTheme } from '../templates/theme';
-import { track } from '../data/track';
+import { track, countEvent } from '../data/track';
 import { DEFAULT_TEMPLATE } from '../data/storage';
 import { markdownToCvData, markdownToCoverLetter, clToMarkdown, isCvMarkdown, isClMarkdown } from '../import/markdownBridge';
 import { useFreeTier } from '../billing/freeTier';
+import { TEMPLATE_LOCK_I18N } from '../ui/i18n/templateLock';
 import { exportLatex, CODE_EXPORT_UI } from './exportLatex';
 import { exportRenderCv, readCodeImport, ImportRefused } from '../import/rendercv';
 import { MAX_IMPORT_BYTES } from '../import/latexImport';
@@ -320,6 +321,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const latexLocked = !ft.latex;
   const cx = CODE_EXPORT_UI[uiLang] ?? CODE_EXPORT_UI.de;
   const coverLocked = docType === 'cover-letter' && !ft.coverLetter;
+  /* Vorlagen-Staffel: gestaltetes PDF und HTML einer Pass-Vorlage → Paneel
+   * `template`. ATS-Fassung als PDF und alle Datenexporte bleiben frei. */
+  const tplLocked = !coverLocked && !ft.templateAllowed(exportConfig.themeId);
+  const designLocked = coverLocked || tplLocked;
   /* RenderCV-YAML oder eine .tex-Datei von hier einlesen (import/rendercv.ts).
    * Läuft im Browser; das Foto der aktuellen Fassung bleibt, weil keine der
    * beiden Dateiarten eines mitbringt. */
@@ -393,48 +398,90 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   // Build a prompt that embeds the actual markdown when possible. If the URL-
   // encoded size would exceed ~12KB we fall back to the URL variant — most
   // chat UIs accept ~32KB query strings but we leave headroom.
-  async function buildPrompt(): Promise<string> {
+  /* KI-Knopf auch ohne Konto (10.10.2026): Der Lebenslauf geht als Markdown
+   * im Auftrag mit (`promptResumeInline`). Mit Konto kommt das Markdown vom
+   * Server (Bridge-Fassung), im Lokalmodus aus dem Browser (dasselbe Format,
+   * export/exportMarkdown.ts). Ist der Auftrag als Adresse zu lang (über
+   * 12 KB kodiert, Chat-Oberflächen nehmen rund 32 KB an, Luft bleibt), gilt
+   * mit Sharelink weiter dessen Adresse; ohne Sharelink geht der ganze Auftrag
+   * in die Zwischenablage, und der Chat öffnet sich leer. */
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
+  async function buildPrompt(): Promise<{ text: string; tooLong?: boolean }> {
     if (isCover) {
       // No public CL share URL — keep the URL-fallback variant for now.
-      return t.promptCoverUrl(resumeMdUrl);
+      return { text: t.promptCoverUrl(resumeMdUrl) };
     }
-    if (!resumeId) return t.promptResumeUrl(resumeMdUrl);
-    try {
-      const r = await fetch(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}.md`, { credentials: 'include' });
-      if (!r.ok) throw new Error(`fetch ${r.status}`);
-      const md = await r.text();
-      const inline = t.promptResumeInline(md);
-      // 12KB safety threshold for the encoded URL query string.
-      if (encodeURIComponent(inline).length < 12000) return inline;
-      return t.promptResumeUrl(resumeMdUrl);
-    } catch {
-      return t.promptResumeUrl(resumeMdUrl);
+    let md: string | null = null;
+    if (resumeId && !demoMode) {
+      try {
+        const r = await fetch(`/pdfapi/api/resumes/${encodeURIComponent(resumeId)}.md`, { credentials: 'include' });
+        if (r.ok) { const txt = await r.text(); if (txt.trimStart().startsWith('---')) md = txt; }
+      } catch { /* lokale Fassung unten */ }
     }
+    if (!md) md = buildMarkdown(data);
+    const inline = t.promptResumeInline(md);
+    if (encodeURIComponent(inline).length < 12000) return { text: inline };
+    if (resumeMdUrl) return { text: t.promptResumeUrl(resumeMdUrl) };
+    return { text: inline, tooLong: true };
   }
 
   async function copyPrompt() {
-    if (!activeShare && !resumeId) return;
     const prompt = await buildPrompt();
-    try { await navigator.clipboard?.writeText(prompt); setJustCopied('prompt'); setTimeout(() => setJustCopied(null), 1500); }
+    countEvent('ai_open', { target: 'clipboard' });
+    try { await navigator.clipboard?.writeText(prompt.text); setJustCopied('prompt'); setTimeout(() => setJustCopied(null), 1500); }
     catch { /* ignore */ }
   }
   async function openInAi(kind: 'chatgpt' | 'claude' | 'gemini') {
-    if (!activeShare && !resumeId) return;
+    setAiNote(null);
+    /* Das Fenster sofort öffnen (Klick des Menschen), die Adresse danach
+     * setzen: Ein window.open nach einem await blockieren manche Browser. */
+    const win = window.open('about:blank', '_blank');
+    if (win) { try { win.opener = null; } catch { /* egal */ } }
     const prompt = await buildPrompt();
+    countEvent('ai_open', { target: kind });
+    const go = (u: string) => { if (win) win.location.href = u; else window.open(u, '_blank', 'noopener'); };
     // Gemini hat (Stand 2026-06) keinen offiziellen Query-Parameter
     // wie ChatGPT/Claude. Wir kopieren den Prompt vorab in die
     // Zwischenablage damit der User ihn drüben mit Cmd/Strg+V einfügt,
     // und öffnen gemini.google.com.
-    if (kind === 'gemini') {
-      try { await navigator.clipboard?.writeText(prompt); } catch { /* ignore */ }
-      window.open('https://gemini.google.com/app', '_blank', 'noopener');
+    if (kind === 'gemini' || prompt.tooLong) {
+      try { await navigator.clipboard?.writeText(prompt.text); } catch { /* ignore */ }
+      if (prompt.tooLong) setAiNote(TL.aiTooLong);
+      go(kind === 'gemini' ? 'https://gemini.google.com/app' : kind === 'chatgpt' ? 'https://chatgpt.com/' : 'https://claude.ai/new');
       return;
     }
-    const url = kind === 'chatgpt'
-      ? `https://chatgpt.com/?q=${encodeURIComponent(prompt)}`
-      : `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
-    window.open(url, '_blank', 'noopener');
+    go(kind === 'chatgpt'
+      ? `https://chatgpt.com/?q=${encodeURIComponent(prompt.text)}`
+      : `https://claude.ai/new?q=${encodeURIComponent(prompt.text)}`);
   }
+  /** Die Knöpfe „In ChatGPT öffnen" usw., mit und ohne Konto gleich. */
+  const aiButtons = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }} data-ai-buttons>
+      <button type="button" onClick={copyPrompt}
+        style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'var(--ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+        {justCopied === 'prompt'
+      ? <><Icon name="check" size={13} /> {t.aiPromptCopied}</>
+      : <><Icon name="clipboard" size={13} /> {t.aiCopyPrompt}</>}
+      </button>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button type="button" onClick={() => void openInAi('chatgpt')} data-ai="chatgpt"
+          style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
+          {t.aiOpenChatgpt}
+        </button>
+        <button type="button" onClick={() => void openInAi('claude')} data-ai="claude"
+          style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
+          {t.aiOpenClaude}
+        </button>
+        <button type="button" onClick={() => void openInAi('gemini')} data-ai="gemini"
+          title={t.aiGeminiTitle}
+          style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
+          {t.aiOpenGemini}
+        </button>
+      </div>
+      {aiNote && <div role="status" aria-live="polite" data-ai-note style={{ fontSize: '11px', lineHeight: 1.5, color: 'var(--ink-2)', fontFamily: 'inherit' }}>{aiNote}</div>}
+    </div>
+  );
   /* Lokalmodus: Der Markdown-Import läuft im Browser (import/markdownBridge.ts),
    * derselbe Parser wie am Server. Geschrieben wird in die gerade bearbeitete
    * Sprache, gespeichert wie jede andere Änderung — im Browser. */
@@ -488,6 +535,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         if (r.cv) onReplaceData?.(r.cv);
         if (r.cl) onReplaceCoverLetter?.(r.cl);
         track(isCover ? 'import_cl_markdown' : 'import_markdown', { demo: true });
+        countEvent('import_markdown', { mode: 'local' });
         setImportOpen(false); setImportText(''); setImportDiff(null);
       } catch (e) { setImportErr(e instanceof Error ? e.message : t.importFailed); }
       finally { setImportBusy(false); }
@@ -498,6 +546,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         ? await api.importCoverLetterMarkdown(resumeId, importText)
         : await api.importMarkdown(resumeId, importText);
       onProfileUpdated?.(r.payload);
+      countEvent('import_markdown', { mode: 'account' });
       setImportOpen(false); setImportText(''); setImportDiff(null);
     } catch (e) { setImportErr(e instanceof Error ? e.message : t.importFailed); }
     finally { setImportBusy(false); }
@@ -710,6 +759,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const [pdfDone, setPdfDone] = useState<string | null>(null);
   async function handlePdf() {
     if (coverLocked) { ft.open('coverLetter'); return; }
+    if (tplLocked) { ft.open('template'); return; }
     setPdfErrMsg(null);
     setPdfDone(null);
     // Ein Klick, ein Download — kein Druckdialog. Der PDF-Endpunkt bedient auch
@@ -789,9 +839,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
         >
           {pdfState === 'busy'
             ? <><span className="cv-spin" aria-hidden /> {t.pdfBuilding}</>
-            : <>{coverLocked ? <LockGlyph size={14} /> : <span>↓</span>} {t.pdfDownload(docWord)}</>}
+            : <>{designLocked ? <LockGlyph size={14} /> : <span>↓</span>} {t.pdfDownload(docWord)}</>}
         </button>
         {coverLocked && <PassNote feature="coverLetter" style={{ marginTop: '8px' }} />}
+        {tplLocked && <PassNote feature="template" label={template} style={{ marginTop: '8px' }} />}
         <div role="status" aria-live="polite" style={{ fontSize: '10.5px', color: pdfState === 'error' ? '#b91c1c' : pdfDone ? '#2d6a3e' : 'var(--ink-3)', lineHeight: 1.55, marginTop: '8px', fontFamily: 'inherit' }}>
           {pdfState === 'error'
             ? t.pdfFailed(pdfErrMsg || t.pdfUnknownError)
@@ -865,8 +916,8 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <>
             <ExportButton
               icon="globe" label={d.clHtml}
-              sub={coverLocked ? ft.priceLine : t.clHtmlSub} locked={coverLocked}
-              onClick={() => { if (coverLocked) { ft.open('coverLetter'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); }}
+              sub={designLocked ? ft.priceLine : t.clHtmlSub} locked={designLocked}
+              onClick={() => { if (coverLocked) { ft.open('coverLetter'); return; } if (tplLocked) { ft.open('template'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); }}
             />
             <ExportButton
               icon="markdown" label={d.clMd}
@@ -885,7 +936,8 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             {/* „druckfertig" stand hier bis zum 17.09.2026 — und war nicht wahr.
                 Was der Browserdruck aus einer HTML-Datei macht, entscheidet
                 sein Druckdialog, nicht die Datei. */}
-            <ExportButton icon="globe" label={d.html} sub={t.htmlSub} onClick={() => exportHtml(data, exportConfig)} />
+            <ExportButton icon="globe" label={d.html} sub={tplLocked ? ft.priceLine : t.htmlSub} locked={tplLocked}
+              onClick={() => { if (tplLocked) { ft.open('template'); return; } void exportHtml(data, exportConfig); }} />
           </>
         )}
       </details>
@@ -894,7 +946,10 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
           <div style={s.divider} />
           <details style={s.section} className="cv-export-group">
             <summary style={{ ...s.sectionLabel, cursor: 'pointer', minHeight: '32px', display: 'flex', alignItems: 'center' }}>{d.secDev}</summary>
-            <ExportButton icon="markdown" label={d.mdLabel} sub={d.mdSub} onClick={resumeId && !demoMode ? downloadResumeMd : () => exportMarkdown(data)} />
+            <ExportButton icon="markdown" label={d.mdLabel} sub={d.mdSub} onClick={() => {
+              countEvent('export_markdown', { mode: demoMode ? 'local' : 'account' });
+              if (resumeId && !demoMode) downloadResumeMd(); else exportMarkdown(data);
+            }} />
             <ExportButton icon="braces" label={d.jsonLabel} sub={d.jsonSub} onClick={() => exportJson(data)} />
             <ExportButton icon="puzzle" label={d.jsonResumeLabel} sub={d.jsonResumeSub} onClick={() => { track('export_json_resume'); exportJsonResume(data); }} />
             <ExportButton icon="braces" label={cx.rendercv} sub={cx.rendercvSub} onClick={() => { track('export_rendercv'); void exportRenderCv(data); }} />
@@ -1000,6 +1055,25 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
               </div>
               <input type="file" accept=".json,application/json" hidden onChange={e => { const f = e.target.files?.[0]; if (f) importJsonFile(f); e.target.value = ''; }} />
             </label>
+          </div>
+        </>
+      )}
+
+      {/* KI ohne Konto (10.10.2026): Markdown im Auftrag, zurück über den
+          Import mit Gegenüberstellung. Vorher nur mit Konto und Sharelink. */}
+      {demoMode && !isCover && resumeId && (
+        <>
+          <div style={s.divider} />
+          <div style={s.section} data-ai-local>
+            <div style={s.sectionLabel}>{t.aiSection}</div>
+            <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
+              {TL.aiLocalHint}
+            </div>
+            {aiButtons}
+            <button type="button" onClick={() => { setImportOpen(true); setImportErr(null); setImportDiff(null); }}
+              style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+              {t.aiImportBack}
+            </button>
           </div>
         </>
       )}
@@ -1122,37 +1196,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {isCover
                 ? t.aiHintCl
-                : t.aiHintCv}
+                : TL.aiLocalHint}
             </div>
-            {!isCover && !activeShare ? (
-              <div style={{ fontSize: '11.5px', color: 'var(--ink-3)', fontFamily: 'inherit', fontStyle: 'italic', marginBottom: '10px' }}>
-                {t.aiNeedLink}
-              </div>
-            ) : !isCover && activeShare ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
-                <button type="button" onClick={copyPrompt}
-                  style={{ padding: '8px 12px', background: justCopied === 'prompt' ? '#2e7d32' : 'var(--ink)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                  {justCopied === 'prompt'
-                ? <><Icon name="check" size={13} /> {t.aiPromptCopied}</>
-                : <><Icon name="clipboard" size={13} /> {t.aiCopyPrompt}</>}
-                </button>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button type="button" onClick={() => openInAi('chatgpt')}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {t.aiOpenChatgpt}
-                  </button>
-                  <button type="button" onClick={() => openInAi('claude')}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {t.aiOpenClaude}
-                  </button>
-                  <button type="button" onClick={() => openInAi('gemini')}
-                    title={t.aiGeminiTitle}
-                    style={{ flex: 1, padding: '7px', background: 'transparent', border: '1px solid oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: '#444', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {t.aiOpenGemini}
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            {!isCover && aiButtons}
             <button type="button" onClick={() => { setImportOpen(true); setImportErr(null); setImportDiff(null); }}
               style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px dashed oklch(0.87 0.006 264)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit' }}>
               {t.aiImportBack}

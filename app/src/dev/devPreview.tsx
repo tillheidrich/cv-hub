@@ -58,6 +58,9 @@ const paper = (q.get('paper') || 'auto') as PaperId;
 const pageFormat: PageFormat = (['a4', 'letter', 'legal', 'a5'] as const).find(f => f === q.get('fmt')) ?? 'a4';
 /** Nutzerregler für die Schriftgröße — 1 = Normalstellung. */
 const userScale = Number(q.get('scale') || '1');
+/** `flat=1`: Versalzeilen ohne Sperrung wie in der ATS-Fassung (flatCaps,
+ *  scripts/capscheck.mjs). Messlauf und Export-HTML bekommen es beide. */
+const flatCaps = q.get('flat') === '1';
 /* Demo-Profil in allen vier Sprachen: `p=demo-en`, `demo-fr`, `demo-es`.
  * FR und ES sind wie in der App Klone der deutschen Fassung mit den
  * Beschriftungen der Zielsprache. */
@@ -92,6 +95,7 @@ function Harness() {
     buildResumeHtmlForTest(stretch(live), {
       themeId: tpl, accentId: accent, paperId: paper, pairingId: 'auto',
       metrics: fit?.metrics, pageBlocks: fit?.pageBlocks, asideSkillCap: fit?.asideCap, pageFormat,
+      ...(flatCaps ? { flatCaps: true } : {}),
     });
   // Text, den die ATS-Prüfung im Export-Panel liest (extractExportText) —
   // scripts/contactwrapcheck.mjs vergleicht ihn mit pdftotext.
@@ -154,7 +158,7 @@ function Harness() {
   const render = (M: Metrics, pageBlocks: string[][] | undefined, measure: boolean, asideCap: number) => (
     doc === 'cl'
       ? <CoverLetterRenderer cvData={data} clData={letter} theme={theme} pairing={pairing} metrics={M} measure={measure} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} />
-      : <ResumeRenderer data={data} theme={theme} pairing={pairing} metrics={M} pageBlocks={pageBlocks} measure={measure} asideSkillCap={asideCap} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} />
+      : <ResumeRenderer data={data} theme={theme} pairing={pairing} metrics={M} pageBlocks={pageBlocks} measure={measure} asideSkillCap={asideCap} pageFormat={pageFormat} inlineEdit={measure ? undefined : inlineEdit} flatCaps={flatCaps} />
   );
   return (
     <>

@@ -26,6 +26,16 @@
 //   Widerruf hatte, bleibt als Untergrenze stehen: access_until ist nie
 //   früher als min(Widerrufszeitpunkt, bisheriges Ende dieses Abschnitts).
 //   Rückwirkend wird nichts gesperrt.
+// - Nach einem Widerruf (10.10.2026): Stammen die
+//   Pass-Berechtigungen eines Kontos NUR aus widerrufenen Bestellungen, gilt es
+//   nicht als „Pass abgelaufen" (das hieße nach AGB § 7 Abs. 5: alles weiter
+//   exportieren, auch Word), sondern als „ohne Pass" (plan_kind 'none', selbst
+//   registriert) bzw. als das, was es vorher war (Einladung/Pilot). Lesen,
+//   Datenexport (JSON, Markdown) und Löschen bleiben, wie für jedes Konto ohne
+//   Pass. Grundlage: § 357 Abs. 8 i. V. m. § 327p Abs. 1 S. 2 BGB. Ein
+//   Gutschein zählt weiter als Pass, auch wenn er widerrufen wurde (das tut nur
+//   der Betreiber). Bestand: migrateWithdrawnOnly rechnet solche Konten einmal
+//   neu.
 // - Selbst registrierte Konten beginnen bei created_at (sofort „ohne Pass").
 //   Eingeladene/Bestandskonten ohne jede Berechtigungszeile sind unbegrenzt.
 // - Admin-Konten werden nie begrenzt.
@@ -56,9 +66,11 @@ export function computeAccess(user, grants) {
   const sorted = [...grants].sort((a, b) => (t(a.granted_at) - t(b.granted_at)) || (a.id - b.id));
   const active = sorted.filter(g => !g.revoked_at);
 
-  const touchesPass = sorted.some(g => g.source === 'order' || g.source === 'voucher');
+  const touchesPass = sorted.some(g => g.source === 'voucher' || (g.source === 'order' && !g.revoked_at));
+  const withdrawnOnly = !touchesPass && sorted.some(g => g.source === 'order' && g.revoked_at);
   let planKind = user.plan_kind ?? null;
   if (touchesPass) planKind = 'pass';
+  else if (withdrawnOnly) planKind = self ? 'none' : (planKind === 'pass' || planKind === 'lifetime' ? null : planKind);
   else if (planKind === 'lifetime') planKind = self ? 'none' : null;
 
   if (!self && sorted.length === 0) return { mode: 'unlimited', until: null, planKind, segments };
@@ -87,8 +99,8 @@ export function computeAccess(user, grants) {
     end = Math.max(end ?? segEnd, segEnd);
   }
 
-  if (active.some(g => g.kind === 'lifetime')) return { mode: 'lifetime', until: null, planKind: 'lifetime', segments };
-  if (unlimited) return { mode: 'unlimited', until: null, planKind: planKind === 'lifetime' ? null : planKind, segments };
+  if (active.some(g => g.kind === 'lifetime')) return { mode: 'lifetime', until: null, planKind: 'lifetime', segments, withdrawnOnly: false };
+  if (unlimited) return { mode: 'unlimited', until: null, planKind: planKind === 'lifetime' ? null : planKind, segments, withdrawnOnly };
 
   // Untergrenze aus widerrufenen Grants: was bis zum Widerruf galt, bleibt.
   let floor = null;
@@ -101,7 +113,7 @@ export function computeAccess(user, grants) {
   let until = end;
   if (floor != null) until = until == null ? floor : Math.max(until, floor);
   if (until == null) until = t(user.created_at) ?? Date.now();
-  return { mode: 'finite', until: new Date(until), planKind, segments };
+  return { mode: 'finite', until: new Date(until), planKind, segments, withdrawnOnly };
 }
 
 /** Gleiche Laufzeit? null = unbegrenzt. */
@@ -295,6 +307,20 @@ export async function planDetails(db, user, now = Date.now()) {
       [user.id],
     ));
   } catch { rows = []; }
+  /* Nur widerrufene Bestellungen, kein Gutschein: Stufe „ohne Pass" mit
+   * Datenexport (siehe computeAccess). Die Oberfläche zeigt dann den Hinweis
+   * zum Widerruf statt „noch kein Pass". */
+  let withdrawn = false;
+  if (plan.kind === 'none' && !rows.some(g => g.source === 'order' || g.source === 'voucher')) {
+    try {
+      const { rows: rv } = await db.query(
+        `SELECT 1 FROM access_grants WHERE user_id = $1 AND source = 'order' AND revoked_at IS NOT NULL LIMIT 1`, [user.id]);
+      const { rows: vv } = await db.query(
+        `SELECT 1 FROM access_grants WHERE user_id = $1 AND source = 'voucher' LIMIT 1`, [user.id]);
+      withdrawn = rv.length > 0 && vv.length === 0;
+    } catch { withdrawn = false; }
+  }
+  plan.withdrawn = withdrawn;
   plan.grants = rows.map(g => ({
     source: g.source,
     kind: g.kind,
@@ -308,6 +334,45 @@ export async function planDetails(db, user, now = Date.now()) {
   plan.freeUntil = plan.kind === 'lifetime' || !free.length ? null : new Date(Math.max(...free.map(g => t(g.effective_until)))).toISOString();
   plan.hasPaid = rows.some(g => g.source === 'order');
   return plan;
+}
+
+/**
+ * Einmalig (10.10.2026): Konten, deren Pass-Berechtigungen nur aus
+ * widerrufenen Bestellungen stammen, nach der neuen Regel neu rechnen. Vorher
+ * standen sie als „Pass abgelaufen" (plan_kind 'pass') da und durften dauerhaft
+ * Word und LaTeX exportieren. Die Laufzeit (access_until) ändert sich dabei
+ * nicht, nur plan_kind.
+ */
+export async function migrateWithdrawnOnly(pool, { log = console.log, name = 'withdrawn_only_v1' } = {}) {
+  const client = await pool.connect();
+  const out = { ran: false, users: 0, changed: 0 };
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(7322, 2)');
+    const mark = await client.query('INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING RETURNING name', [name]);
+    if (!mark.rowCount) { await client.query('COMMIT'); return out; }
+    out.ran = true;
+    const { rows } = await client.query(
+      `SELECT DISTINCT g.user_id FROM access_grants g JOIN users u ON u.id = g.user_id
+        WHERE g.source = 'order' AND g.revoked_at IS NOT NULL AND u.role <> 'admin'
+          AND NOT EXISTS (SELECT 1 FROM access_grants a WHERE a.user_id = g.user_id
+                           AND (a.source = 'voucher' OR (a.source = 'order' AND a.revoked_at IS NULL)))`,
+    );
+    for (const r of rows) {
+      out.users += 1;
+      const before = await lockUser(client, r.user_id);
+      const res = await recomputeAccess(client, r.user_id);
+      if (before && res && before.plan_kind !== res.planKind) out.changed += 1;
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  if (out.ran) log(`access-grants: Widerruf-Regel: ${out.users} Konto/Konten nur mit widerrufenen Bestellungen, ${out.changed} auf „ohne Pass" umgestellt.`);
+  return out;
 }
 
 /* ── Migration: Grants für den Altbestand ─────────────────────────────────

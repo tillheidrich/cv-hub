@@ -67,11 +67,13 @@ Dann übernimmt der Lebenslauf dessen Aufgabe. Ein kurzes Profil oben, zwei bis 
 
 ## So geht es mit CV-Hub
 
-In CV-Hub schreibst du Anschreiben und Lebenslauf im selben Werkzeug, mit derselben Schrift und Gestaltung. Empfänger, Betreff, Anrede, die Absätze und die Grußformel sind eigene Felder, die du je Bewerbung anpassen kannst, ohne den Rest neu zu setzen.
+In CV-Hub schreibst du Anschreiben und Lebenslauf im selben Werkzeug, mit derselben Schrift und Gestaltung, allein oder mit einer KI deiner Wahl. Dafür lädst du das Anschreiben als Markdown herunter, lässt es von einem Modell wie ChatGPT, Claude oder Gemini überarbeiten und liest es wieder ein. Vorher zeigt das Werkzeug, welche Felder sich geändert haben. Über den MCP-Server verbindest du Claude oder ein anderes Programm mit MCP-Unterstützung auch direkt mit deinem Konto.
+
+Empfänger, Betreff, Anrede, die Absätze und die Grußformel sind eigene Felder, die du je Bewerbung anpassen kannst, ohne den Rest neu zu setzen.
 
 Unter „Prüfen“ liest du das Anschreiben so, wie ein Portal es aus dem PDF bekommt. Die Prüfung meldet unter anderem einen fehlenden Betreff, ein veraltetes Datum, eine allgemeine Anrede, obwohl in der Anzeige eine Ansprechperson steht, vergessene Platzhalter und Text, der nicht mehr auf die Seite passt. Fügst du die Stellenanzeige ein, siehst du, ob Stellentitel und Firma im Anschreiben vorkommen. Unter „Beides“ prüfst du Lebenslauf und Anschreiben zusammen auf denselben Namen, dieselbe E-Mail-Adresse und dieselbe Sprache. Eine Punktzahl gibt es absichtlich nicht.
 
-Wenn du mit einer KI arbeiten willst, gibst du deine Daten als Markdown an ein Modell deiner Wahl und holst den überarbeiteten Text zurück. Bietet die Instanz den optionalen Bewerbungs-Pass an, gehören Anschreiben und seine Prüfung dazu; Lebenslauf und PDF bleiben immer kostenlos. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+Bietet die Instanz den optionalen Bewerbungs-Pass an, gehören Anschreiben, seine Prüfung und der direkte MCP-Zugang dazu; den Lebenslauf als PDF bekommst du in jedem Fall. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Häufige Fragen
 

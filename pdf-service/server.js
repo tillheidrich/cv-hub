@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { readFileSync } from 'node:fs';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl, MAX_MARKDOWN_CHARS } from './markdown.js';
-import { sendMail, mailConfigured, onMailResult, tplInvite, tplWelcome, tplPasswordReset, tplPasswordChanged, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
+import { sendMail, mailConfigured, isMailConfigured, onMailResult, tplInvite, tplPasswordReset, tplPasswordChanged, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
 import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError, originGuard, subnetOf, clientKey } from './guards.js';
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
@@ -22,9 +22,13 @@ import { addGrant, planDetails } from './grants.js';
 import { createVouchers } from './vouchers.js';
 import { createAltcha } from './altcha.js';
 import { tplConfirmEmail, tplConfirmEmailChange, tplEmailChangeTaken, tplEmailChangeRequested, tplRegisterExisting } from './mailtexts/index.js';
-import { createAdmin, adminConfig } from './admin.js';
+import { createAdmin, adminConfig, normHost } from './admin.js';
 import { ART9_VERSION, art9Info, hasArt9Consent, requireArt9Consent, legalVersions } from './consent.js';
-import { createStats } from './stats.js';
+import { createStats, CLIENT_COUNTS } from './stats.js';
+import { createMailer } from './mailqueue.js';
+import { mountMailAdmin } from './mailadmin.js';
+import { applyStoredSettings, settingsKey, verifyUnsubscribeToken } from './mailsettings.js';
+import { TIPS_CONSENT_VERSION, mailLang } from './mailflows.js';
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -161,6 +165,15 @@ let admin = null;
 const STARTED_AT = new Date().toISOString();
 const stats = createStats({ pool, templateIds: new Set(TEMPLATES.map(t => t.id)), flushMs: process.env.NODE_ENV === 'test' ? 0 : 15_000 });
 onMailResult(ok => stats.count(ok ? 'mail_sent' : 'mail_failed'));
+/* E-Mail-Workflows (10.10.2026): Warteschlange, Tipps, Protokoll
+ * (mailqueue.js). Entsteht weiter unten, wenn die Angaben des Verkäufers
+ * stehen (Absender im Fuß der Tipps-Mails). */
+let mailer = null;
+// Versandprotokoll jeder Mail, auch der direkten (Login-Code, Passwort …).
+onMailResult((ok, meta) => {
+  if (!mailer) return;
+  mailer.logMail({ workflow: meta?.tag || 'sonstige', queueId: meta?.queueId ?? null, to: meta?.to, status: ok ? 'sent' : meta?.notConfigured ? 'not_configured' : 'failed', error: ok ? null : meta?.error });
+});
 
 const app = express();
 // Kein „x-powered-by: Express" (N5) — verrät nur die Angriffsfläche.
@@ -203,6 +216,8 @@ const ALLOWLIST = new Set([...DEFAULT_ALLOWED, ...ALLOWED_ORIGINS]);
  * nicht der Ursprung. */
 const PUBLIC_CORS_PATHS = new Set([
   '/api/oauth/token', '/api/oauth/register', '/api/oauth/revoke',
+  // One-Click-Abmeldung (RFC 8058): Mailanbieter posten ohne Cookie; der Token ist die Berechtigung.
+  '/api/mail/unsubscribe',
   '/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp',
   '/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/mcp',
 ]);
@@ -645,7 +660,10 @@ async function issueEmailConfirmation(user, base, lang = 'de', { kind = 'signup'
     return false;
   }
   const productName = (process.env.PRODUCT_NAME || 'CV-Hub').trim();
-  const tpl = kind === 'change' ? tplConfirmEmailChange({ token, base, lang, productName }) : tplConfirmEmail({ token, base, lang, productName });
+  /* Double-Opt-in für Tipps: Wartet eine Einwilligung auf die Bestätigung
+   * der Adresse, sagt die Mail das ausdrücklich (mailtexts, tips). */
+  const tips = kind === 'signup' && mailer ? (await mailer.prefs(user)).tips === 'pending' : false;
+  const tpl = kind === 'change' ? tplConfirmEmailChange({ token, base, lang, productName }) : tplConfirmEmail({ token, base, lang, productName, tips });
   return sendMail({ to, ...tpl });
 }
 
@@ -669,6 +687,11 @@ async function generateUsername(client, email) {
 function signupArt9Version(body) {
   return String(body?.art9Consent?.version || '') === ART9_VERSION ? ART9_VERSION : null;
 }
+/* Tipps per E-Mail (E-Mail-Workflows, 10.10.2026): nur, wenn das Formular das
+ * nicht vorangekreuzte Häkchen in der Fassung schickt, die der Server kennt.
+ * Wirksam wird die Einwilligung erst mit dem Klick im Bestätigungslink. */
+const signupTips = body => String(body?.tipsConsent?.version || '') === TIPS_CONSENT_VERSION;
+const signupLang = (req) => mailLang(String(req.body?.lang || req.get('accept-language') || 'de'));
 const signupTermsVersion = () => legalVersions().terms;
 
 async function registerOpen(req, res) {
@@ -718,12 +741,13 @@ async function registerOpen(req, res) {
     const { rows } = await client.query(
       `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until,
                           signup_source, plan_kind, age_confirmed_16_at,
-                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at)
+                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at, mail_lang)
        VALUES ($1, $2, 'user', $3, now(), now(), 'self', 'none', now(),
-               $4, now(), $5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END) RETURNING *`,
-      [username, hash, email, signupTermsVersion(), signupArt9Version(req.body)],
+               $4, now(), $5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END, $6) RETURNING *`,
+      [username, hash, email, signupTermsVersion(), signupArt9Version(req.body), signupLang(req)],
     );
     user = rows[0];
+    if (signupTips(req.body)) await mailer.requestTips(user, 'register', client);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -816,9 +840,9 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
     const hash = await bcrypt.hash(password, 10);
     const { rows: created } = await client.query(
       `INSERT INTO users (username, password_hash, role, email, password_changed_at, access_until,
-                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at)
-       VALUES ($1, $2, $3, $4, now(), NULL, $5, now(), $6::text, CASE WHEN $6::text IS NULL THEN NULL ELSE now() END) RETURNING *`,
-      [username, hash, role, email || null, signupTermsVersion(), signupArt9Version(req.body)],
+                          terms_accepted_version, terms_accepted_at, art9_consent_version, art9_consent_at, mail_lang)
+       VALUES ($1, $2, $3, $4, now(), NULL, $5, now(), $6::text, CASE WHEN $6::text IS NULL THEN NULL ELSE now() END, $7) RETURNING *`,
+      [username, hash, role, email || null, signupTermsVersion(), signupArt9Version(req.body), signupLang(req)],
     );
     let user = created[0];
     /* Laufzeit aus dem Code als Berechtigung (grants.js); die Neuberechnung
@@ -834,11 +858,19 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
       await client.query('INSERT INTO invite_redemptions (code, user_id) VALUES ($1, $2)', [inviteCode, user.id]);
     }
 
+    const tipsWanted = !!email && signupTips(req.body);
+    if (tipsWanted) await mailer.requestTips(user, 'register', client);
     await client.query('COMMIT');
     logEvent(user.id, 'register');
     issueSession(res, user);
     res.json({ user: publicUser(user) });
-    if (email) { const m = tplWelcome({ username }); sendMail({ to: email, ...m }); }
+    /* Willkommen über die Warteschlange (wartet ohne SMTP). Einladungskonten
+     * haben keinen Bestätigungsschritt; wer Tipps will, bekommt den Link,
+     * damit die Einwilligung bestätigt ist (Double-Opt-in). */
+    if (email) {
+      mailer.enqueue('welcome', user.id, 'v1').catch(err => console.error('welcome enqueue failed:', err?.message || err));
+      if (tipsWanted) issueEmailConfirmation(user, publicBaseUrl(req), user.mail_lang || 'de').catch(err => console.error('confirm-email failed:', err?.message || err));
+    }
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('register failed:', err);
@@ -1027,6 +1059,56 @@ app.post('/api/me/consent/art9', rateLimit({ route: 'consent', max: 30, windowMs
   res.json({ ok: true, consent: hasArt9Consent(u), user });
 });
 
+/* ── E-Mails in den Kontoeinstellungen (E-Mail-Workflows, 10.10.2026) ─────
+ * Tipps an/aus mit Fassung und Zeitpunkt der Einwilligung, Sprache der
+ * Mails. Servicemails (Bestätigung, Sicherheit, Bestellung, Laufzeit) lassen
+ * sich nicht abbestellen; das sagt die Oberfläche dazu. */
+app.get('/api/me/mail', requireAuth, async (req, res) => {
+  res.json({ ...(await mailer.prefs(req.user)), mailReady: mailConfigured });
+});
+
+app.post('/api/me/mail', rateLimit({ route: 'mailprefs', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+  const body = req.body || {};
+  if (body.lang !== undefined) {
+    const l = String(body.lang || '').slice(0, 2).toLowerCase();
+    if (!['de', 'en', 'fr', 'es'].includes(l)) return res.status(400).json({ error: 'Sprache: de, en, fr oder es.' });
+    await pool.query('UPDATE users SET mail_lang = $2 WHERE id = $1', [req.user.id, l]);
+    req.user.mail_lang = l;
+  }
+  let confirmationSent;
+  if (body.tips === true) {
+    // Einwilligen nur im Browser mit dem Text der Oberfläche, wie bei Art. 9.
+    if (req.user.authVia && req.user.authVia !== 'session') return res.status(403).json({ error: 'Die Einwilligung geht nur in der App.', code: 'consent_session_only' });
+    if (String(body.version || '') !== TIPS_CONSENT_VERSION) return res.status(409).json({ error: 'Der Einwilligungstext hat sich geändert. Bitte die Seite neu laden.', code: 'consent_version_mismatch', version: TIPS_CONSENT_VERSION });
+    if (!req.user.email) return res.status(409).json({ error: 'Im Konto ist keine E-Mail-Adresse hinterlegt.', code: 'email_missing' });
+    const st = await mailer.requestTips(req.user, 'settings');
+    logEvent(req.user.id, st === 'on' ? 'tips_consent' : 'tips_requested');
+    // Unbestätigte Adresse: Bestätigungslink schicken (Double-Opt-in).
+    if (st === 'pending') confirmationSent = !!(await issueEmailConfirmation(req.user, publicBaseUrl(req), req.user.mail_lang || 'de'));
+  } else if (body.tips === false) {
+    if (await mailer.withdrawTips(req.user.id, 'settings')) logEvent(req.user.id, 'tips_withdraw');
+  } else if (body.lang === undefined) {
+    return res.status(400).json({ error: 'Erwartet: tips (true/false) oder lang.' });
+  }
+  res.json({ ok: true, ...(await mailer.prefs(req.user)), ...(confirmationSent !== undefined ? { confirmationSent } : {}) });
+});
+
+/* Abmelden ohne Anmeldung (/mail/abmelden?token=… in der App, POST hierher).
+ * GET prüft nur den Token und ändert nichts: Link-Scanner rufen Links ab.
+ * POST meldet ab, auch als One-Click nach RFC 8058 (Formular-Body
+ * „List-Unsubscribe=One-Click", Token in der Adresse). */
+const unsubLimit = rateLimit({ route: 'unsubscribe', max: 30, windowMs: 10 * 60 * 1000 });
+app.get('/api/mail/unsubscribe', unsubLimit, (req, res) => {
+  res.json({ valid: verifyUnsubscribeToken(req.query.token) !== null });
+});
+app.post('/api/mail/unsubscribe', unsubLimit, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
+  const token = String(req.query.token || req.body?.token || '').trim();
+  const oneClick = String(req.body?.['List-Unsubscribe'] || '') === 'One-Click';
+  const r = await mailer.unsubscribeByToken(token, oneClick ? 'one-click' : 'link');
+  if (!r.ok) return res.status(400).json({ ok: false, error: 'Der Abmeldelink ist ungültig.', code: 'token_invalid' });
+  res.json({ ok: true, changed: r.changed });
+});
+
 /* Double-Opt-in: Token aus der Mail (nur sein Hash liegt in der Datenbank).
  * Ohne Anmeldung — der Token ist die Berechtigung. Gilt nur für die Adresse,
  * an die er ging. */
@@ -1059,6 +1141,7 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
       }
       await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
       await client.query('UPDATE users SET email = $2, pending_email = NULL, email_confirmed_at = now() WHERE id = $1', [c.user_id, c.email]);
+      await mailer.confirmPendingTips(c.user_id, client);
       await client.query('COMMIT');
       logEvent(c.user_id, 'email_changed');
       const old = u[0].email;
@@ -1067,10 +1150,17 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
     }
     if (String(c.current_email || '').toLowerCase() !== c.email) { await client.query('ROLLBACK'); return invalid(); }
     await client.query('UPDATE email_confirmations SET used = true WHERE user_id = $1', [c.user_id]);
+    const { rows: before } = await client.query('SELECT email_confirmed_at, signup_source FROM users WHERE id = $1', [c.user_id]);
     await client.query('UPDATE users SET email_confirmed_at = coalesce(email_confirmed_at, now()) WHERE id = $1', [c.user_id]);
+    const tipsOn = await mailer.confirmPendingTips(c.user_id, client);
     await client.query('COMMIT');
     logEvent(c.user_id, 'email_confirmed');
-    res.json({ ok: true, emailConfirmed: true });
+    if (tipsOn) logEvent(c.user_id, 'tips_consent');
+    // Willkommen nach der ersten Bestätigung (offene Registrierung).
+    if (!before[0]?.email_confirmed_at && before[0]?.signup_source === 'self') {
+      await mailer.enqueue('welcome', c.user_id, 'v1').catch(err => console.error('welcome enqueue failed:', err?.message || err));
+    }
+    res.json({ ok: true, emailConfirmed: true, tips: tipsOn ? 'on' : undefined });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('confirm-email failed:', err?.message || err);
@@ -1904,8 +1994,8 @@ app.delete('/api/resumes/:id', requireAuth, async (req, res) => {
  */
 app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   try {
-    const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions, declarations] = await Promise.all([
-      pool.query('SELECT id, username, email, pending_email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at, terms_accepted_version, terms_accepted_at, art9_consent_at, art9_consent_version, art9_withdrawn_at FROM users WHERE id = $1', [req.user.id]),
+    const [user, resumes, versions, shares, photos, events, apiKeys, orders, grants, redemptions, declarations, mailPrefs, mailQueue] = await Promise.all([
+      pool.query('SELECT id, username, email, pending_email, role, twofa_enabled, created_at, last_seen_at, access_until, plan_kind, signup_source, email_confirmed_at, age_confirmed_16_at, terms_accepted_version, terms_accepted_at, art9_consent_at, art9_consent_version, art9_withdrawn_at, mail_lang FROM users WHERE id = $1', [req.user.id]),
       pool.query('SELECT id, display_name, payload, created_at, updated_at FROM resumes WHERE user_id = $1', [req.user.id]),
       pool.query(`SELECT v.id, v.resume_id, v.source, v.payload, v.created_at
                     FROM resume_versions v JOIN resumes r ON r.id = v.resume_id
@@ -1932,6 +2022,10 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
                     FROM declarations
                    WHERE user_id = $1 OR order_ids && coalesce((SELECT array_agg(id) FROM orders WHERE user_id = $1), '{}'::uuid[])
                    ORDER BY received_at`, [req.user.id]),
+      // E-Mail-Workflows: Einwilligung in Tipps und Mails an das Konto.
+      pool.query(`SELECT tips_requested_at, tips_requested_version, tips_consent_at, tips_consent_version, tips_consent_source, tips_withdrawn_at, tips_withdrawn_via
+                    FROM mail_prefs WHERE user_id = $1`, [req.user.id]),
+      pool.query(`SELECT workflow, status, due_at, sent_at, created_at FROM mail_queue WHERE user_id = $1 ORDER BY created_at`, [req.user.id]),
     ]);
 
     const dump = {
@@ -1950,6 +2044,8 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
       accessGrants: grants.rows,
       voucherRedemptions: redemptions.rows,
       declarations: declarations.rows,
+      mailPreferences: mailPrefs.rows[0] || null,
+      mails: mailQueue.rows,
     };
 
     logEvent(req.user.id, 'dsgvo_export');
@@ -2063,8 +2159,16 @@ app.post('/api/me/delete', requireAuth, async (req, res) => {
  * Zeitpunkt am Konto, sonst nichts. Für die Demo ohne Konto gibt es diesen
  * Weg nicht. Auch nach Ablauf der Laufzeit erlaubt: Exportieren bleibt. */
 const CLIENT_EVENTS = new Set(['docx', 'pdf_local', 'share_create', 'latex']);
-app.post('/api/events', rateLimit({ route: 'events', max: 120, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
+/* Seit 10.10.2026 zwei Arten von Ereignissen auf einem Weg:
+ * - CLIENT_EVENTS (Word, Browser-PDF, Sharelink, LaTeX): nur mit Konto, je
+ *   Konto protokolliert (Tabelle events, Auswertung je Einladungscode).
+ * - CLIENT_COUNTS (stats.js: Vorlagen-Staffel, Markdown, KI-Knopf): auch ohne
+ *   Konto, NUR als Tageszähler ohne Personenbezug. Auch mit Konto wird hier
+ *   nichts mit Nutzer-ID gespeichert; gezählt wird in stats.middleware. */
+app.post('/api/events', rateLimit({ route: 'events', max: 120, windowMs: 60 * 60 * 1000 }), optionalAuth, async (req, res) => {
   const kind = String(req.body?.kind || '');
+  if (CLIENT_COUNTS.has(kind)) return res.status(204).end();
+  if (!req.user) return res.status(401).json({ error: 'Nicht angemeldet.' });
   if (!CLIENT_EVENTS.has(kind)) return res.status(400).json({ error: 'Unbekannte Ereignisart.' });
   logEvent(req.user.id, kind);
   res.status(204).end();
@@ -2454,8 +2558,20 @@ const vouchers = createVouchers({
   registrationOpen: () => OPEN_REGISTRATION && altcha.configured,
   emailConfirmed,
   baseUrl: BILLING.base,
+  // Bestätigung per Mail (E-Mail-Workflow voucher_redeemed).
+  onRedeemed: ({ userId, redemptionId, grant }) => mailer?.enqueue('voucher_redeemed', userId, String(redemptionId), {
+    grantUntil: grant?.until || null, lifetime: grant?.kind === 'lifetime',
+  }).catch(err => console.error('voucher mail enqueue failed:', err?.message || err)),
 });
 vouchers.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, loadUser });
+
+// ── E-Mail-Workflows (10.10.2026; mailqueue.js, MAILS.md) ────────────────────
+mailer = createMailer({
+  pool,
+  base: (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null,
+  apiBase: (process.env.MAIL_API_BASE || '').trim() || null,
+  seller: BILLING.seller,
+});
 
 // ── Admin-Bereich (Runde 8b, 10.10.2026; admin.js, ADMIN.md) ────────────────
 function systemInfo() {
@@ -2478,8 +2594,9 @@ function systemInfo() {
 }
 admin = createAdmin({
   pool, cfg: ADMIN_CFG, rateLimit, subnetLimit, bucketBlocked, bucketHit, loadUser, markAuth,
-  sendMail, mailConfigured, billing, billingConfig: BILLING, stats, publicBaseUrl, art9Version: ART9_VERSION,
+  sendMail, isMailConfigured, billing, billingConfig: BILLING, stats, publicBaseUrl, art9Version: ART9_VERSION,
   issueEmailConfirmation, issuePasswordReset, deleteAccount, revokeAllCredentials, systemInfo, summarizeUa, tplOffboarding,
+  mountMail: (a, guard, extra) => mountMailAdmin(a, guard, { pool, mailer, rateLimit, cfg: ADMIN_CFG, normHost, ...extra }),
 });
 admin.mount(app);
 
@@ -2574,11 +2691,26 @@ process.on('unhandledRejection', (grund) => {
 const port = process.env.PORT || 3000;
 initDb()
   .then(() => bootstrapAdmin())
+  .then(async () => {
+    // SMTP aus dem Admin-Bereich (mailsettings.js); jede Minute neu gelesen,
+    // damit mehrere Instanzen dieselben Einstellungen nutzen.
+    await applyStoredSettings(pool);
+    setInterval(() => applyStoredSettings(pool).catch(() => {}), 60_000).unref?.();
+    try { const k = settingsKey(); if (k.warning) console.warn(`mail: ${k.warning}`); } catch (err) { console.warn(`mail: ${err.message}`); }
+  })
+  .then(() => billing.ensureTemplateTierSince())
   .then(() => {
     // Aufräumen beim Start und danach täglich (janitor.js).
     if (process.env.JANITOR !== '0') startJanitor(pool);
-    // Hinweis-Mails vor Ablauf der Laufzeit (access.js), alle 6 Stunden.
-    if (process.env.ACCESS_NOTICES !== '0') {
+    /* E-Mail-Workflows: Warteschlange jede Minute, Anlässe alle 10 Minuten,
+     * Hinweise vor Laufzeitende alle 6 Stunden über die Warteschlange.
+     * In Tests (NODE_ENV=test) nur mit MAIL_JOBS=1, damit fremde Prüfungen
+     * keine zusätzlichen Mails im Mitschnitt finden. */
+    const mailJobs = process.env.MAIL_JOBS ?? (process.env.NODE_ENV === 'test' ? '0' : '1');
+    if (mailJobs !== '0') {
+      mailer.start({ everyMs: Number(process.env.MAIL_JOBS_EVERY_MS) || 60_000, accessNotices: process.env.ACCESS_NOTICES !== '0' });
+    } else if (process.env.ACCESS_NOTICES !== '0') {
+      // Hinweis-Mails vor Ablauf der Laufzeit (access.js), alle 6 Stunden, direkt.
       const base = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null;
       startAccessNotices(pool, { base });
     }

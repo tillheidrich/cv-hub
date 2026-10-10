@@ -283,6 +283,9 @@ function robots() {
 function llms(ssr, offer, articles) {
   const brand = ssr.SSR_INFO.brand.name;
   const n = ssr.SSR_INFO.templates.length;
+  // Vorlagen-Staffel (10.10.2026): Zahl der Gratis-Vorlagen aus
+  // templates/freeTemplates.ts (über SSR_INFO), nie von Hand.
+  const frei = ssr.SSR_INFO.freeTemplates ?? 0;
   const hat = f => existsSync(join(APP, 'src', ...f.split('/')));
   const formate = ['PDF (Vektor, echte Textebene, genau die Seiten der Vorschau)', 'PDF in der ATS-Fassung (einspaltig)', 'Word (.docx) mit dem Design der Vorlage', 'Word (.docx) in der ATS-Fassung, einspaltig ohne Tabellen', 'HTML', 'Markdown', 'JSON', 'JSON Resume'];
   if (hat('export/exportLatex.ts')) formate.push('LaTeX (.tex, für pdfLaTeX und Overleaf)');
@@ -290,17 +293,31 @@ function llms(ssr, offer, articles) {
   const importe = ['Markdown', 'JSON Resume', 'LinkedIn-Datenexport (ZIP, wird im Browser gelesen)'];
   if (hat('import/rendercv.ts')) importe.push('RenderCV (YAML)');
   if (hat('import/latexImport.ts')) importe.push('LaTeX (nur .tex-Dateien, die aus diesem Werkzeug stammen)');
-  const preis = offer
-    ? `Ohne Konto kostenlos im Browser, das PDF des Lebenslaufs inklusive. Bewerbungs-Pass: ${(offer.priceCents / 100).toLocaleString('de-DE', { minimumFractionDigits: offer.priceCents % 100 ? 2 : 0 })} ${offer.currency === 'EUR' ? '€' : offer.currency} einmalig für ${offer.days} Tage, kein Abo, endet von selbst. Zum Pass gehören Word, LaTeX, das Anschreiben samt Prüfung, weitere Fassungen und Sprachen${offer.enabled ? '' : ' (Verkauf zum Zeitpunkt dieses Stands noch nicht geöffnet)'}. Details: ${BASIS}/preise`
-    : `Siehe ${BASIS}/preise. Selbst betrieben kostet das Werkzeug nichts.`;
+  const betrag = offer ? `${(offer.priceCents / 100).toLocaleString('de-DE', { minimumFractionDigits: offer.priceCents % 100 ? 2 : 0 })} ${offer.currency === 'EUR' ? '€' : offer.currency}` : '';
+  const staffel = `Ohne Konto kostenlos im Browser: schreiben, alle ${n} Vorlagen ansehen und gestalten, das PDF des Lebenslaufs in ${frei} Vorlagen, die einspaltige ATS-Fassung als PDF in jeder Vorlage, Prüfen, Datenexport (JSON, JSON Resume, Markdown, RenderCV-YAML) und die Markdown-Brücke. Welche Vorlagen kostenlos sind, steht an jeder Vorlage, bevor man sie wählt.`
+    + (offer ? ` Bewerbungs-Pass: ${betrag} einmalig für ${offer.days} Tage, kein Abo, endet von selbst. Zum Pass gehören das gestaltete PDF und HTML der übrigen Vorlagen, Word, LaTeX, das Anschreiben samt Prüfung, weitere Fassungen und Sprachen, Sharelinks, Versionen am Server und die Verbindung zu Claude und anderen MCP-Programmen.` : '');
+  const preis = !offer
+    ? `Siehe ${BASIS}/preise. Selbst betrieben kostet das Werkzeug nichts.`
+    : offer.freeTier?.limited
+      ? `${staffel} Details: ${BASIS}/preise`
+      : offer.enabled
+        ? `Ohne Konto kostenlos im Browser, alle Vorlagen und Exporte inklusive. Bewerbungs-Pass: ${betrag} einmalig für ${offer.days} Tage, kein Abo, endet von selbst; er bringt Speichern über Geräte, Sharelinks, Versionen am Server und die MCP-Verbindung. Details: ${BASIS}/preise`
+        : `Geplant: ${staffel} Der Verkauf ist zum Zeitpunkt dieses Stands noch nicht geöffnet; bis dahin ist im Browser alles frei. Details: ${BASIS}/preise`;
   const artikel = articles.length
     ? articles.map(a => `- [${a.title}](${BASIS}/magazin/${a.slug}/): ${a.description}`).join('\n')
     : '- (noch keine Artikel)';
   return `# ${brand}
 
-> ${brand} ist ein Werkzeug für Lebenslauf und Anschreiben im Browser. Man schreibt direkt in der Vorschau, wählt aus ${n} Vorlagen und lädt ein PDF mit echter Textebene herunter, deren Lesereihenfolge Prüfskripte gegen die Vorschau vergleichen. Für Bewerbungsportale gibt es zu jeder Vorlage dieselbe Fassung einspaltig als PDF oder Word. Starten geht ohne Konto. Keine eingebaute KI; eine Markdown-Brücke und ein MCP-Server verbinden externe Modelle. Quelloffen unter AGPL-3.0.
+> ${brand} ist ein Werkzeug für Lebenslauf und Anschreiben im Browser, gemacht für die Arbeit mit der KI, die man ohnehin nutzt. Man schreibt direkt in der Vorschau oder gibt den Lebenslauf als Markdown an ein Sprachmodell eigener Wahl und holt die überarbeitete Fassung zurück; Claude und andere MCP-Programme verbinden sich mit Konto direkt. Gesetzt wird in ${n} Vorlagen als PDF mit echter Textebene, deren Lesereihenfolge Prüfskripte gegen die Vorschau vergleichen. Für Bewerbungsportale gibt es zu jeder Vorlage dieselbe Fassung einspaltig. Starten geht ohne Konto. Keine eingebaute KI, keine Guthaben. Quelloffen unter AGPL-3.0.
 
 Stand: ${new Date().toISOString().slice(0, 10)}. Website auf Deutsch (${BASIS}/), Englisch (${BASIS}/en/), Französisch (${BASIS}/fr/) und Spanisch (${BASIS}/es/).
+
+## Mit KI arbeiten
+
+- Keine eingebaute KI und keine Guthaben: Die KI-Nutzung läuft beim Anbieter, den die Person selbst wählt
+- Markdown-Brücke ohne Konto: Lebenslauf und Anschreiben als Markdown exportieren, in ChatGPT, Claude oder einen anderen Chat geben, die überarbeitete Fassung wieder einlesen. Vor dem Übernehmen zeigt das Werkzeug eine Übersicht der Änderungen (Name, Kontakt und Profiltext im Vergleich, Zahl der Stationen, Stichpunkte, Ausbildungen, Kenntnisgruppen und Sprachen; beim Anschreiben alle Felder)
+- MCP-Server mit Konto: Claude und andere MCP-Programme lesen und ändern Lebenslauf und Anschreiben direkt, angemeldet über OAuth. Vor jeder Änderung an Inhalt oder Gestaltung legt der Server den bisherigen Stand als Version an (die letzten 25 je Lebenslauf lassen sich wiederherstellen)
+- Inhalte gehen nur an einen KI-Anbieter, wenn die Person sie selbst dorthin gibt
 
 ## Was das Werkzeug kann
 
@@ -313,11 +330,11 @@ Stand: ${new Date().toISOString().slice(0, 10)}. Website auf Deutsch (${BASIS}/)
 - Seitenzahl: eine bis vier Seiten oder automatisch; was über vier Seiten hinausgeht, wird gemeldet und nicht abgeschnitten
 - Prüfen-Paneel für Lebenslauf, Anschreiben und beide zusammen: zeigt den Text in der Reihenfolge, in der ein Parser ihn aus dem PDF liest, meldet fehlende Angaben (beim Anschreiben auch Betreff, Datum, Anrede, Länge, Platzhalter) und gleicht mit einer Stellenanzeige ab; unter „Beides“ werden Name, Kontakt und Sprache beider Unterlagen verglichen. Keine Punktzahl
 - Ohne Konto: Lebensläufe werden im Browser gespeichert (IndexedDB), Sicherungsdatei zum Mitnehmen. Für den PDF-Export geht das Dokument kurz an den eigenen Server und wird dort nicht gespeichert
-- Mit Konto: Speichern über Geräte, Sharelinks, Versionen am Server, MCP-Anbindung für KI-Assistenten
+- Mit Konto: Speichern über Geräte, Sharelinks, Versionen am Server, MCP-Anbindung für Claude und andere MCP-Programme
 
 ## Preise
 
-- ${preis}
+- ${preis}${offer ? '\n- Arbeitssuchende in Deutschland können die Übernahme der Kosten aus dem Vermittlungsbudget beantragen (§ 44 SGB III, beim Jobcenter über § 16 SGB II): vorher beantragen, kein Rechtsanspruch.' : ''}
 
 ## Was geprüft ist und was nicht
 
@@ -338,17 +355,17 @@ Das Werkzeug lässt sich vollständig über Markdown bedienen, ohne Konto auf Ag
 
 1. Vorlage holen: ${BASIS}/vorlage-lebenslauf-de.md, ${BASIS}/vorlage-lebenslauf-en.md, ${BASIS}/vorlage-anschreiben-de.md, ${BASIS}/vorlage-anschreiben-en.md
 2. In genau dieser Struktur ausfüllen. Der Frontmatter-Block steuert Sprache, Schriftgröße und Seitenzahl (pageMode).
-3. Den Text im Werkzeug unter „Import" einfügen. Vor jedem Import legt das Werkzeug eine Version an; vor dem Übernehmen zeigt es jede Änderung.
+3. Den Text im Werkzeug unter „Import" einfügen. Vor dem Übernehmen zeigt das Werkzeug eine Übersicht der Änderungen. Mit Konto legt der Server vor jedem Import eine Version an; ohne Konto sichert der Browser frühere Stände in Abständen und vor großen Änderungen.
 
 ## Datenschutz
 
 - Selbst betrieben: Konten und Lebensläufe liegen auf dem Server dieser Instanz (Standort: siehe Datenschutzerklärung); Schriften selbst ausgeliefert, keine Aufrufe an fremde Server
 - Keine Werbe-Tracker; Reichweitenmessung ist ab Werk aus (optional selbst betriebenes Umami, ohne Cookies)
-- Keine externen KI-Dienste eingebunden
+- Keine externen KI-Dienste eingebunden; über die Markdown-Brücke oder MCP gehen Inhalte nur an den KI-Anbieter, den die Person selbst wählt
 
 ## Quelltext und Rechtliches
 
-- Quelltext (AGPL-3.0): ${ssr.SSR_INFO.repo}
+- Quelltext (AGPL-3.0): ${ssr.SSR_INFO.repo}. Auf einer eigenen Instanz ist alles frei, auch was hier zum Pass gehört
 - Impressum: ${BASIS}/impressum · Datenschutz: ${BASIS}/datenschutz · AGB: ${BASIS}/agb
 `;
 }

@@ -11,7 +11,7 @@ import { exportRenderCv } from '../import/rendercv';
 import { clToMarkdown } from '../import/markdownBridge';
 import { saveText } from '../export/saveFile';
 import { exportFilename } from '../export/filename';
-import { track } from '../data/track';
+import { track, countEvent } from '../data/track';
 import { api, pdfServiceAnswered } from '../data/api';
 import { atsPdfTemplateFor } from '../export/atsPdfTemplate';
 import { getTheme } from '../templates/theme';
@@ -65,6 +65,10 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
   const latexLocked = !ft.latex;
   const cx = CODE_EXPORT_UI[uiLang] ?? CODE_EXPORT_UI.de;
   const coverLocked = isCover && !ft.coverLetter;
+  /* Vorlagen-Staffel: gestaltetes PDF und HTML einer Pass-Vorlage öffnen das
+   * Freischalt-Paneel (Grund `template`). Die ATS-Fassung als PDF bleibt frei. */
+  const tplLocked = !coverLocked && !ft.templateAllowed(exportConfig.themeId);
+  const designLocked = coverLocked || tplLocked;
   const close = useCallback(() => setOpen(false), []);
   /* Die Meldung räumt sich selbst ab, gebunden an genau diese Meldung: Ein
    * älterer Zeitgeber löschte sonst eine neue vorzeitig (zweites ATS-PDF kurz
@@ -78,6 +82,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
 
   async function pdf() {
     if (coverLocked) { ft.open('coverLetter'); return; }
+    if (tplLocked) { ft.open('template'); return; }
     if (busy) return;
     setBusy(true);
     setMsg(null);
@@ -121,9 +126,9 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
     <div style={{ position: 'relative' }}>
       <div className="ui-split">
         <button type="button" className="ui-btn ui-btn-primary" onClick={pdf} disabled={busy} aria-busy={busy}
-          data-locked={coverLocked || undefined} title={coverLocked ? ft.priceLine : undefined}
+          data-locked={designLocked || undefined} title={designLocked ? ft.priceLine : undefined}
           style={{ minHeight: compact ? '44px' : '40px' }}>
-          {busy ? <span className="cv-spin" aria-hidden style={{ marginRight: 0 }} /> : coverLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
+          {busy ? <span className="cv-spin" aria-hidden style={{ marginRight: 0 }} /> : designLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
           <span className={compact ? undefined : 'ui-hide-md'}>{busy ? d.pdfBusy : d.pdfDownload}</span>
           {!compact && <span className="cv-sr-only">{d.pdfDownload}</span>}
         </button>
@@ -134,8 +139,8 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
       </div>
       <Menu open={open} onClose={close} label={d.pdfMore} triggerRef={trigger} width={340}>
         <div className="ui-menu-label">{d.secPdf}</div>
-        <MenuItem onSelect={run(pdf)} icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
-          sub={coverLocked ? ft.priceLine : undefined}>{d.pdfDownload}</MenuItem>
+        <MenuItem onSelect={run(pdf)} icon={designLocked ? <LockGlyph size={15} /> : <Icon name="download" size={15} />}
+          sub={designLocked ? ft.priceLine : undefined}>{d.pdfDownload}</MenuItem>
         {!isCover && (
           <>
             <div className="ui-menu-label">{d.secPortals}</div>
@@ -156,8 +161,8 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
         <div className="ui-menu-label">{d.secMore}</div>
         {isCover ? (
           <>
-            <MenuItem onSelect={run(() => { if (coverLocked) { ft.open('coverLetter'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); })}
-              icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="globe" size={15} />} sub={coverLocked ? ft.priceLine : undefined}>{d.clHtml}</MenuItem>
+            <MenuItem onSelect={run(() => { if (coverLocked) { ft.open('coverLetter'); return; } if (tplLocked) { ft.open('template'); return; } if (coverLetter) exportCoverLetterHtml(data, coverLetter, exportConfig); })}
+              icon={designLocked ? <LockGlyph size={15} /> : <Icon name="globe" size={15} />} sub={designLocked ? ft.priceLine : undefined}>{d.clHtml}</MenuItem>
             <MenuItem sub={coverLocked ? ft.priceLine : undefined} onSelect={run(() => {
               if (coverLocked) { ft.open('coverLetter'); return; }
               if (!coverLetter) return;
@@ -170,14 +175,15 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
             <MenuItem onSelect={run(() => { if (wordLocked) { ft.open('docx'); return; } track('export_docx'); docxEvent(); return import('../export/exportDocx').then(m => m.exportDocx(data, exportConfig, 'design')); })}
               icon={wordLocked ? <LockGlyph size={15} /> : <Icon name="file-text" size={15} />} sub={wordLocked ? ft.priceLine : d.wordDesignSub}
               >{d.wordDesign}</MenuItem>
-            <MenuItem onSelect={run(() => exportHtml(data, exportConfig))} icon={<Icon name="globe" size={15} />} sub={d.htmlSub}>{d.html}</MenuItem>
+            <MenuItem onSelect={run(() => { if (tplLocked) { ft.open('template'); return; } return exportHtml(data, exportConfig); })}
+              icon={tplLocked ? <LockGlyph size={15} /> : <Icon name="globe" size={15} />} sub={tplLocked ? ft.priceLine : d.htmlSub}>{d.html}</MenuItem>
           </>
         )}
         <MenuItem onSelect={run(onShare)} icon={<Icon name="share" size={15} />} sub={d.shareLinkSub}>{d.shareLink}</MenuItem>
         {!isCover && (
           <>
             <div className="ui-menu-label">{d.secDev}</div>
-            <MenuItem onSelect={run(() => exportMarkdown(data))} icon={<Icon name="markdown" size={15} />} sub={d.mdSub}>{d.mdLabel}</MenuItem>
+            <MenuItem onSelect={run(() => { countEvent('export_markdown', { mode: demoMode ? 'local' : 'account' }); exportMarkdown(data); })} icon={<Icon name="markdown" size={15} />} sub={d.mdSub}>{d.mdLabel}</MenuItem>
             <MenuItem onSelect={run(() => exportJson(data))} icon={<Icon name="braces" size={15} />} sub={d.jsonSub}>{d.jsonLabel}</MenuItem>
             <MenuItem onSelect={run(() => { track('export_json_resume'); exportJsonResume(data); })} icon={<Icon name="puzzle" size={15} />} sub={d.jsonResumeSub}>{d.jsonResumeLabel}</MenuItem>
             <MenuItem onSelect={run(async () => { track('export_rendercv'); await exportRenderCv(data); })} icon={<Icon name="braces" size={15} />} sub={cx.rendercvSub}>{cx.rendercv}</MenuItem>

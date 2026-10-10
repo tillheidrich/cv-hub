@@ -22,6 +22,27 @@
  * Durchsetzen lässt sich das im Browser nicht (Word entsteht dort, der Code
  * ist offen). Das ist bewusst so: eine Angebotsgrenze, keine Sicherheitsgrenze.
  * Die Oberfläche sperrt aber an allen Wegen gleich.
+ *
+ * Vorlagen-Staffel (10.10.2026, optional): Ohne Zugang
+ * gibt es das gestaltete PDF und HTML nur in den 10 Gratis-Vorlagen
+ * (templates/freeTemplates.ts). Ansehen, Auswählen, Gestalten und die
+ * ATS-Fassung als PDF bleiben in jeder Vorlage frei. Gleiche Bedingungen wie
+ * oben: nur mit `freeTier.limited`, abgelaufener Pass exportiert weiter alles
+ * (AGB § 7 Abs. 5), selbst gehostet ist nichts gesperrt.
+ *
+ * Bestandsregel (`templateGrandfather`): Eine Fassung, die es schon gab, bevor
+ * die Grenze in diesem Browser bzw. für dieses Konto zum ersten Mal galt,
+ * behält ihre damals gewählte Vorlage frei.
+ *  - Lokal: Beim ersten Laden mit Grenze bekommt jede vorhandene Fassung mit
+ *    einer Pass-Vorlage `settings.grandfatheredTemplate` (App.tsx, einmal je
+ *    Browser, Merker `cv-tpl-tier-v1` im localStorage). Die Markierung reist mit
+ *    Sicherungsdatei und Import. Die unveränderte Demo bekommt keine: Sie zählt
+ *    wie bisher nicht als Bestand.
+ *  - Konto (nur Stufe `none`, alle anderen exportieren ohnehin frei): Fassungen,
+ *    deren `created_at` am Server vor `freeTier.templatesSince` liegt (dem
+ *    Zeitpunkt, an dem der Dienst die Grenze zum ersten Mal gemeldet hat,
+ *    pdf-service/billing.js), behalten die Vorlage, mit der sie am Server
+ *    gespeichert sind. Ohne diesen Zeitpunkt gilt jede Fassung als Bestand.
  */
 import { createContext, useContext } from 'react';
 import type { AuthUser } from '../data/api';
@@ -30,8 +51,13 @@ import { ALL_LANGS } from '../data/labels';
 import { createBlankProfile, createDemoProfile, DEFAULT_COVER_LETTERS } from '../data/storage';
 import type { FreeTierKey } from '../ui/i18n/freetier';
 import type { Offer } from './api';
+import { isFreeTemplate } from '../templates/freeTemplates';
+import { resolveThemeId } from '../templates/theme';
 
 export type { FreeTierKey } from '../ui/i18n/freetier';
+/** Gründe für das Freischalt-Paneel aus der Gratis-Grenze, dazu die
+ *  Vorlagen-Staffel (`template`). */
+export type LockKey = FreeTierKey | 'template';
 
 /** Meldet der Server die Grenze? Nur bei offenem Verkauf. */
 export function freeTierLimited(offer: Offer | null | undefined): boolean {
@@ -46,6 +72,12 @@ export function accessLevel(user: AuthUser | null | undefined, localMode: boolea
   if (localMode || !user) return 'none';
   if (user.role === 'admin') return 'full';
   const p = user.plan;
+  /* Nach einem Widerruf (10.10.2026): Stammen die Zugänge nur aus
+   * widerrufenen Bestellungen, bleibt der Datenexport (lesen, JSON, Markdown,
+   * löschen), aber nicht Word, LaTeX und die Pass-Vorlagen auf Dauer. Der
+   * Server meldet das als kind 'none' ohne Datum und `withdrawn: true`
+   * (pdf-service/grants.js); hier steht es zur Sicherheit noch einmal. */
+  if (p?.withdrawn && p.kind === 'none') return 'none';
   // Dienst ohne Plan-Modell: der alte Pilot-Weg entscheidet.
   if (!p) return user.access?.expired || user.access?.readOnly ? 'export' : 'full';
   if (p.kind === 'unlimited' || p.kind === 'lifetime') return 'full';
@@ -170,21 +202,47 @@ export interface FreeTier {
   addProfile: boolean;
   /** Dokumentsprache wechseln. */
   langAllowed: (l: Lang) => boolean;
+  /** Gestaltetes PDF und HTML in dieser Vorlage (aktive Fassung). Ansehen und
+   *  Auswählen sind immer erlaubt, die ATS-Fassung als PDF auch. */
+  templateAllowed: (id: string) => boolean;
   /** Preiszeile für die Hinweise; leer ohne Angebot. */
   priceLine: string;
   /** Freischalt-Paneel für eine Funktion öffnen. */
-  open: (k: FreeTierKey) => void;
+  open: (k: LockKey) => void;
 }
 
 export const FREE_TIER_OPEN: FreeTier = {
   limited: false, full: true, docx: true, latex: true, coverLetter: true, addProfile: true,
-  langAllowed: () => true, priceLine: '', open: () => {},
+  langAllowed: () => true, templateAllowed: () => true, priceLine: '', open: () => {},
 };
+
+/** Vorlage, die eine Fassung nach der Bestandsregel frei behält (lokal: die
+ *  Markierung im Profil; Konto: `accountGrandfather` aus App.tsx). */
+export function templateGrandfather(p: AppProfile | null | undefined, accountGrandfather?: string | null): string | null {
+  const own = p?.settings?.grandfatheredTemplate;
+  if (own) return resolveThemeId(own);
+  return accountGrandfather ? resolveThemeId(accountGrandfather) : null;
+}
+
+/** Darf die Fassung als gestaltetes PDF/HTML in `id` heraus (Grenze aktiv,
+ *  kein Zugang)? Frei sind die Gratis-Vorlagen und die Bestandsvorlage. */
+export function templateAllowedFor(id: string, grandfathered: string | null): boolean {
+  if (isFreeTemplate(id)) return true;
+  return !!grandfathered && resolveThemeId(id) === grandfathered;
+}
+
+/** Profile, die beim ersten Laden mit Grenze die Bestandsmarkierung brauchen
+ *  (lokal): eigene Fassungen mit einer Pass-Vorlage, noch ohne Markierung. */
+export function profilesToGrandfather(profiles: AppProfile[]): AppProfile[] {
+  return profiles.filter(p => !p.settings.grandfatheredTemplate && !isFreeTemplate(p.settings.template) && !isPristineDemo(p));
+}
 
 export function computeFreeTier(o: {
   offer: Offer | null; user: AuthUser | null; localMode: boolean;
   profiles: AppProfile[]; active: AppProfile | null; lang: Lang;
-  priceLine: string; open: (k: FreeTierKey) => void;
+  priceLine: string; open: (k: LockKey) => void;
+  /** Konto: Vorlage der aktiven Fassung nach der Bestandsregel (App.tsx). */
+  accountGrandfather?: string | null;
 }): FreeTier {
   const limited = freeTierLimited(o.offer);
   if (!limited) return { ...FREE_TIER_OPEN, open: o.open };
@@ -199,6 +257,7 @@ export function computeFreeTier(o: {
     coverLetter: exportAll || hasOwnCoverLetter(o.active, o.lang),
     addProfile: ownProfileCount(o.profiles) === 0,
     langAllowed: l => exportAll || langAllowedFor(o.active, l),
+    templateAllowed: id => exportAll || templateAllowedFor(id, templateGrandfather(o.active, o.localMode ? null : o.accountGrandfather)),
     priceLine: o.priceLine,
     open: o.open,
   };

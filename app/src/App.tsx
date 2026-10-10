@@ -44,7 +44,9 @@ import { Art9ConsentGate } from './screens/Art9Consent';
 import { useOffer, salesOpen } from './billing/hooks';
 import { PATHS, navigate } from './billing/route';
 import { freeOnly, priceOf, freeTierPriceLine } from './billing/format';
-import { computeFreeTier, FreeTierContext, type FreeTierKey } from './billing/freeTier';
+import { computeFreeTier, FreeTierContext, freeTierLimited, accessLevel, profilesToGrandfather, type LockKey } from './billing/freeTier';
+import { nearestFreeTemplate, FREE_TEMPLATE_IDS } from './templates/freeTemplates';
+import { TEMPLATE_LOCK_I18N } from './ui/i18n/templateLock';
 import { LockGlyph, PassNote, CoverLetterPassCard } from './billing/PassLock';
 import { FREETIER_I18N } from './ui/i18n/freetier';
 import { hasPendingCode } from './billing/pendingCode';
@@ -54,7 +56,7 @@ import { cancelUi } from './billing/legalTexts';
 import { BILLING_I18N, type UnlockKey } from './ui/i18n/billing';
 import { api, ApiError, photoIdOf } from './data/api';
 import type { AuthUser } from './data/api';
-import { track } from './data/track';
+import { track, countEvent } from './data/track';
 import {
   getActiveProfileId, setActiveProfileId,
   updateProfileInList, deleteProfileFromList,
@@ -79,6 +81,10 @@ const UI_FONT = "'Inter', sans-serif";
 const PANEL_KEY = 'cv-ui-panel';
 /** „Text direkt anklicken" einmal weggeklickt — bleibt weg. */
 const HINT_KEY = 'cv-ui-write-hint-gone';
+/** Vorlagen-Staffel: Grenze galt in diesem Browser schon einmal (Bestandsregel). */
+const TPL_TIER_KEY = 'cv-tpl-tier-v1';
+/** Hinweis „Was ist kostenlos" einmal weggeklickt. */
+const TIER_INTRO_KEY = 'cv-tpl-tier-intro-gone';
 /** Reihenfolge der Oberflächensprachen — dieselbe wie auf Landing und Anmeldung. */
 const LANG_ORDER: UiLang[] = ['de', 'en', 'fr', 'es'];
 
@@ -176,8 +182,14 @@ export default function App() {
   });
   /** Freischalt-Moment (billing/UnlockPanel.tsx): welche Funktion gerade
    *  einen Pass bräuchte. Ersetzt die frühere „Demo-Limit"-Wand. */
-  const [unlock, setUnlock] = useState<UnlockKey | FreeTierKey | null>(null);
+  const [unlock, setUnlock] = useState<UnlockKey | LockKey | null>(null);
   const [passOpen, setPassOpen] = useState(false);
+  /** Konto: Anlagezeitpunkt und gespeicherte Vorlage je Fassung (Bestandsregel). */
+  const [serverResumes, setServerResumes] = useState<Record<string, { createdAt: string; template: string }>>({});
+  /** Einmaliger Hinweis zur Vorlagen-Staffel beim ersten Öffnen des Editors. */
+  const [tierIntroGone, setTierIntroGone] = useState<boolean>(() => {
+    try { return localStorage.getItem(TIER_INTRO_KEY) === '1'; } catch { return false; }
+  });
   const { offer } = useOffer();
   /** Direktlink in die Demo (/?demo=1, /demo) und auf „Mein Pass" (/?pass=1). */
   const initialFlags = useMemo(() => {
@@ -487,6 +499,14 @@ export default function App() {
         if (resumes.length) {
           const full = await Promise.all(resumes.map(r => api.getResume(r.id)));
           loaded = full.map(f => f.resume.payload).filter(Boolean).map(withAllLangs);
+          /* Bestandsregel der Vorlagen-Staffel für Konten (billing/freeTier.ts):
+           * Anlagezeitpunkt am Server und die dort gespeicherte Vorlage. */
+          const info: Record<string, { createdAt: string; template: string }> = {};
+          for (const r of resumes) {
+            const pl = full.find(f => f.resume.id === r.id)?.resume.payload;
+            if (pl?.settings?.template) info[r.id] = { createdAt: String((r as { created_at?: string }).created_at || ''), template: pl.settings.template };
+          }
+          if (!cancelled) setServerResumes(info);
         }
         // No server-side resumes → empty home. We deliberately do NOT auto-import
         // legacy localStorage here: that path used to leak the previous account's
@@ -535,11 +555,34 @@ export default function App() {
    * PDF bleibt gratis; Word, Anschreiben, weitere Fassungen und Sprachen
    * gehören zum Pass. Greift nur, wenn der Server `freeTier.limited` meldet —
    * ohne Angebot (offline, selbst gehostet) ist nichts gesperrt. */
-  const openFreeTier = useCallback((k: FreeTierKey) => setUnlock(k), []);
+  const openFreeTier = useCallback((k: LockKey) => setUnlock(k), []);
+  /* Bestandsregel für Konten: Fassung am Server angelegt, bevor der Dienst die
+   * Grenze zum ersten Mal meldete (`templatesSince`) → ihre gespeicherte
+   * Vorlage bleibt frei. Ohne Zeitpunkt gilt jede Fassung als Bestand. */
+  const since = offer?.freeTier?.templatesSince ? Date.parse(offer.freeTier.templatesSince) : NaN;
+  const srv = activeId ? serverResumes[activeId] : undefined;
+  const accountGrandfather = !demoMode && srv && (Number.isNaN(since) || !srv.createdAt || Date.parse(srv.createdAt) < since) ? srv.template : null;
   const ft = useMemo(() => computeFreeTier({
     offer, user: authUser, localMode: demoMode, profiles, active: activeProfile, lang,
-    priceLine: freeTierPriceLine(offer, uiLang), open: openFreeTier,
-  }), [offer, authUser, demoMode, profiles, activeProfile, lang, uiLang, openFreeTier]);
+    priceLine: freeTierPriceLine(offer, uiLang), open: openFreeTier, accountGrandfather,
+  }), [offer, authUser, demoMode, profiles, activeProfile, lang, uiLang, openFreeTier, accountGrandfather]);
+  /* Bestandsregel lokal: beim ersten Laden, bei dem die Grenze in diesem
+   * Browser gilt, bekommen die vorhandenen eigenen Fassungen ihre Vorlage als
+   * `grandfatheredTemplate`. Einmal je Browser (Merker), danach nie wieder,
+   * sonst wäre jede neue Fassung „Bestand". */
+  const tierLimited = freeTierLimited(offer) && accessLevel(authUser, demoMode) === 'none';
+  useEffect(() => {
+    if (!demoMode || !dataLoaded || !tierLimited) return;
+    let seen: string | null;
+    try { seen = localStorage.getItem(TPL_TIER_KEY); } catch { return; }
+    if (seen) return;
+    try { localStorage.setItem(TPL_TIER_KEY, new Date().toISOString()); } catch { return; }
+    const mark = new Set(profilesToGrandfather(profiles).map(p => p.id));
+    if (!mark.size) return;
+    const next = profiles.map(p => (mark.has(p.id) ? { ...p, settings: { ...p.settings, grandfatheredTemplate: p.settings.template } } : p));
+    queueMicrotask(() => setProfiles(next));
+    void saveProfilesLocalAsync(next);
+  }, [demoMode, dataLoaded, tierLimited, profiles]);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dirtyRef = useRef<AppProfile | null>(null);
@@ -756,6 +799,11 @@ export default function App() {
   }, []);
 
   function handlePrint() {
+    /* Vorlagen-Staffel: Auch der Browser-Druckweg (Rückfall bei nicht
+     * erreichbarem PDF-Dienst) gibt eine Pass-Vorlage nicht als PDF heraus.
+     * Das ist eine Angebotsgrenze, keine Sicherheitsgrenze: Wer den Code
+     * ändert oder die Seite anders druckt, kommt daran vorbei (SICHERHEIT.md). */
+    if (!ft.templateAllowed(template)) { setUnlock('template'); return; }
     const prevTitle = document.title;
     const coverWord: Record<Lang, string> = { de: 'Anschreiben', en: 'Cover Letter', fr: 'Lettre de motivation', es: 'Carta de presentación' };
     const docWord = docType === 'cover-letter'
@@ -925,12 +973,13 @@ export default function App() {
   useEffect(() => {
     if (!pdfFor || screen !== 'editor' || activeId !== pdfFor.id || !fit || fit === pdfFor.fit0 || docType !== 'resume') return;
     setPdfFor(null);
+    if (!ft.templateAllowed(template)) { setUnlock('template'); return; }
     showNotice(dsT.pdfBusy);
     exportPdf({ data: currentData, cfg: exportConfig, isCover: false }).then(
       r => { track('export_pdf', { docType: 'resume', demo: demoMode }); showNotice(dsT.pdfDone(r.pages, Math.max(1, Math.round(r.bytes / 1024)))); },
       err => showNotice(dsT.pdfFailed(err instanceof Error ? err.message : '?'), true),
     );
-  }, [pdfFor, screen, activeId, fit, docType, currentData, exportConfig, showNotice, dsT, demoMode]);
+  }, [pdfFor, screen, activeId, fit, docType, currentData, exportConfig, showNotice, dsT, demoMode, ft, template]);
   const atsLevel = atsLevelForLayout(theme.layout);
   const nav = useTemplateNav(template);
   const closeMore = useCallback(() => setMoreOpen(false), []);
@@ -970,6 +1019,8 @@ export default function App() {
         themeId, accentId: 'auto', paperId: 'auto', pairingId: 'auto',
         metrics: atsFit.metrics, pageBlocks: atsFit.pageBlocks, asideSkillCap: atsFit.asideCap,
         hiddenSections, sectionOrder, pageFormat, forcedBreaks,
+        // Versalzeilen ohne Sperrung, wie im Messlauf (AtsPdfRunner).
+        flatCaps: true,
       };
       track('export_pdf_ats', { demo: demoMode });
       const res = await exportPdf({ data, cfg, isCover: false, variant: 'ats' });
@@ -1029,6 +1080,50 @@ export default function App() {
       ? <CoverLetterRenderer cvData={settledData} clData={settledCl} theme={th} pairing={pr} metrics={staticMetrics} pageFormat={pageFormat} />
       : <ResumeRenderer data={settledData} theme={th} pairing={pr} metrics={staticMetrics} hiddenSections={hiddenSections} sectionOrder={sectionOrder} pageFormat={pageFormat} />;
   }, [accent, paper, fontPairing, docType, settledData, settledCl, staticMetrics, pageFormat, hiddenSections, sectionOrder]);
+
+  /* ── Vorlagen-Staffel (templates/freeTemplates.ts) ──────────────────────
+   * Gewählte Vorlage gehört zum Pass: Ansehen bleibt frei, PDF, HTML und
+   * Druck öffnen das Freischalt-Paneel mit dem gleichwertigen Gratis-Weg. */
+  const tplLocked = !ft.templateAllowed(template);
+  const freeTpl = nearestFreeTemplate(template);
+  const TL = TEMPLATE_LOCK_I18N[uiLang];
+  /** „Gratis als PDF in Vorlage X": nur wechseln, nicht sofort laden (siehe
+   *  billing/UnlockPanel.tsx), mit Rückgängig. */
+  function switchToFreeTemplate() {
+    const prev = template;
+    setSwap({ key: freeTpl, dir: 0 });
+    updateSettings({ template: freeTpl });
+    showToast(TL.switched(getTheme(freeTpl).name), () => { setSwap({ key: prev, dir: 0 }); updateSettings({ template: prev }); });
+  }
+  const templateUnlock = { name: theme.name, freeName: getTheme(freeTpl).name, onUseFree: switchToFreeTemplate, onAtsPdf: docType === 'resume' ? loadAtsPdf : undefined };
+  /* Strg/Cmd+P druckt sonst die Vorschau über den Browser. Bei einer
+   * Pass-Vorlage stattdessen das Paneel; der Druck über das Browsermenü zeigt
+   * per CSS nur den Hinweis (data-print-locked, index.css). Angebotsgrenze,
+   * keine Sicherheitsgrenze. */
+  useEffect(() => {
+    if (screen !== 'editor' || !tplLocked) return;
+    const on = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); e.stopPropagation(); setUnlock('template'); }
+    };
+    window.addEventListener('keydown', on, true);
+    return () => window.removeEventListener('keydown', on, true);
+  }, [screen, tplLocked]);
+  /* Zähler: Pass-Vorlage mit eigenem Inhalt angesehen (einmal je Vorlage und
+   * Seitenaufruf, ohne Personenbezug). */
+  useEffect(() => {
+    if (screen === 'editor' && tplLocked) countEvent('template_lock_view', { template: resolveThemeId(template) }, { once: true });
+  }, [screen, tplLocked, template]);
+  const showTierIntro = tierLimited && !tierIntroGone && !!offer;
+  const closeTierIntro = () => { setTierIntroGone(true); try { localStorage.setItem(TIER_INTRO_KEY, '1'); } catch { /* ignore */ } };
+  const tierIntro = showTierIntro && offer ? (
+    <div className="ui-tier-intro ui" role="note" data-noprint data-tier-intro>
+      <span>{TL.intro(priceOf(offer, uiLang), offer.days, FREE_TEMPLATE_IDS.length)}</span>
+      <button type="button" className="ft-more" onClick={() => navigate(PATHS.pricing)}>{FREETIER_I18N[uiLang].more}</button>
+      <button type="button" className="ui-btn ui-icon-btn" aria-label={TL.introClose} title={TL.introClose}
+        style={{ minHeight: '32px', width: '32px', minWidth: '32px', color: 'inherit' }} onClick={closeTierIntro}>×</button>
+    </div>
+  ) : null;
+  const printLockedNote = tplLocked ? <div className="cv-print-locked">{TL.printBlocked}</div> : null;
 
   // ── Auth gate ─────────────────────────────────────────────────────────────
   if (authLoading) {
@@ -1098,7 +1193,7 @@ export default function App() {
     <div className="ui-access-banner ui" role="status" data-noprint data-notice={passBand ? `${passBand.kind}-${passBand.notice ?? 'none'}` : access?.notice ?? 'expired'}>
       <span>
         {passBand ? (
-          neverHadPass ? (ft.limited ? FT.planNone : Z.planNone)
+          neverHadPass ? (passBand.withdrawn ? TL.withdrawn : ft.limited ? FT.planNone : Z.planNone)
             : freeBand ? (passExpired ? G.freeExpired(passUntil) : G.freeSoon(passUntil))
             : passExpired ? Z.passExpired(passUntil)
             : passBand.notice === 'soon' ? Z.passSoon(passUntil, passBand.daysLeft ?? 0)
@@ -1172,7 +1267,7 @@ export default function App() {
         {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
         {unlock && (
           <UnlockPanel feature={unlock} lang={uiLang} offer={offer} onClose={() => setUnlock(null)}
-            onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} />
+            onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} template={templateUnlock} />
         )}
         {logoutDialog}
         {noticeEl}
@@ -1274,7 +1369,7 @@ export default function App() {
     <>
       {docLangRow}
       {langLockNote}
-      {readOnly && <div className="ui-readonly-note" role="note">{passExpired ? Z.passReadOnlyContent : plan?.kind === 'none' ? Z.noneReadOnlyContent : Z.readOnlyContent}</div>}
+      {readOnly && <div className="ui-readonly-note" role="note">{passExpired ? Z.passReadOnlyContent : plan?.withdrawn ? TL.withdrawnContent : plan?.kind === 'none' ? Z.noneReadOnlyContent : Z.readOnlyContent}</div>}
       <div className="ui-panel-fill" style={{ flex: 1, minHeight: 0 }}>
         {/* Nach Ablauf: Felder gesperrt (disabled), Lesen und Blättern bleibt.
             Der Lebenslauf sperrt selbst (Reiter bleiben bedienbar), das
@@ -1410,7 +1505,7 @@ export default function App() {
       )}
       {unlock && (
         <UnlockPanel feature={unlock} lang={uiLang} offer={offer} onClose={() => setUnlock(null)}
-          onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} />
+          onSignIn={leaveDemoToAuth} onInviteAccount={leaveDemoToAuth} signedIn={!demoMode && !!authUser} template={templateUnlock} />
       )}
       {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
     </>
@@ -1425,7 +1520,8 @@ export default function App() {
       { id: 'export', label: dsT.exportAll, icon: <Icon name="download" size={19} />, primary: true },
     ];
     return provide(
-      <div className="cv-app-shell ui" style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
+      <div className="cv-app-shell ui" data-print-locked={tplLocked || undefined} style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
+        {printLockedNote}
         <header data-noprint className="ui-top" style={{ padding: '10px 10px 6px', gap: '6px' }}>
           <h1 className="cv-sr-only">{activeProfile?.displayName ?? APP_NAME}</h1>
           <button type="button" className="ui-btn ui-pill" onClick={() => setScreen('home')} aria-label={dsT.toProfiles} title={dsT.toProfiles}
@@ -1441,6 +1537,7 @@ export default function App() {
         {accessBanner}
         <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
         <Art9ConsentGate user={demoMode ? null : authUser} lang={uiLang} onUser={setAuthUser} />
+        {mPanel === null && tierIntro}
         {clLocked && mPanel === null && (
           <div className="ft-mobile-bar" data-noprint><PassNote feature="coverLetter" label={et.coverLetter} /></div>
         )}
@@ -1524,7 +1621,8 @@ export default function App() {
   const panelWidth = panel === 'content' ? 420 : panel === 'tips' ? 380 : 372;
 
   return provide(
-    <div className="cv-app-shell ui" style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
+    <div className="cv-app-shell ui" data-print-locked={tplLocked || undefined} style={{ display: 'flex', flexDirection: 'column', background: 'var(--canvas)', overflow: 'hidden' }}>
+      {printLockedNote}
       <header data-noprint className="ui-top">
         <div className="ui-top-group ui-pill">
           <span className="ui-wordmark ui-hide-lg" aria-hidden>CV<b>-</b>Hub</span>
@@ -1572,6 +1670,7 @@ export default function App() {
       {accessBanner}
       <ConfirmEmailBanner user={demoMode ? null : authUser} lang={uiLang} />
       <Art9ConsentGate user={demoMode ? null : authUser} lang={uiLang} onUser={setAuthUser} />
+      {tierIntro}
 
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '6px 16px 16px', gap: '12px' }}>
         <nav data-noprint className="ui-rail ui-float" aria-label={dsT.railLabel}>

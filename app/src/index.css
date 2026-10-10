@@ -69,6 +69,7 @@ body {
 }
 
 
+
 @media screen {
   .cv-page {
     box-shadow: 0 4px 40px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -249,3 +250,12 @@ body {
 /* Profilübersicht: Auf sehr schmalen Telefonen trägt die ganze Zeile den
    Klick; das Wort „Öffnen →" daneben kostet nur Platz. */
 @media (max-width: 400px) { .cv-home-open-label { display: none; } }
+
+/* Vorlagen-Staffel: Druck einer Pass-Vorlage über das Browsermenü zeigt nur
+   den Hinweis (App.tsx, data-print-locked). Angebotsgrenze, keine
+   Sicherheitsgrenze (pdf-service/SICHERHEIT.md). */
+.cv-print-locked { display: none; }
+@media print {
+  [data-print-locked] .cv-page { display: none !important; }
+  [data-print-locked] .cv-print-locked { display: block; padding: 24mm; font: 14pt/1.5 'Inter', sans-serif; color: #222; }
+}

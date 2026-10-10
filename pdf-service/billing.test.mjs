@@ -26,6 +26,7 @@ import { createBilling, billingConfig, withdrawableUntil, isCountryCode, EU_COUN
 import { legalVersions } from './consent.js';
 import { formatAmount, parseAmount, mollieLocale, checkApiBase } from './mollie.js';
 import { createAltcha } from './altcha.js';
+import { migrateWithdrawnOnly } from './grants.js';
 import { buildLegalJson, serialize as serializeLegal, LEGAL_DIR, LEGAL_JSON } from './scripts/sync-legal.mjs';
 import { ART9_VERSION } from './consent.js';
 // Einwilligung Art. 9 DSGVO (B4, 10.10.2026): Ohne sie speichert ein Konto nicht.
@@ -335,7 +336,9 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
       { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, openRegistration: true },
     );
     assert.match(o.vatNote, /§ 19 UStG/);
-    assert.deepEqual(o.freeTier, { limited: true }, 'FREE_TIER_LIMITS=1 bei verkaufsbereitem Dienst');
+    assert.equal(o.freeTier.limited, true, 'FREE_TIER_LIMITS=1 bei verkaufsbereitem Dienst');
+    // Vorlagen-Staffel: Beginn der Grenze, beim Start gemerkt (Bestandsregel für Konten).
+    assert.ok(o.freeTier.templatesSince && !Number.isNaN(Date.parse(o.freeTier.templatesSince)), 'templatesSince als Zeitpunkt');
   });
 
   test('Gratis-Grenze nur mit FREE_TIER_LIMITS und verkaufsbereitem Dienst', () => {
@@ -352,13 +355,16 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     // Verkauf an, aber Pflichtangabe fehlt: nicht bereit, also keine Grenze.
     assert.deepEqual(offerOf({ ...full, SELLER_PHONE: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: false });
     // P5: Eine leere TERMS_VERSION macht den Dienst nicht unvollständig — die Fassung steht in der Datei.
-    assert.deepEqual(offerOf({ ...full, TERMS_VERSION: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: true });
+    assert.deepEqual(offerOf({ ...full, TERMS_VERSION: '', FREE_TIER_LIMITS: '1' }).freeTier, { limited: true, templatesSince: null });
     // Verkauf bereit, Schalter aus: frei wie bisher.
     assert.deepEqual(offerOf(full).freeTier, { limited: false });
     assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '0' }).freeTier, { limited: false });
     // Beides: Grenze an.
-    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '1' }).freeTier, { limited: true });
-    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: 'true' }).freeTier, { limited: true });
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '1' }).freeTier, { limited: true, templatesSince: null });
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: 'true' }).freeTier, { limited: true, templatesSince: null });
+    // Übersteuerung des Beginns der Vorlagen-Staffel (Bestandsregel für Konten).
+    assert.deepEqual(offerOf({ ...full, FREE_TIER_LIMITS: '1', TEMPLATE_TIER_SINCE: '2026-10-01T00:00:00Z' }).freeTier, { limited: true, templatesSince: '2026-10-01T00:00:00.000Z' });
+    assert.deepEqual(offerOf({ ...full, TEMPLATE_TIER_SINCE: '2026-10-01T00:00:00Z' }).freeTier, { limited: false }, 'ohne Grenze kein Zeitpunkt');
   });
 
   test('Bestandskonten bleiben unbegrenzt, Pilot bleibt Pilot; Unbegrenzte können keinen Pass kaufen', async () => {
@@ -699,6 +705,102 @@ describe('Bezahlung, Plan-Modell und offene Registrierung', { skip: PG_MISSING }
     u = await userRow(uid);
     assert.ok(Math.abs(new Date(u.access_until).getTime() - Date.now() - 90 * DAY) < 120_000, 'noch 90 Tage');
     assert.equal((await C.get('/api/me')).data.plan.kind, 'pass');
+  });
+
+  /* Lücke nach Widerruf (10.10.2026): Ein Konto, dessen
+   * Zugänge nur aus widerrufenen Bestellungen stammen, war bisher „Pass
+   * abgelaufen" und durfte nach AGB § 7 Abs. 5 dauerhaft alles exportieren,
+   * auch Word und LaTeX. Jetzt: Stufe „ohne Pass" mit Datenexport. Ein normal
+   * abgelaufener Pass bleibt beim bisherigen Verhalten. */
+  test('Widerruf ohne andere Berechtigung: Stufe none mit Datenexport (lesen, JSON, Markdown, löschen), keine Schreibwege', async () => {
+    const { C, id } = await registerSelf('nurwiderruf@example.org');
+    const o = await buy(C);
+    const payload = { id: 'wr1', displayName: 'Fassung', createdAt: new Date().toISOString(), settings: { template: 'hamburg', lang: 'de' },
+      data: { de: { personal: { name: 'Erika Muster', title: 'Titel', location: '', email: '', phone: '' }, profile: { text: 'Profil' }, experience: [], education: [], skillGroups: [], languages: [] } }, coverLetters: {} };
+    assert.equal((await C.post('/api/resumes', { id: 'wr1', displayName: 'Fassung', payload })).status, 200);
+    assert.equal((await C.post('/api/billing/withdraw', { orderId: o.id })).status, 200);
+    const me = (await C.get('/api/me')).data;
+    assert.equal(me.plan.kind, 'none');
+    assert.equal(me.plan.until, null, 'kein „Pass abgelaufen am …"');
+    assert.equal(me.plan.withdrawn, true);
+    assert.equal(me.plan.hasPaid, false);
+    assert.equal((await userRow(id)).plan_kind, 'none');
+    // Schreiben gesperrt wie bei jedem Konto ohne Pass.
+    const w = await C.put('/api/resumes/wr1', { payload });
+    assert.equal(w.status, 403);
+    assert.equal(w.data.code, 'pass_required');
+    // Datenexport bleibt: lesen, JSON-Auszug, Markdown, löschen.
+    assert.equal((await C.get('/api/resumes/wr1')).status, 200);
+    const md = await C.get('/api/resumes/wr1.md');
+    assert.equal(md.status, 200);
+    const ex = await C.get('/api/me/export');
+    assert.equal(ex.status, 200);
+    assert.ok(JSON.stringify(ex.data).includes('Erika Muster'), 'Datenauszug enthält die Inhalte');
+    assert.equal((await C.del('/api/resumes/wr1')).status, 200);
+  });
+
+  test('Normal abgelaufener Pass: bisheriges Verhalten (kind none mit Datum, notice expired, nicht withdrawn)', async () => {
+    const { C, id } = await registerSelf('abgelaufen-normal@example.org');
+    await buy(C);
+    // Ablauf nachstellen: Abschnitt der Bestellung und Spiegel in users in die Vergangenheit.
+    await db.query(`UPDATE access_grants SET granted_at = now() - interval '100 days', effective_from = now() - interval '100 days', effective_until = now() - interval '10 days' WHERE user_id = $1`, [id]);
+    await db.query(`UPDATE users SET access_until = now() - interval '10 days' WHERE id = $1`, [id]);
+    const me = (await C.get('/api/me')).data;
+    assert.equal(me.plan.kind, 'none');
+    assert.ok(me.plan.until, 'Datum des Ablaufs steht da');
+    assert.equal(me.plan.notice, 'expired');
+    assert.equal(me.plan.withdrawn, false);
+    assert.equal((await userRow(id)).plan_kind, 'pass');
+  });
+
+  test('Migration: Bestandskonto nur mit widerrufener Bestellung wird einmal auf „ohne Pass" umgestellt, Laufzeit bleibt', async () => {
+    const { C, id } = await registerSelf('altwiderruf@example.org');
+    const o = await buy(C);
+    assert.equal((await C.post('/api/billing/withdraw', { orderId: o.id })).status, 200);
+    // So sah ein solches Konto vor dem 10.10.2026 aus.
+    await db.query(`UPDATE users SET plan_kind = 'pass' WHERE id = $1`, [id]);
+    const before = await userRow(id);
+    await db.query(`DELETE FROM schema_migrations WHERE name = 'withdrawn_only_v1'`);
+    const logs = [];
+    const r = await migrateWithdrawnOnly(db, { log: m => logs.push(m) });
+    assert.equal(r.ran, true);
+    assert.ok(r.changed >= 1, JSON.stringify(r));
+    const after = await userRow(id);
+    assert.equal(after.plan_kind, 'none');
+    assert.equal(new Date(after.access_until).getTime(), new Date(before.access_until).getTime(), 'Laufzeit unverändert');
+    assert.match(logs.join('\n'), /Widerruf-Regel/);
+    // Zweiter Lauf tut nichts.
+    assert.equal((await migrateWithdrawnOnly(db, { log: () => {} })).ran, false);
+  });
+
+  /* Tageszähler der Vorlagen-Staffel (stats.js, CLIENT_COUNTS): auch ohne
+   * Konto, nur feste Merkmale, nichts in der Tabelle events. */
+  test('Client-Zähler ohne Konto: Sperrgrund, Vorlage, Ziel, Weg; fremde Werte fallen weg; andere Ereignisse brauchen ein Konto', async () => {
+    const ev = body => fetch(`${srv.base}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const eventsBefore = (await db.query('SELECT count(*)::int AS n FROM events')).rows[0].n;
+    for (const b of [
+      { kind: 'unlock_panel_view', reason: 'template' },
+      { kind: 'unlock_panel_view', reason: 'docx' },
+      { kind: 'template_lock_view', template: 'hamburg' },
+      { kind: 'template_lock_view', template: 'gibtsnicht<script>' },
+      { kind: 'ai_open', target: 'claude' },
+      { kind: 'ai_open', target: 'https://evil.example/' },
+      { kind: 'export_markdown', mode: 'local' },
+      { kind: 'import_markdown', mode: 'local', name: 'Erika Muster' },
+    ]) assert.equal((await ev(b)).status, 204, JSON.stringify(b));
+    assert.equal((await ev({ kind: 'docx' })).status, 401, 'Word-Ereignis nur mit Konto');
+    assert.equal((await ev({ kind: 'erfunden' })).status, 401);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM events')).rows[0].n, eventsBefore, 'keine Zeile mit Nutzerbezug');
+    const u = (await Adm.get('/api/admin/usage?days=7')).data;
+    const m = u.metrics;
+    assert.equal(m.unlock_panel_view.total, 2);
+    assert.deepEqual(m.unlock_panel_view.dims.reason.map(x => x.value).sort(), ['docx', 'template']);
+    assert.equal(m.template_lock_view.total, 2);
+    assert.deepEqual(m.template_lock_view.dims.template.map(x => x.value), ['hamburg'], 'unbekannte Vorlage ohne Merkmal');
+    assert.deepEqual(m.ai_open.dims.target.map(x => x.value), ['claude']);
+    assert.equal(m.export_markdown.dims.mode[0].value, 'local');
+    assert.equal(JSON.stringify(m).includes('Erika'), false, 'kein freier Text in den Zählern');
+    assert.equal(JSON.stringify(m).includes('evil'), false);
   });
 
   test('Pilot kauft: der Pass schließt an die Pilot-Laufzeit an', async () => {

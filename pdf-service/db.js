@@ -1,6 +1,6 @@
 // Postgres connection + schema bootstrap for cv-api.
 import pg from 'pg';
-import { migrateGrants } from './grants.js';
+import { migrateGrants, migrateWithdrawnOnly } from './grants.js';
 
 const { Pool } = pg;
 
@@ -589,6 +589,92 @@ CREATE TABLE IF NOT EXISTS invoice_documents (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (order_id, kind)
 );
+
+-- ── E-Mail-Workflows (10.10.2026, MAILS.md) ──────────────────────────────
+-- Sprache für Mails an das Konto (de, en, fr, es): bei der Registrierung aus
+-- der Oberfläche, später aus den Kontoeinstellungen. NULL = Deutsch.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mail_lang TEXT;
+
+-- Einwilligung in Tipps per E-Mail (Werbung nach § 7 Abs. 2 Nr. 2 UWG, Art. 6
+-- Abs. 1 lit. a DSGVO). requested = Häkchen gesetzt, wartet auf die
+-- Bestätigung der Adresse (Double-Opt-in); consent = wirksam. Ein Widerruf
+-- leert consent und merkt sich Zeit und Weg (settings, link, one-click, admin).
+CREATE TABLE IF NOT EXISTS mail_prefs (
+  user_id               INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  tips_requested_at     TIMESTAMPTZ,
+  tips_requested_version TEXT,
+  tips_consent_at       TIMESTAMPTZ,
+  tips_consent_version  TEXT,
+  tips_consent_source   TEXT,
+  tips_withdrawn_at     TIMESTAMPTZ,
+  tips_withdrawn_via    TEXT,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Warteschlange. dedupe_key = Workflow + Konto + Anlass: dieselbe Mail
+-- entsteht höchstens einmal. Ohne SMTP: status 'waiting_smtp' (nichts geht
+-- verloren, der Admin sendet oder verwirft). Die Adresse steht hier nicht;
+-- sie wird beim Senden aus dem Konto gelesen.
+CREATE TABLE IF NOT EXISTS mail_queue (
+  id           BIGSERIAL PRIMARY KEY,
+  workflow     TEXT NOT NULL,
+  dedupe_key   TEXT UNIQUE NOT NULL,
+  user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  params       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  due_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status       TEXT NOT NULL DEFAULT 'pending'
+               CHECK (status IN ('pending', 'sending', 'waiting_smtp', 'sent', 'failed', 'discarded', 'skipped')),
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  last_error   TEXT,
+  locked_until TIMESTAMPTZ,
+  sent_at      TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS mail_queue_due_idx ON mail_queue(status, due_at);
+CREATE INDEX IF NOT EXISTS mail_queue_user_idx ON mail_queue(user_id);
+
+-- Versandprotokoll: jede Mail (auch die direkten wie Login-Codes), ohne
+-- Betreff und mit gekürzter Adresse. 90 Tage (janitor.js).
+CREATE TABLE IF NOT EXISTS mail_log (
+  id         BIGSERIAL PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  workflow   TEXT NOT NULL,
+  queue_id   BIGINT,
+  to_masked  TEXT,
+  status     TEXT NOT NULL,
+  error      TEXT
+);
+CREATE INDEX IF NOT EXISTS mail_log_created_idx ON mail_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS mail_log_workflow_idx ON mail_log(workflow, status);
+
+-- Schalter, Zeitpunkt und Textanpassungen je Workflow (Admin-Bereich).
+-- Fehlt eine Zeile, gilt der Standard aus mailflows.js.
+CREATE TABLE IF NOT EXISTS mail_workflow_settings (
+  workflow    TEXT PRIMARY KEY,
+  enabled     BOOLEAN,
+  timing      JSONB,
+  overrides   JSONB,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- SMTP aus dem Admin-Bereich (mailsettings.js). Genau eine Zeile; das
+-- Passwort nur verschlüsselt (AES-256-GCM).
+CREATE TABLE IF NOT EXISTS mail_settings (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  host         TEXT NOT NULL,
+  port         INTEGER NOT NULL,
+  security     TEXT NOT NULL CHECK (security IN ('tls', 'starttls', 'none')),
+  username     TEXT,
+  password_enc TEXT,
+  from_addr    TEXT NOT NULL,
+  reply_to     TEXT,
+  enabled      BOOLEAN NOT NULL DEFAULT false,
+  verified_at  TIMESTAMPTZ,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by   INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
 `;
 
 /** Connect with retry (Postgres may still be starting) and create the schema. */
@@ -601,6 +687,8 @@ export async function initDb(retries = 12) {
       // Einmalig: Berechtigungen für den Altbestand nachtragen, ohne eine
       // gespeicherte Laufzeit zu ändern (Abweichungen stehen im Log).
       await migrateGrants(pool);
+      // Einmalig: Konten nur mit widerrufenen Bestellungen nach der Regel vom 10.10.2026.
+      await migrateWithdrawnOnly(pool);
       return;
     } catch (err) {
       if (attempt === retries) throw err;

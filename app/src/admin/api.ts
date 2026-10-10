@@ -182,3 +182,39 @@ export interface CodeStats {
   code: string; note: string | null; max_uses: number; redeemed: number; access_days: number | null; expires_at: string | null; revoked: boolean; created_at: string;
   accounts: number; active14d: number; with_pdf: number; with_docx: number; with_export: number; with_share: number; expired: number;
 }
+
+/* ── E-Mails (E-Mail-Workflows, 10.10.2026, pdf-service/mailadmin.js) ──────── */
+
+export interface SmtpStatus {
+  configured: boolean; capture: boolean; source: 'db' | 'env' | 'capture' | null;
+  host: string | null; port: number | null; security: string | null; user: string | null;
+  from: string | null; replyTo: string | null; envConfigured: boolean; envHost: string | null; dbActive: boolean; forceEnv: boolean;
+}
+export interface StoredSmtp {
+  host: string; port: number; security: 'tls' | 'starttls' | 'none'; username: string; from: string; replyTo: string;
+  passwordSet: boolean; passwordReadable: boolean | null; enabled: boolean; verifiedAt: string | null; updatedAt: string | null;
+}
+export interface MailWorkflow {
+  id: string; kind: 'service' | 'tips'; label: string; trigger: string; legal: string;
+  defaultEnabled: boolean; enabled: boolean;
+  timing: Record<string, number>; defaultTiming: Record<string, number>; timingFields: string[];
+  overridable: boolean; placeholders: { key: string; label: string }[]; customized: string[];
+  counts: { sent: number; failed: number; skipped: number; unsubscribed: number | null; pending: number; waiting: number; queueFailed: number };
+}
+export interface MailState {
+  asOf: string; smtp: SmtpStatus; stored: StoredSmtp | null;
+  key: { source: string | null; warning: string | null }; precedence: string;
+  workflows: MailWorkflow[]; consent: { on: number; pending: number; withdrawn: number }; countsDays: number; base: string | null;
+}
+export interface MailQueueEntry {
+  id: number; workflow: string; status: string; due_at: string; attempts: number; last_error: string | null;
+  created_at: string; sent_at: string | null; user_id: number | null; to: string | null;
+}
+export interface MailLogEntry { id: number; created_at: string; workflow: string; queue_id: number | null; to_masked: string | null; status: string; error: string | null }
+export interface MailPreview { ok: boolean; subject: string; html: string; text: string; headers: Record<string, string>; customized: boolean }
+export interface MailTexts {
+  workflow: string; lang: string;
+  default: { subject: string; heading: string; body: string } | null;
+  override: { subject?: string; heading?: string; body?: string } | null;
+  placeholders: { key: string; label: string }[];
+}

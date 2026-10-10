@@ -148,7 +148,7 @@ export async function installBillingMock(page, state) {
       return json(route, 200, { ok: true, receivedAt: new Date().toISOString() });
     }
     // Was die App sonst mit Konto fragt
-    if (path === '/api/resumes' && method === 'GET') return json(route, 200, { resumes: state.resumes.map(r => ({ id: r.id, display_name: r.displayName, updated_at: new Date().toISOString() })) });
+    if (path === '/api/resumes' && method === 'GET') return json(route, 200, { resumes: state.resumes.map(r => ({ id: r.id, display_name: r.displayName, created_at: r.createdAt ?? new Date().toISOString(), updated_at: new Date().toISOString() })) });
     if (path === '/api/resumes' && method === 'POST') { state.resumes.push(body); return json(route, 200, { id: body.id }); }
     m = /^\/api\/resumes\/([^/]+)$/.exec(path);
     if (m && method === 'GET') { const r = state.resumes.find(x => x.id === decodeURIComponent(m[1])); return r ? json(route, 200, { resume: { id: r.id, displayName: r.displayName, payload: r.payload } }) : json(route, 404, { error: 'x' }); }

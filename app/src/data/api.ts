@@ -55,6 +55,9 @@ export interface Plan {
   freeUntil?: string | null;
   /** Gibt es mindestens eine bezahlte Bestellung? */
   hasPaid?: boolean;
+  /** Zugänge stammten nur aus widerrufenen Bestellungen (10.10.2026,
+   *  pdf-service/grants.js): Stufe `none` mit Datenexport. */
+  withdrawn?: boolean;
 }
 
 /** Plan und Bestätigungsstand stehen je nach Route am Nutzer oder daneben —
@@ -286,8 +289,9 @@ export const api = {
    *  bis zum Klick gilt die bisherige. Entfernen wirkt sofort. */
   setEmail: (email: string, currentPassword: string) =>
     req<{ ok?: boolean; user: AuthUser; pending?: boolean; pendingEmail?: string | null }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email, currentPassword }) }),
-  register: (username: string, password: string, inviteCode: string, email?: string) =>
-    req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email }) }),
+  /** extra (E-Mail-Workflows): Sprache der Mails und das Häkchen „Tipps“. */
+  register: (username: string, password: string, inviteCode: string, email?: string, extra: { lang?: string; tipsConsent?: { version: string } } = {}) =>
+    req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email, ...extra }) }),
   /** Public: request access without an account. Admin decides via e-mail link or panel. */
   requestAccess: (payload: { name: string; email: string; message?: string; website?: string }) =>
     req<{ ok: boolean }>('/api/access/request', { method: 'POST', body: JSON.stringify(payload) }),
@@ -465,4 +469,30 @@ export const consentApi = {
    *  gezeigt hat) oder widerrufen (consent: false). */
   art9: (consent: boolean, version: string) =>
     req<{ ok: boolean; user: AuthUser }>('/api/me/consent/art9', { method: 'POST', body: JSON.stringify({ consent, version }) }),
+};
+
+/* ── E-Mails (E-Mail-Workflows, 10.10.2026, pdf-service/MAILS.md) ─────────── */
+export interface MailPrefs {
+  /** on = wirksam, pending = wartet auf die Bestätigung der Adresse. */
+  tips: 'on' | 'pending' | 'off';
+  consentAt: string | null;
+  consentVersion: string | null;
+  requestedAt: string | null;
+  withdrawnAt: string | null;
+  /** Aktuelle Fassung des Einwilligungstexts am Server. */
+  version: string;
+  lang: 'de' | 'en' | 'fr' | 'es' | null;
+  emailConfirmed: boolean;
+  hasEmail: boolean;
+  mailReady?: boolean;
+  confirmationSent?: boolean;
+}
+export const mailApi = {
+  get: () => req<MailPrefs>('/api/me/mail'),
+  set: (p: { tips?: boolean; version?: string; lang?: string }) =>
+    req<MailPrefs & { ok: boolean }>('/api/me/mail', { method: 'POST', body: JSON.stringify(p) }),
+  /** Ändert nichts, prüft nur den Link (Abmeldeseite). */
+  checkUnsubscribe: (token: string) => req<{ valid: boolean }>(`/api/mail/unsubscribe?token=${encodeURIComponent(token)}`),
+  unsubscribe: (token: string) =>
+    req<{ ok: boolean; changed: boolean }>(`/api/mail/unsubscribe?token=${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify({ token }) }),
 };

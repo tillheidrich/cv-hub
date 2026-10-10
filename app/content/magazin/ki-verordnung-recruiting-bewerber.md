@@ -85,7 +85,7 @@ Verlass dich nicht auf Tricks gegen die Software. Was in der Vorauswahl wirklich
 
 ## So geht es mit CV-Hub
 
-CV-Hub bewertet weder dich noch deinen Lebenslauf mit einer KI. Es setzt deine Angaben als PDF oder Word und zeigt dir unter „Prüfen“, welcher Text in deiner exportierten Datei steht und in welcher Reihenfolge, beim Lebenslauf wie beim Anschreiben. So siehst du vorher, was ein Bewerbersystem als Rohmaterial bekommt. Ohne Konto bleiben deine Daten in deinem Browser. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
+CV-Hub bewertet weder dich noch deinen Lebenslauf mit einer KI, und eine eingebaute KI hat es nicht. Mit einer KI arbeitest du nur, wenn du selbst eine einbindest: über Markdown in einem Chat deiner Wahl oder über einen MCP-Server, etwa aus Claude. Das Werkzeug setzt deine Angaben als PDF oder Word und zeigt dir unter „Prüfen“, welcher Text in deiner exportierten Datei steht und in welcher Reihenfolge, beim Lebenslauf wie beim Anschreiben. So siehst du vorher, was ein Bewerbersystem als Rohmaterial bekommt. Ohne Konto bleiben deine Daten in deinem Browser. Ausprobieren geht ohne Konto: [zu CV-Hub](/).
 
 ## Häufige Fragen
 

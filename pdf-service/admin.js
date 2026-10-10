@@ -31,7 +31,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { subnetOf } from './guards.js';
 import { addGrant, planDetails } from './grants.js';
-import { escapeHtml, layout, h, p, MAIL_COLORS } from './mail.js';
+import { escapeHtml, layout, h, p, MAIL_COLORS, withTag } from './mail.js';
 import { janitorState } from './janitor.js';
 import { ROUTE_LABELS } from './stats.js';
 import { createMollie } from './mollie.js';
@@ -232,7 +232,7 @@ export function invoiceGaps(invoiceNos, counters) {
 /* ── Mails ─────────────────────────────────────────────────────────────── */
 
 function tplAdminLoginCode({ code, host }) {
-  return {
+  return withTag('admin_login_code', {
     subject: 'Admin-Anmeldung: dein Code',
     html: layout(
       h('Admin-Anmeldung') +
@@ -240,13 +240,13 @@ function tplAdminLoginCode({ code, host }) {
       `<div style="font-family:monospace;font-size:30px;font-weight:700;letter-spacing:0.24em;background:${MAIL_COLORS.PAPER};border:1px solid ${MAIL_COLORS.LINE};border-radius:9px;padding:18px;text-align:center;margin:0 0 20px;">${code}</div>` +
       p('Warst du das nicht, ändere sofort ADMIN_PASSWORD in Coolify und starte den Dienst neu. Damit enden alle Sitzungen.'),
     ),
-  };
+  });
 }
 function tplAdminTest({ host }) {
-  return {
+  return withTag('admin_test', {
     subject: 'Testmail aus dem Admin-Bereich',
     html: layout(h('Mailversand klappt') + p(`Diese Mail hast du im Admin-Bereich${host ? ` (${escapeHtml(host)})` : ''} angefordert. Wenn sie ankommt, funktioniert der Versand.`)),
-  };
+  });
 }
 function maskEmail(e) {
   const [u, d] = String(e || '').split('@');
@@ -259,7 +259,7 @@ function maskEmail(e) {
 /**
  * deps:
  *   pool, cfg (adminConfig), rateLimit, subnetLimit, bucketBlocked, bucketHit,
- *   loadUser, markAuth, sendMail, mailConfigured, billing, billingConfig,
+ *   loadUser, markAuth, sendMail, isMailConfigured, billing, billingConfig,
  *   stats, publicBaseUrl, issueEmailConfirmation, issuePasswordReset,
  *   deleteAccount, revokeAllCredentials, systemInfo, summarizeUa
  */
@@ -496,7 +496,7 @@ export function createAdmin(deps) {
       passes: { ...passes, grantsBySource: grants },
       money: { ...money, open_orders: openOrders.n },
       declarations: decl,
-      mail: { configured: !!deps.mailConfigured, ...mail },
+      mail: { configured: !!deps.isMailConfigured(), ...mail },
       janitor: { ...janitorState },
       storage: { dbBytes: Number(db.bytes), tables: tables.map(t => ({ name: t.name, bytes: Number(t.bytes) })), photos: { n: photos.n, bytes: Number(photos.bytes) }, resumes: resumes.n },
       accessRequestsPending: pending.n,
@@ -754,7 +754,7 @@ export function createAdmin(deps) {
     const want = (cond, name, why) => { if (!cond) missing.push({ name, why }); };
     want(process.env.JWT_SECRET, 'JWT_SECRET', 'Sitzungen');
     want(process.env.DATABASE_URL, 'DATABASE_URL', 'Datenbank');
-    want(deps.mailConfigured, 'SMTP_HOST / SMTP_USER / SMTP_PASS', 'Mailversand, Admin-Anmeldung');
+    want(deps.isMailConfigured(), 'SMTP (Admin → E-Mails oder SMTP_HOST / SMTP_USER / SMTP_PASS)', 'Mailversand, Admin-Anmeldung');
     want(cfg.email, 'ADMIN_EMAIL', 'Ziel der Admin-Codes und Testmails');
     want(process.env.TRUST_PROXY, 'TRUST_PROXY', 'echte Besucheradresse hinter dem Proxy');
     want(cfg.separate, 'ADMIN_HOST', 'Admin-Bereich auf eigener Adresse');
@@ -776,7 +776,7 @@ export function createAdmin(deps) {
       // P5: wirksame Fassungen der Vertragstexte (Quelle: Datei oder Übersteuerung per Umgebung).
       legal: sys.legal || null,
       registration: sys.registration || null,
-      mail: { configured: !!deps.mailConfigured },
+      mail: { configured: !!deps.isMailConfigured() },
       umamiUrl: cfg.umamiUrl,
       version: sys.version || null,
       nodeEnv: process.env.NODE_ENV || null,
@@ -802,7 +802,7 @@ export function createAdmin(deps) {
         const u = await deps.loadUser(req);
         if (u?.role === 'admin') { user = u; via = 'app-session'; }
       }
-      if (!user) return res.json({ mode: req.adminScope, authenticated: false, mailReady: !!deps.mailConfigured });
+      if (!user) return res.json({ mode: req.adminScope, authenticated: false, mailReady: !!deps.isMailConfigured() });
       res.json({
         mode: req.adminScope, authenticated: true, via,
         user: { id: user.id, username: user.username },
@@ -832,7 +832,7 @@ export function createAdmin(deps) {
         return res.status(401).json({ error: 'Anmeldung fehlgeschlagen.' });
       }
       const dest = cfg.email || user.email;
-      if (!dest || !deps.mailConfigured) {
+      if (!dest || !deps.isMailConfigured()) {
         return res.status(503).json({ error: 'Für die Admin-Anmeldung braucht der Dienst Mailversand und ADMIN_EMAIL.', code: 'mail_missing' });
       }
       const challenge = crypto.randomBytes(24).toString('hex');
@@ -841,7 +841,9 @@ export function createAdmin(deps) {
         'INSERT INTO admin_login_codes (challenge, user_id, code_hash, expires_at) VALUES ($1, $2, $3, now() + interval \'10 minutes\')',
         [challenge, user.id, sha256(code)],
       );
-      const sent = await deps.sendMail({ to: dest, ...tplAdminLoginCode({ code, host: cfg.host || normHost(req.headers.host) }) });
+      // fallbackEnv: Scheitern die Einstellungen aus dem Admin-Bereich, geht der
+      // Code über die Umgebung (sonst sperrt eine falsche Eingabe den Admin aus).
+      const sent = await deps.sendMail({ to: dest, ...tplAdminLoginCode({ code, host: cfg.host || normHost(req.headers.host) }), fallbackEnv: true });
       if (!sent) return res.status(502).json({ error: 'Der Code ließ sich nicht verschicken. Bitte gleich noch einmal.' });
       res.json({ challenge, sentTo: maskEmail(dest) });
     });
@@ -1128,6 +1130,9 @@ export function createAdmin(deps) {
       res.locals.audit = { action: 'test_mail', target: null, details: { ok } };
       res.status(ok ? 200 : 502).json({ ok, to: maskEmail(to) });
     });
+
+    // E-Mails: SMTP, Workflows, Protokoll, Warteschlange (mailadmin.js).
+    if (deps.mountMail) deps.mountMail(app, guard, { auditWrite });
   }
 
   return { gate, authenticate, needAdmin, mount, isAdminHost, sessionFromCookie, auditWrite, config: cfg };

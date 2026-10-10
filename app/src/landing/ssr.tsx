@@ -21,6 +21,7 @@ import { faqFor } from './faqFor';
 import { SHOTS } from './shots.gen';
 import { BRAND } from './brand.js';
 import { SOURCE_REPO_URL } from '../data/urls';
+import { FREE_TEMPLATE_IDS } from '../templates/freeTemplates';
 
 const noop = () => {};
 const g = globalThis as unknown as { __CV_SSR_OFFER__?: Offer | null; __CV_SSR_LANG__?: UiLang };
@@ -69,5 +70,7 @@ export const SSR_INFO = {
   langs: LANDING_LANGS,
   templates: PICKABLE_THEMES.map(t => ({ id: t.id, name: t.name, layout: t.layout })),
   shots: SHOTS,
+  /** Zahl der Vorlagen mit kostenlosem gestaltetem PDF (Vorlagen-Staffel). */
+  freeTemplates: FREE_TEMPLATE_IDS.length,
   repo: SOURCE_REPO_URL,
 };

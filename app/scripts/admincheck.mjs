@@ -10,6 +10,10 @@
 //   3. Hell und dunkel; mobil 390 px ohne waagerechtes Scrollen der Seite.
 //   4. Gebautes Bündel (dist/admin.html) unter der CSP aus nginx.conf: keine
 //      CSP-Verletzung (kein Inline-Skript, kein Inline-Stil im HTML).
+//   5. E-Mails (E-Mail-Workflows, 10.10.2026): Bereich mit SMTP, Workflows,
+//      Warteschlange und Protokoll; Vorschau und Texteditor offen ohne
+//      axe-Befund; ein gespeichertes SMTP-Passwort steht nirgends auf der
+//      Seite; Schalter und wartende Mails; dunkel und mobil 390.
 //
 // Bildschirmfotos nach ADMINCHECK_SHOTS (Standard: <tmp>/admincheck-shots).
 //
@@ -46,8 +50,9 @@ mkdirSync(SHOTS, { recursive: true });
 const PAGES = [
   ['ueberblick', 'Überblick'], ['verlauf', 'Verlauf'], ['nutzung', 'Nutzung'], ['kunden', 'Kunden'], ['zahlungen', 'Zahlungen'],
   ['rechnungen', 'Rechnungen'], ['erklaerungen', 'Widerrufe und Kündigungen'], ['gutscheine', 'Gutscheine und Kampagnen'],
-  ['zugang', 'Einladungen und Anfragen'], ['system', 'System'],
+  ['zugang', 'Einladungen und Anfragen'], ['emails', 'E-Mails'], ['system', 'System'],
 ];
+const SMTP_SECRET = 'admincheck-smtp-geheim-7';
 
 /* ── Dienste ────────────────────────────────────────────────────────── */
 const pgInst = await startPostgres(PG_PORT);
@@ -103,6 +108,13 @@ for (let d = 0; d < 30; d++) {
 }
 await db.query(`INSERT INTO declarations (id, type, channel, name, email, order_no, received_at, statement, status) VALUES (gen_random_uuid(), 'withdrawal', 'form', 'Beispiel Person', 'person@example.test', 'B-9999', now() - interval '2 days', 'Hiermit widerrufe ich den Vertrag über den Bewerbungs-Pass.', 'manual')`);
 await db.query(`INSERT INTO access_requests (name, email, message) VALUES ('Beispiel Anfrage', 'anfrage@example.test', 'Ich würde das Werkzeug gern im Coaching nutzen.')`);
+// E-Mails: eine Einwilligung, wartende und fehlgeschlagene Mails, Protokoll.
+await db.query(`INSERT INTO mail_prefs (user_id, tips_consent_at, tips_consent_version, tips_consent_source) VALUES ($1, now() - interval '1 day', '2026-10-10', 'register')`, [ids[0]]);
+await db.query(`INSERT INTO mail_queue (workflow, dedupe_key, user_id, status, last_error, created_at) VALUES ('welcome', $1, $2, 'waiting_smtp', 'SMTP nicht eingerichtet', now() - interval '2 hours')`, [`welcome:${ids[1]}:v1`, ids[1]]);
+await db.query(`INSERT INTO mail_queue (workflow, dedupe_key, user_id, status, attempts, last_error) VALUES ('tips_1', $1, $2, 'failed', 5, 'ECONNREFUSED: Verbindung abgelehnt')`, [`tips_1:${ids[0]}:v1`, ids[0]]);
+for (const [wf, st, err] of [['welcome', 'sent', null], ['login_code', 'sent', null], ['pass_ending', 'failed', 'ETIMEDOUT'], ['welcome', 'waiting_smtp', null], ['tips', 'unsubscribed', 'one-click']]) {
+  await db.query(`INSERT INTO mail_log (workflow, to_masked, status, error) VALUES ($1, 'le••••@example.test', $2, $3)`, [wf, st, err]);
+}
 await db.end();
 
 const vite = spawn(process.execPath, [join(APP, 'node_modules/vite/bin/vite.js'), '--port', String(VITE_PORT), '--strictPort', '--host', 'localhost'], {
@@ -197,6 +209,45 @@ try {
   await page.goto(`${ORIGIN}/admin.html#/system`);
   await waitPage(page, 'System');
   ok(await page.getByRole('cell', { name: 'Pass gewährt' }).first().isVisible(), 'Protokoll zeigt die Aktion');
+  /* 5. E-Mails im Einzelnen */
+  await page.goto(`${ORIGIN}/admin.html#/emails`);
+  await waitPage(page, 'E-Mails');
+  ok(await page.getByRole('heading', { name: 'Versand (SMTP)' }).isVisible(), 'E-Mails: Abschnitt Versand');
+  ok(await page.locator('[data-workflow]').count() === 8, 'E-Mails: acht Workflows', String(await page.locator('[data-workflow]').count()));
+  ok(await page.locator('[data-queue-id]').count() >= 1, 'E-Mails: Warteschlange zeigt Einträge');
+  // SMTP nur speichern (ohne Prüfung, kein Server da): Passwort danach nirgends sichtbar.
+  await page.getByLabel('Host').fill('smtp.example.test');
+  await page.getByLabel('Port').fill('587');
+  await page.getByLabel('Benutzer').fill('cv@example.test');
+  await page.getByLabel(/^Passwort/).fill(SMTP_SECRET);
+  await page.getByLabel('Absender').fill('CV-Hub <cv@example.test>');
+  await page.getByRole('button', { name: 'Nur speichern' }).click();
+  await page.getByText('Gespeichert (nicht aktiv).').waitFor();
+  await page.reload();
+  await waitPage(page, 'E-Mails');
+  const html = await page.content();
+  const pwVal = await page.getByLabel(/^Passwort/).inputValue();
+  ok(!html.includes(SMTP_SECRET) && pwVal === '', 'SMTP-Passwort steht nach dem Speichern nirgends auf der Seite');
+  ok(await page.getByText('(gesetzt, leer lassen = behalten)').isVisible(), 'Passwortfeld zeigt nur „gesetzt“');
+  const apiBody = await page.evaluate(() => fetch('/pdfapi/api/admin/mail').then(r => r.text()));
+  ok(!apiBody.includes(SMTP_SECRET) && !/v1:[kj]:/.test(apiBody), 'API-Antwort ohne Passwort, auch nicht verschlüsselt');
+  // Workflow-Schalter und Vorschau mit Texteditor.
+  const welcome = page.locator('[data-workflow="welcome"]');
+  await welcome.locator('[data-wf-toggle]').click();
+  await page.waitForFunction(() => document.querySelector('[data-workflow="welcome"] [data-wf-toggle]')?.getAttribute('aria-pressed') === 'false', null, { timeout: 10_000 });
+  ok(true, 'Workflow abschalten');
+  await page.locator('[data-workflow="welcome"] [data-wf-toggle]').click();
+  await page.waitForFunction(() => document.querySelector('[data-workflow="welcome"] [data-wf-toggle]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 10_000 });
+  await page.locator('[data-workflow="welcome"]').getByRole('button', { name: 'Vorschau und Text' }).click();
+  await page.locator('[data-wf-editor="welcome"]').getByRole('button', { name: 'Vorschau', exact: true }).click();
+  await page.locator('[data-preview-subject]').waitFor();
+  ok(/bestätigt/.test(await page.locator('[data-preview-subject]').textContent() || ''), 'Vorschau zeigt den Betreff');
+  await page.locator('[data-wf-editor="welcome"] textarea').fill('<b>Hallo</b> {{name}}');
+  await page.locator('[data-wf-editor="welcome"]').getByRole('button', { name: 'Entwurf ansehen' }).click();
+  await page.waitForFunction(() => /&lt;b&gt;|<b>Hallo<\/b> beispiel/.test(document.querySelector('[data-preview-text]')?.textContent || ''), null, { timeout: 10_000 }).catch(() => {});
+  ok(/<b>Hallo<\/b> beispiel/.test(await page.locator('[data-preview-text]').textContent() || ''), 'Entwurf: Platzhalter ersetzt, Text als Text');
+  await axe(page, 'E-Mails mit offener Vorschau');
+  await page.screenshot({ path: join(SHOTS, 'admin-emails-vorschau.png'), fullPage: true });
   ok(errors.length === 0, 'keine Skriptfehler', errors.join(' | '));
   storage = await ctx.storageState();
   await ctx.close();
@@ -204,7 +255,7 @@ try {
   /* 3a. Dunkel */
   const dark = await browser.newContext({ viewport: { width: 1440, height: 950 }, locale: 'de-DE', colorScheme: 'dark', storageState: storage });
   const dp = await dark.newPage();
-  for (const [hash, title] of [['ueberblick', 'Überblick'], ['verlauf', 'Verlauf'], ['zahlungen', 'Zahlungen'], ['gutscheine', 'Gutscheine und Kampagnen']]) {
+  for (const [hash, title] of [['ueberblick', 'Überblick'], ['verlauf', 'Verlauf'], ['zahlungen', 'Zahlungen'], ['gutscheine', 'Gutscheine und Kampagnen'], ['emails', 'E-Mails']]) {
     await dp.goto(`${ORIGIN}/admin.html#/${hash}`);
     await waitPage(dp, title);
     await axe(dp, `${title} (dunkel)`);
@@ -220,11 +271,14 @@ try {
     await waitPage(mp, title);
     const m = await mp.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: window.innerWidth }));
     ok(m.sw <= m.w + 1, `mobil 390: ${title} ohne waagerechtes Scrollen`, `${m.sw} > ${m.w}`);
-    if (['ueberblick', 'kunden', 'zahlungen', 'verlauf'].includes(hash) || hash.startsWith('kunden/')) {
+    if (['ueberblick', 'kunden', 'zahlungen', 'verlauf', 'emails'].includes(hash) || hash.startsWith('kunden/')) {
       await mp.screenshot({ path: join(SHOTS, `admin-mobil-${hash.replace('/', '-')}.png`), fullPage: true });
     }
   }
   await axe(mp, 'Kundendetail mobil');
+  await mp.goto(`${ORIGIN}/admin.html#/emails`);
+  await waitPage(mp, 'E-Mails');
+  await axe(mp, 'E-Mails mobil');
   await mob.close();
 } finally {
   vite.kill('SIGTERM');
