@@ -13,6 +13,7 @@ import { BILLING_I18N } from '../ui/i18n/billing';
 import { LOCAL_I18N } from '../ui/i18n/local';
 import { KONTO_I18N, relativeDay, type KontoStrings } from '../ui/i18n/konto';
 import { formatAccessDate } from '../ui/i18n/zugang';
+import { APP_NAME } from '../brand';
 import { SiteFooter } from '../billing/BillingShell';
 import { useFreeTier } from '../billing/freeTier';
 import { LockGlyph, PassNote } from '../billing/PassLock';
@@ -80,6 +81,8 @@ interface Props {
   plan?: Plan | null;
   /** Lokalmodus (ohne Konto). Fehlt es, gilt: Sicherung angeboten = lokal. */
   localMode?: boolean;
+  /** Marketing-Startseite öffnen (App.tsx, 11.10.2026). */
+  onOpenLanding?: () => void;
 }
 
 // ── Anlege-Dialog ───────────────────────────────────────────────────────────
@@ -535,7 +538,7 @@ function ProfileCard({ profile, index, local, changedAt, x, onOpen, onDelete, on
 
 // ── Übersicht ───────────────────────────────────────────────────────────────
 
-export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup, onDuplicate, readOnlyNote, banner, onOpenPass, onRename, onExportPdf, plan: planProp, localMode }: Props) {
+export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, username, isAdmin, onLogout, onOpenAdmin, onOpenBackup, onDuplicate, readOnlyNote, banner, onOpenPass, onRename, onExportPdf, plan: planProp, localMode, onOpenLanding }: Props) {
   const [createMode, setCreateMode] = useState<StartMode | null>(null);
   const uiLang = useUiLang();
   const t = HOME_I18N[uiLang];
@@ -636,7 +639,12 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
   return (
     <div className="ui kh" lang={uiLang}>
       <header className="kh-top">
-        <span className="kh-brand"><Wordmark /></span>
+        {/* Wortmarke führt zur Startseite (11.10.2026), wie auf jeder Website üblich. */}
+        {onOpenLanding
+          ? <a className="kh-brand" href="/?start" aria-label={`${APP_NAME} – ${BILLING_I18N[uiLang].home}`}
+              style={{ color: 'inherit', textDecoration: 'none' }}
+              onClick={(e) => { e.preventDefault(); onOpenLanding(); }}><Wordmark /></a>
+          : <span className="kh-brand"><Wordmark /></span>}
         <div className="kh-top-right">
           {username && <span className="kh-user" title={username}>{username}</span>}
           {isAdmin && onOpenAdmin && (
@@ -743,7 +751,7 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
           </section>
         )}
       </main>
-      <div className="kh-foot"><SiteFooter lang={uiLang} /></div>
+      <div className="kh-foot"><SiteFooter lang={uiLang} onLanding={onOpenLanding} /></div>
 
       {toast && (
         <div role="status" aria-live="polite" className="ui-toast ui kh-toast">

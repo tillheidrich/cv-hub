@@ -64,10 +64,16 @@ interface Props {
   /** Früher Impressum/Datenschutz; die Fußzeile verlinkt jetzt direkt. */
   onLegal?: (page: 'impressum' | 'privacy') => void;
   ssr?: LandingSsr;
+  /** Gesetzt, wenn schon eine Demo oder ein Konto offen ist: Die Knöpfe
+   *  „Demo starten" und „Anmelden" führen dann zurück ins Werkzeug. */
+  onBackToApp?: () => void;
 }
 
 const UI_LANG_KEY = 'appstudio-ui-lang';
 const NAV_DEMO: Record<UiLang, string> = { de: 'Demo starten', en: 'Try the demo', fr: 'Essayer la démo', es: 'Probar la demo' };
+/* Für Wiederkehrende (Demo oder Konto, 11.10.2026): statt „Demo starten" und
+ * „Anmelden" ein Weg zurück an die eigenen Lebensläufe. */
+const BACK_APP: Record<UiLang, string> = { de: 'Zu deinen Lebensläufen', en: 'Go to your CVs', fr: 'Aller à vos CV', es: 'Ir a tus currículums' };
 const LANG_SHORT: Record<UiLang, string> = { de: 'DE', en: 'EN', fr: 'FR', es: 'ES' };
 const SCRIPTS_URL = sourceFileUrl('app/scripts/pdfcheck.mjs');
 /** Magazin-Artikel, auf den der KI-Abschnitt verweist. */
@@ -94,7 +100,7 @@ function preferredLang(): { lang: UiLang | null; stored: boolean } {
   return { lang: null, stored: false };
 }
 
-export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChange, ssr }: Props) {
+export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChange, ssr, onBackToApp }: Props) {
   const isSsr = !!ssr;
   const [embedded] = useState(() => (isSsr ? null : embeddedLandingData()));
   const [path, setPath] = useState(() => (isSsr ? landingPath(ssr.lang) : window.location.pathname));
@@ -149,14 +155,20 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
     return () => { html.style.scrollBehavior = prev; };
   }, []);
 
-  const startDemo = () => { track('demo_start', { from: 'landing', lang: pageLang }); onDemoStart(); };
+  const back = onBackToApp;
+  const startDemo = () => {
+    if (back) { track('landing_back_to_app'); back(); return; }
+    track('demo_start', { from: 'landing', lang: pageLang }); onDemoStart();
+  };
   const demoLink = (e: React.MouseEvent) => { e.preventDefault(); startDemo(); };
+  const ctaLabel = back ? BACK_APP[pageLang] : t.hero.ctaPrimary;
   const goSignIn = () => { track('signin_click'); onSignIn(); };
   const openRequest = () => { track('request_open'); setRequestOpen(true); };
   const switchLang = (l: UiLang) => (e: React.MouseEvent) => {
     e.preventDefault();
     const p = landingPath(l);
-    try { if (window.location.pathname !== p) window.history.pushState({}, '', p); } catch { /* ignore */ }
+    // Verlaufszustand mitnehmen (`cvLanding` aus App.tsx), sonst schließt „Zurück" die Startseite.
+    try { if (window.location.pathname !== p) window.history.pushState(window.history.state ?? {}, '', p); } catch { /* ignore */ }
     setPath(p);
     setMenuOpen(false);
     setHint(null);
@@ -201,8 +213,8 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           <nav className="lp-nav-links" aria-label={t.nav.label}>{navItems}</nav>
           <div className="lp-nav-end">
             {langLinks('lp-langs lp-hide-sm')}
-            <button type="button" className="lp-signin lp-hide-sm" onClick={goSignIn}>{t.nav.signin}</button>
-            <a className="lp-btn lp-btn-dark lp-nav-cta" href="/demo" onClick={demoLink}>{NAV_DEMO[pageLang]}</a>
+            {!back && <button type="button" className="lp-signin lp-hide-sm" onClick={goSignIn}>{t.nav.signin}</button>}
+            <a className="lp-btn lp-btn-dark lp-nav-cta" href={back ? '/' : '/demo'} onClick={demoLink}>{back ? BACK_APP[pageLang] : NAV_DEMO[pageLang]}</a>
             <button type="button" className="lp-menu-btn" aria-expanded={menuOpen} aria-controls="lp-menu"
               aria-label={menuOpen ? t.nav.close : t.nav.menu} onClick={() => setMenuOpen(o => !o)}>
               <span className="lp-menu-ico" aria-hidden data-open={menuOpen ? '1' : undefined}><i /><i /></span>
@@ -213,7 +225,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           <nav className="lp-menu-links" aria-label={t.nav.menu}>{navItems}</nav>
           <div className="lp-menu-foot">
             {langLinks('lp-langs')}
-            <button type="button" className="lp-signin" onClick={() => { setMenuOpen(false); goSignIn(); }}>{t.nav.signin}</button>
+            {!back && <button type="button" className="lp-signin" onClick={() => { setMenuOpen(false); goSignIn(); }}>{t.nav.signin}</button>}
           </div>
         </div>
       </header>
@@ -228,7 +240,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
               <p className="lp-lede">{t.hero.lede}</p>
               <div className="lp-cta-row">
                 <button type="button" className="lp-btn lp-btn-dark lp-btn-lg" onClick={startDemo}>
-                  {t.hero.ctaPrimary}<span className="lp-btn-ico" aria-hidden><Arrow /></span>
+                  {ctaLabel}<span className="lp-btn-ico" aria-hidden><Arrow /></span>
                 </button>
                 <a className="lp-btn lp-btn-ghost lp-btn-lg" href="#ats">{t.hero.ctaSecondary}</a>
               </div>
@@ -403,7 +415,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
             <p>{t.closing.lede}</p>
             <div className="lp-cta-row lp-cta-center">
               <button type="button" className="lp-btn lp-btn-light lp-btn-lg" onClick={startDemo}>
-                {t.hero.ctaPrimary}<span className="lp-btn-ico" aria-hidden><Arrow /></span>
+                {ctaLabel}<span className="lp-btn-ico" aria-hidden><Arrow /></span>
               </button>
               {!open && !regOpen
                 ? <button type="button" className="lp-btn lp-btn-outline-light lp-btn-lg" onClick={openRequest}>{t.nav.cta}</button>

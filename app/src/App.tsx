@@ -22,6 +22,7 @@ import HomeScreen from './screens/HomeScreen';
 import KnowledgePanel from './knowledge/KnowledgePanel';
 import AuthScreen from './screens/AuthScreen';
 import LandingScreen from './screens/LandingScreen';
+import { landingPath } from './landing/copy';
 import { ImpressumPage, PrivacyPage } from './screens/LegalPages';
 import { atsLevelForLayout } from './templates/atsScore';
 import { detectInitialUiLang, setUiLang, type UiLang } from './ui/i18n';
@@ -136,6 +137,52 @@ export default function App() {
   const [profiles, setProfiles] = useState<AppProfile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>('home');
+  /* Marketing-Startseite für Wiederkehrende (11.10.2026). Wer eine Demo oder
+   * ein Konto offen hat, landet auf „/" im Werkzeug; die Startseite erreicht er
+   * über „⋯ → Startseite", die Fußzeile der Übersicht, „/?start" oder die
+   * Sprachpfade /en/, /fr/, /es/. Der Verlaufseintrag trägt `cvLanding`, damit
+   * „Zurück" im Browser wieder ins Werkzeug führt. */
+  const [landingOpen, setLandingOpen] = useState<boolean>(() => {
+    try {
+      const { pathname, search } = window.location;
+      return /^\/(en|fr|es)\/?$/.test(pathname) || new URLSearchParams(search).has('start')
+        || !!(window.history.state as { cvLanding?: number } | null)?.cvLanding;
+    } catch { return false; }
+  });
+  /** Startseite verlassen: ohne Spuren in der Adresszeile zurück ins Werkzeug. */
+  const leaveLanding = useCallback(() => {
+    setLandingOpen(false);
+    try {
+      const { pathname, search } = window.location;
+      if (/^\/(en|fr|es)\/?$/.test(pathname) || new URLSearchParams(search).has('start') || (window.history.state as { cvLanding?: number } | null)?.cvLanding) {
+        window.history.replaceState({}, '', '/');
+      }
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    // Beim Laden über /?start oder einen Sprachpfad: Eintrag markieren, ?start entfernen.
+    if (!landingOpen) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('start');
+      window.history.replaceState({ ...(window.history.state ?? {}), cvLanding: 1 }, '', url.pathname + url.search + url.hash);
+    } catch { /* ignore */ }
+    // Nur einmal beim ersten Laden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const on = () => {
+      try { setLandingOpen(!!(window.history.state as { cvLanding?: number } | null)?.cvLanding); } catch { /* ignore */ }
+    };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, []);
+  /** Startseite aus dem Werkzeug öffnen (⋯-Menü, Fußzeile der Übersicht). */
+  function openLanding() {
+    try { window.history.pushState({ cvLanding: 1 }, '', landingPath(uiLang)); } catch { /* ignore */ }
+    setLandingOpen(true);
+    window.scrollTo(0, 0);
+  }
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const activeProfile = profiles.find(p => p.id === activeId) ?? null;
@@ -285,9 +332,10 @@ export default function App() {
    *  Zugangscode bereit (Seite /code), geht es dorthin zurück — der Code muss
    *  nicht noch einmal eingetippt werden. */
   const handleAuth = useCallback((u: AuthUser) => {
+    leaveLanding();
     setAuthUser(u);
     if (hasPendingCode()) navigate(PATHS.code);
-  }, []);
+  }, [leaveLanding]);
 
   /* Rücksprung nach dem Anmelden.
    *
@@ -352,6 +400,7 @@ export default function App() {
   const demoBooting = useRef(false);
   async function startDemo() {
     demoBooting.current = true;
+    leaveLanding();
     try { localStorage.setItem('appstudio-demo-mode', '1'); } catch { /* ignore */ }
     setDemoMode(true);
     openEditorPanels('new');
@@ -1138,6 +1187,10 @@ export default function App() {
   if (screen === 'impressum') return <ImpressumPage onBack={() => setScreen('home')} lang={uiLang} />;
   if (screen === 'privacy') return <PrivacyPage onBack={() => setScreen('home')} lang={uiLang} />;
 
+  if (landingOpen && (authUser || demoMode)) {
+    return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
+      onBackToApp={() => { leaveLanding(); window.scrollTo(0, 0); }} />;
+  }
   if (!authUser && !demoMode) {
     if (showAuth) {
       return <AuthScreen onAuth={handleAuth} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
@@ -1261,7 +1314,7 @@ export default function App() {
           onRename={readOnly ? undefined : handleRenameProfile}
           onExportPdf={handleHomePdf}
           plan={demoMode ? null : (authUser?.plan ?? null)}
-          localMode={demoMode} />
+          localMode={demoMode} onOpenLanding={openLanding} />
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
         {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
@@ -1438,6 +1491,7 @@ export default function App() {
       {!demoMode && (plan || salesOpen(offer)) && <MenuItem onSelect={() => { close(); setPassOpen(true); }} sub={plan?.kind === 'pass' && plan.until ? formatAccessDate(plan.until, uiLang) : undefined}>{B.mpTitle}</MenuItem>}
       {!demoMode && <MenuItem onSelect={() => { close(); setKeysOpen(true); }} sub={authUser?.username}>{et.account}</MenuItem>}
       {adminUrl && <MenuItem onSelect={() => { close(); openAdmin(); }}>{et.admin}</MenuItem>}
+      <MenuItem onSelect={() => { close(); openLanding(); }}>{B.home}</MenuItem>
       {!demoMode && <MenuItem onSelect={() => { close(); void requestLogout(); }}>{et.signOut}</MenuItem>}
       {demoMode && <MenuItem onSelect={() => { close(); setUnlock('account'); }}>{et.createAccount}</MenuItem>}
       <div className="ui-menu-sep" />

@@ -14,7 +14,9 @@ import { APP_NAME } from '../brand';
 
 const LANGS: UiLang[] = ['de', 'en', 'fr', 'es'];
 
-export function SiteFooter({ lang, showPricing = true }: { lang: UiLang; showPricing?: boolean }) {
+/** `onLanding`: Weg zur Startseite aus dem Werkzeug (Demo oder Konto). Ohne
+ *  ihn landet man über „/" wieder in den eigenen Lebensläufen. */
+export function SiteFooter({ lang, showPricing = true, onLanding }: { lang: UiLang; showPricing?: boolean; onLanding?: () => void }) {
   const t = BILLING_I18N[lang];
   const links: [string, string, boolean?][] = [
     ...(showPricing ? [[PATHS.pricing, t.pricing] as [string, string]] : []),
@@ -30,6 +32,7 @@ export function SiteFooter({ lang, showPricing = true }: { lang: UiLang; showPri
     <footer className="bl-footer ui" data-noprint>
       <div className="bl-wrap">
         <nav aria-label={t.footerLabel}>
+          {onLanding && <a href="/?start" onClick={(e) => { e.preventDefault(); onLanding(); }}>{t.home}</a>}
           {links.map(([href, label, strong]) => (
             <a key={href} href={href} onClick={linkClick(href)} data-strong={strong ? 'true' : undefined}>{label}</a>
           ))}
