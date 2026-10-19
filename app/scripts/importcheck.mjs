@@ -39,6 +39,12 @@ await p.screenshot({ path: OUT + '/laie-editor.png' });
 // Inhalt-Paneel: Knopf vorhanden
 await p.getByRole('button', { name: 'Inhalt', exact: true }).first().click().catch(() => {}); await p.waitForTimeout(600);
 ok(await p.locator('.cv-import-cta').count() >= 1, 'Knopf im Inhalt-Paneel');
+// 2b Linke Leiste: eigener Eintrag „Übernehmen" direkt hinter „Inhalt"
+const railNames = await p.locator('nav.ui-rail > button').evaluateAll(n => n.map(x => x.textContent.trim()));
+ok(railNames[0] === 'Inhalt' && railNames[1] === 'Übernehmen', `Leiste: ${railNames.join(' · ')}`);
+await p.locator('nav.ui-rail [data-rail-import]').click(); await p.waitForTimeout(500);
+ok(await p.locator('#ic-title').count() === 1, 'Leiste „Übernehmen" öffnet das Fenster');
+await p.keyboard.press('Escape'); await p.waitForTimeout(300);
 // 3 ⋯ → Lebenslauf übernehmen, ersetzen
 await p.locator('button[aria-label="Mehr"]').first().click(); await p.waitForTimeout(400);
 await p.getByRole('menuitem', { name: /Lebenslauf übernehmen/ }).click(); await p.waitForTimeout(600);
@@ -91,5 +97,13 @@ for (const vp of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   const over = await q.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   ok(!over, `kein waagerechtes Scrollen bei ${vp.width} px`);
   if (vp.width === 390) await q.screenshot({ path: OUT + '/laie-mobil.png' });
+  if (vp.width === 390) {
+    await q.getByRole('button', { name: 'Lebenslauf anlegen' }).click(); await q.waitForTimeout(2000);
+    const bar = await q.locator('nav.ui-bottom-bar > button').evaluateAll(n => n.map(x => { const r = x.getBoundingClientRect(); return [x.textContent.trim(), Math.round(r.left), Math.round(r.right)]; }));
+    ok(bar.some(b => b[0] === 'Übernehmen') && bar.every(b => b[2] <= 390), `Leiste unten 390 px: ${bar.map(b => b[0]).join(' · ')}`);
+    await q.locator('nav.ui-bottom-bar [data-rail-import]').click(); await q.waitForTimeout(500);
+    ok(await q.locator('#ic-title').count() === 1, 'Telefon: „Übernehmen" öffnet das Fenster');
+    await q.screenshot({ path: OUT + '/laie-mobil-bar.png' });
+  }
 }
 await b2.close();

@@ -20,9 +20,21 @@ interface Props {
 }
 
 export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing: P, metrics: M, measure, pageFormat = 'a4', inlineEdit }: Props) {
-  // Das Anschreiben ist per Konvention einseitig — hier zählt nur die
-  // Schriftskala. Weißraum wird über dieselbe Achse mitskaliert.
-  const d = M.t * 0.94 + M.s * 0.06;
+  /* Satz des Briefs (19.10.2026, Rückmeldung „alles untereinander
+   * weggeklatscht"): Bis dahin standen 9,5 pt Text mit 8 mm Rand oben auf der
+   * Seite, die untere Hälfte blieb leer, lange Briefe wurden unten
+   * abgeschnitten. Jetzt Ränder nach DIN 5008 (links 25 mm, rechts 20 mm),
+   * 11 pt Text, ein festes Anschriftfeld und Platz für die Unterschrift.
+   * Die Einpassung (preview/DocumentPreview.tsx) macht kurze Briefe luftiger
+   * (Weißraum und Zeilenabstand, nie größere Schrift) und lange enger.
+   *   t = Schrift, s = Weißraum, l = Zeilenabstand, m = Seitenränder */
+  const d = M.t;
+  const sp = M.s;
+  const lh = M.l;
+  const mg = M.m;
+  const BODY = 14.6; // px bei t = 1 ≈ 11 pt
+  const padX = `${20 * mg}mm`;
+  const padL = `${25 * mg}mm`;
   const C = T.colors;
   const { personal } = cvData;
   const banded = T.layout === 'header-band';
@@ -70,7 +82,7 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
       background: banded ? C.panelBg : C.pageBg,
       color: banded ? C.panelInk : C.ink,
       borderBottom: banded ? 'none' : `1px solid ${C.rule}`,
-      padding: `${24 * d}px ${30 * d}px ${18 * d}px`,
+      padding: `${12 * sp}mm ${padX} ${6 * sp}mm ${padL}`,
       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: `${20 * d}px`,
     }}>
       <div>
@@ -98,21 +110,23 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
       {letterhead}
       {!banded && <div style={{ height: `${2.5 * d}px`, background: `linear-gradient(to right, ${C.accent}, transparent)` }} />}
 
-      <div style={{ flex: 1, padding: `${22 * d}px ${30 * d}px ${20 * d}px`, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Recipient + date */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: `${24 * d}px`, marginBottom: `${20 * d}px` }}>
+      <div style={{ flex: 1, padding: `${9 * sp}mm ${padX} ${6 * sp}mm ${padL}`, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Anschrift und Datum. Das Anschriftfeld hat eine feste Höhe wie im
+            Fensterbriefumschlag: der Betreff steht immer an derselben Stelle,
+            auch wenn die Anschrift fehlt. Im PDF steht dann einfach nichts —
+            früher druckte es „Empfänger noch nicht eingegeben". */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: `${24 * d}px`, minHeight: '30mm', marginBottom: `${7 * sp}mm` }}>
           <div>
-            {recipient.some(([, v]) => v.trim()) || inlineEdit ? recipient.map(([k, line], i) => (
+            {recipient.map(([k, line], i) => (
               <div key={k} style={{
-                fontFamily: P.body, fontSize: `${12.6 * d}px`,
-                color: i === 0 ? C.ink : C.inkMid, fontWeight: i === 0 ? 600 : 400, lineHeight: 1.6,
+                fontFamily: P.body, fontSize: `${BODY * d}px`,
+                color: i === 0 ? C.ink : C.inkMid, fontWeight: i === 0 ? 600 : 400, lineHeight: 1.5,
+                whiteSpace: 'pre-line',
               }}><Ed path={`cl.${k}`}>{line}</Ed></div>
-            )) : (
-              <div style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.inkSoft, fontStyle: 'italic' }}>Empfänger noch nicht eingegeben</div>
-            )}
+            ))}
           </div>
           {clData.showDateline !== false && (clData.city || clData.date) && (
-            <div style={{ fontFamily: P.body, fontSize: `${10.9 * d}px`, color: C.inkSoft, whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: P.body, fontSize: `${13 * d}px`, color: C.inkSoft, whiteSpace: 'nowrap' }}>
               {clData.city && <Ed path="cl.city">{clData.city}</Ed>}
               {clData.city && clData.date ? ', ' : ''}
               {clData.date && <Ed path="cl.date">{clData.date}</Ed>}
@@ -122,32 +136,36 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
 
         {/* Subject */}
         {clData.subject && (
-          <div style={{ fontFamily: P.heading, fontSize: `${14.4 * d}px`, fontWeight: 700, color: C.ink, marginBottom: `${14 * d}px` }}>
+          <div style={{ fontFamily: P.heading, fontSize: `${BODY * 1.08 * d}px`, fontWeight: 700, color: C.ink, lineHeight: 1.35, marginBottom: `${7 * sp}mm` }}>
             <Ed path="cl.subject">{clData.subject}</Ed>
           </div>
         )}
 
         {/* Salutation */}
         {clData.salutation && (
-          <p style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.ink, lineHeight: 1.6, margin: `0 0 ${9 * d}px` }}><Ed path="cl.salutation">{clData.salutation}</Ed></p>
+          <p style={{ fontFamily: P.body, fontSize: `${BODY * d}px`, color: C.ink, lineHeight: 1.5 * lh, margin: `0 0 ${0.8 * sp}em` }}><Ed path="cl.salutation">{clData.salutation}</Ed></p>
         )}
 
         {/* Body */}
         {bodyParas.map(([k, v]) => (
-          <p key={k} style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.inkMid, lineHeight: 1.55, margin: `0 0 ${9 * d}px` }}>
+          /* pre-line wie im beschreibbaren Feld: Leerzeilen, die jemand in ein
+             Feld tippt, stehen sonst nur in der Vorschau, im PDF fließt alles
+             zu einem Block zusammen — und die Einpassung misst zu kurz. */
+          <p key={k} style={{ fontFamily: P.body, fontSize: `${BODY * d}px`, color: C.inkMid, lineHeight: 1.5 * lh, margin: `0 0 ${0.75 * sp}em`, whiteSpace: 'pre-line' }}>
             <Ed path={`cl.${k}`}>{v}</Ed>
           </p>
         ))}
 
         {/* Sign-off */}
-        <div style={{ marginTop: `${14 * d}px` }}>
-          <p style={{ fontFamily: P.body, fontSize: `${12.6 * d}px`, color: C.inkMid, margin: `0 0 ${18 * d}px` }}>
+        <div style={{ marginTop: `${3 * sp}mm` }}>
+          {/* Darunter Platz für die Unterschrift (etwa drei Leerzeilen). */}
+          <p style={{ fontFamily: P.body, fontSize: `${BODY * d}px`, color: C.inkMid, margin: `0 0 ${11 * sp}mm` }}>
             <Ed path="cl.signoff">{clData.signoff || 'Mit freundlichen Grüßen'}</Ed>
           </p>
           {clData.showSignature !== false && (
             <>
               <div style={{ borderBottom: `0.6px solid ${C.rule}`, width: `${52 * d}px`, marginBottom: `${4 * d}px` }} />
-              <div style={{ fontFamily: P.heading, fontSize: `${13 * d}px`, color: C.ink }}>{personal.name}</div>
+              <div style={{ fontFamily: P.heading, fontSize: `${BODY * d}px`, color: C.ink }}>{personal.name}</div>
             </>
           )}
         </div>
@@ -156,7 +174,7 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
       </div>
 
       <div style={{
-        borderTop: `1px solid ${C.rule}`, padding: `${10 * d}px ${30 * d}px`,
+        borderTop: `1px solid ${C.rule}`, padding: `${3.5 * sp}mm ${padX} ${3.5 * sp}mm ${padL}`,
         display: 'flex', justifyContent: 'space-between', background: banded ? C.panelBg : C.pageBg,
       }}>
         <div style={{ fontFamily: P.body, fontSize: `${9.2 * d}px`, color: C.inkSoft }}>{personal.name} · Anschreiben</div>

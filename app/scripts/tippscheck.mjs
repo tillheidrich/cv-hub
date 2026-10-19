@@ -147,7 +147,7 @@ for (const lang of LANGS) {
   step(`B. Oberfläche ${lang}`);
   const { ctx, page } = await open({ lang });
   await startDemo(page);
-  await page.locator('nav.ui-rail > button').nth(3).click();
+  await page.locator('nav.ui-rail > button:not([data-rail-import])').nth(3).click();
   await page.waitForSelector('[data-tipps] [data-tip]');
   const tabs = await page.locator('[data-tipps] [role="tab"]').allInnerTexts();
   check(JSON.stringify(tabs) === JSON.stringify(TAB_LABELS[lang]), `${lang}: Reiter`, tabs.join(' · '));
@@ -181,7 +181,7 @@ for (const lang of LANGS) {
   if (lang === 'de') {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
-    const railBtn = page.locator('nav.ui-rail > button').nth(3);
+    const railBtn = page.locator('nav.ui-rail > button:not([data-rail-import])').nth(3);
     if ((await railBtn.getAttribute('aria-expanded')) !== 'true') await railBtn.click();
     await page.waitForSelector('[data-checklist-progress]', { timeout: 8000 }).catch(() => {});
     const after = await page.locator('[data-checklist-progress]').innerText().catch(() => '');
@@ -203,7 +203,7 @@ step('C. axe: Prüfen');
 {
   const { ctx, page } = await open();
   await startDemo(page);
-  await page.locator('nav.ui-rail > button').nth(2).click();
+  await page.locator('nav.ui-rail > button:not([data-rail-import])').nth(2).click();
   await page.click('[data-check-docs] [data-doc="cover"]');
   await page.waitForSelector('[data-cover-summary] .ck-open');
   await page.waitForTimeout(600);
@@ -232,7 +232,7 @@ step('C. axe: Prüfen');
   await ctx.close();
   const l = await open({ offer: { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, vatNote: '', productName: '', features: [], openRegistration: true, freeTier: { limited: true } } });
   await startDemo(l.page);
-  await l.page.locator('nav.ui-rail > button').nth(2).click();
+  await l.page.locator('nav.ui-rail > button:not([data-rail-import])').nth(2).click();
   await l.page.click('[data-check-docs] [data-doc="cover"]');
   await l.page.waitForSelector('[data-cover-locked]');
   await axe(l.page, 'Prüfen · Anschreiben ohne Pass');

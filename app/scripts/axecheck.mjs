@@ -134,7 +134,7 @@ const tel = await browser.newPage({ viewport: { width: 390, height: 844 }, isMob
   await page.waitForTimeout(2200);
   berichte.push(await pruefe('Telefon · Dokument'));
   for (const [i, name] of [[0, 'Telefon · Inhalt'], [1, 'Telefon · Gestaltung'], [2, 'Telefon · Prüfen'], [3, 'Telefon · Export']]) {
-    await page.locator('nav.ui-bottom-bar button').nth(i).click();
+    await page.locator('nav.ui-bottom-bar button:not([data-rail-import])').nth(i).click();
     await page.waitForTimeout(900);
     berichte.push(await pruefe(name));
   }

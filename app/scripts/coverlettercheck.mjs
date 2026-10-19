@@ -68,7 +68,7 @@ async function startDemo(page) {
   await page.waitForSelector('nav.ui-rail', { timeout: 15000 });
   await page.waitForTimeout(1200);
 }
-const rail = (page, i) => page.locator('nav.ui-rail > button').nth(i);
+const rail = (page, i) => page.locator('nav.ui-rail > button:not([data-rail-import])').nth(i);
 
 // ── A. Logik ────────────────────────────────────────────────────────────────
 step('A. Logik');
@@ -176,7 +176,9 @@ step('A. Logik');
     };
   });
 
-  check(r.sample.includes('recipient-placeholder'), 'Muster: „Empfänger noch nicht eingegeben" im PDF erkannt');
+  // Seit 19.10.2026 druckt das PDF ohne Anschrift keinen Platzhalter mehr,
+  // das leere Anschriftfeld meldet die Prüfung als fehlende Anschrift.
+  check(r.sample.includes('recipient-missing') && !r.sample.includes('recipient-placeholder'), 'Muster: fehlende Anschrift erkannt, kein Platzhalter im PDF', r.sample.join(','));
   check(r.sample.includes('subject-incomplete'), 'Muster: Betreff „Bewerbung als" unvollständig');
   check(r.sample.includes('sample-text'), 'Muster: unveränderter Mustertext erkannt');
   check(r.styleSample.includes('floskel') && r.styleSample.includes('konj'), 'Muster: Standardformel und Möglichkeitsform als Stilhinweis', r.styleSample.join(','));
@@ -220,7 +222,7 @@ step('B1. Prüfen → Anschreiben (ohne Grenze)');
   await page.click('[data-check-docs] [data-doc="cover"]');
   await page.waitForSelector('[data-cover-summary] [data-finding]', { timeout: 8000 });
   const sum = await page.locator('[data-cover-summary] [data-finding]').evaluateAll(els => els.map(e => e.getAttribute('data-finding')));
-  check(sum.includes('recipient-placeholder'), 'Kurzfassung zeigt Platzhalter-Zeile des Musters', sum.join(','));
+  check(sum.includes('recipient-missing'), 'Kurzfassung zeigt die fehlende Anschrift des Musters', sum.join(','));
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/check-panel-cover-1440.png` });
   await page.click('[data-cover-summary] .ck-open');
   await page.waitForSelector('[data-check-dialog="cover"]');

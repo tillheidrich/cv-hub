@@ -38,7 +38,7 @@ Kauffrau für Büromanagement
 
 **Telefon:** 0151 23456789
 **E-Mail:** anna.beispiel@example.de
-**Adresse:** Musterstraße 5, 21255 Tostedt
+**Adresse:** Musterstraße 5, 12345 Musterstadt
 **LinkedIn:** linkedin.com/in/anna-beispiel
 
 ---
@@ -84,7 +84,7 @@ Fußball, Lesen`;
   assert.equal(p.title, 'Kauffrau für Büromanagement');
   assert.equal(p.email, 'anna.beispiel@example.de');
   assert.equal(p.phone, '0151 23456789');
-  assert.equal(p.location, 'Musterstraße 5, 21255 Tostedt');
+  assert.equal(p.location, 'Musterstraße 5, 12345 Musterstadt');
   assert.deepEqual(p.socials?.map(s => [s.platform, s.value]), [['linkedin', 'linkedin.com/in/anna-beispiel']]);
   assert.match(r.cv.profile.text, /^Zuverlässige Kauffrau/);
   assert.equal(r.cv.experience.length, 2);
@@ -290,8 +290,8 @@ await check('6 Word-Text ohne Markdown', () => {
   const text = `LEBENSLAUF
 
 Max Mustermann
-Rotdornweg 17
-21255 Tostedt
+Musterweg 12
+12345 Musterstadt
 Telefon: 04182 123456
 max.mustermann@example.de
 Geburtsdatum: 07.05.1992
@@ -325,7 +325,7 @@ Fußball, Angeln`;
   const p = r.cv.personal;
   assert.equal(p.name, 'Max Mustermann');
   assert.equal(p.title, '');
-  assert.equal(p.location, 'Rotdornweg 17, 21255 Tostedt');
+  assert.equal(p.location, 'Musterweg 12, 12345 Musterstadt');
   assert.equal(p.phone, '04182 123456');
   assert.equal(p.email, 'max.mustermann@example.de');
   assert.equal(p.birthDate, '07.05.1992');

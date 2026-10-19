@@ -8,6 +8,8 @@ import type { UiLang } from '../i18n';
 
 export interface ImportCvStrings {
   title: string;
+  /** Eintrag in der linken Leiste und der Leiste unten am Telefon. */
+  railItem: string;
   menuItem: string;
   menuSub: string;
   lede: string;
@@ -55,12 +57,15 @@ export interface ImportCvStrings {
   accBody: string;
   accInvite: string;
   accStay: string;
+  /** Anschreiben passt nicht auf eine Seite (App.tsx, Inhalt-Paneel). */
+  clTooLong: (lines: number) => string;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const DE: ImportCvStrings = {
   title: 'Lebenslauf übernehmen',
+  railItem: 'Übernehmen',
   menuItem: 'Lebenslauf übernehmen …',
   menuSub: 'Text von ChatGPT oder aus Word einfügen',
   lede: 'Du hast schon einen Lebenslauf, in Word, als PDF oder bei ChatGPT? Füg den Text hier ein. Das Werkzeug sortiert ihn in Name, Stationen, Ausbildung, Kenntnisse und Sprachen. Danach kannst du alles in Ruhe prüfen und ändern.',
@@ -112,10 +117,12 @@ const DE: ImportCvStrings = {
   accBody: 'Mit einem Konto liegt dein Lebenslauf auf dem Server dieser Instanz, und du kommst von jedem Gerät dran. Was du bis jetzt gemacht hast, nimmst du mit: Nach dem Anmelden fragt das Werkzeug, ob es übernommen werden soll. Ohne Konto geht fast alles auch, dann bleibt alles in diesem Browser.',
   accInvite: 'Ein Konto gibt es gerade nur mit einem Einladungscode.',
   accStay: 'Ohne Konto weitermachen',
+  clTooLong: n => `Dein Anschreiben ist länger als eine Seite, unten wird etwas abgeschnitten. Kürz es um etwa ${n} ${n === 1 ? 'Zeile' : 'Zeilen'}. Eine Seite ist für ein Anschreiben genau richtig.`,
 };
 
 const EN: ImportCvStrings = {
   title: 'Bring in your CV',
+  railItem: 'Bring in',
   menuItem: 'Bring in a CV …',
   menuSub: 'Paste text from ChatGPT or Word',
   lede: 'Already have a CV in Word, as a PDF or in ChatGPT? Paste the text here. The tool sorts it into name, positions, education, skills and languages. Then you can check and change everything at your own pace.',
@@ -167,10 +174,12 @@ const EN: ImportCvStrings = {
   accBody: 'With an account, your CV is stored on this instance’s server and you can reach it from any device. What you have done so far comes with you: after signing in, the tool asks whether to move it over. Almost everything works without an account too; then everything stays in this browser.',
   accInvite: 'Accounts are currently only available with an invitation code.',
   accStay: 'Carry on without an account',
+  clTooLong: n => `Your cover letter is longer than one page; something is cut off at the bottom. Shorten it by about ${n} ${n === 1 ? 'line' : 'lines'}. One page is just right for a cover letter.`,
 };
 
 const FR: ImportCvStrings = {
   title: 'Reprendre votre CV',
+  railItem: 'Reprendre',
   menuItem: 'Reprendre un CV …',
   menuSub: 'Coller un texte de ChatGPT ou de Word',
   lede: 'Vous avez déjà un CV dans Word, en PDF ou dans ChatGPT ? Collez le texte ici. L’outil le répartit en nom, expériences, formation, compétences et langues. Vous pourrez ensuite tout vérifier et modifier tranquillement.',
@@ -222,10 +231,12 @@ const FR: ImportCvStrings = {
   accBody: 'Avec un compte, votre CV est conservé sur le serveur de cette instance et vous y accédez depuis n’importe quel appareil. Ce que vous avez déjà fait vous suit : après la connexion, l’outil vous propose de le transférer. Presque tout fonctionne aussi sans compte ; tout reste alors dans ce navigateur.',
   accInvite: 'Pour l’instant, un compte n’est disponible qu’avec un code d’invitation.',
   accStay: 'Continuer sans compte',
+  clTooLong: n => `Votre lettre dépasse une page ; le bas est coupé. Raccourcissez-la d’environ ${n} ${n === 1 ? 'ligne' : 'lignes'}. Une page, c’est la bonne longueur pour une lettre de motivation.`,
 };
 
 const ES: ImportCvStrings = {
   title: 'Traer tu currículum',
+  railItem: 'Traer',
   menuItem: 'Traer un currículum …',
   menuSub: 'Pegar texto de ChatGPT o de Word',
   lede: '¿Ya tienes un currículum en Word, en PDF o en ChatGPT? Pega el texto aquí. La herramienta lo ordena en nombre, experiencia, formación, conocimientos e idiomas. Después puedes revisarlo y cambiarlo todo con calma.',
@@ -277,6 +288,7 @@ const ES: ImportCvStrings = {
   accBody: 'Con una cuenta, tu currículum se guarda en el servidor de esta instancia y puedes abrirlo desde cualquier dispositivo. Lo que has hecho hasta ahora se viene contigo: al iniciar sesión, la herramienta te pregunta si quieres pasarlo. Casi todo funciona también sin cuenta; entonces todo se queda en este navegador.',
   accInvite: 'Por ahora, solo hay cuentas con un código de invitación.',
   accStay: 'Seguir sin cuenta',
+  clTooLong: n => `Tu carta ocupa más de una página y se corta por abajo. Acórtala unas ${n} ${n === 1 ? 'línea' : 'líneas'}. Una página es la medida justa para una carta de presentación.`,
 };
 
 export const IMPORTCV_I18N: Record<UiLang, ImportCvStrings> = { de: DE, en: EN, fr: FR, es: ES };

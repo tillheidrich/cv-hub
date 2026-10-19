@@ -60,7 +60,7 @@ fi
 FEHLER=0
 
 if [ -n "$EXTRA" ]; then
-  if git grep -nIEi "$EXTRA" "${AUS[@]}"; then
+  if git grep --untracked -nIEi "$EXTRA" "${AUS[@]}"; then
     echo "::error::Personenbezogene Daten des ursprünglichen Betreibers gefunden."
     FEHLER=1
   fi
@@ -70,12 +70,12 @@ else
        "(CI-Secret) oder lege den privaten Zwilling daneben."
 fi
 
-if git grep -nIE "$HART" "${AUS[@]}"; then
+if git grep --untracked -nIE "$HART" "${AUS[@]}"; then
   echo "::error::Zugangsdaten gefunden."
   FEHLER=1
 fi
 
-REST=$(git grep -nIEi "$WEICH" "${AUS[@]}" | grep -viE "$ERLAUBT" || true)
+REST=$(git grep --untracked -nIEi "$WEICH" "${AUS[@]}" | grep -viE "$ERLAUBT" || true)
 if [ -n "$REST" ]; then
   echo "$REST"
   echo "::error::Spur des ursprünglichen Betreibers außerhalb des Demo-Links in der README."

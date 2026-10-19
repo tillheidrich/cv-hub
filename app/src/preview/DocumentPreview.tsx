@@ -248,12 +248,38 @@ export default function DocumentPreview({
 
     const blockEls = Array.from(page0.querySelectorAll('[data-cv-block]')) as HTMLElement[];
     if (!blockEls.length) {
-      // Dokumente ohne Flow-Blöcke (Anschreiben) sind per Konvention einseitig.
-      report({
-        pages: 1, metrics, condense, overflow: false, overflowLines: 0,
+      /* Dokumente ohne Flow-Blöcke (Anschreiben) sind per Konvention
+       * einseitig. Bis zum 19.10.2026 wurde hier nichts eingepasst: kurze
+       * Briefe klebten oben, lange wurden unten abgeschnitten — ohne Hinweis.
+       * Jetzt dieselbe Bisektion wie beim Lebenslauf, nur mit der natürlichen
+       * Höhe der Messseite als Kriterium: so locker wie möglich (Weißraum,
+       * Zeilenabstand, Ränder), so eng wie nötig. Passt es selbst ganz eng
+       * nicht, wird das als Überlauf gemeldet. */
+      const h = page0.getBoundingClientRect().height;
+      const fitsL = h <= PAGE_PX + 0.5;
+      const doneL = (over: boolean) => report({
+        pages: 1, metrics, condense, overflow: over,
+        overflowLines: over ? Math.ceil((h - PAGE_PX) / 22) : 0,
         charsPerLine: charsPerLineRef.current,
-        lastPageFill: 1, pageBlocks: [], asideCap,
+        lastPageFill: Math.min(1, h / PAGE_PX), pageBlocks: [], asideCap,
       });
+      if (fitsL) {
+        hiRef.current = condense;
+        if (condense <= -EXPAND + 0.001 || hiRef.current - loRef.current < 0.02) { doneL(false); return; }
+      } else {
+        loRef.current = condense;
+        if (condense >= 0.999) { doneL(true); return; }
+        if (hiRef.current - loRef.current < 0.02) { const hi = hiRef.current; queueMicrotask(() => setCondense(hi)); return; }
+      }
+      iterRef.current += 1;
+      if (iterRef.current > 12) {
+        if (fitsL) doneL(false); else queueMicrotask(() => setCondense(1));
+        return;
+      }
+      const nextL = (loRef.current + hiRef.current) / 2;
+      if (Math.abs(nextL - condense) > 0.004) queueMicrotask(() => setCondense(nextL));
+      else if (fitsL) doneL(false);
+      else { const hi = hiRef.current; queueMicrotask(() => setCondense(hi)); }
       return;
     }
 

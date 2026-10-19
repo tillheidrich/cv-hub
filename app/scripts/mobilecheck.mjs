@@ -88,7 +88,7 @@ async function underflow(label) {
 /* Seit dem 08.10.2026 startet das Telefon im Dokument („Ganze Seite").
  * Die untere Leiste öffnet Inhalt · Gestaltung · Prüfen · Export als Paneel
  * über dem Dokument; derselbe Knopf noch einmal schließt es wieder. */
-const tab = async (i) => { await page.locator('nav.ui-bottom-bar button').nth(i).click(); await page.waitForTimeout(1600); };
+const tab = async (i) => { await page.locator('nav.ui-bottom-bar button:not([data-rail-import])').nth(i).click(); await page.waitForTimeout(1600); };
 const zumDokument = async () => {
   const offen = page.locator('.ui-mobile-panel:visible button[aria-label="Paneel schließen"]');
   if (await offen.count()) { await offen.first().click(); await page.waitForTimeout(700); }

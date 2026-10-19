@@ -134,7 +134,7 @@ async function pickTemplate(page, name) {
 }
 
 async function rail(page, i) {
-  await page.locator('.ui-rail > button').nth(i).click();
+  await page.locator('.ui-rail > button:not([data-rail-import])').nth(i).click();
   await page.waitForTimeout(1000);
   await snooze(page);
 }

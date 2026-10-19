@@ -321,7 +321,7 @@
 .ui-bottom-bar {
   position: fixed; left: 12px; right: 12px; z-index: 300;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 6px;
   border-radius: 22px;
 }
 .ui-bottom-bar > button {

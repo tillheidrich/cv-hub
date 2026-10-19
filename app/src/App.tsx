@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { APP_NAME } from './brand';
 import { Icon } from './ui/Icon';
 import ResumeRenderer, { type InlineEditApi } from './templates/ResumeRenderer';
@@ -1549,6 +1549,9 @@ export default function App() {
     <>
       {docLangRow}
       {langLockNote}
+      {docType === 'cover-letter' && fit?.overflow && (
+        <div className="ui-readonly-note" role="status" data-cl-too-long>{IMPORTCV_I18N[uiLang].clTooLong(Math.max(1, fit.overflowLines))}</div>
+      )}
       {!readOnly && docType === 'resume' && (
         <button type="button" className="ui-btn ui-btn-soft cv-import-cta" onClick={() => setImportOpen(true)}
           style={{ minHeight: '40px', justifyContent: 'flex-start', gap: '8px', margin: '0 0 10px', width: '100%' }}>
@@ -1763,11 +1766,20 @@ export default function App() {
 
         <nav data-noprint className="ui-bottom-bar ui-float" aria-label={dsT.railLabel}>
           {bar.map(b => (
-            <button key={b.id} type="button" className={b.primary ? 'ui-bottom-primary' : undefined}
-              aria-expanded={mPanel === b.id} aria-controls={`ui-mpanel-${b.id}`}
-              onClick={() => setMPanel(mPanel === b.id ? null : b.id)}>
-              {b.icon}<span>{b.label}</span>
-            </button>
+            <Fragment key={b.id}>
+              <button type="button" className={b.primary ? 'ui-bottom-primary' : undefined}
+                aria-expanded={mPanel === b.id} aria-controls={`ui-mpanel-${b.id}`}
+                onClick={() => setMPanel(mPanel === b.id ? null : b.id)}>
+                {b.icon}<span>{b.label}</span>
+              </button>
+              {/* Übernehmen direkt hinter „Inhalt" (19.10.2026): Bis dahin
+                  lag der Import nur unter „Export". Öffnet das Fenster, kein Paneel. */}
+              {b.id === 'content' && !readOnly && (
+                <button type="button" aria-haspopup="dialog" data-rail-import aria-label={IMPORTCV_I18N[uiLang].title} onClick={() => { setMPanel(null); setImportOpen(true); }}>
+                  <Icon name="upload" size={19} /><span>{IMPORTCV_I18N[uiLang].railItem}</span>
+                </button>
+              )}
+            </Fragment>
           ))}
         </nav>
 
@@ -1805,8 +1817,8 @@ export default function App() {
     { id: 'design', label: dsT.design, icon: <PanelGlyph kind="design" /> },
     { id: 'check', label: dsT.check, icon: <PanelGlyph kind="check" /> },
     { id: 'tips', label: dsT.tips, icon: <Icon name="bulb" size={18} /> },
-    /* Export als fünfter Eintrag: Import, Teilen und „mit KI bearbeiten"
-       stehen nur dort. Allein hinter „▾ → Alle Wege" wären sie versteckt. */
+    /* Export als letzter Eintrag: Teilen und „mit KI bearbeiten" stehen dort.
+       Übernehmen hat seit 19.10.2026 einen eigenen Eintrag hinter „Inhalt". */
     { id: 'export', label: dsT.exportAll, icon: <Icon name="share" size={18} /> },
   ];
   const panelWidth = panel === 'content' ? 420 : panel === 'tips' ? 380 : 372;
@@ -1869,10 +1881,19 @@ export default function App() {
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '6px 16px 16px', gap: '12px' }}>
         <nav data-noprint className="ui-rail ui-float" aria-label={dsT.railLabel}>
           {rail.map(r => (
-            <button key={r.id} type="button" aria-expanded={panel === r.id} aria-controls="ui-panel"
-              onClick={() => setPanel(panel === r.id ? null : r.id)}>
-              {r.icon}<span>{r.label}</span>
-            </button>
+            <Fragment key={r.id}>
+              <button type="button" aria-expanded={panel === r.id} aria-controls="ui-panel"
+                onClick={() => setPanel(panel === r.id ? null : r.id)}>
+                {r.icon}<span>{r.label}</span>
+              </button>
+              {/* Übernehmen direkt hinter „Inhalt" (19.10.2026): Bis dahin
+                  lag der Import nur unter „Export". Öffnet das Fenster, kein Paneel. */}
+              {r.id === 'content' && !readOnly && (
+                <button type="button" aria-haspopup="dialog" data-rail-import aria-label={IMPORTCV_I18N[uiLang].title} onClick={() => setImportOpen(true)}>
+                  <Icon name="upload" size={18} /><span>{IMPORTCV_I18N[uiLang].railItem}</span>
+                </button>
+              )}
+            </Fragment>
           ))}
         </nav>
         {panel && (
