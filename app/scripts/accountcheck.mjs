@@ -205,7 +205,7 @@ const jpeg = await page.evaluate(() => {
   return c.toDataURL('image/jpeg', 0.9).split(',')[1];
 });
 await page.locator('input[type=file][accept="image/jpeg,image/png,image/webp"]').setInputFiles({ name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
-await page.getByRole('button', { name: 'Übernehmen' }).click();
+await page.getByRole('button', { name: 'Übernehmen', exact: true }).click();
 await page.waitForTimeout(2500);
 const orig = (await uj(`/api/resumes/${list[0].id}`)).body?.resume?.payload?.data?.de?.personal || {};
 const ids = [orig.photo, orig.photoOriginal].map(u => /\/api\/photos\/([0-9a-f]{24})/.exec(u || '')?.[1]).filter(Boolean);

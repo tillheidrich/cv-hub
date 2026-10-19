@@ -460,6 +460,14 @@ export interface Art9Info {
   givenVersion: string | null;
   withdrawnAt: string | null;
 }
+/** Fehlt die Einwilligung? Dann speichert das Konto nichts, und Fragen, die
+ *  etwas ins Konto schreiben wollen (App.tsx: Demo-Lebenslauf übernehmen),
+ *  warten, bis sie gegeben ist. */
+export function art9Pending(user: AuthUser | null): boolean {
+  const info = art9Of(user);
+  return !!user && !!info && info.required && !info.ok;
+}
+
 export function art9Of(u: AuthUser | null | undefined): Art9Info | null {
   const a = (u as (AuthUser & { art9?: Art9Info }) | null | undefined)?.art9;
   return a && typeof a === 'object' && typeof a.ok === 'boolean' ? a : null;

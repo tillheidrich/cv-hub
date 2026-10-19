@@ -184,6 +184,9 @@
 .lp-h1-accent { color: var(--accent-ink); display: inline; }
 .lp-lede { margin: 24px 0 0; max-width: 34em; font-size: clamp(17px, 1.5vw, 19px); line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
 .lp-cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.lp-import-link { margin: 14px 0 0 !important; }
+.lp-import-link a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--accent-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.lp-import-link a svg { flex-shrink: 0; }
 .lp-cta-center { justify-content: center; }
 .lp-proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 26px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--ink-2); }
 .lp-proof li { display: inline-flex; align-items: center; gap: 6px; }

@@ -47,6 +47,7 @@ import Gallery from '../landing/Gallery';
 import Picture from '../landing/Picture';
 import { shot } from '../landing/shot';
 import { BRAND } from '../landing/brand.js';
+import { IMPORTCV_I18N } from '../ui/i18n/importcv';
 import '../billing/billing.css';
 
 /** Werte der vorgerenderten Fassung (scripts/landing-prerender.mjs). */
@@ -67,6 +68,9 @@ interface Props {
   /** Gesetzt, wenn schon eine Demo oder ein Konto offen ist: Die Knöpfe
    *  „Demo starten" und „Anmelden" führen dann zurück ins Werkzeug. */
   onBackToApp?: () => void;
+  /** „Schon einen Lebenslauf?": Werkzeug öffnen und gleich das Fenster
+   *  „Lebenslauf übernehmen" zeigen (19.10.2026). */
+  onImportStart?: () => void;
 }
 
 const UI_LANG_KEY = 'appstudio-ui-lang';
@@ -100,7 +104,7 @@ function preferredLang(): { lang: UiLang | null; stored: boolean } {
   return { lang: null, stored: false };
 }
 
-export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChange, ssr, onBackToApp }: Props) {
+export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChange, ssr, onBackToApp, onImportStart }: Props) {
   const isSsr = !!ssr;
   const [embedded] = useState(() => (isSsr ? null : embeddedLandingData()));
   const [path, setPath] = useState(() => (isSsr ? landingPath(ssr.lang) : window.location.pathname));
@@ -244,6 +248,13 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
                 </button>
                 <a className="lp-btn lp-btn-ghost lp-btn-lg" href="#ats">{t.hero.ctaSecondary}</a>
               </div>
+              {/* Für alle, die schon einen Lebenslauf haben (Word, PDF, ChatGPT):
+                  direkt ins Übernehmen-Fenster. Ohne JavaScript ein Link auf /demo. */}
+              <p className="lp-import-link">
+                <a href="/demo" onClick={(e) => { e.preventDefault(); track('landing_import_click', { lang: pageLang }); onImportStart?.(); }}>
+                  {IMPORTCV_I18N[pageLang].landingLink}<Arrow />
+                </a>
+              </p>
               <ul className="lp-proof">
                 {t.hero.proof.map(p => <li key={p}><Tick />{p}</li>)}
               </ul>

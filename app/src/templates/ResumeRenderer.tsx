@@ -878,7 +878,8 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
   const date = (
     <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`experience.${e.id}.start`}>{e.start}</Ed>
-      {' – '}
+      {/* Nur ein Datum (etwa aus einem Import): kein einsamer Strich. */}
+      {e.start && e.end ? ' – ' : ''}
       <Ed path={`experience.${e.id}.end`}>{present(data, e.end)}</Ed>
     </DateChip>
   );
@@ -955,7 +956,7 @@ function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont, variant, dat
   const date = (
     <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`education.${e.id}.start`}>{e.start}</Ed>
-      {' – '}
+      {e.start && e.end ? ' – ' : ''}
       <Ed path={`education.${e.id}.end`}>{e.end}</Ed>
     </DateChip>
   );

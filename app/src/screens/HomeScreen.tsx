@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppProfile, CVData, Lang } from '../data/types';
-import { createDemoProfile, createBlankProfile, withAllLangs, getLocalStoreStatus, subscribeLocalStore } from '../data/storage';
+import { createDemoProfile, createBlankProfile, getLocalStoreStatus, subscribeLocalStore } from '../data/storage';
 import { api, type Plan } from '../data/api';
 import { DESIGN_I18N } from '../ui/i18n/design';
-import { jsonResumeToCv, isJsonResume } from '../export/jsonResume';
-import { markdownToCvData, isCvMarkdown } from '../import/markdownBridge';
-import { readCodeImport } from '../import/rendercv';
+import { importedCv, importedName, type ImportResult } from '../import/readImport';
+import { ImportPanel } from '../ui/ImportCv';
+import { IMPORTCV_I18N } from '../ui/i18n/importcv';
 import { useUiLang } from '../ui/useUiLang';
 import { HOME_I18N } from '../ui/i18n/home';
 import { FASSUNG_I18N } from '../ui/i18n/fassung';
@@ -89,36 +89,6 @@ interface Props {
 
 type StartMode = 'blank' | 'demo' | 'import';
 
-/** Was eine Importdatei hergibt — vor dem Anlegen gelesen, damit der Mensch
- *  sieht, was übernommen wird. */
-interface ImportResult { cv?: CVData; profile?: AppProfile; what: string }
-
-/** Liest eine mitgebrachte Datei — alle vorhandenen Importwege an einer
- *  Stelle (Personas-Bericht, Hürde 7): LinkedIn-ZIP/CSV, Datensicherung des
- *  Werkzeugs (JSON), JSON Resume und Markdown im Format der Brücke. Läuft
- *  vollständig im Browser. */
-async function readImport(file: File, base: CVData): Promise<ImportResult> {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.zip') || name.endsWith('.csv')) {
-    const befund = await (await import('../import/linkedinImport')).importLinkedIn(file, base);
-    const g = befund.gefunden;
-    return { cv: befund.cv, what: `LinkedIn · ${g.stationen} / ${g.ausbildung} / ${g.skills} / ${g.sprachen}` };
-  }
-  const text = await file.text();
-  /* RenderCV-YAML oder eine .tex-Datei aus diesem Werkzeug (import/rendercv.ts). */
-  const code = await readCodeImport(file.name, text, base);
-  if (code) return code;
-  if (name.endsWith('.json') || text.trimStart().startsWith('{')) {
-    const parsed = JSON.parse(text);
-    if (isJsonResume(parsed)) return { cv: jsonResumeToCv(parsed, base), what: 'JSON Resume' };
-    if (parsed && parsed.id && parsed.data) return { profile: withAllLangs(parsed as AppProfile), what: 'JSON' };
-    if (parsed && parsed.personal && parsed.experience !== undefined) return { cv: parsed as CVData, what: 'JSON' };
-    throw new Error('json');
-  }
-  if (isCvMarkdown(text)) return { cv: markdownToCvData(text, base), what: 'Markdown' };
-  throw new Error('unknown');
-}
-
 function CreateModal({ initialMode, onConfirm, onClose }: {
   initialMode: StartMode;
   onConfirm: (profile: AppProfile) => void;
@@ -131,8 +101,7 @@ function CreateModal({ initialMode, onConfirm, onClose }: {
   const [person, setPerson] = useState('');
   const [mode, setMode] = useState<StartMode>(initialMode);
   const [imp, setImp] = useState<ImportResult | null>(null);
-  const [impErr, setImpErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const ic = IMPORTCV_I18N[uiLang];
   const lang: Lang = (['de', 'en', 'fr', 'es'] as Lang[]).includes(uiLang as Lang) ? uiLang as Lang : 'de';
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnTo = useRef<Element | null>(null);
@@ -148,18 +117,11 @@ function CreateModal({ initialMode, onConfirm, onClose }: {
     };
   }, [onClose]);
 
-  const effectiveTitle = title.trim() || person.trim();
+  /* Beim Übernehmen steht der Name meist im Text: dann muss niemand einen
+     Titel tippen, bevor der Knopf geht. */
+  const impName = mode === 'import' && imp ? importedName(imp) : '';
+  const effectiveTitle = title.trim() || person.trim() || impName;
   const ready = !!effectiveTitle && (mode !== 'import' || !!imp);
-
-  async function pick(file: File) {
-    setBusy(true); setImpErr(null); setImp(null);
-    try {
-      const base = createBlankProfile('').data[lang];
-      setImp(await readImport(file, base));
-    } catch {
-      setImpErr(d.importFailed);
-    } finally { setBusy(false); }
-  }
 
   function handleCreate() {
     if (!ready) return;
@@ -170,7 +132,8 @@ function CreateModal({ initialMode, onConfirm, onClose }: {
       profile = { ...imp.profile, id: fresh.id, displayName: effectiveTitle, createdAt: fresh.createdAt };
     } else {
       profile = createBlankProfile(effectiveTitle);
-      if (mode === 'import' && imp?.cv) profile = { ...profile, data: { ...profile.data, [lang]: imp.cv } };
+      const cv = mode === 'import' && imp ? importedCv(imp, ic.unsortedSection) : undefined;
+      if (cv) profile = { ...profile, data: { ...profile.data, [lang]: cv } };
     }
     profile = { ...profile, settings: { ...profile.settings, lang } };
     /* Der Name der Person steht im Lebenslauf, der Titel nur in der
@@ -218,16 +181,9 @@ function CreateModal({ initialMode, onConfirm, onClose }: {
         </div>
 
         {mode === 'import' && (
-          <div style={{ marginTop: '14px', padding: '14px', borderRadius: '14px', background: 'oklch(1 0 0 / 0.7)', boxShadow: 'var(--pill-shadow)' }}>
-            <p style={{ ...hint, marginTop: 0, marginBottom: '10px', fontSize: 'var(--t-sm)' }}>{d.importKinds}</p>
-            <label className="ui-btn ui-btn-soft" style={{ minHeight: '44px', cursor: busy ? 'wait' : 'pointer' }}>
-              {busy ? <span className="cv-spin" aria-hidden /> : null}{d.importPick}
-              <input type="file" accept=".zip,.csv,.json,.md,.markdown,.txt,.yaml,.yml,.tex,application/json,text/markdown,text/plain,application/yaml,text/yaml,application/x-tex" hidden disabled={busy}
-                onChange={e => { const f = e.target.files?.[0]; if (f) void pick(f); e.target.value = ''; }} />
-            </label>
-            <div role="status" aria-live="polite" style={{ ...hint, fontSize: 'var(--t-sm)', color: impErr ? 'var(--ats-low-ink)' : 'var(--ats-high-ink)' }}>
-              {impErr ?? (imp ? d.importRead(imp.what) : '')}
-            </div>
+          <div style={{ marginTop: '14px' }}>
+            <p style={{ ...hint, marginTop: 0, marginBottom: '10px', fontSize: 'var(--t-sm)', lineHeight: 1.55 }}>{ic.lede}</p>
+            <ImportPanel cvLang={lang} onParsed={setImp} />
           </div>
         )}
 
@@ -681,6 +637,13 @@ export default function HomeScreen({ profiles, onSelect, onCreate, onDelete, use
               <span>{t.newResume}</span>
               <span className="kh-new-icon">{createLocked ? <LockGlyph size={14} /> : Icon.plus}</span>
             </button>
+            {/* Zweiter Weg gleich daneben (19.10.2026): Wer schon einen
+                Lebenslauf hat, soll nicht erst „Neu" wählen müssen. */}
+            {!readOnlyNote && !createLocked && (
+              <button type="button" className="ui-btn ui-btn-soft" onClick={() => startWith('import')} style={{ minHeight: '44px' }}>
+                {IMPORTCV_I18N[uiLang].title}
+              </button>
+            )}
             {createLocked && <PassNote feature="profiles" label={FREETIER_I18N[uiLang].profilesLabel} style={{ maxWidth: '46ch' }} />}
             {readOnlyNote && <p className="kh-note">{readOnlyNote}</p>}
           </div>

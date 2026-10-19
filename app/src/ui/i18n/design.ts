@@ -11,6 +11,8 @@ import type { UiLang } from '../i18n';
 export interface DesignStrings {
   // Kopfleiste
   toProfiles: string;
+  /** Sichtbarer Rückweg im Editor (19.10.2026). */
+  myCvs: string;
   demoPill: string;
   demoPillTitle: string;
   savedLocal: string;
@@ -123,6 +125,7 @@ export interface DesignStrings {
 
 const DE: DesignStrings = {
   toProfiles: 'Zurück zur Profilübersicht',
+  myCvs: 'Deine Lebensläufe',
   demoPill: 'Demo · Konto anlegen',
   demoPillTitle: 'Demo verlassen und ein Konto anlegen',
   savedLocal: 'Im Browser gespeichert',
@@ -221,7 +224,7 @@ const DE: DesignStrings = {
   startTitle: 'Wie willst du anfangen?',
   startBlank: 'Leer', startBlankDesc: 'Ein leeres Blatt in der gewählten Vorlage.',
   startSample: 'Mit Beispiel', startSampleDesc: 'Ein ausgefülltes Beispiel zum Überschreiben.',
-  startImport: 'Importieren', startImportDesc: 'Vorhandenen Lebenslauf mitbringen.',
+  startImport: 'Lebenslauf übernehmen', startImportDesc: 'Text von ChatGPT einfügen oder Word-Datei hochladen.',
   importPick: 'Datei wählen',
   importKinds: 'LinkedIn-Datenexport (ZIP), Datensicherung (JSON), JSON Resume, Markdown, RenderCV (YAML) oder eine .tex-Datei von hier. Die Datei wird nur im Browser gelesen.',
   importRead: w => `Gelesen: ${w}`,
@@ -233,6 +236,7 @@ const DE: DesignStrings = {
 
 const EN: DesignStrings = {
   toProfiles: 'Back to your profiles',
+  myCvs: 'Your CVs',
   demoPill: 'Demo · Create account',
   demoPillTitle: 'Leave the demo and create an account',
   savedLocal: 'Saved in this browser',
@@ -331,7 +335,7 @@ const EN: DesignStrings = {
   startTitle: 'How do you want to start?',
   startBlank: 'Blank', startBlankDesc: 'An empty sheet in the chosen template.',
   startSample: 'With example', startSampleDesc: 'A filled-in example to overwrite.',
-  startImport: 'Import', startImportDesc: 'Bring an existing CV.',
+  startImport: 'Bring in your CV', startImportDesc: 'Paste text from ChatGPT or upload a Word file.',
   importPick: 'Choose file',
   importKinds: 'LinkedIn data export (ZIP), backup (JSON), JSON Resume, Markdown, RenderCV (YAML) or a .tex file exported here. The file is only read in the browser.',
   importRead: w => `Read: ${w}`,
@@ -343,6 +347,7 @@ const EN: DesignStrings = {
 
 const FR: DesignStrings = {
   toProfiles: 'Retour aux profils',
+  myCvs: 'Vos CV',
   demoPill: 'Démo · Créer un compte',
   demoPillTitle: 'Quitter la démo et créer un compte',
   savedLocal: 'Enregistré dans ce navigateur',
@@ -441,7 +446,7 @@ const FR: DesignStrings = {
   startTitle: 'Comment voulez-vous commencer ?',
   startBlank: 'Vide', startBlankDesc: 'Une page vierge dans le modèle choisi.',
   startSample: 'Avec exemple', startSampleDesc: 'Un exemple rempli à remplacer.',
-  startImport: 'Importer', startImportDesc: 'Apporter un CV existant.',
+  startImport: 'Reprendre votre CV', startImportDesc: 'Coller un texte de ChatGPT ou envoyer un fichier Word.',
   importPick: 'Choisir un fichier',
   importKinds: 'Export LinkedIn (ZIP), sauvegarde (JSON), JSON Resume, Markdown, RenderCV (YAML) ou un fichier .tex exporté ici. Le fichier est lu uniquement dans le navigateur.',
   importRead: w => `Lu : ${w}`,
@@ -453,6 +458,7 @@ const FR: DesignStrings = {
 
 const ES: DesignStrings = {
   toProfiles: 'Volver a los perfiles',
+  myCvs: 'Tus CV',
   demoPill: 'Demo · Crear cuenta',
   demoPillTitle: 'Salir de la demo y crear una cuenta',
   savedLocal: 'Guardado en este navegador',
@@ -551,7 +557,7 @@ const ES: DesignStrings = {
   startTitle: '¿Cómo quieres empezar?',
   startBlank: 'Vacío', startBlankDesc: 'Una hoja en blanco con la plantilla elegida.',
   startSample: 'Con ejemplo', startSampleDesc: 'Un ejemplo relleno para sobrescribir.',
-  startImport: 'Importar', startImportDesc: 'Trae un CV existente.',
+  startImport: 'Traer tu currículum', startImportDesc: 'Pega texto de ChatGPT o sube un archivo de Word.',
   importPick: 'Elegir archivo',
   importKinds: 'Exportación de LinkedIn (ZIP), copia de seguridad (JSON), JSON Resume, Markdown, RenderCV (YAML) o un archivo .tex exportado aquí. El archivo solo se lee en el navegador.',
   importRead: w => `Leído: ${w}`,

@@ -102,7 +102,7 @@ check(Buffer.from(jpeg, 'base64').includes('GPSLatitude'), 'Testfoto trägt eine
 if (await page.getByRole('button', { name: 'Inhalt', exact: true }).count()) await page.getByRole('button', { name: 'Inhalt', exact: true }).first().click().catch(() => {});
 await page.getByRole('button', { name: 'Persönlich' }).first().click().catch(() => {});
 await page.locator('input[type=file][accept="image/jpeg,image/png,image/webp"]').setInputFiles({ name: 'handy.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
-await page.getByRole('button', { name: 'Übernehmen' }).click();
+await page.getByRole('button', { name: 'Übernehmen', exact: true }).click();
 await page.waitForTimeout(1500);
 ps = await profiles();
 const pers = ps[0].data.de.personal;

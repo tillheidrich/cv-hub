@@ -29,7 +29,8 @@ import { ET } from '../ui/editorI18n';
 import { track } from '../data/track';
 import type { Offer } from './api';
 import { billingFor, priceOf } from './format';
-import { salesOpen } from './hooks';
+import { salesOpen, registrationOpen } from './hooks';
+import { IMPORTCV_I18N } from '../ui/i18n/importcv';
 import { PATHS, navigate } from './route';
 import './billing.css';
 
@@ -123,6 +124,20 @@ export default function UnlockPanel({ feature, lang, offer, onClose, onSignIn, o
               <button type="button" className="bl-linkbtn" onClick={() => { onClose(); navigate(PATHS.pricing); }}>{t.unlockSeeAll}</button>
               {!signedIn && <button type="button" className="bl-linkbtn" onClick={() => { onClose(); onSignIn(); }}>{t.unlockHaveAccount}</button>}
             </div>
+          </>
+        ) : feature === 'account' ? (
+          /* „Konto anlegen" ist keine gesperrte Funktion: kein „Demo-Limit",
+             keine Fachwörter (Laien-Durchgang 19.10.2026). */
+          <>
+            <h2 id="bl-unlock-h" className="bl-h3">{IMPORTCV_I18N[lang].accTitle}</h2>
+            <p id="bl-unlock-b" className="bl-lede" style={{ fontSize: 'var(--t-md)' }}>
+              {IMPORTCV_I18N[lang].accBody}{!registrationOpen(offer) ? ` ${IMPORTCV_I18N[lang].accInvite}` : ''}
+            </p>
+            <div className="bl-actions">
+              <button type="button" className="ui-btn ui-btn-soft" onClick={onClose}>{IMPORTCV_I18N[lang].accStay}</button>
+              <button type="button" className="ui-btn ui-btn-primary" data-autofocus onClick={() => { onClose(); onInviteAccount(); }}>{et.createAccount}</button>
+            </div>
+            {!signedIn && <div style={{ marginTop: '10px' }}><button type="button" className="bl-linkbtn" onClick={() => { onClose(); onSignIn(); }}>{billingFor(lang, offer).unlockHaveAccount}</button></div>}
           </>
         ) : (
           <>

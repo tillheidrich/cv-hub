@@ -22,6 +22,9 @@ import HomeScreen from './screens/HomeScreen';
 import KnowledgePanel from './knowledge/KnowledgePanel';
 import AuthScreen from './screens/AuthScreen';
 import LandingScreen from './screens/LandingScreen';
+import { ImportDialog } from './ui/ImportCv';
+import { IMPORTCV_I18N } from './ui/i18n/importcv';
+import { importedCv, importedName, type ImportResult } from './import/readImport';
 import { landingPath } from './landing/copy';
 import { ImpressumPage, PrivacyPage } from './screens/LegalPages';
 import { atsLevelForLayout } from './templates/atsScore';
@@ -42,10 +45,11 @@ import UnlockPanel from './billing/UnlockPanel';
 import { PassDialog } from './billing/PassSection';
 import { ConfirmEmailBanner } from './billing/ConfirmEmail';
 import { Art9ConsentGate } from './screens/Art9Consent';
+import { art9Pending } from './data/api';
 import { useOffer, salesOpen } from './billing/hooks';
 import { PATHS, navigate } from './billing/route';
 import { freeOnly, priceOf, freeTierPriceLine } from './billing/format';
-import { computeFreeTier, FreeTierContext, freeTierLimited, accessLevel, profilesToGrandfather, type LockKey } from './billing/freeTier';
+import { computeFreeTier, FreeTierContext, freeTierLimited, accessLevel, profilesToGrandfather, isPristineDemo, ownProfileCount, type LockKey } from './billing/freeTier';
 import { nearestFreeTemplate, FREE_TEMPLATE_IDS } from './templates/freeTemplates';
 import { TEMPLATE_LOCK_I18N } from './ui/i18n/templateLock';
 import { LockGlyph, PassNote, CoverLetterPassCard } from './billing/PassLock';
@@ -64,7 +68,7 @@ import {
   saveProfiles as saveProfilesLocal, loadProfiles as loadProfilesLocal,
   loadProfilesAsync as loadProfilesLocalAsync,
   saveProfilesAsync as saveProfilesLocalAsync, clearLocalStore,
-  createDemoProfile, duplicateProfile, withAllLangs, carryContactToLang,
+  createDemoProfile, createBlankProfile, duplicateProfile, withAllLangs, carryContactToLang,
 } from './data/storage';
 import { upgradeDemoPhotos } from './data/demoUpgrade';
 import { useIsMobile } from './ui/useIsMobile';
@@ -202,6 +206,11 @@ export default function App() {
     try { return localStorage.getItem(HINT_KEY) === '1'; } catch { return false; }
   });
   const [backupOpen, setBackupOpen] = useState(false);
+  /** Lebenslauf übernehmen (ui/ImportCv.tsx, 19.10.2026). */
+  const [importOpen, setImportOpen] = useState(false);
+  /** Lokale Lebensläufe, die nach dem Anmelden ins Konto sollen (19.10.2026). */
+  const [takeover, setTakeover] = useState<AppProfile[] | null>(null);
+  const [takeoverBusy, setTakeoverBusy] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   const [docType, setDocType] = useState<DocType>('resume');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -398,7 +407,9 @@ export default function App() {
   }, [authUser, demoMode]);
 
   const demoBooting = useRef(false);
-  async function startDemo() {
+  /** `empty`: ohne Beispiel-Lebenslauf starten, weil gleich ein eigener
+   *  übernommen wird (Startseite: Schon einen Lebenslauf?). */
+  async function startDemo(opts: { empty?: boolean } = {}) {
     demoBooting.current = true;
     leaveLanding();
     try { localStorage.setItem('appstudio-demo-mode', '1'); } catch { /* ignore */ }
@@ -411,7 +422,11 @@ export default function App() {
     const up = upgradeDemoPhotos(await loadProfilesLocalAsync());
     const existing = up.profiles;
     if (up.changed) saveProfilesLocal(existing);
-    if (existing.length === 0) {
+    if (existing.length === 0 && opts.empty) {
+      setProfiles([]);
+      setScreen('home');
+      setImportOpen(true);
+    } else if (existing.length === 0) {
       const demo = createDemoProfile(uiLang === 'en' ? 'Demo · Lena Brandt' : 'Demo · Lena Brandt');
       demo.settings.lang = uiLang;
       saveProfilesLocal([demo]);
@@ -422,6 +437,7 @@ export default function App() {
       setProfiles(existing);
       setActiveId(existing[0].id); setActiveProfileId(existing[0].id);
       setScreen('editor');
+      if (opts.empty) setImportOpen(true);
     }
     setDataLoaded(true);
   }
@@ -615,6 +631,23 @@ export default function App() {
     offer, user: authUser, localMode: demoMode, profiles, active: activeProfile, lang,
     priceLine: freeTierPriceLine(offer, uiLang), open: openFreeTier, accountGrandfather,
   }), [offer, authUser, demoMode, profiles, activeProfile, lang, uiLang, openFreeTier, accountGrandfather]);
+  // Demo → Konto: Angebot zum Übernehmen (Erklärung bei acceptTakeover).
+  const takeoverKey = authUser ? `cv-takeover-asked:${authUser.id}` : '';
+  useEffect(() => {
+    if (!authUser || demoMode || !dataLoaded || readOnly) return;
+    try { if (localStorage.getItem(takeoverKey)) return; } catch { return; }
+    let cancelled = false;
+    const lastLocal = getActiveProfileId();
+    loadProfilesLocalAsync().then(list => {
+      if (cancelled) return;
+      const own = list.filter(p => !isPristineDemo(p))
+        // Der zuletzt geöffnete zuerst: er wird bei der Gratis-Grenze übernommen.
+        .sort((a, b) => (a.id === lastLocal ? -1 : b.id === lastLocal ? 1 : 0));
+      if (own.length) setTakeover(own);
+      else { try { localStorage.setItem(takeoverKey, '1'); } catch { /* ignore */ } }
+    }).catch(() => { /* lokaler Speicher nicht lesbar: nichts anbieten */ });
+    return () => { cancelled = true; };
+  }, [authUser, demoMode, dataLoaded, readOnly, takeoverKey]);
   /* Bestandsregel lokal: beim ersten Laden, bei dem die Grenze in diesem
    * Browser gilt, bekommen die vorhandenen eigenen Fassungen ihre Vorlage als
    * `grandfatheredTemplate`. Einmal je Browser (Merker), danach nie wieder,
@@ -1189,14 +1222,16 @@ export default function App() {
 
   if (landingOpen && (authUser || demoMode)) {
     return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
-      onBackToApp={() => { leaveLanding(); window.scrollTo(0, 0); }} />;
+      onBackToApp={() => { leaveLanding(); window.scrollTo(0, 0); }}
+      onImportStart={() => { leaveLanding(); window.scrollTo(0, 0); setImportOpen(true); }} />;
   }
   if (!authUser && !demoMode) {
     if (showAuth) {
       return <AuthScreen onAuth={handleAuth} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange}
                          initialInvite={initialInvite} initialMode={initialInvite ? 'register' : 'login'} />;
     }
-    return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange} onLegal={(p) => navigate(p === 'impressum' ? PATHS.imprint : PATHS.privacy)} />;
+    return <LandingScreen onSignIn={() => setShowAuth(true)} onDemoStart={startDemo} lang={uiLang} onLangChange={handleLangChange} onLegal={(p) => navigate(p === 'impressum' ? PATHS.imprint : PATHS.privacy)}
+      onImportStart={() => { track('demo_start', { from: 'landing_import', lang: uiLang }); void startDemo({ empty: true }); }} />;
   }
   if (!dataLoaded) {
     return (
@@ -1296,6 +1331,96 @@ export default function App() {
     </div>
   ) : null;
 
+  /* Lebenslauf übernehmen: Standard ist ein neuer Lebenslauf; ersetzen nur
+   * auf ausdrücklichen Wunsch im Editor. Ist ein weiterer Lebenslauf nicht
+   * frei (Gratis-Grenze), bietet das Fenster nur das Ersetzen an. */
+  function applyImport(r: ImportResult, target: 'new' | 'replace') {
+    const IC = IMPORTCV_I18N[uiLang];
+    setImportOpen(false);
+    track('import_text', { target, what: r.what, demo: demoMode });
+    countEvent('import_markdown', { mode: demoMode ? 'local' : 'account' });
+    const cv = importedCv(r, IC.unsortedSection);
+    if (target === 'replace' && cv && activeId) { updateData(() => cv); return; }
+    const lg: Lang = screen === 'editor' && activeProfile ? activeProfile.settings.lang : (uiLang as Lang);
+    const title = importedName(r) || IC.title;
+    let profile: AppProfile;
+    if (r.profile) {
+      const fresh = createBlankProfile(title);
+      profile = { ...r.profile, id: fresh.id, createdAt: fresh.createdAt, displayName: r.profile.displayName || title };
+    } else {
+      const blank = createBlankProfile(title);
+      profile = { ...blank, data: { ...blank.data, ...(cv ? { [lg]: cv } : {}) }, settings: { ...blank.settings, lang: lg } };
+    }
+    handleCreateProfile(profile);
+  }
+  /* Demo → Konto (Laien-Durchgang 19.10.2026): Wer erst ohne Konto
+   * gearbeitet und sich dann registriert oder angemeldet hat, fand seinen
+   * Lebenslauf nicht wieder — er lag nur im Browser. Jetzt fragt die App
+   * einmal je Konto und Browser, ob er mit soll. Die lokale Kopie bleibt
+   * in jedem Fall im Browser. */
+  const takeoverMax = ft.limited && !ft.full ? Math.max(0, 1 - ownProfileCount(profiles)) : Infinity;
+  async function acceptTakeover() {
+    if (!takeover) return;
+    const IC = IMPORTCV_I18N[uiLang];
+    const pick = takeover.slice(0, Number.isFinite(takeoverMax) ? takeoverMax : takeover.length);
+    setTakeoverBusy(true);
+    const added: AppProfile[] = [];
+    try {
+      for (const p of pick) {
+        const fresh = createBlankProfile(p.displayName);
+        const copy = { ...p, id: fresh.id, createdAt: fresh.createdAt };
+        await api.saveResume(copy);
+        added.push(copy);
+      }
+      track('takeover_local', { n: added.length });
+      try { localStorage.setItem(takeoverKey, '1'); } catch { /* ignore */ }
+      setTakeover(null);
+      if (added.length) {
+        setProfiles(prev => [...prev, ...added]);
+        setActiveId(added[0].id); setActiveProfileId(added[0].id); setScreen('editor');
+      }
+      showNotice(IC.takeoverDone(added.length));
+    } catch {
+      if (added.length) setProfiles(prev => [...prev, ...added]);
+      setTakeover(null);
+      showNotice(IC.takeoverFailed, true);
+    } finally { setTakeoverBusy(false); }
+  }
+  function declineTakeover() {
+    try { localStorage.setItem(takeoverKey, '1'); } catch { /* ignore */ }
+    setTakeover(null);
+  }
+  const takeoverDialog = takeover && takeover.length && !art9Pending(authUser) ? (() => {
+    const IC = IMPORTCV_I18N[uiLang];
+    const names = takeover.map(p => `„${p.displayName}“`).join(', ');
+    const limitHit = Number.isFinite(takeoverMax) && takeover.length > takeoverMax;
+    return (
+      <div className="ui" style={{ position: 'fixed', inset: 0, zIndex: 2150, background: 'oklch(0.21 0.021 264 / 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="cv-takeover-title" className="ui-float"
+          onKeyDown={e => { if (e.key === 'Escape') declineTakeover(); }}
+          style={{ background: 'var(--float-solid)', width: '100%', maxWidth: '500px', padding: 'clamp(20px, 4vw, 28px)' }}>
+          <h2 id="cv-takeover-title" style={{ margin: '0 0 10px', fontSize: '22px', fontWeight: 640, color: 'var(--ink)', letterSpacing: '-0.01em' }}>{IC.takeoverTitle}</h2>
+          <p style={{ margin: '0 0 10px', fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.55 }}>{IC.takeoverBody(names)}</p>
+          {(limitHit || takeoverMax === 0) && <p style={{ margin: '0 0 10px', fontSize: 'var(--t-sm)', color: 'var(--ink-2)', lineHeight: 1.55 }}>{takeoverMax === 0 ? ft.priceLine : IC.takeoverLimit}</p>}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '18px' }}>
+            <button type="button" className="ui-btn ui-btn-soft" onClick={declineTakeover} style={{ minHeight: '44px' }}>{IC.takeoverNo}</button>
+            <button type="button" className="ui-btn ui-btn-primary" disabled={takeoverBusy || takeoverMax === 0} autoFocus
+              onClick={() => void acceptTakeover()} style={{ minHeight: '44px', padding: '0 18px' }}>
+              {takeoverBusy ? <span className="cv-spin" aria-hidden /> : null}{IC.takeoverYes}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  })() : null;
+
+  const importDialog = importOpen ? (
+    <ImportDialog cvLang={screen === 'editor' && activeProfile ? activeProfile.settings.lang : (uiLang as Lang)}
+      canReplace={screen === 'editor' && !!activeId && !readOnly && docType === 'resume'}
+      newLockedNote={ft.addProfile ? undefined : ft.priceLine}
+      onApply={applyImport} onClose={() => setImportOpen(false)} />
+  ) : null;
+
   const noticeEl = notice ? (
     <div role="status" aria-live="polite" className="ui-toast ui" style={{ bottom: isMobile ? '168px' : '24px', padding: '11px 16px', color: notice.error ? 'var(--ats-low-ink)' : undefined }}>{notice.text}</div>
   ) : null;
@@ -1317,6 +1442,8 @@ export default function App() {
           localMode={demoMode} onOpenLanding={openLanding} />
         {backupReminder}
         {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
+      {importDialog}
+      {takeoverDialog}
         {passOpen && <PassDialog lang={uiLang} onClose={() => setPassOpen(false)} />}
         {unlock && (
           <UnlockPanel feature={unlock} lang={uiLang} offer={offer} onClose={() => setUnlock(null)}
@@ -1422,6 +1549,13 @@ export default function App() {
     <>
       {docLangRow}
       {langLockNote}
+      {!readOnly && docType === 'resume' && (
+        <button type="button" className="ui-btn ui-btn-soft cv-import-cta" onClick={() => setImportOpen(true)}
+          style={{ minHeight: '40px', justifyContent: 'flex-start', gap: '8px', margin: '0 0 10px', width: '100%' }}>
+          <span aria-hidden>⤓</span><span>{IMPORTCV_I18N[uiLang].menuItem.replace(/\s*…$/, '')}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 'var(--t-xs)', color: 'var(--ink-2)', fontWeight: 400 }}>{IMPORTCV_I18N[uiLang].menuSub}</span>
+        </button>
+      )}
       {readOnly && <div className="ui-readonly-note" role="note">{passExpired ? Z.passReadOnlyContent : plan?.withdrawn ? TL.withdrawnContent : plan?.kind === 'none' ? Z.noneReadOnlyContent : Z.readOnlyContent}</div>}
       <div className="ui-panel-fill" style={{ flex: 1, minHeight: 0 }}>
         {/* Nach Ablauf: Felder gesperrt (disabled), Lesen und Blättern bleibt.
@@ -1449,7 +1583,7 @@ export default function App() {
   );
   const exportBody = (
     <div className="ui-panel-body ui-panel-fill">
-      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={openUnlock} shareLocked={planLocked} atsLevel={atsLevel} onAtsPdf={exportAtsPdf} onBeforeShare={flushSave} embedded />
+      <ExportPanel data={currentData} coverLetter={currentCoverLetter} resumeId={activeId} lang={lang} template={theme.name} docType={docType} exportConfig={exportConfig} onPrint={handlePrint} onProfileUpdated={handleProfileUpdated} onReplaceData={(cv) => updateData(() => cv)} onReplaceCoverLetter={(cl) => updateCoverLetter(() => cl)} demoMode={demoMode} onDemoBlock={openUnlock} shareLocked={planLocked} atsLevel={atsLevel} onAtsPdf={exportAtsPdf} onBeforeShare={flushSave} embedded onOpenImport={readOnly ? undefined : () => setImportOpen(true)} />
     </div>
   );
   const tipsBody = (
@@ -1477,6 +1611,7 @@ export default function App() {
         </MenuItem>
       ))}
       <div className="ui-menu-sep" />
+      {!readOnly && <MenuItem onSelect={() => { close(); setImportOpen(true); }} sub={IMPORTCV_I18N[uiLang].menuSub}>{IMPORTCV_I18N[uiLang].menuItem}</MenuItem>}
       {activeId && !readOnly && (
         <MenuItem onSelect={() => { close(); handleDuplicateProfile(activeId, true); }}
           sub={ft.addProfile ? F.duplicateSub : ft.priceLine}
@@ -1544,6 +1679,8 @@ export default function App() {
         />
       )}
       {backupOpen && <LocalBackupPanel onClose={() => setBackupOpen(false)} onProfilesReplaced={replaceProfiles} />}
+      {importDialog}
+      {takeoverDialog}
       {backupReminder}
       {logoutDialog}
       {noticeEl}
@@ -1689,8 +1826,11 @@ export default function App() {
               {/* In der Demo trägt die Pille daneben das Wort „Demo"; der
                   Profilname („Demo · Lena Brandt") stünde doppelt und kostete
                   genau den Platz, der „⋯" aus dem Fenster schob. */}
-              {!demoMode && <span className="ui-hide-xl" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeProfile?.displayName ?? APP_NAME}</span>}
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden><path d="M6 9l6 6 6-6" /></svg>
+              {/* Laien-Durchgang 19.10.2026: Ein Pfeil allein war kein
+                  erkennbarer Rückweg. Jetzt steht da, wohin es geht. */}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>
+              {/* Unter 1280 px reicht der Platz nicht (headercheck), dort bleibt der Pfeil. */}
+              <span className="ui-hide-xl" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dsT.myCvs}</span>
             </button>
           </h1>
           {demoMode && (

@@ -289,7 +289,7 @@ if (!WITH_UI) {
   await nameField().fill('Erika Lokal');
   const jpeg = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 600; c.height = 800; const g = c.getContext('2d'); g.fillStyle = '#58a'; g.fillRect(0, 0, 600, 800); return c.toDataURL('image/jpeg', 0.9).split(',')[1]; });
   await page.locator('input[type=file][accept="image/jpeg,image/png,image/webp"]').setInputFiles({ name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpeg, 'base64') });
-  await page.getByRole('button', { name: 'Übernehmen' }).click();
+  await page.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await page.waitForTimeout(2000);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1500);

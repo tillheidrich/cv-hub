@@ -1,3 +1,4 @@
+import { IMPORTCV_I18N } from '../ui/i18n/importcv';
 import { useEffect, useState } from 'react';
 import { saveText } from './saveFile';
 import { Icon, type IconName } from '../ui/Icon';
@@ -108,6 +109,8 @@ interface ExportPanelProps {
   onReplaceData?: (cv: CVData) => void;
   /** Anschreiben der aktiven Sprache ersetzen (Markdown-Import im Lokalmodus). */
   onReplaceCoverLetter?: (cl: CoverLetterData) => void;
+  /** Lebenslauf übernehmen öffnen (ui/ImportCv.tsx), der einfache Weg. */
+  onOpenImport?: () => void;
   /** ATS-Einstufung der gewählten Vorlage — bei „low" und „medium" (Spalte, Kopfband) wird die
    *  Word-ATS-Fassung als „empfohlen" markiert. */
   atsLevel?: AtsLevel;
@@ -304,7 +307,7 @@ function asShares(d: unknown): ShareLink[] {
   return Array.isArray(list) ? list as ShareLink[] : [];
 }
 
-export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, shareLocked = false, onReplaceCoverLetter, atsLevel, embedded = false, onAtsPdf, onBeforeShare }: ExportPanelProps) {
+export default function ExportPanel({ data, coverLetter, resumeId, lang, template = '', docType = 'resume', exportConfig, onPrint, onProfileUpdated, onReplaceData, demoMode = false, onDemoBlock, shareLocked = false, onReplaceCoverLetter, atsLevel, embedded = false, onAtsPdf, onBeforeShare, onOpenImport }: ExportPanelProps) {
   const uiLang = useUiLang();
   const t = EXP_I18N[uiLang];
   const bt = BILLING_I18N[uiLang];
@@ -1031,6 +1034,16 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
             <div style={{ fontSize: '10.5px', color: 'var(--ink-3)', lineHeight: 1.55, marginBottom: '10px', fontFamily: 'inherit' }}>
               {isCover ? t.importHintCl : t.importHintCv}
             </div>
+            {!isCover && onOpenImport && (
+              <button type="button" onClick={onOpenImport}
+                style={{ ...s.exportBtn(false), cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                <div style={s.btnIcon}><Icon name="upload" /></div>
+                <div>
+                  <div style={s.btnLabel}>{IMPORTCV_I18N[uiLang].title}</div>
+                  <div style={s.btnSub}>{IMPORTCV_I18N[uiLang].menuSub}</div>
+                </div>
+              </button>
+            )}
             <label style={{ ...s.exportBtn(false), cursor: 'pointer' }}>
               <div style={s.btnIcon}><Icon name="upload" /></div>
               <div>
