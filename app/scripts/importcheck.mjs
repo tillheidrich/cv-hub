@@ -86,7 +86,7 @@ await b.close();
 const AXE = fs.readFileSync('node_modules/axe-core/axe.min.js', 'utf8');
 const b2 = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 for (const vp of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
-  const q = await (await b2.newContext({ viewport: vp, locale: 'de-DE' })).newPage();
+  const q = await (await b2.newContext({ viewport: vp, locale: 'de-DE', bypassCSP: true })).newPage();
   await q.goto(B + '/'); await q.waitForTimeout(1200);
   await q.locator('.lp-import-link a').click(); await q.waitForTimeout(2000);
   await q.fill('#ic-text', TEXT); await q.waitForTimeout(600);
