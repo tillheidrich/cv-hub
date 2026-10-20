@@ -31,6 +31,19 @@ function keySignatureSecret(master) {
   return crypto.createHmac('sha256', master).update('cv-altcha-derived-secret').digest('hex');
 }
 
+/** Wirksamer Schlüssel (20.10.2026): ALTCHA_HMAC_KEY, wenn gesetzt (ab 32
+ *  Zeichen), sonst aus JWT_SECRET abgeleitet (eigener HMAC-Kontext). Till
+ *  muss damit keinen Zufallswert mehr selbst erzeugen und eintragen. Wer
+ *  JWT_SECRET kennt, könnte ohnehin Sitzungen fälschen; eine eigene Variable
+ *  bleibt möglich, wer die Schlüssel trennen will. */
+export function effectiveAltchaKey(env = process.env) {
+  const raw = String(env.ALTCHA_HMAC_KEY || '').trim();
+  if (raw.length >= 32) return raw;
+  const jwt = String(env.JWT_SECRET || '');
+  if (jwt.length < 16) return '';
+  return crypto.createHmac('sha256', jwt).update('cv-altcha-hmac-v1').digest('hex');
+}
+
 /**
  * @param pool    Postgres-Pool (für den Wiederholungsschutz)
  * @param hmacKey ALTCHA_HMAC_KEY
@@ -39,7 +52,7 @@ function keySignatureSecret(master) {
  * üblichen Laptop mit mehreren Workern 1–3 Sekunden. Über ALTCHA_COST,
  * ALTCHA_COUNTER_MIN, ALTCHA_COUNTER_MAX und ALTCHA_TTL_S einstellbar.
  */
-export function createAltcha({ pool, hmacKey = process.env.ALTCHA_HMAC_KEY } = {}) {
+export function createAltcha({ pool, hmacKey = effectiveAltchaKey() } = {}) {
   // Unter 32 Zeichen = Platzhalter oder zu schwach → gilt als nicht gesetzt.
   const raw = String(hmacKey || '').trim();
   const key = raw.length >= 32 ? raw : '';

@@ -154,6 +154,20 @@ export interface Declaration {
   received_at: string; status: string; note: string | null; resolved_at: string | null; confirmed_at: string | null; statement: string;
 }
 
+/** Admin → Verkauf (pdf-service/saleadmin.js, 20.10.2026). */
+export interface SaleKeyInfo { hint: string | null; checkedAt: string | null; readable: boolean }
+export interface SaleState {
+  asOf: string;
+  source: 'admin' | 'env';
+  stored: null | { mode: 'off' | 'test' | 'live'; registration: boolean; testers: string[]; testKey: SaleKeyInfo | null; liveKey: SaleKeyInfo | null; updatedAt: string };
+  effective: {
+    mode: 'off' | 'test' | 'live'; keyMode: 'test' | 'live' | null; publicSale: boolean; testersSale: boolean;
+    missing: string[]; registrationOpen: boolean; webhookUrl: string | null; priceCents: number; days: number; productName: string; testers: string[];
+  };
+  checks: { id: string; ok: boolean; label: string }[];
+  methods?: { test?: { id: string; description: string }[]; live?: { id: string; description: string }[] };
+}
+
 export interface SystemStatus {
   asOf: string;
   admin: { mode: string; host: string | null; origin: string | null; url: string | null; allowedIps: string[]; invalidIps: string[]; email: string | null; sessionHours: number; idleMinutes: number };

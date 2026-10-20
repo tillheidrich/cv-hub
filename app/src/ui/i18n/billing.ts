@@ -154,6 +154,8 @@ export interface BillingStrings {
   continue: string;
   // Bestellübersicht
   coTitle: string;
+  /** Testverkauf (Admin → Verkauf): Hinweis über dem Bestellformular. */
+  coTestMode: string;
   coSteps: [string, string, string];
   coStepOf: (n: number, total: number) => string;
   coSignedInAs: (who: string) => string;
@@ -430,6 +432,7 @@ const de: BillingStrings = {
   dcAgainCancel: 'Kündigung noch einmal abschicken',
   continue: 'Weiter',
   coTitle: 'Bestellung prüfen',
+  coTestMode: 'Testverkauf: Diese Bestellung läuft über die Mollie-Testumgebung. Es wird kein Geld abgebucht. Nur eingetragene Testkonten sehen diese Seite.',
   coSteps: ['Konto', 'Bestellung', 'Bezahlen'],
   coStepOf: (n, t) => `Schritt ${n} von ${t}`,
   coSignedInAs: w => `Angemeldet als ${w}`,
@@ -703,6 +706,7 @@ const en: BillingStrings = {
   dcAgainCancel: 'Send the cancellation again',
   continue: 'Continue',
   coTitle: 'Review your order',
+  coTestMode: 'Test sale: this order runs through the Mollie test environment. No money is charged. Only registered test accounts see this page.',
   coSteps: ['Account', 'Order', 'Payment'],
   coStepOf: (n, t) => `Step ${n} of ${t}`,
   coSignedInAs: w => `Signed in as ${w}`,
@@ -976,6 +980,7 @@ const fr: BillingStrings = {
   dcAgainCancel: 'Envoyer à nouveau la résiliation',
   continue: 'Continuer',
   coTitle: 'Vérifier la commande',
+  coTestMode: 'Vente test : cette commande passe par l’environnement de test Mollie. Aucun montant n’est débité. Seuls les comptes de test enregistrés voient cette page.',
   coSteps: ['Compte', 'Commande', 'Paiement'],
   coStepOf: (n, t) => `Étape ${n} sur ${t}`,
   coSignedInAs: w => `Connecté en tant que ${w}`,
@@ -1249,6 +1254,7 @@ const es: BillingStrings = {
   dcAgainCancel: 'Enviar de nuevo la cancelación',
   continue: 'Continuar',
   coTitle: 'Revisar el pedido',
+  coTestMode: 'Venta de prueba: este pedido pasa por el entorno de pruebas de Mollie. No se cobra nada. Solo las cuentas de prueba registradas ven esta página.',
   coSteps: ['Cuenta', 'Pedido', 'Pago'],
   coStepOf: (n, t) => `Paso ${n} de ${t}`,
   coSignedInAs: w => `Sesión iniciada como ${w}`,

@@ -14,43 +14,15 @@ import type { UiLang } from '../ui/i18n';
 import { BILLING_I18N, fmtDate } from '../ui/i18n/billing';
 import { api } from '../data/api';
 import { loadProfilesAsync } from '../data/storage';
-import type { AppProfile, Lang } from '../data/types';
+import type { AppProfile } from '../data/types';
 import { track } from '../data/track';
+import { uploadProfilePhotos } from './localTransfer';
 
 function newId(): string {
   try {
     const b = new Uint32Array(3); crypto.getRandomValues(b);
     return [...b].map(x => x.toString(36)).join('');
   } catch { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-}
-
-/** data:image/…;base64,… → { mime, base64 } */
-function splitDataUrl(u: string): { mime: string; base64: string } | null {
-  const m = /^data:([a-z]+\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(u);
-  return m ? { mime: m[1], base64: m[2] } : null;
-}
-
-/** Fotos eines Profils hochladen und die Adressen ersetzen. Gleiche Fotos
- *  (dieselbe data:-URL in mehreren Sprachfassungen) nur einmal. */
-async function uploadProfilePhotos(p: AppProfile, cache = new Map<string, string>()): Promise<AppProfile> {
-  const copy: AppProfile = JSON.parse(JSON.stringify(p));
-  for (const l of Object.keys(copy.data) as Lang[]) {
-    const ps = copy.data[l]?.personal;
-    if (!ps) continue;
-    for (const key of ['photo', 'photoOriginal'] as const) {
-      const v = ps[key];
-      if (!v || !v.startsWith('data:')) continue;
-      let url = cache.get(v);
-      if (!url) {
-        const parts = splitDataUrl(v);
-        if (!parts) { delete ps[key]; continue; }
-        url = (await api.uploadPhoto(parts.mime, parts.base64)).url;
-        cache.set(v, url);
-      }
-      ps[key] = url;
-    }
-  }
-  return copy;
 }
 
 export default function ImportLocal({ lang }: { lang: UiLang }) {

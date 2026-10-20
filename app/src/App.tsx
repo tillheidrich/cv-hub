@@ -25,6 +25,7 @@ import LandingScreen from './screens/LandingScreen';
 import { ImportDialog } from './ui/ImportCv';
 import { IMPORTCV_I18N } from './ui/i18n/importcv';
 import { importedCv, importedName, type ImportResult } from './import/readImport';
+import { uploadProfilePhotos } from './billing/localTransfer';
 import { landingPath } from './landing/copy';
 import { ImpressumPage, PrivacyPage } from './screens/LegalPages';
 import { atsLevelForLayout } from './templates/atsScore';
@@ -1366,9 +1367,12 @@ export default function App() {
     setTakeoverBusy(true);
     const added: AppProfile[] = [];
     try {
+      const photoCache = new Map<string, string>();
       for (const p of pick) {
         const fresh = createBlankProfile(p.displayName);
-        const copy = { ...p, id: fresh.id, createdAt: fresh.createdAt };
+        // Fotos vorher hochladen, sonst trüge das Profil am Server Base64.
+        const withPhotos = await uploadProfilePhotos(p, photoCache);
+        const copy = { ...withPhotos, id: fresh.id, createdAt: fresh.createdAt };
         await api.saveResume(copy);
         added.push(copy);
       }

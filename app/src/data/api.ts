@@ -269,6 +269,14 @@ export interface ChangePasswordResult {
   message?: string;
 }
 
+/** An- oder Abmeldung melden (Angebot im Testverkauf hängt am Konto,
+ *  billing/api.ts holt es dann neu). */
+export const AUTH_CHANGE_EVENT = 'cv-auth-change';
+function authChanged<T>(v: T): T {
+  try { window.dispatchEvent(new Event(AUTH_CHANGE_EVENT)); } catch { /* ohne Fenster (Bau) */ }
+  return v;
+}
+
 export const api = {
   me: () => req<{ user: AuthUser; plan?: Plan | null; emailConfirmed?: boolean }>('/api/auth/me').then(withPlan),
   /** Ereignis melden — nur mit Konto aufrufen (ohne Konto antwortet der
@@ -276,9 +284,9 @@ export const api = {
   event: (kind: ClientEvent, meta: ClientEventMeta = {}): Promise<void> =>
     req<unknown>('/api/events', { method: 'POST', body: JSON.stringify({ kind, ...meta }) }).then(() => undefined, () => undefined),
   login: (username: string, password: string) =>
-    req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }).then(withPlan),
+    req<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }).then(withPlan).then(authChanged),
   verify2fa: (challenge: string, code: string) =>
-    req<{ user: AuthUser }>('/api/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge, code }) }).then(withPlan),
+    req<{ user: AuthUser }>('/api/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ challenge, code }) }).then(withPlan).then(authChanged),
   twofaStatus: () => req<TwoFaStatus>('/api/auth/2fa'),
   setTwofa: (enabled: boolean) =>
     req<{ ok: boolean; enabled: boolean }>('/api/auth/2fa', { method: 'POST', body: JSON.stringify({ enabled }) }),
@@ -291,11 +299,11 @@ export const api = {
     req<{ ok?: boolean; user: AuthUser; pending?: boolean; pendingEmail?: string | null }>('/api/auth/email', { method: 'POST', body: JSON.stringify({ email, currentPassword }) }),
   /** extra (E-Mail-Workflows): Sprache der Mails und das Häkchen „Tipps“. */
   register: (username: string, password: string, inviteCode: string, email?: string, extra: { lang?: string; tipsConsent?: { version: string } } = {}) =>
-    req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email, ...extra }) }),
+    req<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ username, password, inviteCode, email, ...extra }) }).then(authChanged),
   /** Public: request access without an account. Admin decides via e-mail link or panel. */
   requestAccess: (payload: { name: string; email: string; message?: string; website?: string }) =>
     req<{ ok: boolean }>('/api/access/request', { method: 'POST', body: JSON.stringify(payload) }),
-  logout: () => req<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+  logout: () => req<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }).finally(() => authChanged(null)),
   forgotPassword: (identifier: string) =>
     req<{ ok: boolean }>('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ identifier }) }),
   resetPassword: (token: string, newPassword: string) =>

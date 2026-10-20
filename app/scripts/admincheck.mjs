@@ -14,6 +14,11 @@
 //      Warteschlange und Protokoll; Vorschau und Texteditor offen ohne
 //      axe-Befund; ein gespeichertes SMTP-Passwort steht nirgends auf der
 //      Seite; Schalter und wartende Mails; dunkel und mobil 390.
+//   6. Verkauf (20.10.2026): Mollie-Testschlüssel einfügen (geprüft gegen
+//      einen Mollie-Ersatz auf MOLLIE_MOCK_PORT), danach steht er nirgends
+//      auf der Seite und in keiner API-Antwort; falscher Schlüssel wird
+//      abgelehnt; Testkonten; Modus Test; Live nur mit Häkchen; Angebot
+//      öffentlich weiter aus.
 //
 // Bildschirmfotos nach ADMINCHECK_SHOTS (Standard: <tmp>/admincheck-shots).
 //
@@ -50,8 +55,17 @@ mkdirSync(SHOTS, { recursive: true });
 const PAGES = [
   ['ueberblick', 'Überblick'], ['verlauf', 'Verlauf'], ['nutzung', 'Nutzung'], ['kunden', 'Kunden'], ['zahlungen', 'Zahlungen'],
   ['rechnungen', 'Rechnungen'], ['erklaerungen', 'Widerrufe und Kündigungen'], ['gutscheine', 'Gutscheine und Kampagnen'],
-  ['zugang', 'Einladungen und Anfragen'], ['emails', 'E-Mails'], ['system', 'System'],
+  ['zugang', 'Einladungen und Anfragen'], ['emails', 'E-Mails'], ['verkauf', 'Verkauf'], ['system', 'System'],
 ];
+const MOLLIE_PORT = Number(process.env.ADMINCHECK_MOLLIE_PORT || 3366);
+const MOLLIE_TEST_KEY = 'test_admincheckKey000000000000000000';
+/* Mollie-Ersatz: kennt nur MOLLIE_TEST_KEY, liefert zwei Zahlungsarten. */
+const mollieMock = createServer((rq, rs) => {
+  const okKey = rq.headers.authorization === `Bearer ${MOLLIE_TEST_KEY}`;
+  rs.writeHead(okKey ? 200 : 401, { 'Content-Type': 'application/hal+json' });
+  rs.end(JSON.stringify(okKey ? { _embedded: { methods: [{ id: 'creditcard', description: 'Kreditkarte' }, { id: 'paypal', description: 'PayPal' }] } } : { status: 401, title: 'Unauthorized Request' }));
+});
+await new Promise(r => mollieMock.listen(MOLLIE_PORT, '127.0.0.1', r));
 const SMTP_SECRET = 'admincheck-smtp-geheim-7';
 
 /* ── Dienste ────────────────────────────────────────────────────────── */
@@ -65,7 +79,7 @@ const api = await startServer({
   ADMIN_USERNAME: 'leitung', ADMIN_PASSWORD: PW, MAIL_CAPTURE_FILE: mailFile, JANITOR: '1', ACCESS_NOTICES: '0', BILLING_JOBS: '0',
   SMTP_HOST: '', SMTP_USER: '', SMTP_PASS: '', TEST_RATE_LIMIT_FACTOR: '20',
   UMAMI_DASHBOARD_URL: 'https://analytics.example.test/share/cv',
-  PASS_PRICE_CENTS: '900', INVOICE_PREFIX: 'CV',
+  PASS_PRICE_CENTS: '900', INVOICE_PREFIX: 'CV', MOLLIE_API_BASE: `http://127.0.0.1:${MOLLIE_PORT}/v2`,
 }, { port: API_PORT });
 
 /* Beispieldaten: erfunden, nur für diese Prüfung, liegen in einer
@@ -248,6 +262,36 @@ try {
   ok(/<b>Hallo<\/b> beispiel/.test(await page.locator('[data-preview-text]').textContent() || ''), 'Entwurf: Platzhalter ersetzt, Text als Text');
   await axe(page, 'E-Mails mit offener Vorschau');
   await page.screenshot({ path: join(SHOTS, 'admin-emails-vorschau.png'), fullPage: true });
+  /* 6. Verkauf */
+  await page.goto(`${ORIGIN}/admin.html#/verkauf`);
+  await waitPage(page, 'Verkauf');
+  ok(await page.locator('[data-sale-checks] li').count() >= 6, 'Verkauf: Prüfliste steht');
+  await page.getByLabel(/^Testschlüssel/).fill('test_falsch00000000000000000000000');
+  await page.getByRole('button', { name: 'Prüfen und speichern' }).click();
+  await page.getByText('Mollie kennt diesen Schlüssel nicht.').waitFor({ timeout: 10_000 }).then(() => ok(true, 'Verkauf: falscher Schlüssel abgelehnt'), () => ok(false, 'Verkauf: falscher Schlüssel abgelehnt'));
+  await page.getByLabel(/^Testschlüssel/).fill(MOLLIE_TEST_KEY);
+  await page.getByRole('button', { name: 'Prüfen und speichern' }).click();
+  await page.getByText(/Schlüssel von Mollie bestätigt und gespeichert\. Aktive Zahlungsarten bei Mollie: Kreditkarte, PayPal/).waitFor({ timeout: 10_000 }).then(() => ok(true, 'Verkauf: Testschlüssel geprüft, Zahlungsarten genannt'), () => ok(false, 'Verkauf: Testschlüssel geprüft, Zahlungsarten genannt'));
+  await page.reload();
+  await waitPage(page, 'Verkauf');
+  const saleHtml = await page.content();
+  const saleApi = await page.evaluate(() => fetch('/pdfapi/api/admin/sale').then(r => r.text()));
+  ok(!saleHtml.includes(MOLLIE_TEST_KEY) && !saleApi.includes(MOLLIE_TEST_KEY) && !/v1:[kj]:/.test(saleApi), 'Verkauf: Schlüssel nach dem Speichern nirgends, auch nicht verschlüsselt');
+  ok(/gespeichert: test_/.test(await page.locator('label[for="sale-test"]').textContent() || ''), 'Verkauf: nur Anfang und Ende sichtbar');
+  await page.getByLabel(/^E-Mail-Adressen/).fill('lenabrandt@example.test');
+  await page.locator('[data-sale-testers]').getByRole('button', { name: 'Speichern' }).click();
+  await page.getByText('Testkonten gespeichert.').waitFor({ timeout: 10_000 });
+  ok(await page.getByRole('group', { name: 'Modus' }).getByRole('button', { name: 'Live' }).isDisabled(), 'Verkauf: Live ohne Häkchen gesperrt');
+  await page.getByRole('group', { name: 'Modus' }).getByRole('button', { name: 'Test' }).click();
+  await page.getByText('Verkauf: Test.').waitFor({ timeout: 10_000 });
+  ok(await page.getByRole('group', { name: 'Modus' }).getByRole('button', { name: 'Test' }).getAttribute('aria-pressed') === 'true', 'Verkauf: Modus Test aktiv');
+  // Der Admin-Host beantwortet nur /api/admin; das Angebot direkt beim Dienst fragen.
+  const pub = await fetch(`http://127.0.0.1:${API_PORT}/api/billing/offer`).then(r => r.json());
+  ok(pub.enabled === false, 'Verkauf: Angebot öffentlich weiter aus', JSON.stringify(pub).slice(0, 120));
+  await axe(page, 'Verkauf nach dem Speichern');
+  await page.screenshot({ path: join(SHOTS, 'admin-verkauf.png'), fullPage: true });
+  await page.getByRole('group', { name: 'Modus' }).getByRole('button', { name: 'Aus' }).click();
+  await page.getByText('Verkauf: Aus.').waitFor({ timeout: 10_000 });
   ok(errors.length === 0, 'keine Skriptfehler', errors.join(' | '));
   storage = await ctx.storageState();
   await ctx.close();
@@ -335,6 +379,7 @@ if (!existsSync(join(dist, 'admin.html'))) {
   await browser.close().catch(() => {});
   await api.stop();
   pgInst.stop();
+  mollieMock.close();
   try { rmSync(mailDir, { recursive: true, force: true }); } catch { /* egal */ }
 }
 if (fail && viteOut) console.log(viteOut.slice(-1500));

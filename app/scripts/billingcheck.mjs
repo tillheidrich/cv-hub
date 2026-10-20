@@ -238,6 +238,14 @@ for (const e of ['register_start', 'register_done', 'checkout_view']) check(ev.s
 
 // ── 4. Bestellübersicht ─────────────────────────────────────────────────────
 step('Bestellübersicht (§ 312j BGB)');
+check(await page.locator('[data-test-mode]').count() === 0, 'ohne Testverkauf kein Testhinweis');
+st.offer.testMode = true;
+await page.reload();
+await page.locator('[data-test-mode]').waitFor({ timeout: 10_000 }).catch(() => {});
+check(/kein Geld abgebucht/.test(await page.locator('[data-test-mode]').innerText().catch(() => '')), 'Testverkauf (Admin → Verkauf): Hinweis über dem Bestellformular');
+delete st.offer.testMode;
+await page.reload();
+await page.locator('[data-order-button]').waitFor();
 const btn = page.locator('[data-order-button]');
 check((await btn.innerText()).trim() === 'zahlungspflichtig bestellen', 'Knopftext genau „zahlungspflichtig bestellen"', `„${(await btn.innerText()).trim()}"`);
 const adj = await page.evaluate(() => {

@@ -659,6 +659,23 @@ CREATE TABLE IF NOT EXISTS mail_workflow_settings (
   updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Verkauf aus dem Admin-Bereich (salesettings.js, 20.10.2026). Genau eine
+-- Zeile; die Mollie-Schlüssel nur verschlüsselt (AES-256-GCM wie beim SMTP).
+CREATE TABLE IF NOT EXISTS sale_settings (
+  id            INTEGER PRIMARY KEY CHECK (id = 1),
+  mode          TEXT NOT NULL DEFAULT 'off' CHECK (mode IN ('off', 'test', 'live')),
+  registration  BOOLEAN NOT NULL DEFAULT false,
+  testers       TEXT NOT NULL DEFAULT '',
+  test_key_enc  TEXT,
+  test_key_hint TEXT,
+  test_checked_at TIMESTAMPTZ,
+  live_key_enc  TEXT,
+  live_key_hint TEXT,
+  live_checked_at TIMESTAMPTZ,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by    INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
 -- SMTP aus dem Admin-Bereich (mailsettings.js). Genau eine Zeile; das
 -- Passwort nur verschlüsselt (AES-256-GCM).
 CREATE TABLE IF NOT EXISTS mail_settings (

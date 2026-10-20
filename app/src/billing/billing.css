@@ -113,6 +113,7 @@ select.bl-input { appearance: none; background-image: linear-gradient(45deg, tra
 .bl-check a, .bl-legal a, .bl-hint a, .bl-band a, .bl-link { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .bl-linkbtn { background: none; border: 0; padding: 6px 0; font: inherit; font-size: var(--t-sm); color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; min-height: 32px; }
 .bl-error { margin: 0; padding: 10px 12px; border-radius: var(--r-control); background: var(--ats-low-bg); color: var(--ats-low-ink); font-size: var(--t-sm); line-height: 1.45; }
+.bl-note { margin: 0; padding: 10px 12px; border-radius: var(--r-control); background: var(--ats-mid-bg); color: var(--ats-mid-ink); font-size: var(--t-sm); line-height: 1.45; }
 .bl-ok { margin: 0; padding: 10px 12px; border-radius: var(--r-control); background: var(--ats-high-bg); color: var(--ats-high-ink); font-size: var(--t-sm); line-height: 1.45; }
 .bl-altcha { min-height: 64px; }
 .bl-altcha-slot { min-height: 64px; border-radius: 12px; background: oklch(1 0 0 / 0.5); box-shadow: inset 0 0 0 1px var(--hair); }

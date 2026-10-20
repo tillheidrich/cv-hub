@@ -23,6 +23,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { createMollie, isPaymentId, parseAmount, mollieLocale } from './mollie.js';
+import { effectiveAltchaKey } from './altcha.js';
 import { buildInvoiceHtml, buildCreditNoteHtml, buildTermsHtml, buildWithdrawalHtml } from './invoice.js';
 import { legalVersions } from './consent.js';
 import {
@@ -146,7 +147,7 @@ export function billingConfig(env = process.env, legal = undefined) {
     mollieKey: /^(test|live)_[A-Za-z0-9]{20,}$/.test(String(env.MOLLIE_API_KEY || '').trim()) ? String(env.MOLLIE_API_KEY).trim() : '',
     mollieBase: String(env.MOLLIE_API_BASE || '').trim() || undefined,
     // Mindestens 32 Zeichen, sonst gilt der Schlüssel als nicht gesetzt (Platzhalter).
-    altchaKey: String(env.ALTCHA_HMAC_KEY || '').trim().length >= 32 ? String(env.ALTCHA_HMAC_KEY).trim() : '',
+    altchaKey: effectiveAltchaKey(env),
     // Wohin Erklärungen gehen, die Handarbeit brauchen.
     notifyEmail: String(env.BILLING_NOTIFY_EMAIL || env.ACCESS_NOTIFY_EMAIL || env.SELLER_EMAIL || '').trim() || null,
   };
@@ -160,8 +161,23 @@ export function billingConfig(env = process.env, legal = undefined) {
     !cfg.termsVersion && 'TERMS_VERSION',
     !cfg.altchaKey && 'ALTCHA_HMAC_KEY',
   ].filter(Boolean);
-  cfg.ready = cfg.enabled && cfg.missing.length === 0;
+  /* Testbetrieb nur für Testkonten (20.10.2026, Admin → Verkauf): Mit
+   * BILLING_TESTERS_ONLY=1 sehen und kaufen nur die Konten aus
+   * BILLING_TESTERS (E-Mail-Adressen, Komma). Für alle anderen bleibt der
+   * Verkauf zu, auch die Gratis-Grenze greift für sie nicht. Sonst könnte
+   * jeder Besucher mit einer Mollie-Testzahlung einen echten Pass holen. */
+  cfg.testersOnly = truthy(env.BILLING_TESTERS_ONLY);
+  cfg.testers = String(env.BILLING_TESTERS || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+$/.test(x));
+  const complete = cfg.enabled && cfg.missing.length === 0;
+  cfg.ready = complete && !cfg.testersOnly;
+  cfg.readyForTesters = complete && cfg.testersOnly;
   return cfg;
+}
+
+/** Darf dieses Konto im Testbetrieb kaufen? */
+export function isTester(cfg, user) {
+  if (!cfg.readyForTesters || !user?.email) return false;
+  return cfg.testers.includes(String(user.email).trim().toLowerCase());
 }
 
 /* ── Zeit in Berlin ──────────────────────────────────────────────────── */
@@ -242,7 +258,19 @@ export async function euAbroadTotals(pool, now = new Date()) {
 
 export function createBilling({ pool, config = billingConfig(), mollie, renderPdf, send = defaultSend, log = console.log, emailConfirmed = defaultEmailConfirmed }) {
   const cfg = config;
-  const pay = mollie || createMollie({ apiKey: cfg.mollieKey, base: cfg.mollieBase });
+  let pay = mollie || createMollie({ apiKey: cfg.mollieKey, base: cfg.mollieBase });
+  /** Verkauft dieser Dienst an dieses Konto? Öffentlich oder als Testkonto. */
+  const sellsTo = (user) => cfg.ready || isTester(cfg, user);
+
+  /* Neue Einstellungen ohne Neustart übernehmen (Admin → Verkauf): Das
+   * Objekt bleibt dasselbe (server.js hält es als BILLING), nur die Werte
+   * wechseln; der Mollie-Zugang wird mit dem neuen Schlüssel neu gebaut. */
+  function reconfigure(next) {
+    const keyChanged = next.mollieKey !== cfg.mollieKey || next.mollieBase !== cfg.mollieBase;
+    for (const k of Object.keys(cfg)) if (!(k in next)) delete cfg[k];
+    Object.assign(cfg, next);
+    if (keyChanged && !mollie) pay = createMollie({ apiKey: cfg.mollieKey, base: cfg.mollieBase });
+  }
 
   /* ── P7: Verkaufssperre EU-Ausland ─────────────────────────────────────
    * Ab cfg.euB2cStopCents (Standard 9.000 €) im laufenden ODER vorigen Jahr
@@ -278,7 +306,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
    * Neustart den Zeitpunkt nicht verschiebt. TEMPLATE_TIER_SINCE übersteuert. */
   let templatesSince = cfg.templateTierSince || null;
   async function ensureTemplateTierSince() {
-    if (cfg.templateTierSince || !(cfg.ready && cfg.freeTierLimits === true)) return templatesSince;
+    if (cfg.templateTierSince || !((cfg.ready || cfg.readyForTesters) && cfg.freeTierLimits === true)) return templatesSince;
     try {
       await pool.query(`INSERT INTO schema_migrations (name) VALUES ('template_tier_since') ON CONFLICT DO NOTHING`);
       const { rows } = await pool.query(`SELECT ran_at FROM schema_migrations WHERE name = 'template_tier_since'`);
@@ -287,15 +315,18 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     return templatesSince;
   }
 
-  function offer() {
+  function offer(user = null) {
+    const sells = sellsTo(user);
     return {
-      enabled: cfg.ready,
+      enabled: sells,
+      // Testbetrieb: nur Testkonten sehen den Kauf, mit Hinweis auf der Kaufseite.
+      ...(sells && !cfg.ready ? { testMode: true } : {}),
       openRegistration: cfg.openRegistration,
       // Die Oberfläche sperrt nur, wenn hier limited: true steht. Durchsetzen
       // lässt sich das nicht (Word entsteht im Browser, der Code ist offen),
       // es ist eine Angebotsgrenze, keine Sicherheitsgrenze.
       // templatesSince nur mit Grenze: Beginn der Vorlagen-Staffel (Bestandsregel).
-      freeTier: cfg.ready && cfg.freeTierLimits === true ? { limited: true, templatesSince } : { limited: false },
+      freeTier: sells && cfg.freeTierLimits === true ? { limited: true, templatesSince } : { limited: false },
       sku: cfg.sku,
       priceCents: cfg.priceCents,
       currency: cfg.currency,
@@ -313,9 +344,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     };
   }
   /** Angebot mit frischem Stand der EU-Sperre (höchstens eine Minute alt). */
-  async function offerFresh() {
+  async function offerFresh(user = null) {
     try { await euAbroadStatus(); } catch (err) { log(`billing: EU-Auslandsumsatz nicht gelesen (${err?.message || err})`); }
-    return offer();
+    return offer(user);
   }
 
   function orderSummary(o) {
@@ -562,7 +593,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
    * @returns { status, body } — die Route reicht beides durch.
    */
   async function checkout(user, body, { lang } = {}) {
-    if (!cfg.ready) return { status: 404, body: { error: 'Der Kauf ist derzeit nicht verfügbar.', code: 'billing_disabled' } };
+    if (!sellsTo(user)) return { status: 404, body: { error: 'Der Kauf ist derzeit nicht verfügbar.', code: 'billing_disabled' } };
     const sku = String(body?.sku || '');
     const country = String(body?.country || '').trim().toUpperCase();
     // Steuerzeichen raus (Codepunkte unter 32 und 127), Leerraum zusammenfassen.
@@ -1291,16 +1322,17 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   /**
    * @param deps { requireAuth, requireAdmin, rateLimit, altcha }
    */
-  function mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha }) {
+  function mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha, optionalAuth }) {
     const urlencoded = express.urlencoded({ extended: false, limit: '4kb' });
 
-    app.get('/api/billing/offer', async (_req, res) => {
+    // Ohne Anmeldung das öffentliche Angebot; Testkonten sehen im Testbetrieb mehr.
+    app.get('/api/billing/offer', optionalAuth || ((_q, _s, n) => n()), async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
-      res.json(await offerFresh());
+      res.json(await offerFresh(req.user || null));
     });
 
     app.post('/api/billing/checkout', rateLimit({ route: 'checkout', max: 20, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
-      if (!cfg.ready) return res.status(404).json({ error: 'Der Kauf ist derzeit nicht verfügbar.', code: 'billing_disabled' });
+      if (!sellsTo(req.user)) return res.status(404).json({ error: 'Der Kauf ist derzeit nicht verfügbar.', code: 'billing_disabled' });
       const lang = String(req.body?.lang || req.body?.locale || req.get('accept-language') || 'de');
       const r = await checkout(req.user, req.body, { lang });
       res.status(r.status).json(r.body);
@@ -1511,7 +1543,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
   }
 
   return {
-    config: cfg, offer, offerFresh, ensureTemplateTierSince, euAbroadStatus, invoicePdf, creditNotePdf, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
+    config: cfg, reconfigure, sellsTo, offer, offerFresh, ensureTemplateTierSince, euAbroadStatus, invoicePdf, creditNotePdf, checkout, syncOrder, applyPaid, withdraw, withdrawPublic, requestRefund, cancelForUser, cancelPublic, confirmDeclaration, escalateUnconfirmed,
     sendConfirmation, report, runJobs, startJobs, mount, orderSummary,
   };
 }

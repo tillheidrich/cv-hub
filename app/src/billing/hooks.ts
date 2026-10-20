@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../data/api';
 import type { AuthUser } from '../data/api';
-import { loadOffer, type Offer } from './api';
+import { loadOffer, onOfferChange, type Offer } from './api';
 
-/** Angebot vom Server (einmal je Seitenaufruf). `null` = kein Verkauf. */
+/** Angebot vom Server (einmal je Seitenaufruf, neu nach An-/Abmelden). `null` = kein Verkauf. */
 export function useOffer(): { offer: Offer | null; loaded: boolean } {
   const [state, setState] = useState<{ offer: Offer | null; loaded: boolean }>({ offer: null, loaded: false });
   useEffect(() => {
     let alive = true;
-    loadOffer().then(o => { if (alive) setState({ offer: o, loaded: true }); });
-    return () => { alive = false; };
+    const pull = () => { loadOffer().then(o => { if (alive) setState({ offer: o, loaded: true }); }); };
+    pull();
+    const off = onOfferChange(pull);
+    return () => { alive = false; off(); };
   }, []);
   return state;
 }

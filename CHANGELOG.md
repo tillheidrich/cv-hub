@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-20 — sales switch in the admin area
+
+**Admin → Verkauf.** Selling no longer needs environment variables. Paste the
+Mollie test and live keys on the new page; the service checks each key against
+Mollie (`GET /v2/methods`) before storing it encrypted (same scheme as the SMTP
+password) and afterwards shows only its first and last characters. Add test
+accounts, then switch between *Aus* (no sales), *Test* (only the listed
+accounts can buy, with the test key; the order form says that no money is
+charged) and *Live* (public, live key, explicit confirmation). Missing
+prerequisites (seller details, mail, legal pages, webhook, bot protection)
+block the switch with a clear list. Registration can be opened or closed on
+the same page. Stored settings take precedence over `BILLING_ENABLED`,
+`MOLLIE_API_KEY` and `OPEN_REGISTRATION`; without them the environment applies
+as before. Changes take effect without a restart.
+
+`ALTCHA_HMAC_KEY` is now optional: without it the key is derived from
+`JWT_SECRET`. The offer is reloaded after sign-in and sign-out, and photos are
+uploaded when a local CV is taken over into an account.
+
 ## 2026-10-10 — e-mail workflows, an optional template tier, AI-first start page
 
 **E-mail workflows.** Until now every mail went straight out through

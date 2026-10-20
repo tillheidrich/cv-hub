@@ -10,7 +10,7 @@
  * Kein Schlüssel, keine Zahlungsdaten im Browser: Bezahlt wird auf der Seite
  * von Mollie, der Browser bekommt nur die `checkoutUrl` zurück.
  */
-import { apiErrorFrom } from '../data/api';
+import { apiErrorFrom, AUTH_CHANGE_EVENT } from '../data/api';
 import type { AuthUser, Plan } from '../data/api';
 export type { Plan, PlanKind, PlanGrant } from '../data/api';
 
@@ -30,6 +30,10 @@ export interface Offer {
   /** Optional: offene Registrierung (OPEN_REGISTRATION). Fehlt das Feld,
    *  gilt `enabled` als Schalter für beides. */
   openRegistration?: boolean;
+  /** Testverkauf (Admin → Verkauf, 20.10.2026): Verkauf läuft nur für
+   *  eingetragene Testkonten mit einem Mollie-Testschlüssel. Es fließt kein
+   *  echtes Geld. */
+  testMode?: boolean;
   /** Optional: Zahlungsarten, die im Mollie-Konto freigeschaltet sind. */
   paymentMethods?: string[];
   /** Gratis-Grenze (09.10.2026, Env FREE_TIER_LIMITS): `limited: true` =
@@ -102,6 +106,7 @@ export interface RegisterResult { user: AuthUser; emailConfirmed?: boolean; plan
  *  einem Neustart des Dienstes. Fehler (Dienst ohne Bezahlwege, selbst
  *  gehostete Fassung) ergeben `null`: dann gibt es keinen Pass. */
 let offerPromise: Promise<Offer | null> | null = null;
+const offerListeners = new Set<() => void>();
 export function loadOffer(): Promise<Offer | null> {
   if (!offerPromise) {
     offerPromise = req<Offer>('/api/billing/offer')
@@ -110,15 +115,20 @@ export function loadOffer(): Promise<Offer | null> {
   }
   return offerPromise;
 }
-/** Nur für Prüfläufe: zwischengespeichertes Angebot verwerfen. */
+/** Zwischengespeichertes Angebot verwerfen. */
 export function resetOfferCache(): void { offerPromise = null; }
+/** Angebot neu holen und alle useOffer()-Nutzer benachrichtigen. Nötig nach
+ *  An- und Abmelden: Im Testverkauf hängt das Angebot am Konto. */
+export function refreshOffer(): void { offerPromise = null; offerListeners.forEach(f => f()); }
+if (typeof window !== 'undefined') window.addEventListener(AUTH_CHANGE_EVENT, refreshOffer);
+export function onOfferChange(f: () => void): () => void { offerListeners.add(f); return () => { offerListeners.delete(f); }; }
 
 export const billingApi = {
   altchaChallengeUrl: () => `${BASE}/api/altcha/challenge`,
   /** art9Consent: Einwilligung nach Art. 9 DSGVO mit der Fassung, die das
    *  Formular gezeigt hat (legal/einwilligung.ts). */
   register: (p: { email: string; password: string; altcha: string; ageConfirmed16: true; inviteCode?: string; art9Consent?: { version: string }; tipsConsent?: { version: string }; lang?: string }) =>
-    req<RegisterResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(p) }),
+    req<RegisterResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(p) }).then(r => { refreshOffer(); return r; }),
   /** Bestätigt Registrierung oder (kind 'change', M2) eine neue Adresse. */
   confirmEmail: (token: string) =>
     req<{ ok: boolean; kind?: 'change' | string; email?: string }>('/api/auth/confirm-email', { method: 'POST', body: JSON.stringify({ token }) }),

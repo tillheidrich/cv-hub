@@ -114,6 +114,14 @@ export function createMollie({ apiKey, base, timeoutMs = 15_000, fetchImpl = glo
     isTestMode: key.startsWith('test_'),
     configured: !!key,
 
+    /** Aktive Zahlungsarten des Profils — zugleich die Prüfung, ob der
+     *  Schlüssel gilt (Admin → Verkauf). */
+    async listMethods() {
+      const data = await call('GET', '/methods', 'methods');
+      const list = Array.isArray(data?._embedded?.methods) ? data._embedded.methods : [];
+      return list.map(m => ({ id: String(m.id || ''), description: String(m.description || m.id || '').slice(0, 60) }));
+    },
+
     /** Legt eine Zahlung an. Gibt das Payment-Objekt zurück (id, status, _links.checkout.href …). */
     createPayment({ amountCents, currency = 'EUR', description, redirectUrl, webhookUrl, metadata, locale, idempotencyKey }) {
       const body = {

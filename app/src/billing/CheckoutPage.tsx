@@ -175,6 +175,7 @@ function OrderForm({ lang, offer, user, onSignedOut }: { lang: UiLang; offer: Of
       <form className="bl-card bl-form" onSubmit={submit} noValidate aria-labelledby="bl-co-h">
         <div>
           <h1 id="bl-co-h" className="bl-h2">{t.coTitle}</h1>
+          {offer.testMode && <p className="bl-note" role="note" data-test-mode style={{ marginTop: '8px' }}>{t.coTestMode}</p>}
           <p className="bl-hint" style={{ fontSize: 'var(--t-sm)' }}>
             {t.coSignedInAs(who)} · <button type="button" className="bl-linkbtn" onClick={signOut}>{t.coSignOut}</button>
           </p>

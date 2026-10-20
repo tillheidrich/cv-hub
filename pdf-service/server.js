@@ -27,6 +27,8 @@ import { ART9_VERSION, art9Info, hasArt9Consent, requireArt9Consent, legalVersio
 import { createStats, CLIENT_COUNTS } from './stats.js';
 import { createMailer } from './mailqueue.js';
 import { mountMailAdmin } from './mailadmin.js';
+import { mountSaleAdmin } from './saleadmin.js';
+import { loadSaleRow, effectiveEnv } from './salesettings.js';
 import { applyStoredSettings, settingsKey, verifyUnsubscribeToken } from './mailsettings.js';
 import { TIPS_CONSENT_VERSION, mailLang } from './mailflows.js';
 
@@ -640,7 +642,8 @@ app.post('/api/access/action', express.urlencoded({ extended: false, limit: '8kb
  * Konten ohne Kauf löscht der Aufräumjob danach (janitor.js). Neue Konten
  * starten ohne Pass (plan.kind 'none'): lesen ja, schreiben erst mit Pass.
  * Einladungscodes gehen weiter den bisherigen Weg. */
-const OPEN_REGISTRATION = /^(1|true|yes|on)$/i.test(String(process.env.OPEN_REGISTRATION || '').trim());
+/* `let`: Admin → Verkauf kann die Registrierung ohne Neustart öffnen (applySale). */
+let OPEN_REGISTRATION = /^(1|true|yes|on)$/i.test(String(process.env.OPEN_REGISTRATION || '').trim());
 const altcha = createAltcha({ pool });
 const CONFIRM_HOURS = 48;
 
@@ -2549,7 +2552,23 @@ async function renderOwnPdf(html) {
 }
 const BILLING = billingConfig();
 const billing = createBilling({ pool, config: BILLING, renderPdf: renderOwnPdf, emailConfirmed });
-billing.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha });
+billing.mount(app, { requireAuth, requireAdmin, rateLimit, subnetLimit, altcha, optionalAuth });
+
+/* Admin → Verkauf (20.10.2026): Eine gespeicherte Zeile in sale_settings geht
+ * der Umgebung vor. Beim Start, nach jedem Speichern und jede Minute (zweite
+ * Instanz) neu angewandt — ohne Neustart. */
+let saleRowSig = '';
+async function applySale() {
+  const row = await loadSaleRow(pool);
+  const sig = row ? `${row.updated_at?.toISOString?.() ?? row.updated_at}` : 'env';
+  if (sig === saleRowSig) return row;
+  saleRowSig = sig;
+  const eff = effectiveEnv(process.env, row);
+  billing.reconfigure(billingConfig(eff));
+  OPEN_REGISTRATION = /^(1|true|yes|on)$/i.test(String(eff.OPEN_REGISTRATION || '').trim());
+  if (row) console.log(`billing: Einstellungen aus Admin → Verkauf (${row.mode}${row.mode !== 'off' ? `, ${BILLING.ready ? 'öffentlich' : BILLING.readyForTesters ? 'nur Testkonten' : `unvollständig: ${BILLING.missing.join(', ')}`}` : ''}, Registrierung ${OPEN_REGISTRATION ? 'offen' : 'zu'})`);
+  return row;
+}
 
 // ── Gutscheine (09.10.2026, vouchers.js) ───────────────────────────────────
 const vouchers = createVouchers({
@@ -2597,6 +2616,11 @@ admin = createAdmin({
   sendMail, isMailConfigured, billing, billingConfig: BILLING, stats, publicBaseUrl, art9Version: ART9_VERSION,
   issueEmailConfirmation, issuePasswordReset, deleteAccount, revokeAllCredentials, systemInfo, summarizeUa, tplOffboarding,
   mountMail: (a, guard, extra) => mountMailAdmin(a, guard, { pool, mailer, rateLimit, cfg: ADMIN_CFG, normHost, ...extra }),
+  mountSale: (a, guard, extra) => mountSaleAdmin(a, guard, {
+    pool, rateLimit, billingConfig: BILLING, applySale: () => { saleRowSig = ''; return applySale(); },
+    registrationOpen: () => OPEN_REGISTRATION && altcha.configured, botProtection: () => altcha.configured,
+    isMailConfigured, mollieBase: (process.env.MOLLIE_API_BASE || '').trim() || undefined, ...extra,
+  }),
 });
 admin.mount(app);
 
@@ -2696,6 +2720,8 @@ initDb()
     // damit mehrere Instanzen dieselben Einstellungen nutzen.
     await applyStoredSettings(pool);
     setInterval(() => applyStoredSettings(pool).catch(() => {}), 60_000).unref?.();
+    await applySale().catch(err => console.error('billing: Admin → Verkauf nicht gelesen:', err?.message || err));
+    setInterval(() => applySale().catch(() => {}), 60_000).unref?.();
     try { const k = settingsKey(); if (k.warning) console.warn(`mail: ${k.warning}`); } catch (err) { console.warn(`mail: ${err.message}`); }
   })
   .then(() => billing.ensureTemplateTierSince())

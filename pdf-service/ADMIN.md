@@ -89,3 +89,16 @@ Neuer Bereich **E-Mails** (`app/src/admin/pages/Mails.tsx`, Routen in `pdf-servi
 - **Versandprotokoll:** letzte 200 Mails mit Zeit, Workflow, gekürzter Adresse, Status, Fehler; 90 Tage.
 - **Protokoll:** jede Aktion als `mail_*` im Admin-Protokoll (auch eine gescheiterte SMTP-Prüfung), nie mit Passwort. Neue Variablen: `MAIL_SETTINGS_KEY`, optional `SMTP_REPLY_TO`, `SMTP_FORCE_ENV`, `MAIL_JOBS`, `MAIL_API_BASE`.
 
+
+### Nachtrag Verkauf (20.10.2026)
+
+Neuer Bereich **Verkauf** (`app/src/admin/pages/Sale.tsx`, Routen in `pdf-service/saleadmin.js`, Speicher und Umrechnung in `pdf-service/salesettings.js`, Tabelle `sale_settings`). Damit lässt sich der Verkauf ohne Coolify einrichten und schalten:
+
+- **Mollie-Schlüssel:** Test- und Live-Schlüssel einfügen. Vor dem Speichern fragt der Dienst bei Mollie die aktiven Zahlungsarten ab (`GET /v2/methods`); ein Schlüssel, den Mollie nicht kennt, wird nicht gespeichert. Gespeichert wird verschlüsselt wie das SMTP-Passwort (AES-256-GCM, Schlüssel aus `MAIL_SETTINGS_KEY` oder abgeleitet aus `JWT_SECRET`). Danach zeigen Seite und API nur Anfang und Ende.
+- **Testkonten:** E-Mail-Adressen normaler Konten. Admin-Konten haben vollen Zugang und kaufen nicht.
+- **Modus:** *Aus* (kein Kauf), *Test* (nur die Testkonten sehen den Kauf, Zahlung mit dem Testschlüssel, das Bestellformular zeigt „Testverkauf“, für alle anderen bleibt das Angebot aus), *Live* (öffentlich, Live-Schlüssel, nur mit bestätigtem Häkchen). Fehlt etwas (Schlüssel, Anbieterangaben, Mail, Rechtstexte, Webhook, Bot-Schutz), lehnt der Dienst den Wechsel mit 409 ab; eingefügte Schlüssel und Testkonten bleiben trotzdem gespeichert.
+- **Registrierung:** offen oder nur mit Einladung (ersetzt `OPEN_REGISTRATION`).
+- **Vorrang:** Sobald auf der Seite gespeichert wurde, gelten diese Werte vor `BILLING_ENABLED`, `MOLLIE_API_KEY` und `OPEN_REGISTRATION` aus der Umgebung. Ohne Eintrag gilt die Umgebung wie bisher. Wirksam sofort, mehrere Instanzen gleichen sich jede Minute ab.
+- **Bot-Schutz:** Fehlt `ALTCHA_HMAC_KEY`, leitet der Dienst ihn aus `JWT_SECRET` ab (`altcha.js`, `effectiveAltchaKey`). Ein eigener Wert ab 32 Zeichen geht vor.
+- **Protokoll:** `sale_save` mit Modus, Registrierung, Anzahl Testkonten und welcher Schlüssel neu ist, nie mit Schlüssel.
+- Prüfungen: `pdf-service/sale.test.mjs`, `app/scripts/admincheck.mjs` (Abschnitt 6), `app/scripts/billingcheck.mjs` (Testhinweis).

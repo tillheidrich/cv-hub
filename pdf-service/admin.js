@@ -1133,6 +1133,8 @@ export function createAdmin(deps) {
 
     // E-Mails: SMTP, Workflows, Protokoll, Warteschlange (mailadmin.js).
     if (deps.mountMail) deps.mountMail(app, guard, { auditWrite });
+    // Verkauf: Mollie-Schlüssel, Modus, Registrierung (saleadmin.js, 20.10.2026).
+    if (deps.mountSale) deps.mountSale(app, guard, { auditWrite });
   }
 
   return { gate, authenticate, needAdmin, mount, isAdminHost, sessionFromCookie, auditWrite, config: cfg };
