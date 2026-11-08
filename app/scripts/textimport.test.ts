@@ -294,7 +294,7 @@ Musterweg 12
 12345 Musterstadt
 Telefon: 04182 123456
 max.mustermann@example.de
-Geburtsdatum: 07.05.1992
+Geburtsdatum: 01.01.1990
 
 BERUFSERFAHRUNG
 
@@ -328,7 +328,7 @@ Fußball, Angeln`;
   assert.equal(p.location, 'Musterweg 12, 12345 Musterstadt');
   assert.equal(p.phone, '04182 123456');
   assert.equal(p.email, 'max.mustermann@example.de');
-  assert.equal(p.birthDate, '07.05.1992');
+  assert.equal(p.birthDate, '01.01.1990');
   assert.equal(r.cv.experience.length, 2);
   exp(r, 0, { role: 'Fachkraft für Lagerlogistik', company: 'Lagerlogistik Nord GmbH', location: 'Hamburg', start: '03/2021', end: 'present', bullets: 2 });
   exp(r, 1, { role: 'Auszubildender Fachkraft für Lagerlogistik', company: 'Spedition Meyer KG', location: 'Buxtehude', start: '08/2018', end: '02/2021', bullets: ['Tourenplanung'] });
