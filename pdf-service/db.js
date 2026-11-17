@@ -594,6 +594,9 @@ CREATE TABLE IF NOT EXISTS invoice_documents (
 -- Sprache für Mails an das Konto (de, en, fr, es): bei der Registrierung aus
 -- der Oberfläche, später aus den Kontoeinstellungen. NULL = Deutsch.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS mail_lang TEXT;
+-- Sprache der Zugangsanfrage (17.11.2026): die Einladung nach dem Annehmen
+-- geht in dieser Sprache hinaus. NULL = Deutsch.
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS lang TEXT;
 
 -- Einwilligung in Tipps per E-Mail (Werbung nach § 7 Abs. 2 Nr. 2 UWG, Art. 6
 -- Abs. 1 lit. a DSGVO). requested = Häkchen gesetzt, wartet auf die

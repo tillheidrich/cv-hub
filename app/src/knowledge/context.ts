@@ -3,19 +3,41 @@
  *
  * Bewusst wenige, einfache Regeln: was fehlt (Profil, Kenntnisse), was sich
  * zählen lässt (Zahlen in den Punkten, Lücken über sechs Monate, siehe
- * „Hidden Workers"), was nicht zusammenpasst (englischer Lebenslauf mit Foto
- * oder Geburtsdatum) und was im Anschreiben noch vom Muster stammt.
+ * „Hidden Workers"), was nicht zusammenpasst (Foto oder Geburtsdatum für
+ * Großbritannien oder die USA, in Deutschland Unübliches) und was im Anschreiben noch vom Muster stammt.
  * Höchstens drei Hinweise, damit es eine Auswahl bleibt.
+ *
+ * Zielland (17.11.2026): Bis dahin hieß „englischer Lebenslauf" hier „für
+ * Großbritannien oder die USA", und der Foto-Hinweis kam für jeden englischen
+ * Lebenslauf mit Foto. Für jemanden aus Indien, der sich auf Englisch in
+ * Berlin bewirbt, ist das falsch: In Deutschland ist das Foto freiwillig und
+ * wird meist noch erwartet (BA/ZAV). Jetzt entscheidet das Zielland, das in
+ * den Tipps unter „Länder" gewählt wird (Vorgabe Deutschland, weil das
+ * Werkzeug darauf ausgerichtet ist). Gespeichert nur in diesem Browser
+ * (KnowledgePanel, `cv-tipps-target`): Es steuert allein Hinweise, nicht das
+ * Dokument — eine Profileinstellung hätte Speicher, Server, MCP und Export
+ * berührt, ohne dass ein Export davon abhinge.
  */
 import type { CVData, CoverLetterData } from '../data/types';
-import type { TipId, TipTab } from './types';
+import type { TipId, TipTab, Country } from './types';
 import { DEFAULT_COVER_LETTERS } from '../data/storage';
 import { styleHits } from '../check/styleLists';
 import { fold } from '../check/keywords';
+import { unusualForGermany, type UnusualKind } from '../check/germanNorms';
 
-export type ReasonId = 'no-profile' | 'no-numbers' | 'gap' | 'intl-photo' | 'no-skills' | 'cover-open' | 'cover-sample' | 'cover-floskel';
+export type ReasonId = 'no-profile' | 'no-numbers' | 'gap' | 'intl-photo' | 'no-skills' | 'cover-open' | 'cover-sample' | 'cover-floskel'
+  | 'intl-unusual' | 'abroad-german';
 
-export interface ContextHint { tab: TipTab; tip: TipId; reason: ReasonId }
+/** Wo sich jemand bewirbt; `other` = keine Länderregel. */
+export type Target = Country['code'] | 'other';
+export const TARGETS: Target[] = ['DE', 'AT', 'CH', 'UK', 'US', 'other'];
+export const DEFAULT_TARGET: Target = 'DE';
+
+export interface ContextHint {
+  tab: TipTab; tip: TipId; reason: ReasonId;
+  /** Gefundene unübliche Angaben (nur bei `intl-unusual`). */
+  unusual?: UnusualKind[];
+}
 
 const NOW = /heute|present|now|today|current|aujourd|actuel|actualidad|hoy|presente/i;
 
@@ -51,7 +73,7 @@ export function largestGap(cv: CVData): number {
   return gap;
 }
 
-export function contextHints(cv: CVData | undefined, cl: CoverLetterData | undefined, docType: 'resume' | 'cover' | undefined): ContextHint[] {
+export function contextHints(cv: CVData | undefined, cl: CoverLetterData | undefined, docType: 'resume' | 'cover' | undefined, target: Target = DEFAULT_TARGET): ContextHint[] {
   const out: ContextHint[] = [];
   if (!cv) return out;
   const lang = cv.labels?.lang ?? 'de';
@@ -65,11 +87,21 @@ export function contextHints(cv: CVData | undefined, cl: CoverLetterData | undef
     out.push({ tab: 'letter', tip: 'letter-structure', reason: 'cover-open' });
   }
 
+  const dach = target === 'DE' || target === 'AT' || target === 'CH';
+  // In Deutschland unüblich: Declaration, Name des Vaters, Religion, Kaste, Passnummer, CTC.
+  const unusual = dach ? unusualForGermany(cv) : [];
+  if (unusual.length) out.push({ tab: 'cv', tip: 'abroad', reason: 'intl-unusual', unusual });
+  // Englischer Lebenslauf für Deutschland ohne Angabe zu Deutsch (Make it in Germany: Niveau nach GER).
+  else if (target === 'DE' && lang === 'en' && !(cv.languages || []).some(l => /german|deutsch/i.test(l.language || ''))) {
+    out.push({ tab: 'cv', tip: 'abroad', reason: 'abroad-german' });
+  }
+
   if (!cv.profile?.text?.trim()) out.push({ tab: 'cv', tip: 'profile', reason: 'no-profile' });
   const bullets = (cv.experience || []).filter(e => !e.hidden).flatMap(e => e.bullets || []).filter(b => b.trim());
   if (bullets.length >= 3 && !bullets.some(b => /\d/.test(b))) out.push({ tab: 'cv', tip: 'impact', reason: 'no-numbers' });
   if (largestGap(cv) > 6) out.push({ tab: 'cv', tip: 'gaps', reason: 'gap' });
-  if (lang === 'en' && (cv.personal?.photo || cv.personal?.birthDate)) out.push({ tab: 'cv', tip: 'photo', reason: 'intl-photo' });
+  // Foto und Geburtsdatum: nur für Großbritannien und die USA ein Hinweis (Länderübersicht).
+  if ((target === 'UK' || target === 'US') && (cv.personal?.photo || cv.personal?.birthDate)) out.push({ tab: 'cv', tip: 'photo', reason: 'intl-photo' });
   if (!(cv.skillGroups || []).some(g => (g.items || []).some(i => i.trim()))) out.push({ tab: 'cv', tip: 'skills', reason: 'no-skills' });
 
   return out.slice(0, 3);

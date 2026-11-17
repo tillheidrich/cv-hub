@@ -139,7 +139,7 @@ export function payloadSizeError(payload) {
 export function assertPayloadSize(res, payload) {
   const err = payloadSizeError(payload);
   if (!err) return false;
-  res.status(413).json({ error: err });
+  res.status(413).json({ error: err, code: 'payload_too_large', maxKb: Math.round(MAX_RESUME_PAYLOAD_BYTES / 1024) });
   return true;
 }
 

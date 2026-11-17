@@ -24,9 +24,18 @@
 //      (CLS < 0,05), LCP-Element und -Zeit, H1 und Titel unverändert, kein
 //      waagerechtes Scrollen, keine Seitenfehler; ohne JavaScript ist der
 //      Text sichtbar
+//   7. Magazin in zwei Sprachen (17.11.2026): Die Prüfkopien von dist bauen
+//      das Magazin neu aus content/magazin plus den englischen Musterartikeln
+//      in scripts/fixtures/magazin-en (SEOCHECK_MAGAZIN_FIXTURES, leer = ohne).
+//      Geprüft: jede Artikelseite beider Sprachen liefert 200 mit passendem
+//      <html lang> und Canonical, hreflang beidseitig (Ziele erreichbar,
+//      x-default deutsch), englische Übersicht, Themenseiten und 404,
+//      Sitemap mit allen Artikeln beider Sprachen und xhtml:link an Paaren,
+//      llms.txt mit /en/magazine/, Magazin-Abschnitt der Startseiten
+//      (eigene Sprache zuerst, deutsche gekennzeichnet, Links auf a.url)
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, mkdtempSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, mkdtempSync, statSync, readdirSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
@@ -40,6 +49,7 @@ const BASIS = (process.env.PUBLIC_BASE_URL || (await import('../src/landing/bran
 const TMP = mkdtempSync(join(tmpdir(), 'seocheck-'));
 const LANGS = ['de', 'en', 'fr', 'es'];
 const pfad = l => (l === 'de' ? '/' : `/${l}/`);
+const FIXTURES = process.env.SEOCHECK_MAGAZIN_FIXTURES ?? join(APP, 'scripts', 'fixtures', 'magazin-en');
 
 let fehler = 0, geprueft = 0;
 const ok = (c, text, detail) => { geprueft++; if (c) console.log(`  ✓ ${text}`); else { fehler++; console.log(`  ✗ ${text}${detail ? `\n      ${String(detail).split('\n').join('\n      ')}` : ''}`); } };
@@ -91,7 +101,13 @@ async function starteServer(root, port) {
   const typen = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.svg': 'image/svg+xml', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain', '.woff2': 'font/woff2' };
   const srv = createServer((req, res) => {
     const u = decodeURIComponent(req.url.split('?')[0]);
-    if (/^\/(en|fr|es)$/.test(u)) { res.writeHead(301, { Location: `${u}/` }); return res.end(); }
+    if (/^\/(en|fr|es)$|^\/magazin$|^\/en\/magazine$/.test(u)) { res.writeHead(301, { Location: `${u}/` }); return res.end(); }
+    const ausgabe = ['/en/magazine/', '/magazin/'].find(b => u.startsWith(b));
+    if (ausgabe) {
+      const f = join(root, u.endsWith('/') ? `${u}index.html` : u);
+      if (existsSync(f) && statSync(f).isFile()) { res.writeHead(200, { 'Content-Type': typen[extname(f)] || 'application/octet-stream' }); return res.end(readFileSync(f)); }
+      res.writeHead(404, { 'Content-Type': typen['.html'] }); return res.end(readFileSync(join(root, ausgabe, '404.html')));
+    }
     const kandidaten = u === '/' ? ['/index.html'] : u.endsWith('/') ? [`${u}index.html`] : [u, `${u}/index.html`, '/app.html'];
     for (const k of kandidaten) {
       const f = join(root, k);
@@ -187,6 +203,80 @@ async function pruefeSeiten(base, opts) {
   ok(opts.offen ? /9\s?€|9,00\s?€/.test(sichtbarerText(pr.text)) : true, '/preise: Preis im HTML ohne JavaScript (Verkauf offen)');
 }
 
+/** Magazin einer Prüfkopie neu bauen: echte Artikel plus englische Muster. */
+function magazinMitMustern(d, name) {
+  const inhalt = join(TMP, `inhalt-${name}`);
+  mkdirSync(inhalt, { recursive: true });
+  cpSync(join(APP, 'content', 'magazin'), inhalt, { recursive: true });
+  const muster = FIXTURES && existsSync(FIXTURES) ? readdirSync(FIXTURES).filter(n => n.endsWith('.md')) : [];
+  for (const n of muster) cpSync(join(FIXTURES, n), join(inhalt, n));
+  const r = spawnSync(process.execPath, [join(APP, 'scripts', 'magazin-build.mjs')], { env: { ...process.env, MAGAZIN_CONTENT_DIR: inhalt, MAGAZIN_OUT_DIR: d, PUBLIC_BASE_URL: BASIS, MAGAZIN_BUILD_STRICT: '1' }, encoding: 'utf8' });
+  ok(r.status === 0 && !/übersprungen|GESPERRT/.test(r.stdout + r.stderr), `Magazin mit ${muster.length} englischen Mustern gebaut (Verkauf ${name})`, r.stdout + r.stderr);
+  return muster.length;
+}
+
+const alternatesVon = html => [...html.matchAll(/<link rel="alternate" hreflang="([a-z-]+)" href="([^"]+)"/g)].map(m => ({ lang: m[1], href: m[2] }));
+
+async function pruefeMagazin(base, d) {
+  const idx = JSON.parse(readFileSync(join(d, 'magazin', 'index.json'), 'utf8'));
+  const en = idx.articles.filter(a => a.lang === 'en');
+  const de = idx.articles.filter(a => a.lang === 'de');
+  ok(en.length >= 1 && de.length >= 1, `Magazin: ${de.length} deutsche, ${en.length} englische Artikel im Index`);
+  const befunde = [];
+  for (const a of idx.articles) {
+    const r = await holen(base, a.url);
+    const html = r.text;
+    const soll = a.lang === 'en' ? 'en' : (a.lang === 'de' ? 'de' : a.lang);
+    if (r.status !== 200) { befunde.push(`${a.url}: ${r.status}`); continue; }
+    if (!html.includes(`<html lang="${soll}">`)) befunde.push(`${a.url}: <html lang> nicht ${soll}`);
+    if ((/<link rel="canonical" href="([^"]+)"/.exec(html) || [])[1] !== `${BASIS}${a.url}`) befunde.push(`${a.url}: Canonical falsch`);
+    if (!a.url.startsWith(a.lang === 'en' ? '/en/magazine/' : '/magazin/')) befunde.push(`${a.url}: falsche Ausgabe für ${a.lang}`);
+    const alt = alternatesVon(html);
+    if (!a.alternates.length) { if (alt.length) befunde.push(`${a.url}: hreflang ohne Übersetzung`); continue; }
+    const xd = alt.find(x => x.lang === 'x-default');
+    if (!alt.some(x => x.href === `${BASIS}${a.url}` && x.lang === a.lang)) befunde.push(`${a.url}: hreflang ohne sich selbst`);
+    if (!xd || xd.href !== (alt.find(x => x.lang === 'de') || {}).href) befunde.push(`${a.url}: x-default nicht die deutsche Fassung`);
+    for (const g of a.alternates) {
+      if (!alt.some(x => x.lang === g.lang && x.href === `${BASIS}${g.url}`)) { befunde.push(`${a.url}: hreflang ${g.lang} fehlt`); continue; }
+      const z = await holen(base, g.url);
+      if (z.status !== 200) befunde.push(`${a.url}: Fassung ${g.url} liefert ${z.status}`);
+      else if (!alternatesVon(z.text).some(x => x.href === `${BASIS}${a.url}`)) befunde.push(`${a.url}: ${g.url} verweist nicht zurück`);
+    }
+  }
+  ok(befunde.length === 0, `Magazin: alle ${idx.articles.length} Artikelseiten 200, <html lang> und Canonical passend, hreflang beidseitig`, befunde.join('\n'));
+  const paare = idx.articles.filter(a => a.alternates.length);
+  ok(!FIXTURES || paare.length >= 2, `Magazin: ${paare.length / 2} Übersetzungspaar(e), z. B. ${paare.map(a => a.url).slice(0, 2).join(' ↔ ')}`);
+  const eu = await holen(base, '/en/magazine/');
+  ok(eu.status === 200 && eu.text.includes('<html lang="en">') && (/<link rel="canonical" href="([^"]+)"/.exec(eu.text) || [])[1] === `${BASIS}/en/magazine/` && (en.length ? !/noindex/.test(eu.text) : /noindex/.test(eu.text)), `/en/magazine/: englische Übersicht (${en.length ? 'indexierbar' : 'noindex, noch keine englischen Artikel'})`, eu.status);
+  const ed = (idx.editions || []).find(e => e.lang === 'en') || { topics: [] };
+  const themen = [];
+  for (const t of ed.topics) { const r = await holen(base, t.url); if (r.status !== 200 || !r.text.includes('<html lang="en">')) themen.push(`${t.url} ${r.status}`); }
+  ok(themen.length === 0 && ed.topics.every(t => t.url.startsWith('/en/magazine/topic/')), `/en/magazine/topic/…: ${ed.topics.length} Themenseiten`, themen.join('\n'));
+  const e404 = await holen(base, '/en/magazine/gibt-es-nicht/');
+  ok(e404.status === 404 && e404.text.includes('<html lang="en">') && /noindex/.test(e404.text), '/en/magazine/<unbekannt>/ → englische 404', e404.status);
+  const umleitung = await holen(base, '/en/magazine');
+  ok(umleitung.status === 301 && /\/en\/magazine\/$/.test(umleitung.h('location')), '/en/magazine → 301 /en/magazine/', `${umleitung.status} ${umleitung.h('location')}`);
+
+  // Magazin-Abschnitt der Startseiten: eigene Sprache zuerst, deutsche gekennzeichnet.
+  for (const l of LANGS) {
+    const html = (await holen(base, pfad(l))).text;
+    const sect = (/<section[^>]*id="magazin"[\s\S]*?<\/section>/.exec(html) || [''])[0];
+    const karten = [...sect.matchAll(/<article class="lp-mag-card"([^>]*)>([\s\S]*?)<\/article>/g)].map(m => ({ lang: (/lang="([a-z]+)"/.exec(m[1]) || [])[1] || l, href: (/<h3><a href="([^"]+)"/.exec(m[2]) || [])[1], mark: /data-magazin-sprache=/.test(m[2]) }));
+    const alle = (/<a class="lp-btn lp-btn-soft" href="([^"]+)"/.exec(sect) || [])[1];
+    const eigene = idx.articles.filter(a => a.lang === l);
+    const n = `${pfad(l)} Magazin-Abschnitt`;
+    if (!karten.length) { ok(!idx.articles.length, `${n}: vorhanden`); continue; }
+    ok(karten.every(k => idx.articles.some(a => a.url === k.href)), `${n}: Links auf die url aus dem Index`, karten.map(k => k.href).join(' '));
+    ok(alle === (l === 'en' ? '/en/magazine/' : '/magazin/'), `${n}: „Alle Artikel" → ${alle}`);
+    if (l === 'de') ok(karten.every(k => k.lang === 'de' && !k.mark), `${n}: nur deutsche Artikel, keine Kennzeichnung`);
+    else {
+      const erste = karten.slice(0, Math.min(eigene.length, 6));
+      ok(erste.every(k => k.lang === l) && karten.slice(erste.length).every(k => k.lang === 'de' && k.mark) && (eigene.length >= 3 || karten.length === Math.min(6, eigene.length + de.filter(a => !a.alternates.some(x => x.lang === l)).length)), `${n}: ${erste.length} in der eigenen Sprache zuerst, ${karten.length - erste.length} deutsche sichtbar gekennzeichnet`, JSON.stringify(karten));
+      ok(!karten.some(k => k.lang === 'de' && idx.articles.find(a => a.url === k.href)?.alternates.some(x => x.lang === l)), `${n}: kein deutscher Artikel, der eine Fassung in dieser Sprache hat`);
+    }
+  }
+}
+
 async function main() {
   console.log(`SEO-Prüflauf · dist ${DIST} · Basis ${BASIS}`);
   const ssr = join(APP, 'node_modules', '.cache', 'landing-ssr', 'ssr.mjs');
@@ -195,6 +285,7 @@ async function main() {
   for (const [name, offer] of [['offen', { enabled: true, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90, productName: 'Bewerbungs-Pass', freeTier: { limited: true } }], ['zu', { enabled: false, sku: 'pass90', priceCents: 900, currency: 'EUR', days: 90 }]]) {
     const d = join(TMP, `dist-${name}`);
     cpSync(DIST, d, { recursive: true });
+    magazinMitMustern(d, name);
     if (existsSync(ssr)) {
       const r = spawnSync(process.execPath, [join(APP, 'scripts', 'landing-prerender.mjs')], { env: { ...process.env, PRERENDER_OUT_DIR: d, PRERENDER_OFFER_JSON: JSON.stringify(offer), PRERENDER_STRICT: '1', PUBLIC_BASE_URL: BASIS }, encoding: 'utf8' });
       ok(r.status === 0, `Vorrendern mit Verkauf ${name} (Exit 0)`, r.stdout + r.stderr);
@@ -207,22 +298,36 @@ async function main() {
     abschnitt(`1–4 · Ausgeliefertes HTML ohne JavaScript (Verkauf ${f.name})`);
     const srv = await starteServer(f.d, port);
     console.log(`  (Server: ${srv.art})`);
-    try { await pruefeSeiten(`http://127.0.0.1:${port}`, { offen: f.offen }); } finally { srv.stop(); }
+    try {
+      await pruefeSeiten(`http://127.0.0.1:${port}`, { offen: f.offen });
+      abschnitt(`7 · Magazin in zwei Sprachen (Verkauf ${f.name})`);
+      await pruefeMagazin(`http://127.0.0.1:${port}`, f.d);
+    } finally { srv.stop(); }
     port++;
   }
 
   abschnitt('5 · Sitemap, robots.txt, llms.txt');
-  const sm = readFileSync(join(DIST, 'sitemap.xml'), 'utf8');
+  // Aus der Prüfkopie mit den englischen Mustern (gleicher Bau wie dist).
+  const SD = fassungen[1].d;
+  const sm = readFileSync(join(SD, 'sitemap.xml'), 'utf8');
   const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+  const eintrag = loc => sm.split('<url>').find(u => u.includes(`<loc>${loc}</loc>`)) || '';
   ok(LANGS.every(l => locs.includes(`${BASIS}${pfad(l)}`)) && locs.includes(`${BASIS}/preise`) && locs.includes(`${BASIS}/magazin/`), 'Sitemap: vier Sprachfassungen, /preise, /magazin/', locs.slice(0, 8).join('\n'));
-  ok((sm.match(/<xhtml:link rel="alternate" hreflang="x-default"/g) || []).length === 4 && /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/.test(sm), 'Sitemap: hreflang-Alternativen an den Sprachfassungen');
-  const artikel = existsSync(join(DIST, 'magazin', 'index.json')) ? JSON.parse(readFileSync(join(DIST, 'magazin', 'index.json'), 'utf8')).articles : [];
-  ok(artikel.every(a => locs.includes(`${BASIS}/magazin/${a.slug}/`)), `Sitemap: alle ${artikel.length} Magazin-Artikel`);
+  ok(LANGS.every(l => LANGS.every(x => eintrag(`${BASIS}${pfad(l)}`).includes(`hreflang="${x}" href="${BASIS}${pfad(x)}"`)) && /hreflang="x-default"/.test(eintrag(`${BASIS}${pfad(l)}`))) && /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/.test(sm), 'Sitemap: hreflang-Alternativen an den Sprachfassungen');
+  const mi = existsSync(join(SD, 'magazin', 'index.json')) ? JSON.parse(readFileSync(join(SD, 'magazin', 'index.json'), 'utf8')) : { articles: [], editions: [] };
+  const artikel = mi.articles;
+  ok(artikel.every(a => locs.includes(`${BASIS}${a.url}`)), `Sitemap: alle ${artikel.length} Magazin-Artikel beider Sprachen (${artikel.filter(a => a.lang === 'en').length} englisch)`);
+  const edEn = (mi.editions || []).find(e => e.lang === 'en');
+  ok(!edEn || !edEn.indexable || (locs.includes(`${BASIS}/en/magazine/`) && edEn.topics.every(t => locs.includes(`${BASIS}${t.url}`))), 'Sitemap: englische Übersicht und Themenseiten (wenn es englische Artikel gibt)');
+  ok(artikel.every(a => a.alternates.every(g => eintrag(`${BASIS}${a.url}`).includes(`hreflang="${g.lang}" href="${BASIS}${g.url}"`))) && artikel.filter(a => !a.alternates.length).every(a => !/xhtml:link/.test(eintrag(`${BASIS}${a.url}`))), 'Sitemap: xhtml:link an Übersetzungspaaren, an Einzelartikeln keine');
   ok(locs.every(u => u.startsWith(`${BASIS}/`)) && new Set(locs).size === locs.length, 'Sitemap: nur eigene Adressen, keine doppelten');
-  const rb = readFileSync(join(DIST, 'robots.txt'), 'utf8');
+  const rb = readFileSync(join(SD, 'robots.txt'), 'utf8');
   ok(rb.includes(`Sitemap: ${BASIS}/sitemap.xml`) && !/^Disallow:\s*\/\s*$/m.test(rb) && /Disallow: \/share\//.test(rb), 'robots.txt: Sitemap, nichts Öffentliches gesperrt, /share/ gesperrt');
   ok(!/User-agent:\s*(GPTBot|ClaudeBot|PerplexityBot|Google-Extended)[\s\S]*?Disallow:\s*\/\s*$/im.test(rb), 'robots.txt: KI-Crawler nicht ausgesperrt (sonst keine Zitate in KI-Antworten)');
-  const llms = readFileSync(join(DIST, 'llms.txt'), 'utf8');
+  const llms = readFileSync(join(SD, 'llms.txt'), 'utf8');
+  const enArtikel = artikel.filter(a => a.lang === 'en');
+  ok(!enArtikel.length || (llms.includes(`Overview: ${BASIS}/en/magazine/`) && enArtikel.every(a => llms.includes(`[${a.title}](${BASIS}${a.url}): ${a.description}`))), `llms.txt: Abschnitt „Magazine (English)" mit ${enArtikel.length} Artikeln und /en/magazine/`);
+  ok(artikel.filter(a => a.lang === 'de').every(a => llms.includes(`(${BASIS}${a.url})`)), 'llms.txt: alle deutschen Artikel mit ihrer Adresse');
   const tplZahl = (/(\d+) wählbare Vorlagen/.exec(llms) || [])[1];
   const ssrMod = existsSync(ssr) ? await import(`file://${ssr}`) : null;
   ok(!!tplZahl && (!ssrMod || Number(tplZahl) === ssrMod.SSR_INFO.templates.length), `llms.txt: Vorlagenzahl aus dem Code (${tplZahl})`);

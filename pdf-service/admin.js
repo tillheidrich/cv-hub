@@ -1029,7 +1029,7 @@ export function createAdmin(deps) {
       await pool.query('UPDATE users SET disabled = $1 WHERE id = $2', [disabled, u.id]);
       res.locals.audit = { action: disabled ? 'customer_disable' : 'customer_enable', target: u.id };
       res.json({ ok: true, disabled });
-      if (disabled && u.email && deps.tplOffboarding) deps.sendMail({ to: u.email, ...deps.tplOffboarding({ username: u.username, deleted: false }) });
+      if (disabled && u.email && deps.tplOffboarding) deps.sendMail({ to: u.email, ...deps.tplOffboarding({ username: u.username, deleted: false, lang: u.mail_lang }) });
     });
 
     app.post('/api/admin/customers/:id/password-reset-mail', ...guard, async (req, res) => {
@@ -1092,7 +1092,7 @@ export function createAdmin(deps) {
       res.locals.audit = { action: 'customer_delete', target: u.id, details: { retainedOrders: r.retainedOrders } };
       res.json({ ok: true, retainedOrders: r.retainedOrders });
       // Die Person erfährt es, wie beim Löschen über die App.
-      if (u.email && deps.tplOffboarding) deps.sendMail({ to: u.email, ...deps.tplOffboarding({ username: u.username, deleted: true, retainedOrders: r.retainedOrders }) });
+      if (u.email && deps.tplOffboarding) deps.sendMail({ to: u.email, ...deps.tplOffboarding({ username: u.username, deleted: true, retainedOrders: r.retainedOrders, lang: u.mail_lang }) });
     });
 
     app.post('/api/admin/payments/:id/sync', ...guard, async (req, res) => {

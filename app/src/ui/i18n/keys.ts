@@ -176,7 +176,7 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     tfaNeedsEmail: 'Add an email address first.',
 
     sectionApps: 'Connected apps',
-    appsIntro: 'AI clients you have granted access to your résumés through the MCP endpoint. “Revoke” withdraws access immediately, and the client then has to ask again.',
+    appsIntro: 'AI clients you have granted access to your CVs through the MCP endpoint. “Revoke” withdraws access immediately, and the client then has to ask again.',
     mcpLabel: 'Address for your AI client',
     mcpHint: 'No key needed: the client registers itself, you confirm in the browser. After that it appears in the list below and can be revoked there at any time.',
     copy: 'Copy', copied: 'Copied', copySection: 'Copy section',
@@ -207,7 +207,7 @@ export const KEYS_I18N: Record<UiLang, KeysStrings> = {
     cancel: 'Cancel', deleting: 'Deleting…', deleteFinal: 'Delete permanently',
 
     tipLabel: 'Tip:',
-    tipBody: 'To have an AI edit your résumé, use the Markdown feature in the export panel. You do not need to install anything.',
+    tipBody: 'To have an AI edit your CV, use the Markdown feature in the export panel. You do not need to install anything.',
 
     genericError: 'Error.',
   },

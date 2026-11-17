@@ -1093,6 +1093,93 @@ export const ACCENTS: { id: AccentId; name: string; value: string | null }[] = [
 
 export type { AccentId, PaperId };
 
+// ── Namen in der Oberflächensprache (17.11.2026) ────────────────────────────
+// Die Felder `name`/`note` oben bleiben deutsch (Bestand, Vergleich in
+// Prüfskripten). Angezeigt wird über die Funktionen unten — vorher stand im
+// englischen Gestaltungsbereich „Vorlagenfarbe", „Tinte", „Durchgehend Inter".
+
+type NameLang = 'de' | 'en' | 'fr' | 'es';
+
+const ACCENT_NAMES: Record<Exclude<NameLang, 'de'>, Record<AccentId, string>> = {
+  en: { auto: 'Template colour', graphit: 'Graphite', tinte: 'Ink', petrol: 'Petrol', tanne: 'Fir', olive: 'Olive', kupfer: 'Copper', bordeaux: 'Bordeaux', aubergine: 'Aubergine' },
+  fr: { auto: 'Couleur du modèle', graphit: 'Graphite', tinte: 'Encre', petrol: 'Pétrole', tanne: 'Sapin', olive: 'Olive', kupfer: 'Cuivre', bordeaux: 'Bordeaux', aubergine: 'Aubergine' },
+  es: { auto: 'Color de la plantilla', graphit: 'Grafito', tinte: 'Tinta', petrol: 'Petróleo', tanne: 'Abeto', olive: 'Oliva', kupfer: 'Cobre', bordeaux: 'Burdeos', aubergine: 'Berenjena' },
+};
+
+const PAPER_NAMES: Record<Exclude<NameLang, 'de'>, Record<PaperId, string>> = {
+  en: { auto: 'Template colour', weiss: 'White', creme: 'Cream', sand: 'Sand', leinen: 'Linen', nebel: 'Mist' },
+  fr: { auto: 'Couleur du modèle', weiss: 'Blanc', creme: 'Crème', sand: 'Sable', leinen: 'Lin', nebel: 'Brume' },
+  es: { auto: 'Color de la plantilla', weiss: 'Blanco', creme: 'Crema', sand: 'Arena', leinen: 'Lino', nebel: 'Niebla' },
+};
+
+/** Name und Notiz einer Schriftpaarung. Schriftnamen bleiben, wie sie sind. */
+const PAIRING_TEXT: Record<Exclude<NameLang, 'de'>, Record<FontPairingId, { name: string; note: string }>> = {
+  en: {
+    auto: { name: 'Automatic', note: 'The template’s typeface' },
+    'inter-playfair': { name: 'Modern classic', note: 'Display serif + sans' },
+    'pure-inter': { name: 'Pure', note: 'Inter throughout' },
+    'lora-source': { name: 'Editorial', note: 'Lora + Source Sans' },
+    'merri-source': { name: 'Serious', note: 'Merriweather + Source Sans' },
+    'space-inter': { name: 'Tech', note: 'Space Grotesk + Inter' },
+    'garamond-archivo': { name: 'Elegant', note: 'Garamond + Archivo' },
+    'plex-corporate': { name: 'Corporate', note: 'IBM Plex Serif + Sans' },
+    'libre-inter': { name: 'Book', note: 'Libre Baskerville + Inter' },
+    'source-classic': { name: 'Formal', note: 'Source Serif 4 + Source Sans 3' },
+    'source-serif': { name: 'Book serif', note: 'Source Serif 4 throughout' },
+    'plex-sans': { name: 'Technical', note: 'IBM Plex Sans throughout' },
+    'archivo-grotesk': { name: 'Grotesque', note: 'Archivo throughout' },
+    'fraunces-archivo': { name: 'Expressive', note: 'Fraunces + Archivo' },
+  },
+  fr: {
+    auto: { name: 'Automatique', note: 'Police du modèle' },
+    'inter-playfair': { name: 'Classique moderne', note: 'Serif de titrage + sans' },
+    'pure-inter': { name: 'Épuré', note: 'Inter partout' },
+    'lora-source': { name: 'Éditorial', note: 'Lora + Source Sans' },
+    'merri-source': { name: 'Sérieux', note: 'Merriweather + Source Sans' },
+    'space-inter': { name: 'Tech', note: 'Space Grotesk + Inter' },
+    'garamond-archivo': { name: 'Élégant', note: 'Garamond + Archivo' },
+    'plex-corporate': { name: 'Entreprise', note: 'IBM Plex Serif + Sans' },
+    'libre-inter': { name: 'Livre', note: 'Libre Baskerville + Inter' },
+    'source-classic': { name: 'Officiel', note: 'Source Serif 4 + Source Sans 3' },
+    'source-serif': { name: 'Composition livre', note: 'Source Serif 4 partout' },
+    'plex-sans': { name: 'Technique', note: 'IBM Plex Sans partout' },
+    'archivo-grotesk': { name: 'Grotesque', note: 'Archivo partout' },
+    'fraunces-archivo': { name: 'Expressif', note: 'Fraunces + Archivo' },
+  },
+  es: {
+    auto: { name: 'Automático', note: 'Tipografía de la plantilla' },
+    'inter-playfair': { name: 'Clásico moderno', note: 'Serif de titular + sans' },
+    'pure-inter': { name: 'Puro', note: 'Inter en todo' },
+    'lora-source': { name: 'Editorial', note: 'Lora + Source Sans' },
+    'merri-source': { name: 'Serio', note: 'Merriweather + Source Sans' },
+    'space-inter': { name: 'Tech', note: 'Space Grotesk + Inter' },
+    'garamond-archivo': { name: 'Elegante', note: 'Garamond + Archivo' },
+    'plex-corporate': { name: 'Corporativo', note: 'IBM Plex Serif + Sans' },
+    'libre-inter': { name: 'Libro', note: 'Libre Baskerville + Inter' },
+    'source-classic': { name: 'Oficial', note: 'Source Serif 4 + Source Sans 3' },
+    'source-serif': { name: 'Composición de libro', note: 'Source Serif 4 en todo' },
+    'plex-sans': { name: 'Técnico', note: 'IBM Plex Sans en todo' },
+    'archivo-grotesk': { name: 'Grotesca', note: 'Archivo en todo' },
+    'fraunces-archivo': { name: 'Expresivo', note: 'Fraunces + Archivo' },
+  },
+};
+
+export function accentName(id: AccentId, lang: string): string {
+  return lang === 'de' ? (ACCENTS.find(a => a.id === id)?.name ?? id) : (ACCENT_NAMES[lang as Exclude<NameLang, 'de'>] ?? ACCENT_NAMES.en)[id] ?? id;
+}
+
+export function paperName(id: PaperId, lang: string): string {
+  return lang === 'de' ? (PAPERS.find(p => p.id === id)?.name ?? id) : (PAPER_NAMES[lang as Exclude<NameLang, 'de'>] ?? PAPER_NAMES.en)[id] ?? id;
+}
+
+export function pairingText(id: FontPairingId, lang: string): { name: string; note: string } {
+  if (lang === 'de') {
+    const p = FONT_PAIRING_LIST.find(x => x.id === id);
+    return { name: p?.name ?? id, note: p?.note ?? '' };
+  }
+  return (PAIRING_TEXT[lang as Exclude<NameLang, 'de'>] ?? PAIRING_TEXT.en)[id] ?? { name: id, note: '' };
+}
+
 /** Wählbare Papierfarben.
  *
  *  Wunsch vom 14.09.2026: „Wenn du schon den Hintergrund änderst bei einigen

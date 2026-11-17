@@ -3,6 +3,55 @@
 CV-Hub is derived from a private production tool. This file tracks what has been
 generalized for public/self-host use and what is still in progress.
 
+## Done (2026-11-17, international applicants, English, MCP)
+
+Mirrored diff-based (`git apply --reject` of the private tool's diff, rejected
+hunks redone with `git merge-file`, base = the private tool's previous
+revision); conflicts resolved in favour of the neutral CV-Hub wording.
+
+- **Account and security mails in four languages.** `mail.js` took the new
+  per-language tables from the private revision; every product name in them
+  is `CV-Hub` (subjects, invitation and goodbye texts), the header and footer
+  keep `APP_NAME`, the access-request mail still says "Jemand möchte Zugang"
+  without a product name. In `mailtexts/index.js` the new tables for address
+  change and repeated registration build their subjects from `productName`
+  (default `PRODUCT_NAME`/`APP_NAME`, else `CV-Hub`), as before.
+- **English magazine (`/en/magazine/`).** The six new English articles
+  (German CV guide, Indian resume, CGPA, English or German, Opportunity Card
+  and Blue Card, MCP) and the German MCP article came over as sample content
+  without `outlineId`. Neutralized: "Doing this with CV-Hub" instead of the
+  original product name; the MCP address is `https://<your-instance>/mcp` /
+  `https://<deine-instanz>/mcp` instead of the original domain; "stored on
+  the CV tool's server in Germany" became "the server of the instance (you
+  use)"; the pass is conditional ("If the instance offers the optional
+  Application Pass …") and the sentence that it is sold in the EU only is
+  gone. "Tested with this CV tool" stays: it describes the code, not a
+  deployment. `lebenslauf-pdf-oder-word.md` got its `translationKey` but no
+  `outlineId`. `MAGAZIN_LANG` now defaults to `de` for `/magazin/` (the
+  English edition has its own overview); the README says so.
+- **Start page.** The new "Applying in Germany" section (en/fr/es) holds no
+  operator data. The new FAQ "Can I use the tool if I live outside the EU?"
+  no longer claims the pass is sold in the EU only: "Who can buy the
+  Application Pass is up to the operator of this instance" (fr/es likewise);
+  without an offer the short answer applies. `LandingScreen.tsx` keeps
+  `SOURCE_REPO_URL`/`sourceFileUrl()`; the private hard-coded `SOURCE_URL`
+  constant and its comment were not taken over.
+- **No server location** in the new English interface texts either: photo
+  hint, "Save across devices", the unlock card and both "Why does it cost
+  anything?" answers say "our server" / "a server", as before.
+- **Template kit README:** the English footer says "Made with CV-Hub." (the
+  private one named the original operator), like the German one.
+- **English screenshots re-taken, not mirrored.** The private English photos
+  and `og-en.png` show the original wordmark and the sentence about a server
+  in Germany. They were taken again here with `scripts/landing-shots.mjs`
+  (`LANDING_LANGS=en`): 198 image files in `public/landing/` plus
+  `og-en.png`, with the new demo person and `CV-Hub` in the top bar;
+  `shots.gen.ts` and `manifest.json` come from that run. German, French and Spanish photos are
+  unchanged.
+- **Removed as in the private tool:** `pdf-service/renderer/` (an unused
+  copy of the renderer, not in the image). The sperrliste label in
+  `magazincheck.mjs` stays CV-Hub's ("API-Schlüssel (cvk_)").
+
 ## Done (2026-10-10, template tier and mail workflows)
 
 Mirrored diff-based (`git merge-file`, base = the private tool's previous

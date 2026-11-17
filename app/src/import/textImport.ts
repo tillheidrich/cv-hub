@@ -27,11 +27,26 @@ import type {
 } from '../data/types';
 import { markdownToCvData, isCvMarkdown } from './markdownBridge';
 
+/** Was bewusst NICHT in den Lebenslauf kommt (17.11.2026, internationale
+ *  Fachkräfte): in deutschen Lebensläufen unüblich oder heikel. Die Oberfläche
+ *  zeigt es mit Grund an (ui/ImportCv.tsx), damit nichts stillschweigend
+ *  verschwindet, aber auch nichts stillschweigend im Lebenslauf landet. */
+export type DroppedKind = 'declaration' | 'strengths' | 'references' | 'parents' | 'religion' | 'caste'
+  | 'gender' | 'idNumber' | 'salary' | 'biodata';
+export interface DroppedItem { kind: DroppedKind; text: string }
+/** Hinweise zum Übernommenen: „Career Objective" steht als Profil drin,
+ *  sollte aber umgeschrieben werden; Noten als CGPA oder Prozent brauchen
+ *  die Umrechnung. */
+export type ImportNote = 'objective' | 'grades';
+
 export interface TextImportResult {
   /** Vollständiges CVData auf Basis von `base` (Beschriftungen, Foto usw. aus `base`). */
   cv: CVData;
   /** Zeilen/Blöcke ohne sichere Zuordnung („Bitte prüfen"), Abschnittsname vorn. */
   unsorted: string[];
+  /** Nicht übernommen, mit Art (für den Grund in der Oberfläche). */
+  dropped: DroppedItem[];
+  notes: ImportNote[];
   found: { name: boolean; contact: number; experience: number; education: number; skills: number; languages: number; profile: boolean; other: number };
   /** true, wenn das eigene Export-Format erkannt und markdownToCvData benutzt wurde. */
   strict: boolean;
@@ -110,7 +125,9 @@ function strongSplit(s: string): string[] {
 function trimSep(s: string): string {
   return s.replace(/\(\s*\)|\[\s*\]/g, '')
     .replace(/^[\s|,;:·•–—\-/]+/, '')
-    .replace(/[\s|,;:·•–—\-/]+$/, '')
+    // (?<!…): nur am Anfang einer Folge ansetzen, sonst quadratisch bei langen
+    // Folgen ohne Zeilenende-Treffer (redoscheck.mjs, 17.11.2026). Gleiches Ergebnis.
+    .replace(/(?<![\s|,;:·•–—\-/])[\s|,;:·•–—\-/]+$/, '')
     .trim();
 }
 
@@ -161,9 +178,9 @@ const MONTHS: Record<string, number> = {
 };
 const MONTH_ALT = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join('|');
 const Y = '(?:19|20)\\d{2}';
-const TOK = `(?<![\\p{L}\\d])(?:\\d{1,2}\\.\\s?\\d{1,2}\\.\\s?${Y}|\\d{1,2}\\.\\s?(?:${MONTH_ALT})\\.?\\s${Y}|\\d{1,2}\\s?[./]\\s?${Y}|${Y}-\\d{2}(?!\\d)|(?:${MONTH_ALT})(?![\\p{L}])\\.?\\s?${Y}|${Y})(?!\\d)`;
+const TOK = `(?<![\\p{L}\\d])(?:\\d{1,2}\\.\\s?\\d{1,2}\\.\\s?${Y}|\\d{1,2}\\.\\s?(?:${MONTH_ALT})\\.?\\s${Y}|\\d{1,2}\\s?[./]\\s?${Y}|${Y}-\\d{2}(?!\\d)|(?:${MONTH_ALT})(?![\\p{L}])\\.?(?:[\\s-]?${Y}|\\s?['’]\\s?\\d{2}|-\\d{2})|${Y})(?!\\d)`;
 const TOK2 = `(?:${TOK}|(?<![\\p{L}\\d])\\d{1,2}\\/\\d{2}(?![\\d/.]))`;
-const PRESENT = `(?:bis\\s)?(?:heute|dato)|aktuell|derzeit|laufend|jetzt|gegenwart|present|current(?:ly)?|now|today|ongoing|aujourd['’]hui|[àa] ce jour|actuel(?:lement)?|en cours|(?:la\\s)?actualidad|presente|hoy|actual(?:mente)?`;
+const PRESENT = `(?:(?:till|until|to)\\s)?date|(?:till|until)\\s(?:now|present|today)|(?:bis\\s)?(?:heute|dato)|aktuell|derzeit|laufend|jetzt|gegenwart|present|current(?:ly)?|now|today|ongoing|aujourd['’]hui|[àa] ce jour|actuel(?:lement)?|en cours|(?:la\\s)?actualidad|presente|hoy|actual(?:mente)?`;
 const SEP = `(?:\\s?[-–—‐‑]{1,2}\\s?|\\s(?:bis|to|until|till|through|à|au|a|al|hasta|jusqu['’]?(?:à|au|en))\\s)`;
 const PREFIX = `(?:(?:von|vom|ab|seit|since|from|depuis|du|de|desde|del)\\s)?`;
 const RANGE_RE = new RegExp(`${PREFIX}(${TOK2})\\s?${SEP}\\s?(${TOK2}|${PRESENT})(?![\\p{L}])`, 'iu');
@@ -182,8 +199,15 @@ function normTok(tok: string): string {
   if (m) { const mm = pad(+m[1]); return mm ? `${mm}/${m[2]}` : ''; }
   m = /^(\d{4})-(\d{2})$/.exec(t);
   if (m) { const mm = pad(+m[2]); return mm ? `${mm}/${m[1]}` : ''; }
-  m = /^(?:\d{1,2}\.\s?)?(\p{L}+)\.?\s?(\d{4})$/u.exec(t);
-  if (m) { const mm = pad(MONTHS[m[1]] ?? 0); return mm ? `${mm}/${m[2]}` : ''; }
+  // „June 2021", „Jun-2021", „Jun'21", „Jun-21" (häufig in indischen Lebensläufen).
+  m = /^(?:\d{1,2}\.\s?)?(\p{L}+)\.?(?:[\s-]?|\s?['’]\s?)(\d{4}|\d{2})$/u.exec(t);
+  if (m) {
+    const mm = pad(MONTHS[m[1]] ?? 0);
+    if (!mm) return '';
+    if (m[2].length === 4) return `${mm}/${m[2]}`;
+    const yy = +m[2], now = new Date().getFullYear() % 100;
+    return `${mm}/${yy <= now + 1 ? 2000 + yy : 1900 + yy}`;
+  }
   m = /^(\d{1,2})\/(\d{2})$/.exec(t);
   if (m) {
     const mm = pad(+m[1]);
@@ -233,13 +257,17 @@ function isHeaderish(c: string, h: DateHit): boolean {
 // ── Abschnitte erkennen ─────────────────────────────────────────────────────
 
 type Sec = 'head' | 'profile' | 'contact' | 'experience' | 'education' | 'skills' | 'languages'
-  | 'certificates' | 'projects' | 'volunteering' | 'publications' | 'interests' | 'awards' | 'additional' | 'unknown';
+  | 'certificates' | 'projects' | 'volunteering' | 'publications' | 'interests' | 'awards' | 'additional' | 'unknown'
+  /* Seit 17.11.2026: freie Liste mit eigener Überschrift (Extra-Curricular,
+   * Positions of Responsibility, Patents) und drei Abschnitte, die nicht
+   * übernommen, sondern in der Rückmeldung genannt werden. */
+  | 'activities' | 'declaration' | 'strengths' | 'references';
 
 function normHeading(s: string): string {
   return s.toLowerCase()
     .replace(/[*_`#]/g, '')
     .replace(/^[^\p{L}]+/u, '')
-    .replace(/[\s:.\-–—]+$/u, '')
+    .replace(/(?<![\s:.\-–—])[\s:.\-–—]+$/u, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -264,18 +292,23 @@ const SECTION_RULES: [Sec, RegExp][] = [
 /** Genaue Überschriften — gelten auch ohne jede Auszeichnung (Text aus Word). */
 const EXACT: Record<string, Sec> = {};
 const exactList: [Sec, string][] = [
-  ['profile', 'profil|kurzprofil|berufsprofil|persönliches profil|über mich|zusammenfassung|summary|professional summary|executive summary|career summary|profile|professional profile|about me|about|profil professionnel|résumé|resume|à propos|à propos de moi|perfil|perfil profesional|sobre mí|resumen|resumen profesional|objective|career objective|zielsetzung|kurzvorstellung'],
-  ['experience', 'berufserfahrung|berufliche erfahrung|erfahrung|beruflicher werdegang|werdegang|berufspraxis|praktika|praktikum|praktische erfahrung|berufliche stationen|beruflicher hintergrund|work experience|experience|professional experience|relevant experience|employment|employment history|work history|career history|expérience professionnelle|expériences professionnelles|expérience|expériences|parcours professionnel|experiencia laboral|experiencia profesional|experiencia|trayectoria profesional'],
-  ['education', 'ausbildung|bildung|bildungsweg|bildungsgang|schulbildung|schulische ausbildung|schulischer werdegang|akademischer werdegang|studium|hochschulbildung|hochschulausbildung|berufsausbildung|schule und studium|studium und ausbildung|education|academic background|education and training|formation|formations|études|diplômes|formación|formación académica|educación|estudios'],
-  ['skills', 'kenntnisse|fähigkeiten|skills|kompetenzen|it-kenntnisse|edv-kenntnisse|fachkenntnisse|besondere kenntnisse|fachliche kompetenzen|technische kenntnisse|qualifikationen|stärken|fähigkeiten und kenntnisse|kenntnisse und fähigkeiten|technical skills|key skills|core skills|core competencies|hard skills|soft skills|compétences|compétences techniques|habilidades|aptitudes|competencias|conocimientos|habilidades técnicas'],
-  ['languages', 'sprachen|sprachkenntnisse|fremdsprachen|fremdsprachenkenntnisse|languages|language skills|langues|compétences linguistiques|idiomas|lenguas'],
-  ['certificates', 'zertifikate|zertifizierungen|weiterbildung|weiterbildungen|fortbildung|fortbildungen|kurse|schulungen|lehrgänge|certifications|certificates|licenses|licences|certificats|formation continue|certificaciones|certificados|cursos'],
-  ['projects', 'projekte|ausgewählte projekte|projects|selected projects|projets|proyectos'],
+  ['profile', 'profil|kurzprofil|berufsprofil|persönliches profil|über mich|zusammenfassung|summary|professional summary|executive summary|career summary|profile|professional profile|about me|about|profil professionnel|résumé|resume|à propos|à propos de moi|perfil|perfil profesional|sobre mí|resumen|resumen profesional|objective|career objective|zielsetzung|kurzvorstellung|profile summary|summary of qualifications|professional objective|job objective'],
+  ['experience', 'berufserfahrung|berufliche erfahrung|erfahrung|beruflicher werdegang|werdegang|berufspraxis|praktika|praktikum|praktische erfahrung|berufliche stationen|beruflicher hintergrund|work experience|experience|professional experience|relevant experience|employment|employment history|work history|career history|experience summary|employment details|organisational experience|organizational experience|internships|internship|internship experience|internship details|industrial training|expérience professionnelle|expériences professionnelles|expérience|expériences|parcours professionnel|experiencia laboral|experiencia profesional|experiencia|trayectoria profesional'],
+  ['education', 'ausbildung|bildung|bildungsweg|bildungsgang|schulbildung|schulische ausbildung|schulischer werdegang|akademischer werdegang|studium|hochschulbildung|hochschulausbildung|berufsausbildung|schule und studium|studium und ausbildung|education|academic background|education and training|academic qualification|academic qualifications|educational qualification|educational qualifications|educational background|educational details|education details|academic details|academic profile|academic credentials|scholastic profile|formation|formations|études|diplômes|formación|formación académica|educación|estudios'],
+  ['skills', 'kenntnisse|fähigkeiten|skills|kompetenzen|it-kenntnisse|edv-kenntnisse|fachkenntnisse|besondere kenntnisse|fachliche kompetenzen|technische kenntnisse|qualifikationen|stärken|fähigkeiten und kenntnisse|kenntnisse und fähigkeiten|technical skills|technical proficiency|technical expertise|technical skill set|skill set|skillset|skills set|tools and technologies|tools & technologies|tech stack|it skills|computer skills|key skills|core skills|core competencies|hard skills|soft skills|compétences|compétences techniques|habilidades|aptitudes|competencias|conocimientos|habilidades técnicas'],
+  ['languages', 'sprachen|sprachkenntnisse|fremdsprachen|fremdsprachenkenntnisse|languages|language skills|languages known|language known|linguistic proficiency|language proficiency|langues|compétences linguistiques|idiomas|lenguas'],
+  ['certificates', 'zertifikate|zertifizierungen|weiterbildung|weiterbildungen|fortbildung|fortbildungen|kurse|schulungen|lehrgänge|certifications|certificates|licenses|licences|certifications & trainings|certifications and trainings|trainings|trainings attended|courses|courses & certifications|courses and certifications|professional certifications|certificats|formation continue|certificaciones|certificados|cursos'],
+  ['projects', 'projekte|ausgewählte projekte|projects|selected projects|projects undertaken|academic projects|personal projects|key projects|major projects|open source contributions|open-source contributions|projets|proyectos'],
   ['volunteering', 'ehrenamt|ehrenamtliches engagement|ehrenamtliche tätigkeit|ehrenamtliche tätigkeiten|soziales engagement|engagement|volunteering|volunteer experience|volunteer work|bénévolat|engagement associatif|voluntariado'],
   ['interests', 'interessen|hobbys|hobbies|freizeit|freizeitaktivitäten|interessen und hobbys|hobbys und interessen|interests|centres d\'intérêt|centres d’intérêt|loisirs|intérêts|intereses|aficiones'],
-  ['contact', 'kontakt|kontaktdaten|persönliche daten|persönliche angaben|persönliches|angaben zur person|contact|contact information|contact details|personal details|personal information|coordonnées|informations personnelles|contacto|datos personales|datos de contacto'],
+  ['contact', 'kontakt|kontaktdaten|persönliche daten|persönliche angaben|persönliches|angaben zur person|contact|contact information|contact details|personal details|personal information|personal profile|personal data|personal particulars|biodata|bio data|bio-data|coordonnées|informations personnelles|contacto|datos personales|datos de contacto'],
   ['additional', 'weiteres|sonstiges|sonstige angaben|zusätzliche informationen|additional information|other|divers|autres|otros|información adicional'],
-  ['awards', 'auszeichnungen|preise|awards|honors|honours|prix|distinctions|premios'],
+  ['awards', 'auszeichnungen|preise|awards|honors|honours|prix|distinctions|premios|achievements|achievements & awards|achievements and awards|awards & achievements|awards and achievements|accomplishments|awards and recognition|honours and awards|honors and awards'],
+  ['activities', 'extra-curricular activities|extra curricular activities|extracurricular activities|co-curricular activities|co curricular activities|extra-curricular|co-curricular|positions of responsibility|position of responsibility|leadership roles|patents'],
+  // Werden nicht übernommen, sondern in der Rückmeldung mit Grund genannt.
+  ['declaration', 'declaration|self declaration|self-declaration'],
+  ['strengths', 'strengths|key strengths|personal strengths|my strengths|strengths and weaknesses'],
+  ['references', 'references|referees'],
   ['publications', 'publikationen|veröffentlichungen|publications|publicaciones'],
 ];
 for (const [sec, list] of exactList) for (const w of list.split('|')) EXACT[w] = sec;
@@ -296,7 +329,10 @@ function exactSection(text: string): Sec | null {
   const t = normHeading(text.replace(/\([^()]{0,40}\)/g, ''));
   if (!t || t.length > 50 || /\d/.test(t)) return null;
   if (EXACT[t]) return EXACT[t];
-  const parts = t.split(/\s+(?:und|&|and|et|y|\/|\+)\s+|\s*&\s*|\s*\/\s*/).filter(Boolean);
+  // Linear statt quadratisch (redoscheck.mjs, 17.11.2026): kein führendes
+  // \s* vor & und /, stattdessen die Teile trimmen; (?<!\s) setzt das Wort-
+  // Trennzeichen nur am Anfang einer Leerraum-Folge an.
+  const parts = t.split(/(?<!\s)\s+(?:und|and|et|y|\+)\s+|[&/]/).map(p => p.trim()).filter(Boolean);
   if (parts.length > 1 && parts.every(p => EXACT[p])) return EXACT[parts[0]];
   if (words(t) <= 3) for (const [re, sec] of LAST_WORD) if (re.test(t)) return sec;
   return null;
@@ -325,14 +361,14 @@ function headingOf(t: string): Heading | null {
   }
   m = /^\*\*([^*]{1,120})\*\*\s*:?\s*$/.exec(t) || /^__([^_]{1,120})__\s*:?\s*$/.exec(t);
   if (m) {
-    const text = cleanInline(m[1]).replace(/\s*:$/, '');
+    const text = cleanInline(m[1]).replace(/(?<!\s)\s*:$/, '');
     return text ? { kind: 'bold', level: 0, text } : null;
   }
   if (t.length <= 60 && !/[@\d]/.test(t) && !bulletOf(t)) {
     const sp = unspace(t);
     const letters = sp.replace(/[^\p{L}]/gu, '');
     if (letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()) {
-      return { kind: 'caps', level: 0, text: sp.replace(/\s*:$/, '') };
+      return { kind: 'caps', level: 0, text: sp.replace(/(?<!\s)\s*:$/, '') };
     }
   }
   m = /^([^:|]{2,50}):$/.exec(t);
@@ -374,6 +410,27 @@ const LABEL_FIELDS: [RegExp, PField][] = [
   [/^(?:name|vor- und nachname|vorname und nachname|vollst[äa]ndiger name|full name|nom(?: complet)?|pr[ée]nom et nom|nombre(?: completo)?|nombre y apellidos)$/, 'name'],
   [/^(?:berufsbezeichnung|job title|titre|puesto)$/, 'title'],
 ];
+/** Angaben aus „Personal Details"/„Biodata", die nicht in einen deutschen
+ *  Lebenslauf gehören (BA/ZAV „Working and living in Germany" 01/2026:
+ *  Familienstand und Religion sind nicht nötig; Namen der Eltern, Kaste,
+ *  Ausweisnummern und Gehalt haben im Lebenslauf nichts zu suchen). Sie
+ *  werden nicht übernommen, sondern in der Rückmeldung genannt. */
+const DROP_LABELS: [RegExp, DroppedKind][] = [
+  [/^(?:father|mother|parent|guardian|spouse|husband|wife)(?:['’]?s)?(?:\s(?:full\s)?(?:name|occupation|profession))?$|^(?:s|d|w)\s?\/\s?o$|^(?:son|daughter|wife) of$/, 'parents'],
+  [/^(?:religion|religious affiliation|faith)$/, 'religion'],
+  [/^(?:caste|sub-?caste|caste category|social category)$/, 'caste'],
+  [/^(?:gender|sex)$/, 'gender'],
+  [/^(?:passport(?:\s(?:no\.?|number|num|details|id))?|aadhaa?r(?:\s(?:no\.?|number|card))?|pan(?:\s(?:no\.?|number|card))?|national id(?:\snumber)?)$/, 'idNumber'],
+  [/^(?:(?:current|present|expected|last)\s)?(?:annual\s)?(?:ctc|salary|package)(?:\s\(?(?:lpa|p\.a\.|in lakhs?|inr)\)?)?$/, 'salary'],
+  [/^(?:height|weight|blood group)$/, 'biodata'],
+];
+
+function dropKindOfLabel(label: string): DroppedKind | null {
+  const l = label.toLowerCase().replace(/\s+/g, ' ').replace(/[.:]+$/, '').trim();
+  for (const [re, k] of DROP_LABELS) if (re.test(l)) return k;
+  return null;
+}
+
 const SOCIAL_LABEL: Record<string, SocialPlatform> = {
   linkedin: 'linkedin', 'linked in': 'linkedin', github: 'github', xing: 'xing', twitter: 'twitter', x: 'twitter',
   bluesky: 'bluesky', mastodon: 'mastodon', instagram: 'instagram', youtube: 'youtube', tiktok: 'tiktok',
@@ -491,6 +548,24 @@ interface Acc {
   custom: CustomSection[];
   additional: string[];
   unsorted: string[];
+  dropped: DroppedItem[];
+  notes: Set<ImportNote>;
+}
+
+function pushDropped(acc: Acc, kind: DroppedKind, text: string) {
+  const t = flat(text);
+  if (!t || acc.dropped.length >= 60) return;
+  acc.dropped.push({ kind, text: clipField(t, LONG) });
+}
+
+/** „Father's Name: …", „Religion: …" usw. → nicht übernehmen, nennen. */
+function dropLabelled(acc: Acc, t: string): boolean {
+  const ls = labelSplit(t);
+  if (!ls) return false;
+  const k = dropKindOfLabel(ls.label);
+  if (!k) return false;
+  pushDropped(acc, k, ls.value ? `${ls.label}: ${ls.value}` : ls.label);
+  return true;
 }
 
 function pushUnsorted(acc: Acc, prefix: string, text: string) {
@@ -506,8 +581,10 @@ function addSocial(acc: Acc, platform: SocialPlatform, value: string) {
 }
 
 function setField(acc: Acc, f: PField, value: string, prefix: string, label?: string): void {
-  const v = clipField(flat(value), f === 'name' ? 120 : f === 'title' ? 160 : SHORT);
+  let v = clipField(flat(value), f === 'name' ? 120 : f === 'title' ? 160 : SHORT);
   if (!v) return;
+  // „ARJUN KUMAR SHARMA" (häufig in indischen Lebensläufen) → „Arjun Kumar Sharma".
+  if (f === 'name' && /\p{Lu}{2}/u.test(v) && v === v.toUpperCase()) v = v.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (_m, a: string, b: string) => a + b.toUpperCase());
   const P = acc.P;
   if (f === 'location') { P.location = P.location ? clipField(`${P.location}, ${v}`) : v; return; }
   if (P[f]) { if (P[f] !== v) pushUnsorted(acc, prefix, label ? `${label}: ${v}` : v); return; }
@@ -517,7 +594,7 @@ function setField(acc: Acc, f: PField, value: string, prefix: string, label?: st
 const SKILL_DEFAULT: Record<Lang, string> = { de: 'Kenntnisse', en: 'Skills', fr: 'Compétences', es: 'Habilidades' };
 
 function niceLabel(s: string): string {
-  const t = flat(s).replace(/\s*:$/, '');
+  const t = flat(s).replace(/(?<!\s)\s*:$/, '');
   if (t.length > 3 && t === t.toUpperCase() && t !== t.toLowerCase()) return t.charAt(0) + t.slice(1).toLowerCase();
   return t;
 }
@@ -551,6 +628,7 @@ function parseContactLine(acc: Acc, line: string, prefix: string): { used: boole
     const f = fieldOfLabel(whole.label);
     const social = SOCIAL_LABEL[whole.label.toLowerCase()];
     const multi = /\s\|\s|\s·\s|\s•\s|\t/.test(whole.value) && /:\s/.test(whole.value);
+    if (!multi && dropLabelled(acc, t)) return { used: true, rest: [] };
     if ((f || social) && whole.value && !multi) {
       if (social) addSocial(acc, social, whole.value);
       else setField(acc, f!, whole.value, prefix, whole.label);
@@ -583,6 +661,7 @@ function fieldOfLabel(label: string): PField | null {
 }
 
 function handleContactSeg(acc: Acc, seg: string, prefix: string): boolean {
+  if (dropLabelled(acc, seg)) return true;
   const ls = labelSplit(seg);
   if (ls && ls.value) {
     const social = SOCIAL_LABEL[ls.label.toLowerCase()];
@@ -629,6 +708,9 @@ function isNameLike(s: string): boolean {
   return w.every(x => /^[\p{Lu}][\p{L}'’.-]*$/u.test(x) || /^(?:von|van|de|der|den|la|le|del|da|di|du|y|zu|ten|ter|al|el|bin|dos|das)$/.test(x));
 }
 
+const DECLARATION_RE = /^\W{0,4}(?:i|we)\s(?:do\s)?(?:hereby|solemnly)\s(?:hereby\s|solemnly\s)?(?:declare|affirm|certify|state|confirm)(?![\p{L}])|^\W{0,4}i\s(?:declare|affirm|certify)\sthat(?![\p{L}])/iu;
+const REFERENCES_LINE_RE = /^\W{0,4}references?\s(?:are\s|will be\s)?(?:available\s|furnished\s|provided\s)?(?:up)?on\s(?:request|demand)\.?$/i;
+
 function splitBlocks(lines: string[]): Block[] {
   const blocks: Block[] = [{ sec: 'head', title: '', lines: [] }];
   let cur = blocks[0];
@@ -637,6 +719,15 @@ function splitBlocks(lines: string[]): Block[] {
     const t = raw.trim();
     if (t.startsWith('|') && isSepRow(tableCells(t))) { cur.lines.push({ t, blank: false, hd: null, sep: true }); continue; }
     if (!t || isRule(t)) { cur.lines.push({ t: '', blank: true, hd: null }); continue; }
+    /* „I hereby declare that …" ohne eigene Überschrift: ab hier Erklärung
+     * (Ort, Datum und Name darunter gehören dazu). „References available on
+     * request" ist eine einzelne Zeile, danach geht es im Abschnitt weiter. */
+    if (cur.sec !== 'declaration' && DECLARATION_RE.test(t)) {
+      cur = { sec: 'declaration', title: 'Declaration', lines: [{ t, blank: false, hd: null }] };
+      blocks.push(cur);
+      continue;
+    }
+    if (REFERENCES_LINE_RE.test(t)) { blocks.push({ sec: 'references', title: 'References', lines: [{ t, blank: false, hd: null }] }); continue; }
     const hd = headingOf(t);
     if (hd) {
       let sec: Sec | null;
@@ -647,10 +738,16 @@ function splitBlocks(lines: string[]): Block[] {
         /* „**Praktikum Marketing**" im Berufsweg ist eine Station, keine Überschrift. */
         if (sec && sec === cur.sec && !EXACT[normHeading(hd.text)]) sec = null;
       }
+      /* „Achievements:" oder „Key Achievements" unter einer Station ist eine
+       * Zwischenüberschrift, kein neuer Abschnitt (nur Großbuchstaben oder
+       * #/## gelten dort als Abschnitt). */
+      if (sec && (cur.sec === 'experience' || cur.sec === 'projects' || cur.sec === 'volunteering')
+        && hd.kind !== 'caps' && !(hd.kind === 'md' && hd.level <= 2) && SUB_LABEL.test(hd.text.trim())) sec = null;
       if (sec === 'profile' && cur.sec === 'head' && !headName && /^r[ée]sum[ée]$|^resume$/i.test(normHeading(hd.text))) sec = null;
       if (sec) {
-        if (!(hd.kind === 'plain' && sec === cur.sec)) {
-          cur = { sec, title: niceLabel(hd.text.replace(/\s*:$/, '')), lines: [] };
+        /* Gleicher Abschnitt ohne Auszeichnung: weiterlaufen — außer bei Kenntnissen, dort ist „Tools & Technologies" eine eigene Gruppe. */
+        if (!(hd.kind === 'plain' && sec === cur.sec && !(sec === 'skills' && EXACT[normHeading(hd.text)] && cur.lines.some(l => !l.blank)))) {
+          cur = { sec, title: niceLabel(hd.text.replace(/(?<!\s)\s*:$/, '')), lines: [] };
           blocks.push(cur);
         }
         continue;
@@ -686,8 +783,11 @@ function tryInlineSection(acc: Acc, t: string, prefix: string): boolean {
       if (looksSpoken(items)) { for (const it of items) pushLang(acc, it, prefix); return true; }
       addSkills(acc, ls.label, items); return true;
     case 'languages': for (const it of items) pushLang(acc, it, prefix); return true;
-    case 'interests': case 'awards': addCustom(acc, ls.label, ls.value); return true;
-    case 'profile': acc.profile = acc.profile ? `${acc.profile}\n${ls.value}` : ls.value; return true;
+    case 'interests': case 'awards': case 'activities': addCustom(acc, ls.label, ls.value); return true;
+    case 'profile':
+      if (OBJECTIVE_RE.test(ls.label)) acc.notes.add('objective');
+      acc.profile = acc.profile ? `${acc.profile}\n${ls.value}` : ls.value; return true;
+    case 'declaration': case 'strengths': case 'references': pushDropped(acc, sec, `${ls.label}: ${ls.value}`); return true;
     case 'certificates': pushCert(acc, ls.value, prefix); return true;
     case 'additional': acc.additional.push(clipField(ls.value, LONG)); return true;
     default: return false;
@@ -698,6 +798,10 @@ function pushLang(acc: Acc, item: string, prefix: string, levelForAll = '') {
   const e = parseLangItem(item);
   if (!e) { pushUnsorted(acc, prefix, item); return; }
   if (levelForAll && !e.level) e.level = clipField(levelForAll, 120);
+  /* Dieselbe Sprache zweimal (eigener Abschnitt und „Languages Known" in den
+   * persönlichen Angaben): einmal behalten, ein fehlendes Niveau ergänzen. */
+  const same = acc.langs.find(x => x.language.toLowerCase() === e.language.toLowerCase());
+  if (same) { if (!same.level && e.level) same.level = e.level; else if (e.level && same.level !== e.level) pushUnsorted(acc, prefix, item); return; }
   if (acc.langs.length < 30) acc.langs.push(e);
 }
 
@@ -753,7 +857,26 @@ function parseContact(acc: Acc, b: Block) {
   }
 }
 
+/** „Career Objective" — in Indien üblich, in Deutschland ein kurzes Profil. */
+const OBJECTIVE_RE = /objective|zielsetzung/i;
+
+/** Erklärung, Stärken, Referenzen: ganzer Abschnitt nicht übernommen. */
+function parseDropped(acc: Acc, b: Block, kind: DroppedKind) {
+  const parts: string[] = [];
+  for (const L of b.lines) {
+    if (L.blank || L.sep) continue;
+    const raw = L.hd ? L.hd.text : L.t;
+    const t = flat(cleanInline(bulletOf(raw) ?? raw));
+    if (t) parts.push(t);
+  }
+  if (!parts.length) return;
+  // Stärken und Referenzen als Liste, die Erklärung als ein Text.
+  if (kind === 'declaration') pushDropped(acc, kind, parts.join(' '));
+  else pushDropped(acc, kind, parts.join(' · '));
+}
+
 function parseProfile(acc: Acc, b: Block) {
+  if (OBJECTIVE_RE.test(b.title)) acc.notes.add('objective');
   const out: string[] = [];
   let para = '';
   const flush = () => { if (para) out.push(para); para = ''; };
@@ -884,6 +1007,7 @@ function parseListSection(acc: Acc, b: Block) {
     const t = cleanInline(bulletOf(raw) ?? raw);
     if (!t) continue;
     if (b.sec === 'additional') {
+      if (dropLabelled(acc, t)) continue;
       const ls = labelSplit(t);
       const f = ls && ls.value ? fieldOfLabel(ls.label) : null;
       if (f && f !== 'name' && f !== 'title') { setField(acc, f, ls!.value, b.title, ls!.label); continue; }
@@ -901,6 +1025,7 @@ function parseUnknown(acc: Acc, b: Block) {
     const raw = L.hd ? L.hd.text : L.t;
     const t = cleanInline(bulletOf(raw) ?? raw);
     if (!t) continue;
+    if (dropLabelled(acc, t)) continue;
     const ls = labelSplit(t);
     const f = ls && ls.value ? fieldOfLabel(ls.label) : null;
     if (f && f !== 'name' && f !== 'title') { setField(acc, f, ls!.value, b.title, ls!.label); continue; }
@@ -962,10 +1087,10 @@ function tableEntries(lines: string[]): RawEntry[] {
     if (/^(?:von|start|beginn|from|du|de|desde)$/.test(h)) return 'start';
     if (/^(?:bis|ende|end|to|au|hasta|a)$/.test(h)) return 'end';
     if (/zeit|datum|jahr|period|date|year|p[ée]riode|ann[ée]e|fecha|a[ñn]o|dauer/.test(h)) return 'date';
-    if (/position|titel|rolle|t[äa]tigkeit$|funktion|beruf|stelle|role|title|job|poste|fonction|puesto|cargo|abschluss|degree|dipl[ôo]me|t[íi]tulo|studiengang|qualifikation/.test(h)) return 'role';
-    if (/firma|unternehmen|arbeitgeber|betrieb|company|employer|organi[sz]ation|entreprise|soci[ée]t[ée]|empresa|schule|hochschule|universit|institution|einrichtung|bildungseinrichtung|school|[ée]tablissement|[ée]cole|centro|instituci/.test(h)) return 'org';
+    if (/position|titel|rolle|t[äa]tigkeit$|funktion|beruf|stelle|role|title|job|poste|fonction|puesto|cargo|abschluss|degree|dipl[ôo]me|t[íi]tulo|studiengang|qualifikation|qualification|course|examination/.test(h)) return 'role';
+    if (/firma|unternehmen|arbeitgeber|betrieb|company|employer|organi[sz]ation|entreprise|soci[ée]t[ée]|empresa|schule|hochschule|universit|institut|college|board|einrichtung|bildungseinrichtung|school|[ée]tablissement|[ée]cole|centro|instituci/.test(h)) return 'org';
     if (/^(?:ort|standort|location|city|lieu|ville|ciudad|lugar|ubicaci[óo]n)$/.test(h)) return 'loc';
-    if (/aufgaben|beschreibung|t[äa]tigkeiten|inhalt|details|description|responsibilit|missions|tareas|funciones|note|grade|schwerpunkt|erfolge|achievements/.test(h)) return 'desc';
+    if (/aufgaben|beschreibung|t[äa]tigkeiten|inhalt|details|description|responsibilit|missions|tareas|funciones|note|grade|c?gpa|cpi|percentage|marks|score|result|%|schwerpunkt|erfolge|achievements/.test(h)) return 'desc';
     return null;
   };
   const cols = header ? header.map(colOf) : null;
@@ -1316,10 +1441,10 @@ function countFound(cv: CVData): TextImportResult['found'] {
 
 // ── Einstieg ────────────────────────────────────────────────────────────────
 
-function parseTolerant(main: string, outside: string[], base: CVData, lang: Lang): { cv: CVData; unsorted: string[] } {
+function parseTolerant(main: string, outside: string[], base: CVData, lang: Lang): { cv: CVData; unsorted: string[]; dropped: DroppedItem[]; notes: ImportNote[] } {
   const acc: Acc = {
     lang, P: {}, socials: [], profile: '', headProfile: [],
-    exp: [], edu: [], skills: [], langs: [], projects: [], certs: [], vols: [], pubs: [], custom: [], additional: [], unsorted: [],
+    exp: [], edu: [], skills: [], langs: [], projects: [], certs: [], vols: [], pubs: [], custom: [], additional: [], unsorted: [], dropped: [], notes: new Set(),
   };
   for (const o of outside) pushUnsorted(acc, '', cleanInline(o));
 
@@ -1337,7 +1462,8 @@ function parseTolerant(main: string, outside: string[], base: CVData, lang: Lang
       case 'projects': parseProjects(acc, b); break;
       case 'volunteering': parseVolunteering(acc, b); break;
       case 'publications': parsePublications(acc, b); break;
-      case 'interests': case 'awards': case 'additional': parseListSection(acc, b); break;
+      case 'interests': case 'awards': case 'additional': case 'activities': parseListSection(acc, b); break;
+      case 'declaration': case 'strengths': case 'references': parseDropped(acc, b, b.sec); break;
       default: parseUnknown(acc, b);
     }
   }
@@ -1364,7 +1490,10 @@ function parseTolerant(main: string, outside: string[], base: CVData, lang: Lang
   const custom = acc.custom.filter(s => s.items?.length || s.entries?.length);
   if (custom.length) cv.customSections = [...(base.customSections ?? []), ...custom];
   cv.labels = base.labels;
-  return { cv, unsorted: acc.unsorted };
+  // Noten als CGPA, GPA oder Prozent: Original behalten, Umrechnung ergänzen.
+  const GRADE_RE = /(?<![\p{L}])(?:c?gpa|cpi|sgpa|percentage)(?![\p{L}])|\d{2}(?:[.,]\d{1,2})?\s?%/iu;
+  if (cv.education.some(e => GRADE_RE.test(`${e.degree} ${e.notes ?? ''}`))) acc.notes.add('grades');
+  return { cv, unsorted: acc.unsorted, dropped: acc.dropped, notes: [...acc.notes] };
 }
 
 /**
@@ -1382,15 +1511,15 @@ export function importCvText(text: string, base: CVData, lang: Lang): TextImport
     const trimmed = main.replace(/^\s*\n/, '').replace(/^[ \t]+(?=---)/, '');
     if (isCvMarkdown(trimmed) && looksLikeOwnExport(trimmed)) {
       const cv = markdownToCvData(trimmed, base);
-      return { cv, unsorted: [], found: countFound(cv), strict: true };
+      return { cv, unsorted: [], dropped: [], notes: [], found: countFound(cv), strict: true };
     }
-    const { cv, unsorted } = parseTolerant(main, outside, base, L);
-    return { cv, unsorted, found: countFound(cv), strict: false };
+    const { cv, unsorted, dropped, notes } = parseTolerant(main, outside, base, L);
+    return { cv, unsorted, dropped, notes, found: countFound(cv), strict: false };
   } catch {
     let cv: CVData;
     try { cv = clone(base); } catch { cv = base; }
     const unsorted = input.split('\n').map(l => l.trim()).filter(l => l && !isRule(l)).slice(0, MAX_UNSORTED).map(l => clipField(l, LONG));
-    return { cv, unsorted, found: countFound(cv), strict: false };
+    return { cv, unsorted, dropped: [], notes: [], found: countFound(cv), strict: false };
   }
 }
 

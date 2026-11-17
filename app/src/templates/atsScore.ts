@@ -61,7 +61,7 @@ export type AtsLang = 'de' | 'en' | 'fr' | 'es';
  * Portale" ist eine Einordnung mit Herstellerbelegen, keine Zusage. */
 const LABELS: Record<AtsLang, Record<AtsLevel, string>> = {
   de: { high: 'Gut für Portale', medium: 'Für Portale geeignet', low: 'Für Mail und Druck' },
-  en: { high: 'Good for portals', medium: 'Suits portals', low: 'For email and print' },
+  en: { high: 'Good for portals', medium: 'Portal-friendly', low: 'For email and print' },
   fr: { high: 'Bien lu par les portails', medium: 'Adapté aux portails', low: 'E-mail et impression' },
   es: { high: 'Buena para portales', medium: 'Apta para portales', low: 'Correo e impresión' },
 };

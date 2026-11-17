@@ -10,7 +10,7 @@
 // Sprache: Deutsch ist maßgeblich. Wer nicht auf Deutsch bestellt hat,
 // bekommt die englische Lesehilfe aus mails.ts.
 
-import { layout, btn, h, p, escapeHtml, MAIL_COLORS, withTag } from '../mail.js';
+import { layout, btn, h, p, escapeHtml, MAIL_COLORS, withTag, knownLang, mailDate } from '../mail.js';
 import { legalMail, legalLang, withdrawalDoc, docText, LEGAL } from './legal.js';
 
 const { LINE, PAPER, SOFT } = MAIL_COLORS;
@@ -69,15 +69,19 @@ function linkify(escaped) {
 }
 const pre = t => `<pre style="white-space:pre-wrap;font-family:Inter,Segoe UI,Arial,sans-serif;font-size:12px;line-height:1.55;color:${SOFT};background:${PAPER};border:1px solid ${LINE};border-radius:9px;padding:14px;margin:0 0 16px;">${escapeHtml(t)}</pre>`;
 
-/** Zeilen aus mails.ts → { subject, html, text }. */
-function fromLines({ subject, lines, footer = [] }, { button = null, appendix = [] } = {}) {
+/** Zeilen aus mails.ts → { subject, html, text }. lang: Sprache der Mail
+ *  (Fuß und lang-Attribut), Standard Deutsch. */
+function fromLines({ subject, lines, footer = [] }, { button = null, appendix = [], lang = 'de' } = {}) {
   const html = lines.map(l => (l === '' ? '' : p(linkify(escapeHtml(l))))).join('')
     + (button ? `<div style="margin:4px 0 16px;">${btn(button.href, escapeHtml(button.label))}</div>` : '')
     + appendix.map(a => `<div style="border-top:1px solid ${LINE};margin:20px 0 16px;"></div>${a.title ? p(`<strong>${escapeHtml(a.title)}</strong>`) : ''}${pre(a.text)}`).join('')
     + (footer.length ? `<div style="border-top:1px solid ${LINE};margin:20px 0 12px;"></div><p style="font-size:11px;line-height:1.5;color:#8b8d9b;margin:0;">${footer.map(f => escapeHtml(f)).join('<br/>')}</p>` : '');
   const text = [...lines, ...appendix.flatMap(a => ['', a.title || '', a.text]), '', ...footer].join('\n');
-  return { subject, html: layout(html), text };
+  return { subject, html: layout(html, lang), text };
 }
+
+/** Leere Zeilen nicht doppelt und nicht am Ende. */
+const tidy = lines => lines.filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '' && i < a.length - 1));
 
 /* ── Registrierung ───────────────────────────────────────────────────── */
 
@@ -107,7 +111,7 @@ export function tplConfirmEmail({ token, base, lang = 'de', productName = 'CV-Hu
   const L = legalLang(lang);
   const m0 = legalMail('registrationConfirmation', L, { PRODUCT_NAME: productName, CONFIRM_URL: url, BASE_URL: b || '' });
   const m = m0 && tips ? withTipsLines(m0, L) : m0;
-  if (m) return withTag('confirm_email', fromLines(m));
+  if (m) return withTag('confirm_email', fromLines(m, { lang: L }));
   // TODO(Rechtstexte): Ersatz ohne legal-texts.json.
   const fallback = {
     subject: `Bitte bestätige deine E-Mail-Adresse für ${productName}`,
@@ -127,7 +131,7 @@ export function tplOrderConfirmation({ order, seller, productName, base }) {
   const wd = withdrawalDoc(values, 'de');
   const appendix = [{ title: '', text: docText(wd) }];
   const m = legalMail('orderConfirmation', L, values);
-  if (m) return withTag('order_confirmation', fromLines(m, { appendix }));
+  if (m) return withTag('order_confirmation', fromLines(m, { appendix, lang: L }));
   // TODO(Rechtstexte): Ersatz ohne legal-texts.json.
   return withTag('order_confirmation', fromLines({
     subject: `Bestellbestätigung ${order.order_no} · Rechnung ${order.invoice_no}`,
@@ -149,7 +153,7 @@ export function tplWithdrawalReceipt({ order, statement, receivedAt, refundStatu
   const values = legalValues({ order, seller, productName, base, lang: L, extra: { refundStatus, values: { RECEIVED_AT: berlinDateTime(receivedAt) } } });
   const appendix = statement ? [{ title: L === 'de' ? 'Ihre Erklärung im Wortlaut' : 'Your declaration (German record)', text: statement }] : [];
   const m = legalMail('withdrawalReceipt', L, values);
-  if (m) return withTag('withdrawal_receipt', fromLines(m, { appendix }));
+  if (m) return withTag('withdrawal_receipt', fromLines(m, { appendix, lang: L }));
   return withTag('withdrawal_receipt', fromLines({
     subject: `Eingangsbestätigung Ihres Widerrufs – Bestellung ${order.order_no}`,
     lines: ['Ihr Widerruf ist bei uns eingegangen.', '', `Eingang: ${values.RECEIVED_AT}`, `Bestellung: ${order.order_no}`, `Erstattung: ${values.PRICE}, vollständig (${values.REFUND_STATUS}).`],
@@ -158,39 +162,86 @@ export function tplWithdrawalReceipt({ order, statement, receivedAt, refundStatu
 
 /** Widerruf nach Fristende (über das öffentliche Formular): Eingang
  *  bestätigen, Frist nennen, Kündigung als Weg zeigen. */
+/* Sprache (17.11.2026): wie die übrigen Vertragsmails Deutsch oder die
+ * englische Lesehilfe (legalLang, aus der Sprache der Bestellung bzw. des
+ * Kontos). Französisch und Spanisch bekommen Englisch, weil es die
+ * Vertragstexte nur deutsch und englisch gibt. Die englische Fassung sagt,
+ * dass die deutsche maßgeblich ist. */
+const READING_AID = 'This English text is a reading aid; the German version is binding.';
+
+/** Widerruf nach Fristende (über das öffentliche Formular): Eingang
+ *  bestätigen, Frist nennen, Kündigung als Weg zeigen. */
 export function tplWithdrawalLate({ order, statement, receivedAt, base = null }) {
+  const L = legalLang(order?.locale);
   const b = base ? String(base).replace(/\/+$/, '') : '';
-  const lines = [
-    `Guten Tag ${order.billing_name},`, '',
-    'Ihre Widerrufserklärung ist bei uns eingegangen.', '',
-    `Eingang: ${berlinDateTime(receivedAt)}`,
-    `Bestellung: ${order.order_no}`, '',
-    'Die Widerrufsfrist dieser Bestellung war zum Zeitpunkt des Eingangs bereits abgelaufen. Wir haben Ihre Erklärung gespeichert und melden uns innerhalb von zwei Werktagen.',
-    b ? `Den Pass beenden können Sie jederzeit über „Verträge hier kündigen“: ${b}/kuendigen` : '',
-  ];
-  return withTag('withdrawal_late', fromLines({ subject: `Eingangsbestätigung Ihrer Erklärung – Bestellung ${order.order_no}`, lines }, { appendix: statement ? [{ title: 'Ihre Erklärung im Wortlaut', text: statement }] : [] }));
+  const at = berlinDateTime(receivedAt);
+  const t = L === 'de' ? {
+    subject: `Eingangsbestätigung Ihrer Erklärung – Bestellung ${order.order_no}`,
+    lines: [
+      `Guten Tag ${order.billing_name},`, '',
+      'Ihre Widerrufserklärung ist bei uns eingegangen.', '',
+      `Eingang: ${at}`,
+      `Bestellung: ${order.order_no}`, '',
+      'Die Widerrufsfrist dieser Bestellung war zum Zeitpunkt des Eingangs bereits abgelaufen. Wir haben Ihre Erklärung gespeichert und melden uns innerhalb von zwei Werktagen.',
+      b ? `Den Pass beenden können Sie jederzeit über „Verträge hier kündigen“: ${b}/kuendigen` : '',
+    ],
+    title: 'Ihre Erklärung im Wortlaut',
+  } : {
+    subject: `Acknowledgement of your declaration – order ${order.order_no}`,
+    lines: [
+      `Hello ${order.billing_name},`, '',
+      'We have received your withdrawal.', '',
+      `Received: ${at}`,
+      `Order: ${order.order_no}`, '',
+      'The withdrawal period for this order had already ended when your declaration arrived. We have stored your declaration and will get back to you within two working days.',
+      b ? `You can end the pass at any time via “Cancel contracts here”: ${b}/kuendigen` : '',
+      '', READING_AID,
+    ],
+    title: 'Your declaration',
+  };
+  return withTag('withdrawal_late', fromLines({ subject: t.subject, lines: tidy(t.lines) }, { appendix: statement ? [{ title: t.title, text: statement }] : [], lang: L }));
 }
 
-/** Öffentliche Erklärung (Widerruf oder Kündigung), die sich nicht sofort
- *  zuordnen ließ: Eingang an die eingegebene Adresse bestätigen, ohne etwas
- *  über Bestellungen zu sagen. Text des Widerrufs aus widerruf.ts (unmatched). */
-export function tplDeclarationUnmatched({ type, statement, receivedAt }) {
-  const fnText = LEGAL?.withdrawal?.de?.fn?.unmatched;
-  const what = type === 'withdrawal' ? 'Widerruf' : 'Kündigung';
-  const lines = [
-    'Guten Tag,', '',
-    `Ihre Erklärung (${what}) ist bei uns eingegangen.`, '',
-    `Eingang: ${berlinDateTime(receivedAt)}`, '',
-    type === 'withdrawal' && fnText ? fnText : 'Wir konnten sie nicht sofort einer Bestellung zuordnen. Ihre Erklärung ist trotzdem eingegangen; wir prüfen sie und melden uns innerhalb von zwei Werktagen.',
-    '', 'Bitte heben Sie diese Mail als Beleg auf.',
-  ];
-  return withTag('declaration_unmatched', fromLines({ subject: `Eingangsbestätigung Ihrer Erklärung (${what})`, lines }, { appendix: [{ title: 'Ihre Erklärung im Wortlaut', text: statement }] }));
+/** Erklärung (Widerruf oder Kündigung), die sich nicht sofort zuordnen ließ:
+ *  Eingang an die eingegebene Adresse bestätigen, ohne etwas über
+ *  Bestellungen zu sagen. Text des Widerrufs aus widerruf.ts (unmatched).
+ *  lang: Sprache der Bestellung bzw. des Kontos, sonst Deutsch. */
+export function tplDeclarationUnmatched({ type, statement, receivedAt, lang = 'de' }) {
+  const L = legalLang(lang);
+  const w = type === 'withdrawal';
+  const fnText = LEGAL?.withdrawal?.[L]?.fn?.unmatched;
+  const at = berlinDateTime(receivedAt);
+  const t = L === 'de' ? {
+    what: w ? 'Widerruf' : 'Kündigung',
+    lines: what => [
+      'Guten Tag,', '',
+      `Ihre Erklärung (${what}) ist bei uns eingegangen.`, '',
+      `Eingang: ${at}`, '',
+      w && fnText ? fnText : 'Wir konnten sie nicht sofort einer Bestellung zuordnen. Ihre Erklärung ist trotzdem eingegangen; wir prüfen sie und melden uns innerhalb von zwei Werktagen.',
+      '', 'Bitte heben Sie diese Mail als Beleg auf.',
+    ],
+    subject: what => `Eingangsbestätigung Ihrer Erklärung (${what})`,
+    title: 'Ihre Erklärung im Wortlaut',
+  } : {
+    what: w ? 'withdrawal' : 'cancellation',
+    lines: what => [
+      'Hello,', '',
+      `We have received your declaration (${what}).`, '',
+      `Received: ${at}`, '',
+      w && fnText ? fnText : 'We could not match it to an order straight away. Your declaration has still been received; we will check it and get back to you within two working days.',
+      '', 'Please keep this email as a record.',
+      '', READING_AID,
+    ],
+    subject: what => `Acknowledgement of your declaration (${what})`,
+    title: 'Your declaration',
+  };
+  return withTag('declaration_unmatched', fromLines({ subject: t.subject(t.what), lines: t.lines(t.what) }, { appendix: [{ title: t.title, text: statement }], lang: L }));
 }
 
 export function tplRefundDone({ order, seller = {}, productName = '', base = null }) {
   const L = legalLang(order.locale);
   const m = legalMail('refundDone', L, legalValues({ order, seller, productName, base, lang: L }));
-  if (m) return withTag('refund_done', fromLines(m));
+  if (m) return withTag('refund_done', fromLines(m, { lang: L }));
   return withTag('refund_done', fromLines({ subject: `Erstattung ausgeführt – Bestellung ${order.order_no}`, lines: [`Die Erstattung von ${euro(order.amount_cents, order.currency)} für die Bestellung ${order.order_no} ist ausgeführt.`] }));
 }
 
@@ -207,7 +258,7 @@ export function tplCancellationReceipt({ order, receivedAt, kind, reason, effect
   } } });
   const appendix = statement ? [{ title: L === 'de' ? 'Ihre Erklärung im Wortlaut' : 'Your declaration', text: statement }] : [];
   const m = legalMail('cancellationReceipt', L, values);
-  if (m) return withTag('cancellation_receipt', fromLines(m, { appendix }));
+  if (m) return withTag('cancellation_receipt', fromLines(m, { appendix, lang: L }));
   return withTag('cancellation_receipt', fromLines({
     subject: `Kündigungsbestätigung – Bewerbungs-Pass ${order?.order_no || ''}`,
     lines: ['Wir bestätigen den Eingang Ihrer Kündigung.', '', `Eingang: ${values.RECEIVED_AT}`, `Art: ${kindText}`, `Grund: ${reason || '—'}`, `Der Vertrag endet am: ${values.CANCEL_EFFECTIVE}`],
@@ -217,21 +268,66 @@ export function tplCancellationReceipt({ order, receivedAt, kind, reason, effect
 /* ── Pass endet ──────────────────────────────────────────────────────── */
 
 /** Hinweis 14 bzw. 3 Tage vor Ende des Passes, mit „Pass verlängern“.
- *  TODO(Rechtstexte): kein Pflichttext, eigene Fassung des Backends. */
-export function tplPassEnding({ username, until, daysLeft, base }) {
-  const de = berlinDate(until);
+ *  TODO(Rechtstexte): kein Pflichttext, eigene Fassung des Backends.
+ *  Seit 17.11.2026 in der Sprache des Kontos (lang = users.mail_lang). Ohne
+ *  bekannte Sprache wie bisher Deutsch mit einem englischen Absatz. */
+const PASS_ENDING = {
+  de: {
+    subject: d => `Dein Bewerbungs-Pass endet am ${d}`,
+    h: n => `Noch ${n === 1 ? 'ein Tag' : `${n} Tage`}`,
+    intro: (u, d) => `Hallo ${u}, dein Bewerbungs-Pass endet am <strong>${d}</strong>. Er verlängert sich nicht von selbst, es gibt kein Abo. Danach kannst du deine Lebensläufe weiter öffnen, exportieren und löschen, aber im Konto nicht mehr ändern. Gelöscht wird nichts.`,
+    longer: 'Du brauchst länger? Ein neuer Pass schließt direkt an das bisherige Ende an.',
+    btn: 'Pass verlängern →',
+    keep: 'Willst du deine Unterlagen unabhängig vom Konto behalten: DOCX, JSON, PDF und die Vorlage als ZIP gibt es im Export-Bereich des Editors, auch nach dem Ende des Passes.',
+  },
+  en: {
+    subject: d => `Your application pass ends on ${d}`,
+    h: n => `${n === 1 ? 'One day' : `${n} days`} left`,
+    intro: (u, d) => `Hi ${u}, your application pass ends on <strong>${d}</strong>. It does not renew by itself; there is no subscription. Afterwards you can still open, export and delete your CVs, but no longer edit them in your account. Nothing is deleted.`,
+    longer: 'Need longer? A new pass starts right where the current one ends.',
+    btn: 'Extend pass →',
+    keep: 'To keep your documents independently of the account: DOCX, JSON, PDF and the template as a ZIP are in the editor’s export panel, also after the pass has ended.',
+  },
+  fr: {
+    subject: d => `Votre pass candidature se termine le ${d}`,
+    h: n => (n === 1 ? 'Plus qu’un jour' : `Plus que ${n} jours`),
+    intro: (u, d) => `Bonjour ${u}, votre pass candidature se termine le <strong>${d}</strong>. Il ne se renouvelle pas automatiquement, il n’y a pas d’abonnement. Ensuite, vous pourrez toujours ouvrir, exporter et supprimer vos CV, mais plus les modifier dans le compte. Rien n’est supprimé.`,
+    longer: 'Besoin de plus de temps ? Un nouveau pass prend le relais dès la fin de l’actuel.',
+    btn: 'Prolonger le pass →',
+    keep: 'Pour conserver vos documents indépendamment du compte : DOCX, JSON, PDF et le modèle en ZIP se trouvent dans le panneau d’export de l’éditeur, même après la fin du pass.',
+  },
+  es: {
+    subject: d => `Tu pase de candidatura termina el ${d}`,
+    h: n => (n === 1 ? 'Queda un día' : `Quedan ${n} días`),
+    intro: (u, d) => `Hola ${u}, tu pase de candidatura termina el <strong>${d}</strong>. No se renueva solo, no hay suscripción. Después podrás seguir abriendo, exportando y borrando tus currículums, pero ya no editarlos en la cuenta. No se borra nada.`,
+    longer: '¿Necesitas más tiempo? Un pase nuevo empieza justo donde termina el actual.',
+    btn: 'Ampliar el pase →',
+    keep: 'Si quieres conservar tus documentos sin depender de la cuenta: DOCX, JSON, PDF y la plantilla en ZIP están en el panel de exportación del editor, también después de que termine el pase.',
+  },
+};
+export function tplPassEnding({ username, until, daysLeft, base, lang = null }) {
   const n = Math.max(1, Math.round(Number(daysLeft) || 1));
   const b = base ? String(base).replace(/\/+$/, '') : null;
+  const L = knownLang(lang);
+  const block = (X, d) => {
+    const t = PASS_ENDING[X];
+    return h(t.h(n))
+      + p(t.intro(escapeHtml(username), d))
+      + p(t.longer)
+      + (b ? `<div style="margin:4px 0 16px;">${btn(`${b}/preise`, t.btn)}</div>` : '')
+      + p(t.keep);
+  };
+  if (L) {
+    const d = mailDate(L, until);
+    return withTag('pass_ending', { subject: PASS_ENDING[L].subject(d), html: layout(block(L, d), L) });
+  }
+  const de = berlinDate(until);
   return withTag('pass_ending', {
-    subject: `Dein Bewerbungs-Pass endet am ${de} · Your pass ends on ${de}`,
+    subject: `Dein Bewerbungs-Pass endet am ${de} · Your pass ends on ${mailDate('en', until)}`,
     html: layout(
-      h(`Noch ${n === 1 ? 'ein Tag' : `${n} Tage`}`)
-      + p(`Hallo ${escapeHtml(username)}, dein Bewerbungs-Pass endet am <strong>${de}</strong>. Er verlängert sich nicht von selbst, es gibt kein Abo. Danach kannst du deine Lebensläufe weiter öffnen, exportieren und löschen, aber im Konto nicht mehr ändern. Gelöscht wird nichts.`)
-      + p('Du brauchst länger? Ein neuer Pass schließt direkt an das bisherige Ende an.')
-      + (b ? `<div style="margin:4px 0 16px;">${btn(`${b}/preise`, 'Pass verlängern →')}</div>` : '')
-      + p('Willst du deine Unterlagen unabhängig vom Konto behalten: DOCX, JSON, PDF und die Vorlage als ZIP gibt es im Export-Bereich des Editors, auch nach dem Ende des Passes.')
+      block('de', de)
       + `<div style="border-top:1px solid ${LINE};margin:20px 0 16px;"></div>`
-      + p(`<strong>Your pass ends on ${de}.</strong> It does not renew automatically. Afterwards you can still open, export and delete your résumés.${b ? ` Extend it at ${escapeHtml(b)}/preise.` : ''}`),
+      + p(`<strong>Your application pass ends on ${mailDate('en', until)}.</strong> It does not renew by itself. Afterwards you can still open, export and delete your CVs.${b ? ` Extend it at ${escapeHtml(b)}/preise.` : ''}`),
     ),
   });
 }
@@ -330,59 +426,88 @@ export function tplDeclarationReceivedPlain({ type, receivedAt, name = null, ord
   }));
 }
 
+/* ── Konto: Adresswechsel und Registrierung (17.11.2026 vierfach) ─────────
+ * Wie die Kontomails in mail.js: de, en, fr, es; Deutsch und Spanisch duzen,
+ * Französisch siezt. lang kommt vom Aufrufer (Konto bzw. Anfrage). */
 /** Name des Angebots in Betreffzeilen, wenn der Aufrufer keinen mitgibt. */
 const defaultProductName = () => (process.env.PRODUCT_NAME || process.env.APP_NAME || 'CV-Hub').trim();
+const L4 = v => knownLang(v) || 'de';
+const trimBase = base => (base ? String(base).replace(/\/+$/, '') : '');
 
+const CONFIRM_CHANGE = {
+  de: {
+    subject: n => `Bitte bestätige deine neue E-Mail-Adresse für ${n}`,
+    lines: ['Für ein Konto wurde diese Adresse als neue E-Mail-Adresse angegeben.', 'Erst mit deinem Klick wird sie die Adresse des Kontos; bis dahin gilt die bisherige.', '', 'Der Link gilt 48 Stunden. Warst du das nicht, ignoriere diese Mail — dann ändert sich nichts.'],
+    button: 'Neue Adresse bestätigen',
+  },
+  en: {
+    subject: n => `Please confirm your new email address for ${n}`,
+    lines: ['This address was entered as the new email address for an account.', 'It only becomes the account’s address once you click; until then the old one stays in use.', '', 'The link is valid for 48 hours. If this wasn’t you, ignore this email and nothing will change.'],
+    button: 'Confirm new address',
+  },
+  fr: {
+    subject: n => `Veuillez confirmer votre nouvelle adresse e-mail pour ${n}`,
+    lines: ['Cette adresse a été indiquée comme nouvelle adresse e-mail d’un compte.', 'Elle ne devient l’adresse du compte qu’après votre clic ; d’ici là, l’ancienne reste valable.', '', 'Le lien est valable 48 heures. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail : rien ne changera.'],
+    button: 'Confirmer la nouvelle adresse',
+  },
+  es: {
+    subject: n => `Confirma tu nueva dirección de correo para ${n}`,
+    lines: ['Esta dirección se ha indicado como nueva dirección de correo de una cuenta.', 'Solo pasa a ser la dirección de la cuenta cuando hagas clic; hasta entonces sigue valiendo la anterior.', '', 'El enlace es válido durante 48 horas. Si no has sido tú, ignora este correo y no cambiará nada.'],
+    button: 'Confirmar la nueva dirección',
+  },
+};
 /** Bestätigungslink für eine NEUE Adresse (M2). */
-export function tplConfirmEmailChange({ token, base, productName = defaultProductName() }) {
-  const b = base ? String(base).replace(/\/+$/, '') : null;
+export function tplConfirmEmailChange({ token, base, productName = defaultProductName(), lang = 'de' }) {
+  const L = L4(lang);
+  const t = CONFIRM_CHANGE[L];
+  const b = trimBase(base);
   const url = b ? `${b}/email-bestaetigen?token=${encodeURIComponent(token)}` : '';
-  return withTag('confirm_email_change', fromLines({
-    subject: `Bitte bestätige deine neue E-Mail-Adresse für ${productName}`,
-    lines: [
-      'Für ein Konto wurde diese Adresse als neue E-Mail-Adresse angegeben.',
-      'Erst mit deinem Klick wird sie die Adresse des Kontos; bis dahin gilt die bisherige.', '',
-      'Der Link gilt 48 Stunden. Warst du das nicht, ignoriere diese Mail — dann ändert sich nichts.',
-      '', 'This address was entered as the new e-mail address of an account. It only takes effect once you confirm it (link valid for 48 hours).',
-    ],
-  }, { button: url ? { href: url, label: 'Neue Adresse bestätigen' } : null }));
+  return withTag('confirm_email_change', fromLines({ subject: t.subject(productName), lines: t.lines }, { button: url ? { href: url, label: t.button } : null, lang: L }));
 }
 
+const CHANGE_TAKEN = {
+  de: { subject: n => `Hinweis zu deinem Konto bei ${n}`, lines: ['Jemand hat versucht, diese E-Mail-Adresse für ein anderes Konto einzutragen. Zu dieser Adresse gibt es bei uns schon ein Konto — es bleibt, wie es ist.', '', 'Warst du das selbst und willst die Konten zusammenlegen, melde dich einfach. Sonst musst du nichts tun.'], signIn: b => `Anmelden: ${b}` },
+  en: { subject: n => `A note about your ${n} account`, lines: ['Someone tried to add this email address to a different account. There is already an account with this address here, and it stays as it is.', '', 'If that was you and you want to merge the accounts, just get in touch. Otherwise you don’t need to do anything.'], signIn: b => `Sign in: ${b}` },
+  fr: { subject: n => `Information concernant votre compte ${n}`, lines: ['Quelqu’un a essayé d’ajouter cette adresse e-mail à un autre compte. Un compte existe déjà avec cette adresse chez nous ; il reste inchangé.', '', 'Si c’était vous et que vous souhaitez fusionner les comptes, contactez-nous. Sinon, vous n’avez rien à faire.'], signIn: b => `Se connecter : ${b}` },
+  es: { subject: n => `Aviso sobre tu cuenta de ${n}`, lines: ['Alguien ha intentado añadir esta dirección de correo a otra cuenta. Ya existe una cuenta con esta dirección y se queda como está.', '', 'Si has sido tú y quieres unir las cuentas, escríbenos. Si no, no tienes que hacer nada.'], signIn: b => `Iniciar sesión: ${b}` },
+};
 /** An die NEUE Adresse, wenn sie schon zu einem anderen Konto gehört (N5):
- *  derselbe Ablauf von außen, aber ein Hinweis statt eines Links. */
-export function tplEmailChangeTaken({ base, productName = defaultProductName() }) {
-  const b = base ? String(base).replace(/\/+$/, '') : '';
-  return withTag('email_change_taken', fromLines({
-    subject: `Hinweis zu deinem Konto bei ${productName}`,
-    lines: [
-      'Jemand hat versucht, diese E-Mail-Adresse für ein anderes Konto einzutragen. Zu dieser Adresse gibt es bei uns schon ein Konto — es bleibt, wie es ist.',
-      '', 'Warst du das selbst und willst die Konten zusammenlegen, melde dich einfach. Sonst musst du nichts tun.',
-      b ? `Anmelden: ${b}` : '',
-    ].filter(Boolean),
-  }));
+ *  derselbe Ablauf von außen, aber ein Hinweis statt eines Links. lang: die
+ *  Sprache des Kontos, dem die Adresse gehört. */
+export function tplEmailChangeTaken({ base, productName = defaultProductName(), lang = 'de' }) {
+  const L = L4(lang);
+  const t = CHANGE_TAKEN[L];
+  const b = trimBase(base);
+  return withTag('email_change_taken', fromLines({ subject: t.subject(productName), lines: [...t.lines, ...(b ? [t.signIn(b)] : [])] }, { lang: L }));
 }
 
+const CHANGE_REQUESTED = {
+  de: { subject: n => `Neue E-Mail-Adresse für dein Konto angefordert — ${n}`, lines: (u, e) => [`Für dein Konto ${u} wurde die neue Adresse ${e} angegeben.`, 'Sie gilt erst, wenn sie über den Link in der Mail an die neue Adresse bestätigt ist. Bis dahin gehen alle Nachrichten weiter an diese Adresse.', '', 'Warst du das nicht, ändere bitte dein Passwort und melde dich bei uns.'] },
+  en: { subject: n => `New email address requested for your account — ${n}`, lines: (u, e) => [`The new address ${e} was entered for your account ${u}.`, 'It only takes effect once it has been confirmed via the link in the email sent to the new address. Until then, all messages keep coming to this address.', '', 'If this wasn’t you, please change your password and get in touch.'] },
+  fr: { subject: n => `Nouvelle adresse e-mail demandée pour votre compte — ${n}`, lines: (u, e) => [`La nouvelle adresse ${e} a été indiquée pour votre compte ${u}.`, 'Elle ne s’applique qu’une fois confirmée via le lien envoyé à la nouvelle adresse. D’ici là, tous les messages continuent d’arriver à cette adresse.', '', 'Si vous n’êtes pas à l’origine de cette demande, changez votre mot de passe et contactez-nous.'] },
+  es: { subject: n => `Nueva dirección de correo solicitada para tu cuenta — ${n}`, lines: (u, e) => [`Para tu cuenta ${u} se ha indicado la nueva dirección ${e}.`, 'Solo será válida cuando se confirme con el enlace del correo enviado a la nueva dirección. Hasta entonces, todos los mensajes siguen llegando a esta dirección.', '', 'Si no has sido tú, cambia tu contraseña y ponte en contacto con nosotros.'] },
+};
 /** An die ALTE Adresse, wenn ein Wechsel angefordert wurde (M2). */
-export function tplEmailChangeRequested({ username, newEmail, productName = defaultProductName() }) {
-  return withTag('email_change_requested', fromLines({
-    subject: `Neue E-Mail-Adresse für dein Konto angefordert — ${productName}`,
-    lines: [
-      `Für dein Konto ${username} wurde die neue Adresse ${newEmail} angegeben.`,
-      'Sie gilt erst, wenn sie über den Link in der Mail an die neue Adresse bestätigt ist. Bis dahin gehen alle Nachrichten weiter an diese Adresse.',
-      '', 'Warst du das nicht, ändere bitte dein Passwort und melde dich bei uns.',
-    ],
-  }));
+export function tplEmailChangeRequested({ username, newEmail, productName = defaultProductName(), lang = 'de' }) {
+  const L = L4(lang);
+  const t = CHANGE_REQUESTED[L];
+  return withTag('email_change_requested', fromLines({ subject: t.subject(productName), lines: t.lines(username, newEmail) }, { lang: L }));
 }
 
-/** Registrierung mit einer Adresse, zu der es schon ein Konto gibt (N5). */
-export function tplRegisterExisting({ base, productName = defaultProductName() }) {
-  const b = base ? String(base).replace(/\/+$/, '') : '';
+const REGISTER_EXISTING = {
+  de: { subject: n => `Du hast schon ein Konto bei ${n}`, first: 'Mit dieser E-Mail-Adresse wollte sich gerade jemand neu registrieren. Zu der Adresse gibt es schon ein Konto.', signIn: b => `Anmelden: ${b} (Passwort vergessen? Auf der Anmeldeseite lässt es sich zurücksetzen.)`, last: 'Warst du das nicht, musst du nichts tun. Dein Konto bleibt, wie es ist.' },
+  en: { subject: n => `You already have a ${n} account`, first: 'Someone just tried to register again with this email address. There is already an account for it.', signIn: b => `Sign in: ${b} (forgotten your password? You can reset it on the sign-in page.)`, last: 'If this wasn’t you, you don’t need to do anything. Your account stays as it is.' },
+  fr: { subject: n => `Vous avez déjà un compte ${n}`, first: 'Quelqu’un vient d’essayer de créer un compte avec cette adresse e-mail. Un compte existe déjà pour cette adresse.', signIn: b => `Se connecter : ${b} (mot de passe oublié ? Vous pouvez le réinitialiser sur la page de connexion.)`, last: 'Si vous n’êtes pas à l’origine de cette demande, vous n’avez rien à faire. Votre compte reste inchangé.' },
+  es: { subject: n => `Ya tienes una cuenta en ${n}`, first: 'Alguien acaba de intentar registrarse con esta dirección de correo. Ya existe una cuenta para ella.', signIn: b => `Iniciar sesión: ${b} (¿has olvidado la contraseña? Puedes restablecerla en la página de inicio de sesión.)`, last: 'Si no has sido tú, no tienes que hacer nada. Tu cuenta se queda como está.' },
+};
+/** Registrierung mit einer Adresse, zu der es schon ein Konto gibt (N5).
+ *  lang: Sprache der Anfrage (sonst die des bestehenden Kontos). */
+export function tplRegisterExisting({ base, productName = defaultProductName(), lang = 'de' }) {
+  const L = L4(lang);
+  const t = REGISTER_EXISTING[L];
+  const b = trimBase(base);
   return withTag('register_existing', fromLines({
-    subject: `Du hast schon ein Konto bei ${productName}`,
-    lines: [
-      'Mit dieser E-Mail-Adresse wollte sich gerade jemand neu registrieren. Zu der Adresse gibt es schon ein Konto.',
-      b ? `Anmelden: ${b} (Passwort vergessen? Auf der Anmeldeseite lässt es sich zurücksetzen.)` : '',
-      '', 'Warst du das nicht, musst du nichts tun. Dein Konto bleibt, wie es ist.',
-    ].filter((l, i, a) => l !== '' || a[i - 1] !== ''),
-  }));
+    subject: t.subject(productName),
+    lines: [t.first, ...(b ? [t.signIn(b)] : []), '', t.last],
+  }, { lang: L }));
 }

@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { readFileSync } from 'node:fs';
 import { pool, initDb, logEvent } from './db.js';
 import { cvToMarkdown, markdownToCV, clToMarkdown, markdownToCl, MAX_MARKDOWN_CHARS } from './markdown.js';
-import { sendMail, mailConfigured, isMailConfigured, onMailResult, tplInvite, tplPasswordReset, tplPasswordChanged, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest } from './mail.js';
+import { sendMail, mailConfigured, isMailConfigured, onMailResult, tplInvite, tplPasswordReset, tplPasswordChanged, tplEmailChanged, tplOffboarding, tplLoginCode, tplAccessRequest, knownLang } from './mail.js';
 import { securityHeaders, trustProxyWarning, assertPayloadSize, createLimiter, BusyError, originGuard, subnetOf, clientKey } from './guards.js';
 import { createRenderer, rendererHosts, MAX_PAGES } from './pdf.js';
 import { buildShareSnapshot, shareResponse } from './share.js';
@@ -31,6 +31,26 @@ import { mountSaleAdmin } from './saleadmin.js';
 import { loadSaleRow, effectiveEnv } from './salesettings.js';
 import { applyStoredSettings, settingsKey, verifyUnsubscribeToken } from './mailsettings.js';
 import { TIPS_CONSENT_VERSION, mailLang } from './mailflows.js';
+
+/* Sprache der Konto- und Sicherheitsmails (17.11.2026).
+ * requestLang: aus der Anfrage, erst das Body-Feld `lang`, dann
+ * Accept-Language (die App schickt dort ihre Oberflächensprache mit); die
+ * erste bekannte Sprache zählt, sonst null.
+ * langFor: Konto (users.mail_lang) vor Anfrage vor Deutsch. Für Mails, die
+ * an ein anderes Konto gehen als das anfragende, nur dessen mail_lang. */
+function requestLang(req) {
+  const fromBody = knownLang(req?.body?.lang);
+  if (fromBody) return fromBody;
+  const header = String(req?.get?.('accept-language') || '');
+  for (const part of header.split(',')) {
+    const l = knownLang(part.split(';')[0]);
+    if (l) return l;
+  }
+  return null;
+}
+function langFor(user, req = null) {
+  return knownLang(user?.mail_lang) || requestLang(req) || 'de';
+}
 
 /* Befund N10 (08.10.2026): Die alte Prüfung ließ Klammern, Anführungszeichen,
  * spitze Klammern und Kommas durch. Genau diese Zeichen bilden die
@@ -111,7 +131,7 @@ function rateLimit({ route, max: baseMax, windowMs }) {
     if (b.count >= max) {
       const retry = Math.ceil((b.reset - now) / 1000);
       res.setHeader('Retry-After', retry);
-      return res.status(429).json({ error: `Zu viele Versuche. Bitte ${retry}s warten.` });
+      return res.status(429).json({ error: `Zu viele Versuche. Bitte ${retry}s warten.`, code: 'rate_limited', retryAfter: retry });
     }
     b.count += 1;
     next();
@@ -328,7 +348,7 @@ async function startTwoFactor(user) {
     'INSERT INTO login_codes (challenge, user_id, code_hash, expires_at) VALUES ($1, $2, $3, $4)',
     [challenge, user.id, sha256(code), expires],
   );
-  const m = tplLoginCode({ code });
+  const m = tplLoginCode({ code, lang: langFor(user) });
   const sent = await sendMail({ to: user.email, ...m });
   logEvent(user.id, 'twofa_challenge');
   return { challenge, sent };
@@ -411,7 +431,7 @@ async function requireAuth(req, res, next) {
   // die Admin-Sitzung, nie das Cookie der Hauptdomain oder ein API-Schlüssel.
   if (req.adminScope) return admin.authenticate(req, res, next);
   const u = await loadUser(req);
-  if (!u) return res.status(401).json({ error: 'Nicht angemeldet.' });
+  if (!u) return res.status(401).json({ error: 'Nicht angemeldet.', code: 'auth_required' });
   req.user = u;
   pool.query('UPDATE users SET last_seen_at = now() WHERE id = $1', [u.id]).catch(() => {});
   next();
@@ -521,7 +541,7 @@ async function acceptAccessRequest(reqRow, decidedBy) {
     `UPDATE access_requests SET status = 'accepted', invite_code = $1, decided_by = $2, decided_at = now() WHERE id = $3`,
     [code, decidedBy, reqRow.id],
   );
-  const m = tplInvite({ code, note: null });
+  const m = tplInvite({ code, note: null, lang: knownLang(reqRow.lang) || 'de' });
   const emailed = await sendMail({ to: reqRow.email, ...m });
   logEvent(decidedBy ?? null, 'access_accept');
   return { code, emailed };
@@ -533,8 +553,8 @@ app.post('/api/access/request', rateLimit({ route: 'access', max: 5, windowMs: 6
   const name = String(req.body?.name || '').trim().slice(0, 120);
   const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 200);
   const message = String(req.body?.message || '').trim().slice(0, 1000);
-  if (name.length < 2) return res.status(400).json({ error: 'Bitte gib deinen Namen an.' });
-  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.' });
+  if (name.length < 2) return res.status(400).json({ error: 'Bitte gib deinen Namen an.', code: 'name_required' });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.', code: 'email_invalid' });
 
   const dupe = await pool.query(
     `SELECT 1 FROM users WHERE lower(email) = $1
@@ -545,8 +565,8 @@ app.post('/api/access/request', rateLimit({ route: 'access', max: 5, windowMs: 6
 
   const ua = summarizeUa(req.get('user-agent') || '');
   const { rows } = await pool.query(
-    'INSERT INTO access_requests (name, email, message, ua_summary) VALUES ($1, $2, $3, $4) RETURNING id',
-    [name, email, message || null, ua],
+    'INSERT INTO access_requests (name, email, message, ua_summary, lang) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [name, email, message || null, ua, requestLang(req)],
   );
   const id = rows[0].id;
   /* Ohne bekannte Basis-URL entstehen KEINE Aktionslinks. Lieber eine
@@ -666,7 +686,7 @@ async function issueEmailConfirmation(user, base, lang = 'de', { kind = 'signup'
   /* Double-Opt-in für Tipps: Wartet eine Einwilligung auf die Bestätigung
    * der Adresse, sagt die Mail das ausdrücklich (mailtexts, tips). */
   const tips = kind === 'signup' && mailer ? (await mailer.prefs(user)).tips === 'pending' : false;
-  const tpl = kind === 'change' ? tplConfirmEmailChange({ token, base, lang, productName }) : tplConfirmEmail({ token, base, lang, productName, tips });
+  const tpl = kind === 'change' ? tplConfirmEmailChange({ token, base, lang: knownLang(lang) || 'de', productName }) : tplConfirmEmail({ token, base, lang, productName, tips });
   return sendMail({ to, ...tpl });
 }
 
@@ -694,7 +714,7 @@ function signupArt9Version(body) {
  * nicht vorangekreuzte Häkchen in der Fassung schickt, die der Server kennt.
  * Wirksam wird die Einwilligung erst mit dem Klick im Bestätigungslink. */
 const signupTips = body => String(body?.tipsConsent?.version || '') === TIPS_CONSENT_VERSION;
-const signupLang = (req) => mailLang(String(req.body?.lang || req.get('accept-language') || 'de'));
+const signupLang = (req) => requestLang(req) || mailLang('de');
 const signupTermsVersion = () => legalVersions().terms;
 
 async function registerOpen(req, res) {
@@ -703,7 +723,7 @@ async function registerOpen(req, res) {
   const wanted = String(req.body?.username || '').trim();
   if (!EMAIL_RE.test(email) || email.length > 200) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.', code: 'email_invalid' });
   if (password.length < 8) return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen haben.', code: 'password_short' });
-  if (wanted && !/^[a-zA-Z0-9_.-]{3,32}$/.test(wanted)) return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).' });
+  if (wanted && !/^[a-zA-Z0-9_.-]{3,32}$/.test(wanted)) return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).', code: 'username_invalid' });
   if (req.body?.ageConfirmed16 !== true) {
     return res.status(400).json({ error: 'Ein Konto ist ab 16 Jahren möglich. Bitte bestätige dein Alter.', code: 'age16_required' });
   }
@@ -718,7 +738,7 @@ async function registerOpen(req, res) {
   let user;
   try {
     await client.query('BEGIN');
-    const dupE = await client.query('SELECT 1 FROM users WHERE lower(email) = $1', [email]);
+    const dupE = await client.query('SELECT mail_lang FROM users WHERE lower(email) = $1', [email]);
     if (dupE.rowCount) {
       await client.query('ROLLBACK');
       /* N5: Die Antwort bleibt (die Oberfläche meldet direkt an, ein
@@ -728,7 +748,7 @@ async function registerOpen(req, res) {
       const k = `register-existing:${email}`;
       if (!bucketBlocked(k, 1)) {
         bucketHit(k, 24 * 60 * 60 * 1000);
-        sendMail({ to: email, ...tplRegisterExisting({ base: publicBaseUrl(req) }) }).catch(() => {});
+        sendMail({ to: email, ...tplRegisterExisting({ base: publicBaseUrl(req), lang: requestLang(req) || langFor(dupE.rows[0]) }) }).catch(() => {});
       }
       return res.status(409).json({ error: 'Für diese E-Mail-Adresse gibt es schon ein Konto. Melde dich an oder setze das Passwort zurück.', code: 'email_taken' });
     }
@@ -756,14 +776,14 @@ async function registerOpen(req, res) {
     await client.query('ROLLBACK').catch(() => {});
     if (err?.code === '23505') return res.status(409).json({ error: 'Für diese E-Mail-Adresse gibt es schon ein Konto.', code: 'email_taken' });
     console.error('register (offen) failed:', err?.message || err);
-    return res.status(500).json({ error: 'Registrierung fehlgeschlagen.' });
+    return res.status(500).json({ error: 'Registrierung fehlgeschlagen.', code: 'registration_failed' });
   } finally {
     client.release();
   }
   logEvent(user.id, 'register_open');
   issueSession(res, user);
   res.json({ user: publicUser(user), emailConfirmed: false, plan: planInfo(user) });
-  const lang = String(req.body?.lang || req.get('accept-language') || 'de').slice(0, 2).toLowerCase();
+  const lang = langFor(user, req);
   issueEmailConfirmation(user, publicBaseUrl(req), lang).catch(err => console.error('confirm-email failed:', err?.message || err));
 }
 
@@ -792,13 +812,13 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
   if (!username && email && EMAIL_RE.test(email)) username = await generateUsername(pool, email);
 
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
-    return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).' });
+    return res.status(400).json({ error: 'Nutzername: 3–32 Zeichen (Buchstaben, Zahlen, . _ -).', code: 'username_invalid' });
   }
   if (password.length < 8) {
-    return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen haben.' });
+    return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen haben.', code: 'password_short' });
   }
   if (email && !EMAIL_RE.test(email)) {
-    return res.status(400).json({ error: 'E-Mail-Adresse ungültig.' });
+    return res.status(400).json({ error: 'E-Mail-Adresse ungültig.', code: 'email_invalid' });
   }
 
   const client = await pool.connect();
@@ -816,28 +836,28 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
     if (firstUser) {
       role = 'admin'; // bootstrap: first account is the admin, no code needed
     } else {
-      if (!inviteCode) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode erforderlich.' }); }
+      if (!inviteCode) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode erforderlich.', code: 'invite_required' }); }
       const { rows: ic } = await client.query('SELECT * FROM invite_codes WHERE code = $1 FOR UPDATE', [inviteCode]);
       const code = ic[0];
-      if (!code || code.revoked) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ungültig.' }); }
-      if (code.expires_at && new Date(code.expires_at) < new Date()) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ist abgelaufen.' }); }
-      if (code.uses >= code.max_uses) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode wurde bereits aufgebraucht.' }); }
+      if (!code || code.revoked) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ungültig.', code: 'invite_invalid' }); }
+      if (code.expires_at && new Date(code.expires_at) < new Date()) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode ist abgelaufen.', code: 'invite_expired' }); }
+      if (code.uses >= code.max_uses) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Einladungscode wurde bereits aufgebraucht.', code: 'invite_used_up' }); }
       /* N8: Ein an eine Adresse gebundener Code war nur dem Namen nach
        * gebunden — gespeichert wurde die Adresse, verglichen nie. */
       if (code.email && String(code.email).trim().toLowerCase() !== email) {
         await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Dieser Einladungscode gilt nur für die E-Mail-Adresse, an die er geschickt wurde. Bitte genau diese Adresse angeben.' });
+        return res.status(403).json({ error: 'Dieser Einladungscode gilt nur für die E-Mail-Adresse, an die er geschickt wurde. Bitte genau diese Adresse angeben.', code: 'invite_email_mismatch' });
       }
       if (Number.isInteger(code.access_days) && code.access_days > 0) accessDays = code.access_days;
     }
 
     // Erst NACH akzeptiertem Code (bzw. Bootstrap) auf Dubletten prüfen.
     const dup = await client.query('SELECT 1 FROM users WHERE lower(username) = lower($1)', [username]);
-    if (dup.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Nutzername ist bereits vergeben.' }); }
+    if (dup.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Nutzername ist bereits vergeben.', code: 'username_taken' }); }
 
     if (email) {
       const dupE = await client.query('SELECT 1 FROM users WHERE lower(email) = $1', [email]);
-      if (dupE.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'E-Mail-Adresse ist bereits registriert.' }); }
+      if (dupE.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'E-Mail-Adresse ist bereits registriert.', code: 'email_taken' }); }
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -877,7 +897,7 @@ app.post('/api/auth/register', rateLimit({ route: 'register', max: 10, windowMs:
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('register failed:', err);
-    res.status(500).json({ error: 'Registrierung fehlgeschlagen.' });
+    res.status(500).json({ error: 'Registrierung fehlgeschlagen.', code: 'registration_failed' });
   } finally {
     client.release();
   }
@@ -909,27 +929,27 @@ app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 6
     const blockedFor = bucketBlocked(acctKey, LOGIN_ACCOUNT_FAILS);
     if (blockedFor) {
       res.setHeader('Retry-After', blockedFor);
-      return res.status(429).json({ error: `Zu viele Fehlversuche für dieses Konto. Bitte ${blockedFor}s warten oder das Passwort zurücksetzen.`, code: 'account_locked' });
+      return res.status(429).json({ error: `Zu viele Fehlversuche für dieses Konto. Bitte ${blockedFor}s warten oder das Passwort zurücksetzen.`, code: 'account_locked', retryAfter: blockedFor });
     }
     // Immer einen bcrypt-Vergleich ausführen (Dummy-Hash bei fehlendem Nutzer),
     // damit die Antwortzeit keine gültigen Nutzernamen verrät. (Finding #5.)
     const passOk = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
     if (!user || !passOk) {
       bucketHit(acctKey, LOGIN_ACCOUNT_WINDOW_MS);
-      return res.status(401).json({ error: 'Nutzername oder Passwort falsch.' });
+      return res.status(401).json({ error: 'Nutzername oder Passwort falsch.', code: 'credentials_wrong' });
     }
-    if (user.disabled) return res.status(403).json({ error: 'Konto gesperrt.' });
+    if (user.disabled) return res.status(403).json({ error: 'Konto gesperrt.', code: 'account_disabled' });
 
     // Zwei-Faktor: aktiv + E-Mail hinterlegt (Aktivieren setzt beides voraus).
     // FAIL CLOSED: Ist der E-Mail-Versand nicht verfügbar, wird der Login
     // verweigert statt still auf Passwort-only herabgestuft. (Finding #3.)
     if (user.twofa_enabled && user.email) {
       if (!mailConfigured) {
-        return res.status(503).json({ error: 'Zwei-Faktor ist für dieses Konto aktiv, aber der E-Mail-Versand ist derzeit nicht verfügbar. Bitte später erneut versuchen oder den Administrator kontaktieren.' });
+        return res.status(503).json({ error: 'Zwei-Faktor ist für dieses Konto aktiv, aber der E-Mail-Versand ist derzeit nicht verfügbar. Bitte später erneut versuchen oder den Administrator kontaktieren.', code: 'twofa_mail_unavailable' });
       }
       const { challenge, sent } = await startTwoFactor(user);
       if (!sent) {
-        return res.status(502).json({ error: 'Der Bestätigungscode konnte nicht versendet werden. Bitte in Kürze erneut anmelden.' });
+        return res.status(502).json({ error: 'Der Bestätigungscode konnte nicht versendet werden. Bitte in Kürze erneut anmelden.', code: 'twofa_send_failed' });
       }
       return res.json({ twofa: true, challenge });
     }
@@ -940,7 +960,7 @@ app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 6
     res.json({ user: publicUser(user) });
   } catch (err) {
     console.error('login failed:', err);
-    res.status(500).json({ error: 'Login fehlgeschlagen.' });
+    res.status(500).json({ error: 'Login fehlgeschlagen.', code: 'login_failed' });
   }
 });
 
@@ -949,7 +969,7 @@ app.post('/api/auth/login', rateLimit({ route: 'login', max: 5, windowMs: 15 * 6
 app.post('/api/auth/verify-2fa', rateLimit({ route: 'verify2fa', max: 20, windowMs: 15 * 60 * 1000 }), async (req, res) => {
   const challenge = String(req.body?.challenge || '').trim();
   const code = String(req.body?.code || '').trim();
-  if (!challenge || !/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Code muss 6-stellig sein.' });
+  if (!challenge || !/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Code muss 6-stellig sein.', code: 'twofa_code_format' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -957,17 +977,17 @@ app.post('/api/auth/verify-2fa', rateLimit({ route: 'verify2fa', max: 20, window
     const lc = rows[0];
     if (!lc || lc.used || new Date(lc.expires_at) < new Date()) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Code ist ungültig oder abgelaufen. Bitte erneut anmelden.' });
+      return res.status(400).json({ error: 'Code ist ungültig oder abgelaufen. Bitte erneut anmelden.', code: 'twofa_code_expired' });
     }
     if (lc.attempts >= 5) {
       await client.query('UPDATE login_codes SET used = true WHERE challenge = $1', [challenge]);
       await client.query('COMMIT');
-      return res.status(429).json({ error: 'Zu viele Fehlversuche. Bitte erneut anmelden.' });
+      return res.status(429).json({ error: 'Zu viele Fehlversuche. Bitte erneut anmelden.', code: 'twofa_too_many' });
     }
     if (lc.code_hash !== sha256(code)) {
       await client.query('UPDATE login_codes SET attempts = attempts + 1 WHERE challenge = $1', [challenge]);
       await client.query('COMMIT');
-      return res.status(401).json({ error: 'Code falsch.' });
+      return res.status(401).json({ error: 'Code falsch.', code: 'twofa_code_wrong' });
     }
     await client.query('UPDATE login_codes SET used = true WHERE challenge = $1', [challenge]);
     // Alle anderen offenen Codes dieses Nutzers ebenfalls entwerten.
@@ -976,7 +996,7 @@ app.post('/api/auth/verify-2fa', rateLimit({ route: 'verify2fa', max: 20, window
 
     const { rows: u } = await pool.query('SELECT * FROM users WHERE id = $1', [lc.user_id]);
     const user = u[0];
-    if (!user || user.disabled) return res.status(403).json({ error: 'Konto gesperrt.' });
+    if (!user || user.disabled) return res.status(403).json({ error: 'Konto gesperrt.', code: 'account_disabled' });
     await pool.query('UPDATE users SET last_seen_at = now() WHERE id = $1', [user.id]);
     logEvent(user.id, 'login');
     issueSession(res, user);
@@ -984,7 +1004,7 @@ app.post('/api/auth/verify-2fa', rateLimit({ route: 'verify2fa', max: 20, window
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('verify-2fa failed:', err?.message || err);
-    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
+    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.', code: 'login_failed' });
   } finally {
     client.release();
   }
@@ -1055,7 +1075,7 @@ app.post('/api/me/consent/art9', rateLimit({ route: 'consent', max: 30, windowMs
         WHERE id = $1 RETURNING *`,
       [req.user.id]);
   const u = rows[0];
-  if (!u) return res.status(404).json({ error: 'Konto nicht gefunden.' });
+  if (!u) return res.status(404).json({ error: 'Konto nicht gefunden.', code: 'account_not_found' });
   logEvent(u.id, give ? 'art9_consent' : 'art9_withdraw');
   const user = publicUser(u);
   user.plan = await planDetails(pool, u);
@@ -1074,7 +1094,7 @@ app.post('/api/me/mail', rateLimit({ route: 'mailprefs', max: 30, windowMs: 60 *
   const body = req.body || {};
   if (body.lang !== undefined) {
     const l = String(body.lang || '').slice(0, 2).toLowerCase();
-    if (!['de', 'en', 'fr', 'es'].includes(l)) return res.status(400).json({ error: 'Sprache: de, en, fr oder es.' });
+    if (!['de', 'en', 'fr', 'es'].includes(l)) return res.status(400).json({ error: 'Sprache: de, en, fr oder es.', code: 'lang_invalid' });
     await pool.query('UPDATE users SET mail_lang = $2 WHERE id = $1', [req.user.id, l]);
     req.user.mail_lang = l;
   }
@@ -1091,7 +1111,7 @@ app.post('/api/me/mail', rateLimit({ route: 'mailprefs', max: 30, windowMs: 60 *
   } else if (body.tips === false) {
     if (await mailer.withdrawTips(req.user.id, 'settings')) logEvent(req.user.id, 'tips_withdraw');
   } else if (body.lang === undefined) {
-    return res.status(400).json({ error: 'Erwartet: tips (true/false) oder lang.' });
+    return res.status(400).json({ error: 'Erwartet: tips (true/false) oder lang.', code: 'request_invalid' });
   }
   res.json({ ok: true, ...(await mailer.prefs(req.user)), ...(confirmationSent !== undefined ? { confirmationSent } : {}) });
 });
@@ -1133,7 +1153,7 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
       /* M2: Erst hier wird die neue Adresse die des Kontos — und zwar nur,
        * wenn sie noch die angeforderte ist und kein anderes Konto sie
        * inzwischen hat. Bestätigt ist sie damit auch. */
-      const { rows: u } = await client.query('SELECT id, username, email, pending_email FROM users WHERE id = $1 FOR UPDATE', [c.user_id]);
+      const { rows: u } = await client.query('SELECT id, username, email, pending_email, mail_lang FROM users WHERE id = $1 FOR UPDATE', [c.user_id]);
       if (!u[0] || String(u[0].pending_email || '').toLowerCase() !== c.email) { await client.query('ROLLBACK'); return invalid(); }
       const taken = await client.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [c.email, c.user_id]);
       if (taken.rowCount) {
@@ -1148,7 +1168,7 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
       await client.query('COMMIT');
       logEvent(c.user_id, 'email_changed');
       const old = u[0].email;
-      if (old && old.toLowerCase() !== c.email) sendMail({ to: old, ...tplEmailChanged({ username: u[0].username, newEmail: c.email }) });
+      if (old && old.toLowerCase() !== c.email) sendMail({ to: old, ...tplEmailChanged({ username: u[0].username, newEmail: c.email, lang: langFor(u[0], req) }) });
       return res.json({ ok: true, emailConfirmed: true, kind: 'change', email: c.email });
     }
     if (String(c.current_email || '').toLowerCase() !== c.email) { await client.query('ROLLBACK'); return invalid(); }
@@ -1167,7 +1187,7 @@ app.post('/api/auth/confirm-email', rateLimit({ route: 'confirm', max: 20, windo
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('confirm-email failed:', err?.message || err);
-    res.status(500).json({ error: 'Bestätigung fehlgeschlagen.' });
+    res.status(500).json({ error: 'Bestätigung fehlgeschlagen.', code: 'confirm_failed' });
   } finally {
     client.release();
   }
@@ -1178,18 +1198,18 @@ app.post('/api/auth/resend-confirmation', rateLimit({ route: 'resend-confirm', m
   if (req.user.pending_email) {
     const taken = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [String(req.user.pending_email).toLowerCase(), req.user.id]);
     // Gleiche Antwort, auch wenn die Adresse vergeben ist (N5) — dann geht nichts hinaus.
-    const sent = taken.rowCount ? true : await issueEmailConfirmation(req.user, publicBaseUrl(req), 'de', { kind: 'change', email: req.user.pending_email });
+    const sent = taken.rowCount ? true : await issueEmailConfirmation(req.user, publicBaseUrl(req), langFor(req.user, req), { kind: 'change', email: req.user.pending_email });
     return res.json({ ok: true, sent: !!sent, pending: true });
   }
   if (emailConfirmed(req.user)) return res.json({ ok: true, alreadyConfirmed: true });
-  if (!req.user.email) return res.status(400).json({ error: 'Im Konto ist keine E-Mail-Adresse hinterlegt.' });
-  const sent = await issueEmailConfirmation(req.user, publicBaseUrl(req));
+  if (!req.user.email) return res.status(400).json({ error: 'Im Konto ist keine E-Mail-Adresse hinterlegt.', code: 'email_missing' });
+  const sent = await issueEmailConfirmation(req.user, publicBaseUrl(req), langFor(req.user, req));
   res.json({ ok: true, sent: !!sent });
 });
 
 /* ALTCHA-Aufgabe für Registrierung und öffentlichen Widerruf. */
 app.get('/api/altcha/challenge', rateLimit({ route: 'altcha', max: 120, windowMs: 10 * 60 * 1000 }), async (_req, res) => {
-  if (!altcha.configured) return res.status(503).json({ error: 'Die Sicherheitsprüfung ist nicht eingerichtet.' });
+  if (!altcha.configured) return res.status(503).json({ error: 'Die Sicherheitsprüfung ist nicht eingerichtet.', code: 'altcha_unavailable' });
   res.setHeader('Cache-Control', 'no-store');
   res.json(await altcha.challenge());
 });
@@ -1211,9 +1231,9 @@ async function revokeAllCredentials(client, userId) {
 app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   const cur = String(req.body?.currentPassword || '');
   const nxt = String(req.body?.newPassword || '');
-  if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.' });
+  if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.', code: 'password_short' });
   if (!(await bcrypt.compare(cur, req.user.password_hash))) {
-    return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.' });
+    return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.', code: 'password_wrong' });
   }
   const hash = await bcrypt.hash(nxt, 10);
   const client = await pool.connect();
@@ -1230,7 +1250,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('change-password failed:', err?.message || err);
-    return res.status(500).json({ error: 'Passwortänderung fehlgeschlagen.' });
+    return res.status(500).json({ error: 'Passwortänderung fehlgeschlagen.', code: 'password_change_failed' });
   } finally {
     client.release();
   }
@@ -1238,7 +1258,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   // entwertet; die eigene aktuelle wird frisch ausgestellt.
   issueSession(res, user);
   logEvent(req.user.id, 'password_changed');
-  if (user?.email) { const m = tplPasswordChanged({ username: user.username }); sendMail({ to: user.email, ...m }); }
+  if (user?.email) { const m = tplPasswordChanged({ username: user.username, lang: langFor(user, req) }); sendMail({ to: user.email, ...m }); }
   res.json({
     ok: true,
     revoked,
@@ -1256,7 +1276,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 app.post('/api/auth/email', rateLimit({ route: 'setemail', max: 12, windowMs: 30 * 60 * 1000 }), requireAuth, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.currentPassword || req.body?.password || '');
-  if (email && !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.' });
+  if (email && !EMAIL_RE.test(email)) return res.status(400).json({ error: 'E-Mail-Adresse ungültig.', code: 'email_invalid' });
   if (!password) return res.status(400).json({ error: 'Bitte zur Bestätigung das aktuelle Passwort angeben.', code: 'password_required' });
   if (!(await bcrypt.compare(password, req.user.password_hash))) {
     return res.status(403).json({ error: 'Aktuelles Passwort ist falsch.', code: 'password_wrong' });
@@ -1278,21 +1298,21 @@ app.post('/api/auth/email', rateLimit({ route: 'setemail', max: 12, windowMs: 30
   if (email) {
     await pool.query('UPDATE users SET pending_email = $1 WHERE id = $2', [email, req.user.id]);
     const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
-    const dupE = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
+    const dupE = await pool.query('SELECT mail_lang FROM users WHERE lower(email) = $1 AND id <> $2', [email, req.user.id]);
     const base = publicBaseUrl(req);
-    const lang = String(req.body?.lang || req.get('accept-language') || 'de').slice(0, 2).toLowerCase();
+    const lang = langFor(rows[0], req);
     if (dupE.rowCount) {
       const k = `email-change-taken:${email}`;
       if (!bucketBlocked(k, 1)) {
         bucketHit(k, 24 * 60 * 60 * 1000);
-        sendMail({ to: email, ...tplEmailChangeTaken({ base }) }).catch(() => {});
+        sendMail({ to: email, ...tplEmailChangeTaken({ base, lang: langFor(dupE.rows[0]) }) }).catch(() => {});
       }
     } else {
       issueEmailConfirmation(rows[0], base, lang, { kind: 'change', email })
         .catch(err => console.error('email-change confirm failed:', err?.message || err));
     }
     logEvent(req.user.id, 'email_change_requested');
-    if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChangeRequested({ username: rows[0].username, newEmail: email }) });
+    if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChangeRequested({ username: rows[0].username, newEmail: email, lang }) });
     return res.json({ ok: true, pending: true, pendingEmail: email, user: publicUser(rows[0]) });
   }
   // E-Mail entfernt → 2FA kann nicht mehr greifen, also abschalten. Sofort
@@ -1300,7 +1320,7 @@ app.post('/api/auth/email', rateLimit({ route: 'setemail', max: 12, windowMs: 30
   await pool.query('UPDATE users SET email = NULL, pending_email = NULL, twofa_enabled = false WHERE id = $1', [req.user.id]);
   const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
   logEvent(req.user.id, 'email_changed');
-  if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChanged({ username: rows[0].username, newEmail: null }) });
+  if (oldEmail) sendMail({ to: oldEmail, ...tplEmailChanged({ username: rows[0].username, newEmail: null, lang: langFor(rows[0], req) }) });
   res.json({ ok: true, pending: false, pendingEmail: null, user: publicUser(rows[0]) });
 });
 
@@ -1321,8 +1341,8 @@ app.get('/api/auth/2fa', requireAuth, (req, res) => {
 app.post('/api/auth/2fa', rateLimit({ route: 'twofatoggle', max: 20, windowMs: 30 * 60 * 1000 }), requireAuth, async (req, res) => {
   const enabled = !!req.body?.enabled;
   if (enabled) {
-    if (!req.user.email) return res.status(400).json({ error: 'Für 2FA muss eine E-Mail-Adresse im Konto hinterlegt sein.' });
-    if (!mailConfigured) return res.status(503).json({ error: 'E-Mail-Versand ist derzeit nicht konfiguriert.' });
+    if (!req.user.email) return res.status(400).json({ error: 'Für 2FA muss eine E-Mail-Adresse im Konto hinterlegt sein.', code: 'twofa_email_required' });
+    if (!mailConfigured) return res.status(503).json({ error: 'E-Mail-Versand ist derzeit nicht konfiguriert.', code: 'mail_unavailable' });
   }
   try {
     await pool.query('UPDATE users SET twofa_enabled = $1 WHERE id = $2', [enabled, req.user.id]);
@@ -1330,7 +1350,7 @@ app.post('/api/auth/2fa', rateLimit({ route: 'twofatoggle', max: 20, windowMs: 3
     res.json({ ok: true, enabled });
   } catch (err) {
     console.error('2fa toggle failed:', err?.message || err);
-    res.status(500).json({ error: 'Änderung fehlgeschlagen.' });
+    res.status(500).json({ error: 'Änderung fehlgeschlagen.', code: 'change_failed' });
   }
 });
 
@@ -1357,7 +1377,7 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
     );
     const user = rows[0];
     if (!user || user.disabled || !user.email) return;   // ohne hinterlegte Mail kein Reset
-    await issuePasswordReset(user, { base });
+    await issuePasswordReset(user, { base, lang: langFor(user, req) });
   } catch (err) {
     console.error('forgot-password failed:', err?.message || err);
   }
@@ -1367,7 +1387,7 @@ app.post('/api/auth/forgot-password', rateLimit({ route: 'forgot', max: 5, windo
  * Offene Registrierung: erst nach bestätigter Adresse — sonst wäre ein Konto
  * mit fremder Adresse über deren Postfach übernehmbar. Höchstens drei Mails
  * je Adresse und Stunde (M3), auch auf Admin-Wunsch. */
-async function issuePasswordReset(user, { base = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null } = {}) {
+async function issuePasswordReset(user, { base = (process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '') || null, lang = null } = {}) {
   if (!user?.email || user.disabled) return { ok: false, status: 409, error: 'Konto ohne Adresse oder gesperrt.' };
   if (!emailConfirmed(user)) return { ok: false, status: 409, error: 'Die Adresse ist noch nicht bestätigt.' };
   if (!base) return { ok: false, status: 503, error: 'PUBLIC_BASE_URL fehlt.' };
@@ -1386,7 +1406,7 @@ async function issuePasswordReset(user, { base = (process.env.PUBLIC_BASE_URL ||
     [sha256(token), user.id, expires],
   );
   logEvent(user.id, 'password_reset_requested');
-  const m = tplPasswordReset({ token, base });
+  const m = tplPasswordReset({ token, base, lang: lang || langFor(user) });
   const sent = await sendMail({ to: user.email, ...m });
   return sent ? { ok: true } : { ok: false, status: 502, error: 'Mailversand fehlgeschlagen.' };
 }
@@ -1395,8 +1415,8 @@ async function issuePasswordReset(user, { base = (process.env.PUBLIC_BASE_URL ||
 app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, windowMs: 30 * 60 * 1000 }), async (req, res) => {
   const token = String(req.body?.token || '').trim();
   const nxt = String(req.body?.newPassword || '');
-  if (!token) return res.status(400).json({ error: 'Token fehlt.' });
-  if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.' });
+  if (!token) return res.status(400).json({ error: 'Token fehlt.', code: 'token_invalid' });
+  if (nxt.length < 8) return res.status(400).json({ error: 'Neues Passwort muss mindestens 8 Zeichen haben.', code: 'password_short' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1404,7 +1424,7 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
     const pr = rows[0];
     if (!pr || pr.used || new Date(pr.expires_at) < new Date()) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Link ist ungültig oder abgelaufen.' });
+      return res.status(400).json({ error: 'Link ist ungültig oder abgelaufen.', code: 'token_invalid' });
     }
     const hash = await bcrypt.hash(nxt, 10);
     // password_changed_at bump entwertet alle Alt-Sessions — wichtig, wenn der
@@ -1418,13 +1438,13 @@ app.post('/api/auth/reset-password', rateLimit({ route: 'reset', max: 10, window
     logEvent(pr.user_id, 'password_reset_done');
     // Wer sein Passwort über die Mail neu gesetzt hat, ist nicht mehr gesperrt (M3, Konto-Limit).
     rateBuckets.delete(`login:acct:id:${pr.user_id}`);
-    const { rows: u } = await pool.query('SELECT username, email FROM users WHERE id = $1', [pr.user_id]);
-    if (u[0]?.email) { const m = tplPasswordChanged({ username: u[0].username }); sendMail({ to: u[0].email, ...m }); }
+    const { rows: u } = await pool.query('SELECT username, email, mail_lang FROM users WHERE id = $1', [pr.user_id]);
+    if (u[0]?.email) { const m = tplPasswordChanged({ username: u[0].username, lang: langFor(u[0], req) }); sendMail({ to: u[0].email, ...m }); }
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('reset-password failed:', err?.message || err);
-    res.status(500).json({ error: 'Zurücksetzen fehlgeschlagen.' });
+    res.status(500).json({ error: 'Zurücksetzen fehlgeschlagen.', code: 'reset_failed' });
   } finally {
     client.release();
   }
@@ -1481,17 +1501,17 @@ const MAX_PHOTO_BYTES_PER_USER = 100 * 1024 * 1024;
 app.post('/api/photos', requireAuth, requireWritable, requireArt9Consent, rateLimit({ route: 'photos', max: 30, windowMs: 60 * 60 * 1000 }), async (req, res) => {
   const mime = String(req.body?.mime || '');
   const b64 = String(req.body?.dataBase64 || '');
-  if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return res.status(400).json({ error: 'Nur JPEG, PNG, WebP oder GIF.' });
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return res.status(400).json({ error: 'Nur JPEG, PNG, WebP oder GIF.', code: 'photo_type' });
   let buf;
-  try { buf = Buffer.from(b64, 'base64'); } catch { return res.status(400).json({ error: 'Ungültige Base64-Daten.' }); }
-  if (buf.length < 100) return res.status(400).json({ error: 'Datei zu klein.' });
-  if (buf.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Maximal 4 MB.' });
-  if (!imageMagicMatches(buf, mime)) return res.status(400).json({ error: 'Dateiformat passt nicht zum angegebenen MIME-Typ.' });
+  try { buf = Buffer.from(b64, 'base64'); } catch { return res.status(400).json({ error: 'Ungültige Base64-Daten.', code: 'photo_invalid' }); }
+  if (buf.length < 100) return res.status(400).json({ error: 'Datei zu klein.', code: 'photo_invalid' });
+  if (buf.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Maximal 4 MB.', code: 'photo_too_large' });
+  if (!imageMagicMatches(buf, mime)) return res.status(400).json({ error: 'Dateiformat passt nicht zum angegebenen MIME-Typ.', code: 'photo_type' });
   /* N4: Obergrenze je Konto. Fotos ohne Verweis räumt prunePhotos nach der
    * Schonfrist ab; wer trotzdem hier ankommt, lädt in Serie hoch. */
   const { rows: q } = await pool.query('SELECT count(*)::int AS n, coalesce(sum(size_bytes), 0)::bigint AS bytes FROM photos WHERE user_id = $1', [req.user.id]);
   if (q[0].n >= MAX_PHOTOS_PER_USER || Number(q[0].bytes) + buf.length > MAX_PHOTO_BYTES_PER_USER) {
-    return res.status(413).json({ error: `Höchstens ${MAX_PHOTOS_PER_USER} Fotos bzw. ${Math.round(MAX_PHOTO_BYTES_PER_USER / 1024 / 1024)} MB je Konto. Bitte nicht mehr benutzte Fotos entfernen.`, code: 'photo_quota' });
+    return res.status(413).json({ error: `Höchstens ${MAX_PHOTOS_PER_USER} Fotos bzw. ${Math.round(MAX_PHOTO_BYTES_PER_USER / 1024 / 1024)} MB je Konto. Bitte nicht mehr benutzte Fotos entfernen.`, code: 'photo_quota', maxPhotos: MAX_PHOTOS_PER_USER, maxMb: Math.round(MAX_PHOTO_BYTES_PER_USER / 1024 / 1024) });
   }
   const id = crypto.randomBytes(12).toString('hex');
   await pool.query('INSERT INTO photos (id, user_id, mime, data, size_bytes) VALUES ($1, $2, $3, $4, $5)', [id, req.user.id, mime, buf, buf.length]);
@@ -1535,9 +1555,9 @@ app.get('/api/photos/:id', async (req, res) => {
  * Datei bis zur Kontolöschung in der Datenbank. Eine Profilversion oder ein
  * Sharelink, der noch darauf zeigt, zeigt danach kein Foto mehr. */
 app.delete('/api/photos/:id', requireAuth, async (req, res) => {
-  if (!PHOTO_ID_RE.test(req.params.id)) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+  if (!PHOTO_ID_RE.test(req.params.id)) return res.status(404).json({ error: 'Foto nicht gefunden.', code: 'photo_not_found' });
   const { rowCount } = await pool.query('DELETE FROM photos WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-  if (!rowCount) return res.status(404).json({ error: 'Foto nicht gefunden.' });
+  if (!rowCount) return res.status(404).json({ error: 'Foto nicht gefunden.', code: 'photo_not_found' });
   logEvent(req.user.id, 'photo_delete');
   res.json({ ok: true });
 });
@@ -1583,7 +1603,7 @@ function recordShareView(token, variant, ua) {
 app.post('/api/resumes/:id/share', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const id = req.params.id;
   const { rows } = await pool.query('SELECT 1 FROM resumes WHERE id = $1 AND user_id = $2', [id, req.user.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.', code: 'profile_not_found' });
   const token = crypto.randomBytes(18).toString('hex');
   const days = parseInt(req.body?.expiresInDays, 10);
   const expiresAt = Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86400 * 1000) : null;
@@ -1636,7 +1656,7 @@ app.post('/api/shares/:token/refresh', requireAuth, requireWritable, requireArt9
       WHERE s.token = $1 AND s.created_by = $2`,
     [req.params.token, req.user.id],
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Link nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Link nicht gefunden.', code: 'share_not_found' });
   await pool.query('UPDATE share_links SET snapshot = $1 WHERE token = $2 AND created_by = $3',
     [buildShareSnapshot(rows[0].payload, req.params.token), req.params.token, req.user.id]);
   await prunePhotosSoon(req.user.id);
@@ -1646,14 +1666,14 @@ app.post('/api/shares/:token/refresh', requireAuth, requireWritable, requireArt9
 // Toggle the cover-letter inclusion on an existing share link.
 app.patch('/api/shares/:token', requireAuth, async (req, res) => {
   const includeCl = req.body?.includeCoverLetter;
-  if (typeof includeCl !== 'boolean') return res.status(400).json({ error: 'includeCoverLetter (bool) erwartet.' });
+  if (typeof includeCl !== 'boolean') return res.status(400).json({ error: 'includeCoverLetter (bool) erwartet.', code: 'request_invalid' });
   // Nach Ablauf darf ein Link nur weniger zeigen, nicht mehr.
   if (includeCl && isAccessExpired(req.user)) return requireWritable(req, res, () => {});
   const r = await pool.query(
     'UPDATE share_links SET include_cover_letter = $1 WHERE token = $2 AND created_by = $3',
     [includeCl, req.params.token, req.user.id],
   );
-  if (r.rowCount === 0) return res.status(404).json({ error: 'Link nicht gefunden.' });
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Link nicht gefunden.', code: 'share_not_found' });
   res.json({ ok: true });
 });
 
@@ -1663,16 +1683,16 @@ app.patch('/api/shares/:token', requireAuth, async (req, res) => {
  * beim ersten Abruf aus dem dann aktuellen Profil, gefiltert wie ein neuer
  * Link; ab da gilt dieser Stand. */
 async function loadShare(token) {
-  if (!/^[0-9a-fA-F]{8,64}$/.test(String(token || ''))) return { status: 404, msg: 'Link nicht gefunden.' };
+  if (!/^[0-9a-fA-F]{8,64}$/.test(String(token || ''))) return { status: 404, msg: 'Link nicht gefunden.', code: 'share_not_found' };
   const { rows } = await pool.query(
     `SELECT s.token, s.created_by, s.expires_at, s.revoked, s.include_cover_letter, s.snapshot, r.payload
        FROM share_links s JOIN resumes r ON r.id = s.resume_id WHERE s.token = $1`,
     [token],
   );
   const s = rows[0];
-  if (!s) return { status: 404, msg: 'Link nicht gefunden.' };
-  if (s.revoked) return { status: 403, msg: 'Link widerrufen.' };
-  if (s.expires_at && new Date(s.expires_at) < new Date()) return { status: 410, msg: 'Link abgelaufen.' };
+  if (!s) return { status: 404, msg: 'Link nicht gefunden.', code: 'share_not_found' };
+  if (s.revoked) return { status: 403, msg: 'Link widerrufen.', code: 'share_revoked' };
+  if (s.expires_at && new Date(s.expires_at) < new Date()) return { status: 410, msg: 'Link abgelaufen.', code: 'share_expired' };
   let snap = s.snapshot;
   if (!snap) {
     snap = buildShareSnapshot(s.payload, s.token);
@@ -1766,7 +1786,7 @@ ${photo ? `<meta name="twitter:image" content="${escapeHtml(photo)}">` : ''}
 
 app.get('/api/share/:token', async (req, res) => {
   const r = await loadShare(req.params.token);
-  if (r.status !== 200) return res.status(r.status).json({ error: r.msg });
+  if (r.status !== 200) return res.status(r.status).json({ error: r.msg, code: r.code });
   recordShareView(req.params.token, 'html', req.get('user-agent'));
   /* Antwortform wie vorher ({ resume, include_cover_letter }) — die ShareView
    * liest sie unverändert. Inhalt: nur die sichtbare Fassung (share.js). */
@@ -1795,14 +1815,14 @@ app.get(/^\/api\/resumes\/([^/]+)\.md$/, requireAuth, async (req, res) => {
 app.post('/api/resumes/:id/import-md', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
-  if (md.length < 20) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
+  if (md.length < 20) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.', code: 'markdown_too_short' });
   // H1: Obergrenze vor dem Parser (ein Profil hat höchstens 200 KB, siehe guards.js).
   if (md.length > MAX_MARKDOWN_CHARS) return res.status(413).json({ error: `Markdown zu groß (höchstens ${Math.round(MAX_MARKDOWN_CHARS / 1000)} KB).`, code: 'markdown_too_large' });
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.', code: 'profile_not_found' });
   let updated;
   try { updated = markdownToCV(md, rows[0].payload, wantedLang(req.body?.lang)); }
-  catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
+  catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt'), code: 'markdown_invalid' }); }
   updated.id = req.params.id;
   if (assertPayloadSize(res, updated)) return;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
@@ -1824,13 +1844,13 @@ app.get(/^\/api\/resumes\/([^/]+)\/cover-letter\.md$/, requireAuth, async (req, 
 app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const md = String(req.body?.markdown || '');
   const dryRun = req.body?.dryRun === true;
-  if (md.length < 10) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.' });
+  if (md.length < 10) return res.status(400).json({ error: 'Markdown fehlt oder zu kurz.', code: 'markdown_too_short' });
   if (md.length > MAX_MARKDOWN_CHARS) return res.status(413).json({ error: `Markdown zu groß (höchstens ${Math.round(MAX_MARKDOWN_CHARS / 1000)} KB).`, code: 'markdown_too_large' });
   const { rows } = await pool.query('SELECT payload FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.', code: 'profile_not_found' });
   let updated;
   try { updated = markdownToCl(md, rows[0].payload, wantedLang(req.body?.lang)); }
-  catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt') }); }
+  catch (e) { return res.status(400).json({ error: 'Markdown-Parser-Fehler: ' + (e?.message || 'unbekannt'), code: 'markdown_invalid' }); }
   updated.id = req.params.id;
   if (assertPayloadSize(res, updated)) return;
   if (dryRun) return res.json({ ok: true, payload: updated, dryRun: true });
@@ -1844,7 +1864,7 @@ app.post('/api/resumes/:id/import-cover-letter-md', requireAuth, requireWritable
 
 app.get('/api/resumes/:id/versions', requireAuth, async (req, res) => {
   const r = await pool.query('SELECT 1 FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-  if (!r.rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.' });
+  if (!r.rows[0]) return res.status(404).json({ error: 'Profil nicht gefunden.', code: 'profile_not_found' });
   const { rows } = await pool.query(
     'SELECT id, source, created_at FROM resume_versions WHERE resume_id = $1 ORDER BY created_at DESC LIMIT 25',
     [req.params.id],
@@ -1853,26 +1873,26 @@ app.get('/api/resumes/:id/versions', requireAuth, async (req, res) => {
 });
 
 app.get('/api/resumes/:id/versions/:vid', requireAuth, async (req, res) => {
-  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
+  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.', code: 'version_not_found' });
   const { rows } = await pool.query(
     `SELECT v.payload, v.source, v.created_at FROM resume_versions v
        JOIN resumes r ON r.id = v.resume_id
       WHERE v.id = $1 AND v.resume_id = $2 AND r.user_id = $3`,
     [req.params.vid, req.params.id, req.user.id],
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Version nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Version nicht gefunden.', code: 'version_not_found' });
   res.json({ version: rows[0] });
 });
 
 app.post('/api/resumes/:id/versions/:vid/restore', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
-  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.' });
+  if (!/^\d{1,9}$/.test(req.params.vid)) return res.status(404).json({ error: 'Version nicht gefunden.', code: 'version_not_found' });
   const { rows } = await pool.query(
     `SELECT v.payload FROM resume_versions v
        JOIN resumes r ON r.id = v.resume_id
       WHERE v.id = $1 AND v.resume_id = $2 AND r.user_id = $3`,
     [req.params.vid, req.params.id, req.user.id],
   );
-  if (!rows[0]) return res.status(404).json({ error: 'Version nicht gefunden.' });
+  if (!rows[0]) return res.status(404).json({ error: 'Version nicht gefunden.', code: 'version_not_found' });
   const restored = { ...rows[0].payload, id: req.params.id };
   if (assertPayloadSize(res, restored)) return;
   await snapshotResume(req.params.id, req.user.id, 'restore');
@@ -1898,7 +1918,7 @@ app.get('/api/resumes', requireAuth, async (req, res) => {
 app.get('/api/resumes/:id', requireAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM resumes WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   const r = rows[0];
-  if (!r) return res.status(404).json({ error: 'Nicht gefunden.' });
+  if (!r) return res.status(404).json({ error: 'Nicht gefunden.', code: 'profile_not_found' });
   res.json({ resume: { id: r.id, displayName: r.display_name, payload: r.payload, updatedAt: r.updated_at } });
 });
 
@@ -1912,10 +1932,10 @@ app.post('/api/resumes', requireAuth, requireWritable, requireArt9Consent, async
   const id = String(req.body?.id || crypto.randomUUID());
   // Profil-IDs sind kurz und schlicht (App: Base36, MCP: UUID). Alles andere
   // ist kein Profil, sondern ein Versuch.
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) return res.status(400).json({ error: 'Ungültige Profil-ID.' });
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) return res.status(400).json({ error: 'Ungültige Profil-ID.', code: 'profile_id_invalid' });
   const displayName = String(req.body?.displayName || 'Profil').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').slice(0, 120);
   const payload = req.body?.payload;
-  if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
+  if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.', code: 'request_invalid' });
   if (assertPayloadSize(res, payload)) return;
   // Der Payload trägt seine eigene id; fehlt sie (über MCP angelegt), gilt die der Zeile.
   if (!payload.id) payload.id = id;
@@ -1925,7 +1945,7 @@ app.post('/api/resumes', requireAuth, requireWritable, requireArt9Consent, async
   if (existsForUser.rowCount === 0) {
     const { rows: cnt } = await pool.query('SELECT count(*)::int AS n FROM resumes WHERE user_id = $1', [req.user.id]);
     if (cnt[0].n >= MAX_RESUMES_PER_USER) {
-      return res.status(403).json({ error: `Maximal ${MAX_RESUMES_PER_USER} Profile pro Konto.` });
+      return res.status(403).json({ error: `Maximal ${MAX_RESUMES_PER_USER} Profile pro Konto.`, code: 'profile_limit', max: MAX_RESUMES_PER_USER });
     }
   }
   // Cross-user ID-collision guard. The ON CONFLICT clause used to silently
@@ -1934,7 +1954,7 @@ app.post('/api/resumes', requireAuth, requireWritable, requireArt9Consent, async
   // ghost-INSERTs. Refuse explicitly with 409. (Security audit finding.)
   const existing = await pool.query('SELECT user_id FROM resumes WHERE id = $1', [id]);
   if (existing.rows[0] && existing.rows[0].user_id !== req.user.id) {
-    return res.status(409).json({ error: 'Diese Profil-ID ist bereits vergeben.' });
+    return res.status(409).json({ error: 'Diese Profil-ID ist bereits vergeben.', code: 'profile_id_taken' });
   }
   // Opt-in snapshot for callers that know they're doing a wholesale replace
   // (e.g. JSON upload). Regular debounced editor saves do NOT pass this flag
@@ -1956,13 +1976,13 @@ app.post('/api/resumes', requireAuth, requireWritable, requireArt9Consent, async
 app.put('/api/resumes/:id', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const displayName = String(req.body?.displayName || 'Profil').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').slice(0, 120);
   const payload = req.body?.payload;
-  if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.' });
+  if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'payload fehlt.', code: 'request_invalid' });
   if (assertPayloadSize(res, payload)) return;
   const { rowCount } = await pool.query(
     'UPDATE resumes SET display_name = $1, payload = $2, updated_at = now() WHERE id = $3 AND user_id = $4',
     [displayName, payload, req.params.id, req.user.id],
   );
-  if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.' });
+  if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.', code: 'profile_not_found' });
   await prunePhotosSoon(req.user.id);
   res.json({ ok: true });
 });
@@ -1973,12 +1993,12 @@ app.put('/api/resumes/:id', requireAuth, requireWritable, requireArt9Consent, as
  * müsste das ganze Profil durchreichen und könnte es dabei beschädigen. */
 app.patch('/api/resumes/:id', requireAuth, requireWritable, requireArt9Consent, async (req, res) => {
   const displayName = String(req.body?.displayName || '').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').trim().slice(0, 120);
-  if (!displayName) return res.status(400).json({ error: 'displayName fehlt.' });
+  if (!displayName) return res.status(400).json({ error: 'displayName fehlt.', code: 'request_invalid' });
   const { rowCount } = await pool.query(
     'UPDATE resumes SET display_name = $1, updated_at = now() WHERE id = $2 AND user_id = $3',
     [displayName, req.params.id, req.user.id],
   );
-  if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.' });
+  if (!rowCount) return res.status(404).json({ error: 'Nicht gefunden.', code: 'profile_not_found' });
   res.json({ ok: true, displayName });
 });
 
@@ -2058,7 +2078,7 @@ app.get('/api/me/export', requireAuth, rateLimit({ route: 'export', max: 3, wind
     res.send(JSON.stringify(dump, null, 2));
   } catch (err) {
     console.error('me/export failed:', err);
-    res.status(500).json({ error: 'Export fehlgeschlagen.' });
+    res.status(500).json({ error: 'Export fehlgeschlagen.', code: 'export_failed' });
   }
 });
 
@@ -2133,25 +2153,25 @@ async function deleteAccount({ id: userId, email: emailRaw }) {
  */
 app.post('/api/me/delete', requireAuth, async (req, res) => {
   const password = String(req.body?.password || '');
-  if (!password) return res.status(400).json({ error: 'Passwort zur Bestätigung erforderlich.' });
+  if (!password) return res.status(400).json({ error: 'Passwort zur Bestätigung erforderlich.', code: 'password_required' });
   // Admin accounts can't be deleted via this endpoint — they're bootstrapped
   // from env and would be re-created on next boot. Admin: change ADMIN_USERNAME first.
   if (req.user.role === 'admin') return res.status(403).json({ error: 'Admin-Konto: bitte ADMIN_USERNAME in Coolify ändern und neu deployen.' });
   try {
     const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
-    if (!rows[0]) return res.status(404).json({ error: 'Konto nicht gefunden.' });
+    if (!rows[0]) return res.status(404).json({ error: 'Konto nicht gefunden.', code: 'account_not_found' });
     const ok = await bcrypt.compare(password, rows[0].password_hash);
-    if (!ok) return res.status(401).json({ error: 'Passwort falsch.' });
+    if (!ok) return res.status(401).json({ error: 'Passwort falsch.', code: 'password_wrong' });
 
     // Kontaktdaten vor dem Löschen sichern (für die Offboarding-Mail).
-    const { rows: info } = await pool.query('SELECT username, email FROM users WHERE id = $1', [req.user.id]);
+    const { rows: info } = await pool.query('SELECT username, email, mail_lang FROM users WHERE id = $1', [req.user.id]);
     const { retainedOrders } = await deleteAccount({ id: req.user.id, email: info[0]?.email });
     res.clearCookie(COOKIE, { httpOnly: true, secure: true, sameSite: 'lax' });
     res.json({ ok: true });
-    if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true, retainedOrders }); sendMail({ to: info[0].email, ...m }); }
+    if (info[0]?.email) { const m = tplOffboarding({ username: info[0].username, deleted: true, retainedOrders, lang: langFor(info[0], req) }); sendMail({ to: info[0].email, ...m }); }
   } catch (err) {
     console.error('me/delete failed:', err);
-    res.status(500).json({ error: 'Löschung fehlgeschlagen.' });
+    res.status(500).json({ error: 'Löschung fehlgeschlagen.', code: 'delete_failed' });
   }
 });
 
@@ -2171,8 +2191,8 @@ const CLIENT_EVENTS = new Set(['docx', 'pdf_local', 'share_create', 'latex']);
 app.post('/api/events', rateLimit({ route: 'events', max: 120, windowMs: 60 * 60 * 1000 }), optionalAuth, async (req, res) => {
   const kind = String(req.body?.kind || '');
   if (CLIENT_COUNTS.has(kind)) return res.status(204).end();
-  if (!req.user) return res.status(401).json({ error: 'Nicht angemeldet.' });
-  if (!CLIENT_EVENTS.has(kind)) return res.status(400).json({ error: 'Unbekannte Ereignisart.' });
+  if (!req.user) return res.status(401).json({ error: 'Nicht angemeldet.', code: 'auth_required' });
+  if (!CLIENT_EVENTS.has(kind)) return res.status(400).json({ error: 'Unbekannte Ereignisart.', code: 'request_invalid' });
   logEvent(req.user.id, kind);
   res.status(204).end();
 });
@@ -2209,7 +2229,7 @@ app.post('/api/admin/invites', requireAuth, requireAdmin, async (req, res) => {
   );
   // Onboarding-Automatik: wenn eine E-Mail angegeben ist, Einladung direkt versenden.
   let emailed = false;
-  if (email) { const m = tplInvite({ code, note }); emailed = await sendMail({ to: email, ...m }); }
+  if (email) { const m = tplInvite({ code, note, lang: knownLang(req.body?.lang) || 'de' }); emailed = await sendMail({ to: email, ...m }); }
   res.json({ code, maxUses, note, expiresAt, accessDays, email: email || null, emailed });
 });
 
@@ -2271,9 +2291,9 @@ app.post('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req, 
   const id = parseInt(req.params.id, 10);
   const disabled = !!req.body?.disabled;
   if (id === req.user.id) return res.status(400).json({ error: 'Eigenes Konto kann nicht gesperrt werden.' });
-  const { rows } = await pool.query('UPDATE users SET disabled = $1 WHERE id = $2 RETURNING username, email', [disabled, id]);
+  const { rows } = await pool.query('UPDATE users SET disabled = $1 WHERE id = $2 RETURNING username, email, mail_lang', [disabled, id]);
   res.json({ ok: true });
-  if (disabled && rows[0]?.email) { const m = tplOffboarding({ username: rows[0].username, deleted: false }); sendMail({ to: rows[0].email, ...m }); }
+  if (disabled && rows[0]?.email) { const m = tplOffboarding({ username: rows[0].username, deleted: false, lang: langFor(rows[0]) }); sendMail({ to: rows[0].email, ...m }); }
 });
 
 /* Direktes Setzen eines Kundenpassworts durch den Admin gibt es seit dem
@@ -2466,10 +2486,10 @@ function anonPdfGate(req, res, next) {
 app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 60 * 60 * 1000 }), anonPdfGate, async (req, res) => {
   const { html, filename, pageFormat } = req.body || {};
   if (typeof html !== 'string' || html.length < 30) {
-    return res.status(400).json({ error: 'Field "html" is required.' });
+    return res.status(400).json({ error: 'Field "html" is required.', code: 'request_invalid' });
   }
   if (html.length > MAX_PDF_HTML_CHARS) {
-    return res.status(413).json({ error: 'Das Dokument ist zu groß für den PDF-Export (höchstens 3 MB).' });
+    return res.status(413).json({ error: 'Das Dokument ist zu groß für den PDF-Export (höchstens 3 MB).', code: 'pdf_too_large' });
   }
   const fmt = PDF_FORMAT_MAP[pageFormat] || 'A4';
   /* Der „eigene Host" für die SSRF-Prüfung kommt aus der Konfiguration, nicht
@@ -2493,7 +2513,7 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
        * aber 30 Sekunden. Hier stehen beide auf demselben Wert. */
       const wait = err.retryAfter || 30;
       res.setHeader('Retry-After', String(wait));
-      return res.status(503).json({ error: `Der PDF-Dienst ist gerade ausgelastet. Bitte in ${wait} Sekunden noch einmal versuchen.` });
+      return res.status(503).json({ error: `Der PDF-Dienst ist gerade ausgelastet. Bitte in ${wait} Sekunden noch einmal versuchen.`, code: 'pdf_busy', retryAfter: wait });
     }
     throw err;
   }
@@ -2526,11 +2546,11 @@ app.post('/api/pdf', optionalAuth, rateLimit({ route: 'pdf', max: 60, windowMs: 
   } catch (err) {
     if (err?.code === 'ETIMEDOUT') {
       console.warn('pdf render timed out');
-      if (!res.headersSent) res.status(503).json({ error: 'Das PDF hat zu lange gebraucht und wurde abgebrochen. Bitte erneut versuchen; bei sehr langen Dokumenten erst kürzen.' });
+      if (!res.headersSent) res.status(503).json({ error: 'Das PDF hat zu lange gebraucht und wurde abgebrochen. Bitte erneut versuchen; bei sehr langen Dokumenten erst kürzen.', code: 'pdf_timeout' });
       return;
     }
     console.error('pdf render failed:', err?.message || err);
-    if (!res.headersSent) res.status(500).json({ error: 'PDF rendering failed' });
+    if (!res.headersSent) res.status(500).json({ error: 'PDF rendering failed', code: 'pdf_failed' });
   } finally {
     release();
   }
@@ -2700,10 +2720,10 @@ app.use((err, req, res, _next) => {
   const kaputt = err?.type === 'entity.parse.failed';
   if (!zuGross && !kaputt) console.error('unhandled:', req.method, req.originalUrl, code || '', err && err.message);
   if (res.headersSent) return;
-  if (zuGross) return res.status(413).json({ error: 'Anfrage zu groß.' });
-  if (kaputt) return res.status(400).json({ error: 'Ungültiges JSON.' });
+  if (zuGross) return res.status(413).json({ error: 'Anfrage zu groß.', code: 'request_too_large' });
+  if (kaputt) return res.status(400).json({ error: 'Ungültiges JSON.', code: 'request_invalid' });
   res.status(eingabe ? 400 : (status >= 400 && status < 600 ? status : 500))
-    .json({ error: eingabe ? 'Ungültiger Parameter.' : (status < 500 ? 'Ungültige Anfrage.' : 'Interner Fehler.') });
+    .json({ error: eingabe ? 'Ungültiger Parameter.' : (status < 500 ? 'Ungültige Anfrage.' : 'Interner Fehler.'), code: status < 500 ? 'request_invalid' : 'server_error' });
 });
 
 process.on('unhandledRejection', (grund) => {

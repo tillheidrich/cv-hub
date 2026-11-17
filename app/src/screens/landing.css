@@ -408,6 +408,19 @@
 .lp-ai-foot { margin: 24px 2px 0; max-width: 46em; font-size: 15.5px; line-height: 1.6; color: var(--ink-2); }
 .lp-ai-foot .lp-arrow-link { display: inline-flex; min-height: 40px; }
 @media (max-width: 900px) { .lp-ai-grid { grid-template-columns: minmax(0, 1fr); } }
+.lp-ai-card > p.lp-ai-card-link { margin-top: 14px; }
+.lp-ai-card-link .lp-arrow-link { display: inline-flex; min-height: 40px; }
+
+/* Bewerben in Deutschland (en/fr/es, 17.11.2026) */
+.lp-abroad-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 0; padding: 0; list-style: none; }
+.lp-abroad-card { padding: clamp(20px, 2.6vw, 30px); border-radius: var(--lp-r-xl); background: var(--lp-paper); box-shadow: 0 0 0 1px oklch(0.30 0.02 250 / 0.07); min-width: 0; }
+.lp-abroad-card h3 { margin: 0; font-size: clamp(19px, 1.8vw, 22px); line-height: 1.2; font-weight: 670; letter-spacing: -0.02em; text-wrap: balance; }
+.lp-abroad-card p { margin: 12px 0 0; font-size: 16px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
+.lp-abroad-links { margin: 28px 2px 0; }
+.lp-abroad-links ul { display: flex; flex-wrap: wrap; gap: 4px 28px; margin: 8px 0 0; padding: 0; list-style: none; }
+.lp-abroad-links .lp-arrow-link { display: inline-flex; min-height: 40px; align-items: center; }
+@media (max-width: 1000px) { .lp-abroad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .lp-abroad-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Kennzeichen „Pass" an Vorlagen, deren gestaltetes PDF zum Pass gehört
    (nur bei aktiver Gratis-Grenze; Ehrlichkeitsregel: vor der Wahl sichtbar). */

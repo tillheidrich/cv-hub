@@ -578,7 +578,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
       if (!r.ok) throw new Error(t.serverAnswered(r.status));
       const text = await r.text();
       if (!text.trimStart().startsWith('---')) throw new Error(t.notMarkdown);
-      saveText(exportFilename(art, data.personal.name, 'md'), text, 'text/markdown');
+      saveText(exportFilename(art, data.personal.name, 'md', data.labels?.lang), text, 'text/markdown');
     } catch (e) {
       if (art === 'lebenslauf') {
         exportMarkdown(data);
@@ -592,7 +592,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   const downloadCoverLetterMd = () => {
     // Lokalmodus: dieselbe Bridge-Fassung, im Browser gebaut.
     if (demoMode && coverLetter) {
-      saveText(exportFilename('anschreiben', data.personal.name, 'md'),
+      saveText(exportFilename('anschreiben', data.personal.name, 'md', data.labels?.lang),
         clToMarkdown(coverLetter, lang, exportConfig.themeId || DEFAULT_TEMPLATE), 'text/markdown');
       return;
     }
@@ -657,7 +657,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   function downloadMdTemplate() {
     const kind = isCover ? 'cl' : 'cv';
     const md = getMdTemplate(kind, lang as MdTemplateFullLang);
-    saveText(exportFilename(isCover ? 'anschreiben' : 'lebenslauf', 'Vorlage', 'md'), md, 'text/markdown');
+    saveText(exportFilename(isCover ? 'anschreiben' : 'lebenslauf', ({ de: 'Vorlage', en: 'Template', fr: 'Modele', es: 'Plantilla' } as Record<string, string>)[lang] ?? 'Vorlage', 'md', lang), md, 'text/markdown');
   }
 
   // MD file pickup — read into the import textarea so user can review.
@@ -665,7 +665,7 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
   async function linkedinLesen(file: File) {
     setLiBusy(true); setLiErr(null); setLiBefund(null);
     try {
-      setLiBefund(await (await import('../import/linkedinImport')).importLinkedIn(file, data));
+      setLiBefund(await (await import('../import/linkedinImport')).importLinkedIn(file, data, uiLang));
     } catch (e) {
       setLiErr(e instanceof Error ? e.message : t.liReadError);
     } finally { setLiBusy(false); }
@@ -786,9 +786,9 @@ export default function ExportPanel({ data, coverLetter, resumeId, lang, templat
     }
   }
 
-  const coverWord: Record<string, string> = { de: 'Anschreiben', en: 'Cover Letter', fr: 'Lettre de motivation', es: 'Carta de presentación' };
-  const cvWord: Record<string, string> = { de: 'Lebenslauf', en: 'Curriculum Vitae', fr: 'Curriculum Vitae', es: 'Currículum' };
-  const docWord = (isCover ? coverWord[lang] : cvWord[lang]) ?? (isCover ? 'Cover Letter' : 'Curriculum Vitae');
+  const coverWord: Record<string, string> = { de: 'Anschreiben', en: 'Cover letter', fr: 'Lettre de motivation', es: 'Carta de presentación' };
+  const cvWord: Record<string, string> = { de: 'Lebenslauf', en: 'CV', fr: 'Curriculum Vitae', es: 'Currículum' };
+  const docWord = (isCover ? coverWord[lang] : cvWord[lang]) ?? (isCover ? 'Cover letter' : 'CV');
   const langLabel = LANG_NAMES[lang as keyof typeof LANG_NAMES] ?? lang.toUpperCase();
 
   return (

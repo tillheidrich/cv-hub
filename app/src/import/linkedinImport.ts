@@ -133,8 +133,59 @@ export function normalizeDate(raw: string): string {
   return s;
 }
 
-const LAEUFT: Record<Lang, string> = { de: 'heute', en: 'today', fr: "aujourd'hui", es: 'hoy' };
+/* Laufende Stationen stehen als `present` im Bestand, wie bei jedem anderen
+ * Import — Vorschau und Exporte setzen daraus das Wort der Dokumentsprache
+ * (data/extraSections.ts, `endLabel`). Bis 17.11.2026 schrieb der Import
+ * „today“/„heute“/„hoy“ je nach Sprache. */
+const LAEUFT = 'present';
 const istLaufend = (s: string) => /^(present|current|heute|aujourd'hui|hoy|ongoing)$/i.test((s || '').trim());
+
+/** Meldungen an den Menschen, in der Sprache der Oberfläche. */
+const MSG: Record<Lang, {
+  noCsv: string; wrongFile: string; tooBig: string;
+  noExperience: string; noEducation: string; noName: string; noEmail: string; noPhoto: string;
+}> = {
+  de: {
+    noCsv: 'In diesem Archiv liegt keine einzige CSV-Datei. Es sieht nicht nach einem LinkedIn-Datenexport aus.',
+    wrongFile: 'Bitte das ZIP aus dem LinkedIn-Datenexport hochladen (oder eine einzelne CSV daraus).',
+    tooBig: 'Das Archiv ist zu groß.',
+    noExperience: 'Keine Berufserfahrung im Archiv gefunden (Positions.csv fehlt oder ist leer).',
+    noEducation: 'Keine Ausbildung im Archiv gefunden (Education.csv fehlt oder ist leer).',
+    noName: 'Kein Name im Archiv gefunden (Profile.csv fehlt oder ist leer).',
+    noEmail: 'Keine E-Mail-Adresse im Archiv — die trägst du selbst nach.',
+    noPhoto: 'LinkedIn liefert kein Bewerbungsfoto und keinen Profiltext für den Lebenslauf. Beides bleibt, wie es war.',
+  },
+  en: {
+    noCsv: 'This archive contains no CSV files. It does not look like a LinkedIn data export.',
+    wrongFile: 'Please upload the ZIP from your LinkedIn data export (or a single CSV from it).',
+    tooBig: 'The archive is too large.',
+    noExperience: 'No work experience found in the archive (Positions.csv is missing or empty).',
+    noEducation: 'No education found in the archive (Education.csv is missing or empty).',
+    noName: 'No name found in the archive (Profile.csv is missing or empty).',
+    noEmail: 'No email address in the archive. Please add it yourself.',
+    noPhoto: 'LinkedIn provides no application photo and no profile text for the CV. Both stay as they were.',
+  },
+  fr: {
+    noCsv: 'Cette archive ne contient aucun fichier CSV. Elle ne ressemble pas à un export de données LinkedIn.',
+    wrongFile: 'Merci de téléverser le ZIP de votre export de données LinkedIn (ou un seul CSV qui en provient).',
+    tooBig: 'L’archive est trop volumineuse.',
+    noExperience: 'Aucune expérience trouvée dans l’archive (Positions.csv manque ou est vide).',
+    noEducation: 'Aucune formation trouvée dans l’archive (Education.csv manque ou est vide).',
+    noName: 'Aucun nom trouvé dans l’archive (Profile.csv manque ou est vide).',
+    noEmail: 'Aucune adresse e-mail dans l’archive : ajoutez-la vous-même.',
+    noPhoto: 'LinkedIn ne fournit ni photo de candidature ni texte de profil pour le CV. Les deux restent inchangés.',
+  },
+  es: {
+    noCsv: 'Este archivo no contiene ningún CSV. No parece una exportación de datos de LinkedIn.',
+    wrongFile: 'Sube el ZIP de tu exportación de datos de LinkedIn (o un solo CSV de él).',
+    tooBig: 'El archivo es demasiado grande.',
+    noExperience: 'No se encontró experiencia en el archivo (falta Positions.csv o está vacío).',
+    noEducation: 'No se encontró formación en el archivo (falta Education.csv o está vacío).',
+    noName: 'No se encontró ningún nombre en el archivo (falta Profile.csv o está vacío).',
+    noEmail: 'No hay correo electrónico en el archivo: añádelo tú.',
+    noPhoto: 'LinkedIn no aporta foto de candidatura ni texto de perfil para el CV. Ambos se quedan como estaban.',
+  },
+};
 
 // ── Aufzählungspunkte ───────────────────────────────────────────────────────
 
@@ -172,13 +223,13 @@ function dotsFuer(stufe: string): number {
 // ── Archiv lesen ────────────────────────────────────────────────────────────
 
 /** Alle CSV-Dateien aus dem Archiv, unter normalisiertem Basisnamen. */
-async function csvsAusZip(file: File): Promise<Record<string, string>> {
+async function csvsAusZip(file: File, tooBig: string): Promise<Record<string, string>> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const out: Record<string, string> = {};
   const dateien = Object.values(zip.files).filter(f => !f.dir && /\.csv$/i.test(f.name));
   // Grenzen gegen ZIP-Bomben (Audit 10.10.2026, S14): höchstens 200 CSV,
   // je 5 MB und zusammen 20 MB entpackt; was darüber liegt, wird übersprungen.
-  if (dateien.length > 200) throw new Error('Archiv zu groß');
+  if (dateien.length > 200) throw new Error(tooBig);
   let summe = 0;
   for (const f of dateien) {
     const groesse = (f as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0;
@@ -227,21 +278,23 @@ export interface LinkedInBefund {
  * `basis` ist der aktuelle Lebenslauf: Sprache, Beschriftungen, Foto und
  * Profiltext kommen von dort, alles andere aus dem Archiv. Der Aufrufer
  * entscheidet, ob er das Ergebnis übernimmt — diese Funktion schreibt nichts.
+ * `uiLang` ist die Sprache der Meldungen (Oberfläche), nicht des Lebenslaufs.
  */
-export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedInBefund> {
+export async function importLinkedIn(file: File, basis: CVData, uiLang: Lang = 'de'): Promise<LinkedInBefund> {
+  const M = MSG[uiLang] ?? MSG.de;
   const hinweise: string[] = [];
   const name = file.name.toLowerCase();
 
   let csvs: Record<string, string>;
   if (name.endsWith('.zip')) {
-    csvs = await csvsAusZip(file);
+    csvs = await csvsAusZip(file, M.tooBig);
     if (Object.keys(csvs).length === 0) {
-      throw new Error('In diesem Archiv liegt keine einzige CSV-Datei. Es sieht nicht nach einem LinkedIn-Datenexport aus.');
+      throw new Error(M.noCsv);
     }
   } else if (name.endsWith('.csv')) {
     csvs = { [normKey(file.name.replace(/\.csv$/i, ''))]: await file.text() };
   } else {
-    throw new Error('Bitte das ZIP aus dem LinkedIn-Datenexport hochladen (oder eine einzelne CSV daraus).');
+    throw new Error(M.wrongFile);
   }
 
   const rows = (...begriffe: string[]) => {
@@ -249,8 +302,7 @@ export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedI
     return t ? parseCSV(t) : [];
   };
 
-  const lang = (basis.labels?.lang ?? 'de') as Lang;
-  const laufend = LAEUFT[lang] ?? LAEUFT.de;
+  const laufend = LAEUFT;
 
   // ── Person ────────────────────────────────────────────────────────────────
   const profil = rows('Profile')[0] ?? {};
@@ -374,11 +426,11 @@ export async function importLinkedIn(file: File, basis: CVData): Promise<LinkedI
     }));
 
   // ── Was fehlt, wird gesagt ────────────────────────────────────────────────
-  if (!positionen.length) hinweise.push('Keine Berufserfahrung im Archiv gefunden (Positions.csv fehlt oder ist leer).');
-  if (!schulen.length) hinweise.push('Keine Ausbildung im Archiv gefunden (Education.csv fehlt oder ist leer).');
-  if (!personName) hinweise.push('Kein Name im Archiv gefunden (Profile.csv fehlt oder ist leer).');
-  if (!mail) hinweise.push('Keine E-Mail-Adresse im Archiv — die trägst du selbst nach.');
-  hinweise.push('LinkedIn liefert kein Bewerbungsfoto und keinen Profiltext für den Lebenslauf. Beides bleibt, wie es war.');
+  if (!positionen.length) hinweise.push(M.noExperience);
+  if (!schulen.length) hinweise.push(M.noEducation);
+  if (!personName) hinweise.push(M.noName);
+  if (!mail) hinweise.push(M.noEmail);
+  hinweise.push(M.noPhoto);
 
   const cv: CVData = {
     ...basis,

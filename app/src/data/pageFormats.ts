@@ -43,6 +43,20 @@ export const PAGE_FORMATS: Record<PageFormat, PageFormatSpec> = {
 
 export const PAGE_FORMAT_LIST: PageFormatSpec[] = Object.values(PAGE_FORMATS);
 
+/** Hinweis zum Format in der Oberflächensprache. `hint` oben bleibt die
+ *  deutsche Fassung (17.11.2026: der englische Gestaltungsbereich zeigte
+ *  „Europa · Standard"). */
+const HINTS: Record<'de' | 'en' | 'fr' | 'es', Record<PageFormat, string>> = {
+  de: { a4: 'Europa · Standard', letter: 'USA, Kanada', legal: 'USA · Akademische CVs', a5: 'Kompakt · Halbe Höhe' },
+  en: { a4: 'Europe · standard', letter: 'USA, Canada', legal: 'USA · academic CVs', a5: 'Compact · half height' },
+  fr: { a4: 'Europe · standard', letter: 'États-Unis, Canada', legal: 'États-Unis · CV académiques', a5: 'Compact · demi-hauteur' },
+  es: { a4: 'Europa · estándar', letter: 'EE. UU., Canadá', legal: 'EE. UU. · CV académicos', a5: 'Compacto · media altura' },
+};
+
+export function pageFormatHint(id: PageFormat, lang: string): string {
+  return (HINTS[lang as 'de'] ?? HINTS.de)[id] ?? PAGE_FORMATS[id]?.hint ?? '';
+}
+
 export function getPageFormat(id?: PageFormat | string): PageFormatSpec {
   if (id && id in PAGE_FORMATS) return PAGE_FORMATS[id as PageFormat];
   return PAGE_FORMATS.a4;

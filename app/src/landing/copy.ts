@@ -30,8 +30,24 @@ export interface AiCopy {
   eyebrow: string; h: string; intro: string;
   bridge: { tag: string; title: string; body: string };
   /** `tag` mit Angebot (Pass) oder ohne (Konto per Einladung, selbst betrieben). */
-  mcp: { tagPass: string; tagAccount: string; title: string; body: string };
+  mcp: { tagPass: string; tagAccount: string; title: string; body: string;
+    /** Welche Assistenten (17.11.2026): getestet nur Claude, Rest laut Anbieter-Doku. */
+    clients: string;
+    /** Linktext zum Magazin-Artikel über MCP. */
+    link: string };
   foot: string; footLink: string;
+}
+
+/** Abschnitt „Bewerben in Deutschland" (17.11.2026) für en/fr/es: für
+ *  internationale Fachkräfte, Fakten aus BA/ZAV 01/2026, Make it in Germany,
+ *  anabin; die Artikel unter /en/magazine/ belegen sie im Einzelnen. */
+export interface AbroadCopy {
+  eyebrow: string; h: string; lede: string;
+  items: { title: string; body: string }[];
+  linksLabel: string;
+  /** Englische Magazin-Artikel (Slug unter /en/magazine/). */
+  links: { slug: string; label: string }[];
+  note: string;
 }
 
 export interface LandingCopy {
@@ -53,6 +69,8 @@ export interface LandingCopy {
     sourcesLabel: string; sources: { label: string; url: string }[];
   };
   ai: AiCopy;
+  /** Nur für Seiten, die sich an Bewerbungen aus dem Ausland richten (nicht de). */
+  abroad?: AbroadCopy;
   gallery: {
     eyebrow: string; h: (n: number) => string; lede: string; showAll: (n: number) => string; legend: string;
     /** Kennzeichen an Vorlagen, deren gestaltetes PDF zum Pass gehört (nur bei aktiver Gratis-Grenze). */
@@ -80,7 +98,7 @@ const SRC_HBS = 'https://www.hbs.edu/managing-the-future-of-work/research/Pages/
 const DE: LandingCopy = {
   meta: {
     title: () => 'Lebenslauf mit deiner KI, maschinenlesbar gesetzt',
-    description: n => `Lebenslauf im Browser schreiben, allein oder mit ChatGPT, Claude oder einem anderen Modell: ${n} Vorlagen, PDF mit echter Textebene, ATS-Fassung mit einem Klick.`,
+    description: n => `Lebenslauf im Browser schreiben, allein oder mit ChatGPT oder Claude, auch direkt per MCP: ${n} Vorlagen, PDF mit echter Textebene, ATS-Fassung per Klick.`,
     ogAlt: 'Der Editor mit einem Lebenslauf in der Vorschau und dem Gestaltungs-Paneel',
   },
   langName: 'Deutsch',
@@ -95,7 +113,7 @@ const DE: LandingCopy = {
     lede: 'Du schreibst direkt auf der Seite oder gibst deinen Lebenslauf als Markdown an ChatGPT, Claude oder ein anderes Modell und holst die überarbeitete Fassung zurück. Vor dem Übernehmen zeigt das Werkzeug, was sich geändert hat. Das PDF hat genau die Seiten der Vorschau und eine echte Textebene, und für Bewerbungsportale gibt es dieselbe Fassung einspaltig.',
     ctaPrimary: 'Direkt ausprobieren',
     ctaSecondary: 'So liest ein Portal deinen Lebenslauf',
-    proof: ['KI deiner Wahl, keine eingebaute', 'Ohne Konto starten', 'Kein Abo', 'Quelloffene Fassung'],
+    proof: ['KI deiner Wahl, Claude auch direkt per MCP', 'Ohne Konto starten', 'Kein Abo', 'Quelloffene Fassung'],
     shotAlt: 'Der Editor in der Demo: links das Gestaltungs-Paneel mit Vorlagen, in der Mitte der Lebenslauf von Lena Brandt, unten das Karussell mit der Marke der Vorlage',
     chipText: 'PDF mit Textebene',
     chipAts: 'ATS-Fassung mit einem Klick',
@@ -162,6 +180,8 @@ const DE: LandingCopy = {
       tagAccount: 'Mit Konto · direkt verbinden',
       title: 'Claude und andere MCP-Programme direkt am Lebenslauf.',
       body: 'Mit Konto verbindest du Claude oder ein anderes Programm, das MCP unterstützt, mit deinem Lebenslauf. Angemeldet wird über OAuth, kopieren musst du nichts. Bevor die KI Inhalt oder Gestaltung ändert, legt der Server den bisherigen Stand als Version ab, und die letzten 25 Versionen kannst du wiederherstellen.',
+      clients: 'Getestet mit Claude; eigene Connectors gibt es dort in allen Tarifen, im kostenlosen einen. Andere Assistenten, die eigene MCP-Server unterstützen, sollten ebenso funktionieren, etwa ChatGPT im Entwicklermodus, Mistral Vibe oder VS Code.',
+      link: 'So verbindest du Claude, und was die KI dabei sieht',
     },
     foot: 'Ob eine Formulierung zu dir passt und ob jede Angabe stimmt, entscheidest du. Wie das gelingt, steht im Magazin:',
     footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
@@ -236,8 +256,8 @@ const DE: LandingCopy = {
 
 const EN: LandingCopy = {
   meta: {
-    title: () => 'Your CV with your AI, typeset machine-readable',
-    description: n => `Write your CV in the browser, on your own or with ChatGPT, Claude or another model: ${n} templates, a PDF with a real text layer, an ATS version in one click.`,
+    title: () => 'CV builder for jobs in Germany, with your own AI',
+    description: n => `German-style CV and cover letter in your browser, with ChatGPT or Claude (also via MCP): ${n} templates, a PDF with a real text layer, ATS version in one click.`,
     ogAlt: 'The editor with a CV in the preview and the design panel',
   },
   langName: 'English',
@@ -246,15 +266,15 @@ const EN: LandingCopy = {
   skip: 'Skip to content',
   nav: { label: 'Main navigation', ats: 'How an ATS reads', templates: 'Templates', features: 'Features', magazin: 'Magazine', faq: 'FAQ', signin: 'Sign in', cta: 'Request access', source: 'Source code', home: 'Home', lang: 'Page language', menu: 'Menu', close: 'Close menu' },
   hero: {
-    eyebrow: 'CV and cover letter in your browser, with the AI of your choice',
+    eyebrow: 'CV and cover letter for jobs in Germany, with the AI of your choice',
     h1a: 'Written with your AI,',
     // Geschützter Bindestrich (U+2011), damit „machine-readable“ nicht am Bindestrich bricht.
     h1b: 'typeset to be machine\u2011readable.',
     lede: 'You write right on the page, or you hand your CV as Markdown to ChatGPT, Claude or another model and bring the revised version back. Before anything is applied, the tool shows what has changed. The PDF has exactly the pages of the preview and a real text layer, and for application portals there is the same version in one column.',
     ctaPrimary: 'Try the demo',
     ctaSecondary: 'How a portal reads your CV',
-    proof: ['Your choice of AI, none built in', 'Start without an account', 'No subscription', 'Open-source edition'],
-    shotAlt: 'The editor in the demo: the design panel with templates on the left, Lena Brandt’s CV in the middle, the carousel with the template’s label below',
+    proof: ['Your choice of AI, Claude directly via MCP', 'Start without an account', 'No subscription', 'Open-source edition'],
+    shotAlt: 'The editor in the demo: the design panel with templates on the left, Priya Raman’s CV in the middle, the carousel with the template’s label below',
     chipText: 'PDF with text layer',
     chipAts: 'ATS version in one click',
   },
@@ -320,9 +340,33 @@ const EN: LandingCopy = {
       tagAccount: 'With an account · connect directly',
       title: 'Claude and other MCP programs working on your CV directly.',
       body: 'With an account you connect Claude or another program that supports MCP to your CV. Sign-in runs over OAuth, and there is nothing to copy. Before the AI changes content or design, the server saves the previous state as a version, and you can restore the last 25 versions.',
+      clients: 'Tested with Claude, where custom connectors are available on every plan, one on the free plan. Other assistants that support custom MCP servers should work too, such as ChatGPT in developer mode, Mistral Vibe or VS Code.',
+      link: 'How to connect Claude, and what the AI sees',
     },
     foot: 'Whether a phrase suits you and whether every detail is right is your decision. How to get there is explained in the magazine (in German):',
     footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
+  abroad: {
+    eyebrow: 'Applying in Germany',
+    h: 'Applying from abroad? Your CV, the way German employers read it.',
+    lede: 'Recruiters in Germany expect a CV that looks different from one in India, the US or the UK. The tool is set up for that: English templates in the German format, checks for the details German readers look for, and an import that leaves out what they don’t expect.',
+    items: [
+      { title: 'A table, newest first', body: 'Month and year for every entry, three to five bullets per job, two pages at most. That is the shape the Federal Employment Agency describes for international applicants.' },
+      { title: 'Photo optional, biodata out', body: 'A photo is common but optional. Marital status, religion, parents’ names and passport numbers don’t belong on a German CV. Paste your old CV and the tool leaves them out and tells you what it removed.' },
+      { title: 'Language levels from A1 to C2', body: 'Many employers look at your German first. Write every language on the European CEFR scale, with certificate and year, and say if you are taking a course.' },
+      { title: 'Grades German readers understand', body: 'Write your CGPA or percentage and the German equivalent next to it, calculated with the modified Bavarian formula and the minimum pass grade of your university.' },
+      { title: 'Visa status in one line', body: '“EU Blue Card holder” or “Opportunity Card, in Germany since 01/2026” answers the employer’s first question. The dates on your CV should match your documents.' },
+      { title: 'English and German side by side', body: 'Answer in the language of the job ad. Both versions live in one profile, with headings and date formats switched for each language.' },
+    ],
+    linksLabel: 'Guides in the magazine',
+    links: [
+      { slug: 'german-cv-guide', label: 'How to write a German CV' },
+      { slug: 'indian-resume-to-german-cv', label: 'Indian resume to German CV, line by line' },
+      { slug: 'cgpa-german-cv', label: 'Your CGPA on a German CV' },
+      { slug: 'english-or-german-cv', label: 'English or German CV?' },
+      { slug: 'cv-opportunity-card-blue-card', label: 'Your CV for the Opportunity Card and the Blue Card' },
+    ],
+    note: 'Sources: Federal Employment Agency (ZAV, 01/2026), Make it in Germany, anabin. Each guide lists them in full.',
   },
   gallery: {
     eyebrow: 'Templates',
@@ -369,6 +413,8 @@ const EN: LandingCopy = {
       { id: 'pages', q: 'How many pages can my CV have?', a: 'Up to four. You set one to four pages or let the typesetting break the pages itself. In Germany one or two pages are usual, in science and engineering more is common when there are publications or a project list. From the third page on, the check panel shows a note about it.' },
       { id: 'check', q: 'Can I check my cover letter too?', a: 'Yes. The check panel reads your CV and cover letter the way they are stored in the PDF. For the cover letter it looks at subject line, date, salutation, length and forgotten placeholders, and with a job ad also at whether the job title and company appear. Under “Both” it compares name, contact details and language of the two documents and shows which terms from the ad appear where. There is deliberately no score.', aLimited: 'Yes, with the Application Pass, which also includes the cover letter. The check panel reads your CV and cover letter the way they are stored in the PDF. For the cover letter it looks at subject line, date, salutation, length and forgotten placeholders, and with a job ad also at whether the job title and company appear. Under “Both” it compares name, contact details and language of the two documents. Checking your CV needs no pass.' },
       { id: 'langs', q: 'Which languages does the tool support?', a: 'CV, cover letter and interface are available in German, English, French and Spanish. Headings, date formats and field names switch with the language, and all four versions live in the same profile.' },
+      { id: 'abroadLang', q: 'Should I apply in English or German?', a: 'Answer in the language of the job ad. An English CV is common for tech jobs at international companies and start-ups. If the ad is in German or asks for German at a certain level, send a German CV. The tool keeps both versions in one profile.' },
+      { id: 'outsideEu', q: 'Can I use the tool if I live outside the EU?', a: 'Yes. The editor, designing with every template, the check panel and the PDF with a text layer work in your browser anywhere, without an account. Who can buy the Application Pass is up to the operator of this instance. If you run the open-source edition yourself, everything is free.', aNoOffer: 'Yes. The editor, designing with every template, the check panel and the PDF with a text layer work in your browser anywhere, without an account.' },
       { id: 'ai', q: 'Can I use an AI?', a: 'Yes, the AI of your choice, just not a built-in one. Without an account you export the CV as Markdown, let ChatGPT, Claude or another model revise it and import it again. Before anything is applied you see an overview of the changes. With an account you connect Claude or another MCP-capable program directly to your CV. There are no credits or word limits, because the AI runs with your own provider.', aLimited: 'Yes, the AI of your choice, just not a built-in one. Without an account you export the CV as Markdown, let ChatGPT, Claude or another model revise it and import it again. Before anything is applied you see an overview of the changes. With the Application Pass you connect Claude or another MCP-capable program directly to your CV. There are no credits or word limits, because the AI runs with your own provider.' },
       { id: 'import', q: 'Can I bring my existing CV?', a: 'Yes. The tool reads LinkedIn’s ZIP data export in the browser without sending it to a server, and the same goes for JSON Resume and RenderCV YAML. From an existing PDF you take the text via Markdown: paste it into the template, let an AI structure it, import it back.' },
       { id: 'data', q: 'Where is my data stored?', a: 'Without an account your browser stores it, and you can download a backup file at any time. With an account it is stored on the server that runs this site; the privacy policy says where it is located. Either way the PDF is made there: for the export the document goes to the server briefly and is not stored afterwards. Your text only goes to an AI provider if you send it there yourself through the Markdown bridge or via MCP. There are no ad trackers.' },
@@ -410,7 +456,7 @@ const FR: LandingCopy = {
     lede: 'Vous écrivez directement sur la page, ou vous confiez votre CV en Markdown à ChatGPT, Claude ou un autre modèle et récupérez la version révisée. Avant de l’appliquer, l’outil montre ce qui a changé. Le PDF a exactement les pages de l’aperçu et une vraie couche de texte, et pour les portails de candidature la même version existe sur une colonne.',
     ctaPrimary: 'Essayer maintenant',
     ctaSecondary: 'Comment un portail lit votre CV',
-    proof: ['L’IA de votre choix, aucune intégrée', 'Sans compte', 'Sans abonnement', 'Version open source'],
+    proof: ['L’IA de votre choix, Claude aussi directement via MCP', 'Sans compte', 'Sans abonnement', 'Version open source'],
     shotAlt: 'L’éditeur en démo : à gauche le panneau de mise en page avec les modèles, au centre le CV de Lena Brandt, en bas le carrousel avec le libellé du modèle',
     chipText: 'PDF avec couche de texte',
     chipAts: 'Version ATS en un clic',
@@ -477,9 +523,33 @@ const FR: LandingCopy = {
       tagAccount: 'Avec un compte · connexion directe',
       title: 'Claude et d’autres programmes MCP directement sur votre CV.',
       body: 'Avec un compte, vous connectez Claude ou un autre programme compatible MCP à votre CV. La connexion passe par OAuth, sans rien copier. Avant que l’IA modifie le contenu ou la mise en page, le serveur enregistre l’état précédent comme version, et vous pouvez restaurer les 25 dernières versions.',
+      clients: 'Testé avec Claude, où les connecteurs personnalisés existent dans toutes les offres, un seul dans l’offre gratuite. Les autres assistants qui acceptent des serveurs MCP personnalisés devraient fonctionner aussi, comme ChatGPT en mode développeur, Mistral Vibe ou VS Code.',
+      link: 'Connecter Claude, et ce que voit l’IA',
     },
     foot: 'C’est vous qui décidez si une formulation vous correspond et si chaque information est exacte. Comment y parvenir, le magazine l’explique (en allemand) :',
     footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
+  abroad: {
+    eyebrow: 'Postuler en Allemagne',
+    h: 'Vous postulez depuis l’étranger ? Un CV tel que les employeurs allemands le lisent.',
+    lede: 'En Allemagne, les recruteurs attendent un CV différent de ceux d’Inde, des États-Unis ou de France. L’outil s’y prête : des modèles au format allemand, des vérifications pour les détails attendus, et une importation qui laisse de côté ce qui n’a pas sa place.',
+    items: [
+      { title: 'Un tableau, le plus récent d’abord', body: 'Mois et année pour chaque entrée, trois à cinq points par poste, deux pages au plus. C’est la forme que décrit l’Agence fédérale pour l’emploi pour les candidats internationaux.' },
+      { title: 'Photo facultative, état civil en moins', body: 'La photo est courante, mais elle reste facultative. Situation familiale, religion, noms des parents et numéro de passeport n’ont pas leur place dans un CV allemand. Collez votre ancien CV : l’outil les écarte et vous indique ce qu’il a retiré.' },
+      { title: 'Niveaux de langue de A1 à C2', body: 'Beaucoup d’employeurs regardent d’abord votre allemand. Indiquez chaque langue selon le CECRL, avec certificat et année, et précisez si vous suivez un cours.' },
+      { title: 'Des notes compréhensibles en Allemagne', body: 'Indiquez votre note d’origine et son équivalent allemand, calculé avec la formule bavaroise modifiée et la note minimale de réussite de votre université.' },
+      { title: 'Le statut de séjour en une ligne', body: '« Titulaire de la carte bleue européenne » ou « Chancenkarte, en Allemagne depuis 01/2026 » répond à la première question de l’employeur. Les dates du CV doivent correspondre à vos documents.' },
+      { title: 'Allemand et anglais côte à côte', body: 'Répondez dans la langue de l’annonce. Les deux versions sont dans le même profil, avec titres et formats de date adaptés à chaque langue.' },
+    ],
+    linksLabel: 'Guides du magazine (en anglais)',
+    links: [
+      { slug: 'german-cv-guide', label: 'Rédiger un CV allemand' },
+      { slug: 'indian-resume-to-german-cv', label: 'Du CV indien au CV allemand, ligne par ligne' },
+      { slug: 'cgpa-german-cv', label: 'Votre CGPA sur un CV allemand' },
+      { slug: 'english-or-german-cv', label: 'CV en anglais ou en allemand ?' },
+      { slug: 'cv-opportunity-card-blue-card', label: 'Le CV pour la Chancenkarte et la carte bleue' },
+    ],
+    note: 'Sources : Agence fédérale pour l’emploi (ZAV, 01/2026), Make it in Germany, anabin. Chaque guide les cite en détail.',
   },
   gallery: {
     eyebrow: 'Modèles',
@@ -526,6 +596,8 @@ const FR: LandingCopy = {
       { id: 'pages', q: 'Combien de pages mon CV peut-il avoir ?', a: 'Jusqu’à quatre. Vous choisissez une à quatre pages ou laissez la composition couper les pages elle-même. En Allemagne, une ou deux pages sont l’usage ; en sciences et en ingénierie, davantage avec des publications ou une liste de projets. À partir de la troisième page, le panneau Vérifier affiche une remarque à ce sujet.' },
       { id: 'check', q: 'Puis-je aussi vérifier ma lettre de motivation ?', a: 'Oui. Le panneau Vérifier lit le CV et la lettre tels qu’ils figurent dans le PDF. Pour la lettre, il regarde l’objet, la date, la formule d’appel, la longueur et les espaces réservés oubliés, et avec une offre d’emploi aussi si l’intitulé du poste et l’entreprise apparaissent. Sous « Les deux », il compare le nom, les coordonnées et la langue des deux documents et montre quels termes de l’offre figurent où. Il n’y a volontairement pas de score.', aLimited: 'Oui, avec le Pass candidature, qui comprend aussi la lettre de motivation. Le panneau Vérifier lit le CV et la lettre tels qu’ils figurent dans le PDF. Pour la lettre, il regarde l’objet, la date, la formule d’appel, la longueur et les espaces réservés oubliés, et avec une offre d’emploi aussi si l’intitulé du poste et l’entreprise apparaissent. Sous « Les deux », il compare le nom, les coordonnées et la langue des deux documents. La vérification du CV ne demande pas de pass.' },
       { id: 'langs', q: 'Dans quelles langues l’outil existe-t-il ?', a: 'CV, lettre de motivation et interface existent en allemand, anglais, français et espagnol. Titres, formats de date et noms de champs changent avec la langue, et les quatre versions vivent dans le même profil.' },
+      { id: 'abroadLang', q: 'Faut-il postuler en anglais ou en allemand ?', a: 'Répondez dans la langue de l’annonce. Un CV en anglais est courant pour les postes tech dans les entreprises internationales et les start-up. Si l’annonce est en allemand ou exige un niveau d’allemand, envoyez un CV en allemand. L’outil garde les deux versions dans le même profil.' },
+      { id: 'outsideEu', q: 'Puis-je utiliser l’outil si je vis hors de l’UE ?', a: 'Oui. L’éditeur, la mise en page avec chaque modèle, la vérification et le PDF avec couche de texte fonctionnent dans votre navigateur partout, sans compte. C’est l’exploitant de cette instance qui décide à qui le Pass candidature est vendu. Si vous hébergez vous-même la version open source, tout est gratuit.', aNoOffer: 'Oui. L’éditeur, la mise en page avec chaque modèle, la vérification et le PDF avec couche de texte fonctionnent dans votre navigateur partout, sans compte.' },
       { id: 'ai', q: 'Puis-je utiliser une IA ?', a: 'Oui, l’IA de votre choix, mais pas une IA intégrée. Sans compte, vous exportez le CV en Markdown, le faites réviser par ChatGPT, Claude ou un autre modèle et l’importez à nouveau. Avant de l’appliquer, vous voyez un aperçu des modifications. Avec un compte, vous connectez Claude ou un autre programme compatible MCP directement à votre CV. Il n’y a ni crédits ni limite de mots, car l’IA tourne chez votre propre fournisseur.', aLimited: 'Oui, l’IA de votre choix, mais pas une IA intégrée. Sans compte, vous exportez le CV en Markdown, le faites réviser par ChatGPT, Claude ou un autre modèle et l’importez à nouveau. Avant de l’appliquer, vous voyez un aperçu des modifications. Avec le Pass candidature, vous connectez Claude ou un autre programme compatible MCP directement à votre CV. Il n’y a ni crédits ni limite de mots, car l’IA tourne chez votre propre fournisseur.' },
       { id: 'import', q: 'Puis-je reprendre mon CV actuel ?', a: 'Oui. L’outil lit l’export de données ZIP de LinkedIn dans le navigateur, sans l’envoyer à un serveur, de même que JSON Resume et le YAML RenderCV. Depuis un PDF existant, vous passez par le Markdown : le texte dans le modèle, une IA le structure, vous le réimportez.' },
       { id: 'data', q: 'Où sont stockées mes données ?', a: 'Sans compte, votre navigateur les enregistre, et vous pouvez télécharger un fichier de sauvegarde à tout moment. Avec un compte, elles sont sur le serveur qui fait tourner ce site ; la politique de confidentialité indique où il se trouve. Dans les deux cas, le PDF y est créé : pour l’export, le document passe brièvement par le serveur et n’y est pas conservé. Votre texte ne va chez un fournisseur d’IA que si vous l’y envoyez vous-même, par la passerelle Markdown ou via MCP. Il n’y a pas de traceur publicitaire.' },
@@ -567,7 +639,7 @@ const ES: LandingCopy = {
     lede: 'Escribes directamente en la página, o pasas tu currículum en Markdown a ChatGPT, Claude u otro modelo y recuperas la versión revisada. Antes de aplicarla, la herramienta muestra qué ha cambiado. El PDF tiene exactamente las páginas de la vista previa y una capa de texto real, y para portales de empleo tienes la misma versión a una columna.',
     ctaPrimary: 'Probar ahora',
     ctaSecondary: 'Cómo lee un portal tu CV',
-    proof: ['La IA que elijas, ninguna integrada', 'Empieza sin cuenta', 'Sin suscripción', 'Versión de código abierto'],
+    proof: ['La IA que elijas, Claude también directamente por MCP', 'Empieza sin cuenta', 'Sin suscripción', 'Versión de código abierto'],
     shotAlt: 'El editor en la demo: a la izquierda el panel de diseño con plantillas, en el centro el currículum de Lena Brandt, abajo el carrusel con la etiqueta de la plantilla',
     chipText: 'PDF con capa de texto',
     chipAts: 'Versión ATS con un clic',
@@ -634,9 +706,33 @@ const ES: LandingCopy = {
       tagAccount: 'Con cuenta · conexión directa',
       title: 'Claude y otros programas MCP directamente en tu currículum.',
       body: 'Con cuenta conectas Claude u otro programa compatible con MCP a tu currículum. El inicio de sesión va por OAuth y no hay que copiar nada. Antes de que la IA cambie contenido o diseño, el servidor guarda el estado anterior como versión, y puedes restaurar las últimas 25.',
+      clients: 'Probado con Claude, donde los conectores propios están en todos los planes, uno en el gratuito. Otros asistentes que admiten servidores MCP propios deberían funcionar igual, como ChatGPT en modo desarrollador, Mistral Vibe o VS Code.',
+      link: 'Cómo conectar Claude y qué ve la IA',
     },
     foot: 'Si una formulación te encaja y si cada dato es correcto lo decides tú. Cómo conseguirlo lo explica la revista (en alemán):',
     footLink: 'Lebenslauf mit KI schreiben, ohne dass etwas erfunden wird',
+  },
+  abroad: {
+    eyebrow: 'Postularse en Alemania',
+    h: '¿Te postulas desde el extranjero? Tu CV, tal como lo leen en Alemania.',
+    lede: 'En Alemania, los reclutadores esperan un currículum distinto al de India, Estados Unidos o España. La herramienta está preparada para eso: plantillas con el formato alemán, comprobaciones de los detalles que se esperan y una importación que deja fuera lo que no encaja.',
+    items: [
+      { title: 'Una tabla, lo más reciente primero', body: 'Mes y año en cada entrada, de tres a cinco puntos por puesto, dos páginas como máximo. Es la forma que describe la Agencia Federal de Empleo para candidatos internacionales.' },
+      { title: 'Foto opcional, datos personales fuera', body: 'La foto es habitual, pero es opcional. Estado civil, religión, nombres de los padres y número de pasaporte no van en un CV alemán. Pega tu CV anterior: la herramienta los deja fuera y te dice qué ha quitado.' },
+      { title: 'Idiomas de A1 a C2', body: 'Muchas empresas miran primero tu alemán. Indica cada idioma según el MCER, con certificado y año, y di si estás haciendo un curso.' },
+      { title: 'Notas que se entienden en Alemania', body: 'Pon tu nota original y su equivalente alemán, calculado con la fórmula bávara modificada y la nota mínima de aprobado de tu universidad.' },
+      { title: 'Tu situación de visado en una línea', body: '«Titular de la Tarjeta Azul UE» o «Chancenkarte, en Alemania desde 01/2026» responde a la primera pregunta de la empresa. Las fechas del CV deben coincidir con tus documentos.' },
+      { title: 'Alemán e inglés, uno al lado del otro', body: 'Responde en el idioma de la oferta. Las dos versiones están en el mismo perfil, con títulos y formatos de fecha adaptados a cada idioma.' },
+    ],
+    linksLabel: 'Guías de la revista (en inglés)',
+    links: [
+      { slug: 'german-cv-guide', label: 'Cómo escribir un CV alemán' },
+      { slug: 'indian-resume-to-german-cv', label: 'Del CV indio al alemán, línea por línea' },
+      { slug: 'cgpa-german-cv', label: 'Tu CGPA en un CV alemán' },
+      { slug: 'english-or-german-cv', label: '¿CV en inglés o en alemán?' },
+      { slug: 'cv-opportunity-card-blue-card', label: 'El CV para la Chancenkarte y la Tarjeta Azul' },
+    ],
+    note: 'Fuentes: Agencia Federal de Empleo (ZAV, 01/2026), Make it in Germany, anabin. Cada guía las cita en detalle.',
   },
   gallery: {
     eyebrow: 'Plantillas',
@@ -683,6 +779,8 @@ const ES: LandingCopy = {
       { id: 'pages', q: '¿Cuántas páginas puede tener mi currículum?', a: 'Hasta cuatro. Eliges de una a cuatro páginas o dejas que la composición corte las páginas sola. En Alemania lo habitual son una o dos páginas; en ciencia e ingeniería, más si hay publicaciones o una lista de proyectos. A partir de la tercera página, el panel Comprobar muestra una nota al respecto.' },
       { id: 'check', q: '¿Puedo comprobar también la carta de presentación?', a: 'Sí. El panel Comprobar lee el currículum y la carta tal como están en el PDF. En la carta mira el asunto, la fecha, el saludo, la extensión y los marcadores olvidados, y con una oferta también si aparecen el puesto y la empresa. En «Ambos» compara nombre, contacto e idioma de los dos documentos y muestra qué términos de la oferta están en cada uno. A propósito, no hay puntuación.', aLimited: 'Sí, con el Pase de candidatura, que también incluye la carta. El panel Comprobar lee el currículum y la carta tal como están en el PDF. En la carta mira el asunto, la fecha, el saludo, la extensión y los marcadores olvidados, y con una oferta también si aparecen el puesto y la empresa. En «Ambos» compara nombre, contacto e idioma de los dos documentos. El currículum lo compruebas sin pase.' },
       { id: 'langs', q: '¿En qué idiomas está la herramienta?', a: 'Currículum, carta e interfaz están en alemán, inglés, francés y español. Títulos, formatos de fecha y nombres de campos cambian con el idioma, y las cuatro versiones viven en el mismo perfil.' },
+      { id: 'abroadLang', q: '¿Me postulo en inglés o en alemán?', a: 'Responde en el idioma de la oferta. Un CV en inglés es habitual en puestos tecnológicos de empresas internacionales y startups. Si la oferta está en alemán o pide un nivel de alemán, envía un CV en alemán. La herramienta guarda las dos versiones en el mismo perfil.' },
+      { id: 'outsideEu', q: '¿Puedo usar la herramienta si vivo fuera de la UE?', a: 'Sí. El editor, el diseño con cada plantilla, la comprobación y el PDF con capa de texto funcionan en tu navegador desde cualquier lugar, sin cuenta. Quién puede comprar el Pase de candidatura lo decide quien opera esta instancia. Si alojas tú mismo la versión de código abierto, todo es gratis.', aNoOffer: 'Sí. El editor, el diseño con cada plantilla, la comprobación y el PDF con capa de texto funcionan en tu navegador desde cualquier lugar, sin cuenta.' },
       { id: 'ai', q: '¿Puedo usar una IA?', a: 'Sí, la IA que elijas, pero no una integrada. Sin cuenta exportas el currículum en Markdown, dejas que lo revise ChatGPT, Claude u otro modelo y lo vuelves a importar. Antes de aplicarlo ves un resumen de los cambios. Con cuenta conectas Claude u otro programa compatible con MCP directamente con tu currículum. No hay créditos ni límites de palabras, porque la IA funciona con tu propio proveedor.', aLimited: 'Sí, la IA que elijas, pero no una integrada. Sin cuenta exportas el currículum en Markdown, dejas que lo revise ChatGPT, Claude u otro modelo y lo vuelves a importar. Antes de aplicarlo ves un resumen de los cambios. Con el Pase de candidatura conectas Claude u otro programa compatible con MCP directamente con tu currículum. No hay créditos ni límites de palabras, porque la IA funciona con tu propio proveedor.' },
       { id: 'import', q: '¿Puedo traer mi currículum actual?', a: 'Sí. La herramienta lee la exportación de datos ZIP de LinkedIn en el navegador, sin enviarla a ningún servidor, y lo mismo vale para JSON Resume y el YAML de RenderCV. Desde un PDF existente pasas por Markdown: el texto a la plantilla, que una IA lo estructure, y lo reimportas.' },
       { id: 'data', q: '¿Dónde se guardan mis datos?', a: 'Sin cuenta los guarda tu navegador, y puedes descargar una copia de seguridad cuando quieras. Con cuenta están en el servidor que aloja este sitio; la política de privacidad indica dónde está. En ambos casos el PDF se crea allí: para exportar, el documento pasa un momento por el servidor y no se guarda después. Tu texto solo llega a un proveedor de IA si tú lo envías por el puente Markdown o por MCP. No hay rastreadores publicitarios.' },

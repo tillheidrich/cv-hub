@@ -428,7 +428,7 @@ export default function App() {
       setScreen('home');
       setImportOpen(true);
     } else if (existing.length === 0) {
-      const demo = createDemoProfile(uiLang === 'en' ? 'Demo · Lena Brandt' : 'Demo · Lena Brandt');
+      const demo = createDemoProfile(uiLang === 'en' ? 'Demo · Priya Raman' : 'Demo · Lena Brandt');
       demo.settings.lang = uiLang;
       saveProfilesLocal([demo]);
       setProfiles([demo]);
@@ -457,7 +457,7 @@ export default function App() {
       let existing = up.profiles;
       if (up.changed) saveProfilesLocal(existing);
       if (!existing.length) {
-        const demo = createDemoProfile('Demo · Lena Brandt');
+        const demo = createDemoProfile(uiLang === 'en' ? 'Demo · Priya Raman' : 'Demo · Lena Brandt');
         demo.settings.lang = uiLang;
         saveProfilesLocal([demo]);
         existing = [demo];
@@ -1463,7 +1463,7 @@ export default function App() {
   if (printing) {
     return (
       <div id="print-only-root" style={{ background: 'oklch(0.985 0.003 264)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '40px' }}>
-        <div data-noprint style={{ fontFamily: UI_FONT, fontSize: '12px', color: '#767676', marginBottom: '24px' }}>Druckvorschau wird vorbereitet…</div>
+        <div data-noprint style={{ fontFamily: UI_FONT, fontSize: '12px', color: '#767676', marginBottom: '24px' }}>{({ de: 'Druckvorschau wird vorbereitet…', en: 'Preparing print preview…', fr: 'Préparation de l’aperçu avant impression…', es: 'Preparando la vista de impresión…' } as Record<UiLang, string>)[uiLang]}</div>
         <DocumentPreview
           render={renderDoc}
           userScale={fontScale}

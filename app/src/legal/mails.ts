@@ -163,7 +163,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello {{CUSTOMER_NAME}},',
         '',
-        'thank you for your order. Your payment has arrived and the pass is active. The contract is now concluded. Here are the details:',
+        'Thank you for your order. Your payment has arrived and the pass is active. The contract is now concluded. Here are the details:',
         '',
         'Order number: {{ORDER_NO}}',
         'Contract concluded: {{ORDER_DATE}}',
@@ -196,7 +196,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello {{CUSTOMER_NAME}},',
         '',
-        'we have received your withdrawal.',
+        'We have received your withdrawal.',
         '',
         'Received: {{RECEIVED_AT}}',
         'Content of your declaration: withdrawal from the contract for the application pass from order {{ORDER_NO}}',
@@ -215,7 +215,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello {{CUSTOMER_NAME}},',
         '',
-        'the refund of {{PRICE}} for order {{ORDER_NO}} has been carried out. Depending on the payment method, you will see it in your account within a few days.',
+        'The refund of {{PRICE}} for order {{ORDER_NO}} has been carried out. Depending on the payment method, you will see it in your account within a few days.',
       ],
     },
     cancellationReceipt: {
@@ -223,7 +223,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello {{CUSTOMER_NAME}},',
         '',
-        'we confirm receipt of your cancellation.',
+        'We confirm receipt of your cancellation.',
         '',
         'Received: {{RECEIVED_AT}}',
         'Contract: application pass for {{PRODUCT_NAME}}, order {{ORDER_NO}}',
@@ -244,7 +244,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello,',
         '',
-        'an account at {{PRODUCT_NAME}} has been created with this e-mail address. Please confirm the address with this link:',
+        'An account at {{PRODUCT_NAME}} has been created with this e-mail address. Please confirm the address with this link:',
         '',
         '{{CONFIRM_URL}}',
         '',
@@ -262,7 +262,7 @@ export const MAILS: Bilingual<MailTexts> = {
       body: [
         'Hello {{CUSTOMER_NAME}},',
         '',
-        'unfortunately we could not reach an agreement on your request. We are required by law to refer you to the competent consumer arbitration board:',
+        'Unfortunately we could not reach an agreement on your request. We are required by law to refer you to the competent consumer arbitration board:',
         '',
         'Universalschlichtungsstelle des Bundes, Zentrum für Schlichtung e. V., Straßburger Straße 8, 77694 Kehl am Rhein, Germany, www.universalschlichtungsstelle.de',
         '',

@@ -5,6 +5,7 @@ description: "Wann PDF, wann Word: was Bewerbersysteme annehmen, wie du die Text
 category: "bewerbung"
 lang: de
 updated: 2026-10-10
+translationKey: "lebenslauf-pdf-oder-word"
 ---
 
 Schick ein PDF, wenn in der Anzeige nichts anderes steht. Halte eine Word-Fassung bereit, wenn ein Portal sie verlangt oder wenn du über eine Personalvermittlung gehst. Wichtiger als das Format ist, dass in der Datei echter, auslesbarer Text steckt. Das kannst du in einer Minute selbst prüfen.

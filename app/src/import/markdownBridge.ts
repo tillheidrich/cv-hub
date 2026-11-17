@@ -20,6 +20,11 @@
 //     nicht in die, die im Frontmatter steht.
 
 import type { CVData, CoverLetterData, ExperienceEntry, EducationEntry, SkillGroup, LanguageEntry, SocialLink, SocialPlatform } from '../data/types';
+import { clHeadsOf } from '../export/markdownHeads';
+
+// Seit 17.11.2026 schreibt die Brücke Überschriften und Schlüssel in der
+// Sprache des Dokuments (export/markdownHeads.ts). Die Parser hier erkennen
+// alle vier Sprachen — wie pdf-service/markdown.js.
 
 // Eigene Abschnitte (Projekte, Zertifikate, Ehrenamt, Publikationen, freie
 // Abschnitte): Port von `extraSectionOf` / `parseExtraSection` aus
@@ -54,7 +59,7 @@ function normalisePlatform(k: string): SocialPlatform | null {
 function parseMeta(line: string) {
   const parts = line.split('·').map(p => p.trim());
   const out = { company: '', location: '', start: '', end: '' };
-  const dateIdx = parts.findIndex(p => /\d{2,4}|heute|present|today/i.test(p) && /[–\-—]/.test(p));
+  const dateIdx = parts.findIndex(p => /\d{2,4}|heute|present|today|actualidad|à ce jour/i.test(p) && /[–\-—]/.test(p));
   let dated = '';
   if (dateIdx >= 0) { dated = parts[dateIdx]; parts.splice(dateIdx, 1); }
   if (dated) {
@@ -69,17 +74,22 @@ function parseMeta(line: string) {
 
 type CvSection = 'profile' | 'experience' | 'education' | 'skills' | 'languages' | 'additional' | 'contact' | null;
 
+/* „Weiteres“ vor „Ausbildung“: „Información adicional“ und „Informations
+ * complémentaires“ enthalten „formación“/„formation“. */
 function sectionOf(title: string): CvSection {
   const t = title.toLowerCase();
-  if (/profil/.test(t)) return 'profile';
-  if (/berufserfahrung|experience|werdegang/.test(t)) return 'experience';
-  if (/ausbildung|education/.test(t)) return 'education';
-  if (/skills|kenntnisse|fähigkeiten/.test(t)) return 'skills';
-  if (/sprachen|languages/.test(t)) return 'languages';
-  if (/weiteres|additional/.test(t)) return 'additional';
+  if (/profil|perfil/.test(t)) return 'profile';
+  if (/berufserfahrung|experience|exp[ée]rience|experiencia|werdegang/.test(t)) return 'experience';
+  if (/weiteres|additional|compl[ée]mentaires|divers|adicional/.test(t)) return 'additional';
+  if (/ausbildung|education|formation|formaci[oó]n/.test(t)) return 'education';
+  if (/skills|kenntnisse|fähigkeiten|comp[ée]tences|competencias|habilidades/.test(t)) return 'skills';
+  if (/sprachen|languages|langues|idiomas/.test(t)) return 'languages';
   if (/kontakt|contact/.test(t)) return 'contact';
   return null;
 }
+
+const KEY_LOCATION = /ort|location|adresse|address|ubicaci[oó]n|direcci[oó]n/;
+const KEY_NOT_LOCATION = /e[-\s]?mail|correo|telefon|phone|tel[ée]fono|website|web|portfolio|site|sitio/;
 
 type ExtraKind = 'projects' | 'certificates' | 'volunteering' | 'publications' | 'custom';
 
@@ -87,20 +97,23 @@ type ExtraKind = 'projects' | 'certificates' | 'volunteering' | 'publications' |
  *  Abschnitten geprüft: „Volunteer experience" ist kein Berufsweg. */
 export function extraSectionOf(title: string): ExtraKind | null {
   const t = val(title).toLowerCase();
-  if (/^(abschnitt|section)\s*:/.test(t)) return 'custom';
-  if (/^(projekte?|projects?)\b/.test(t)) return 'projects';
+  if (/^(abschnitt|section|secci[oó]n)\s*:/.test(t)) return 'custom';
+  if (/^(projekte?|projects?|projets?|proyectos?)\b/.test(t)) return 'projects';
   if (/zertifikat|certific/.test(t)) return 'certificates';
-  if (/ehrenamt|volunteer/.test(t)) return 'volunteering';
-  if (/publikation|publication|veröffentlichung/.test(t)) return 'publications';
+  if (/ehrenamt|volunteer|b[ée]n[ée]volat|voluntariado/.test(t)) return 'volunteering';
+  if (/publikation|publication|veröffentlichung|publicaci[oó]n/.test(t)) return 'publications';
   return null;
 }
 
-const FIELD_RE = /^(rolle|role|zeitraum|period|dates?|link|url|aussteller|issuer|datum|kennung|id|credential(?:\s*id)?|verlag|publisher|ort\/verlag|untertitel|subtitle)\s*:\s*(.*)$/i;
+const FIELD_RE = /^(rolle|role|rôle|rol|zeitraum|period|période|periodo|dates?|link|lien|enlace|url|aussteller|issuer|émetteur|emisor|datum|fecha|kennung|identifiant|id|credential(?:\s*id)?|verlag|publisher|éditeur|editorial|ort\/verlag|untertitel|subtitle|sous-titre|subtítulo)\s*:\s*(.*)$/i;
 const FIELD_KEY: Record<string, string> = {
-  rolle: 'role', role: 'role', zeitraum: 'period', period: 'period', date: 'date', dates: 'period',
-  link: 'url', url: 'url', aussteller: 'issuer', issuer: 'issuer', datum: 'date',
-  kennung: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
-  verlag: 'publisher', publisher: 'publisher', 'ort/verlag': 'publisher', untertitel: 'subtitle', subtitle: 'subtitle',
+  rolle: 'role', role: 'role', 'rôle': 'role', rol: 'role',
+  zeitraum: 'period', period: 'period', 'période': 'period', periodo: 'period', date: 'date', dates: 'period',
+  link: 'url', lien: 'url', enlace: 'url', url: 'url',
+  aussteller: 'issuer', issuer: 'issuer', 'émetteur': 'issuer', emisor: 'issuer', datum: 'date', fecha: 'date',
+  kennung: 'credentialId', identifiant: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
+  verlag: 'publisher', publisher: 'publisher', 'éditeur': 'publisher', editorial: 'publisher', 'ort/verlag': 'publisher',
+  untertitel: 'subtitle', subtitle: 'subtitle', 'sous-titre': 'subtitle', 'subtítulo': 'subtitle',
 };
 const FIELDS_IN: Record<ExtraKind, string[]> = {
   projects: ['role', 'period', 'url'],
@@ -178,7 +191,7 @@ export function parseExtraSection(kind: ExtraKind, title: string, sectionLines: 
     const list = cv.customSections ?? (cv.customSections = []);
     list.push({
       id: uid('sec'),
-      title: clipField(val(title).replace(/^(abschnitt|section)\s*:\s*/i, ''), SHORT),
+      title: clipField(val(title).replace(/^(abschnitt|section|secci[oó]n)\s*:\s*/i, ''), SHORT),
       items,
       entries: entries.map(e => ({ id: uid('ent'), title: e.title, subtitle: e.fields.subtitle || '', date: e.fields.date || '', text: clipField(e.text, LONG) })),
     });
@@ -320,14 +333,15 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
       const m = splitKeyLine(t);
       if (m) {
         const k = m.key.toLowerCase(), v = clipField(m.value, 240);
-        if (/e[-\s]?mail/.test(k)) cv.personal.email = v;
-        else if (/telefon|phone/.test(k)) cv.personal.phone = v;
-        else if (/ort|location|adresse|address/.test(k)) cv.personal.location = v;
-        else if (/website|web|portfolio/.test(k)) cv.personal.website = v;
-        else if (/geburtsdatum|date of birth/.test(k)) cv.personal.birthDate = v;
-        else if (/führerschein|drivers? licen[sc]e/.test(k)) cv.personal.driversLicense = v;
-        else if (/staatsangehörigkeit|nationality/.test(k)) cv.personal.nationality = v;
-        else if (/familienstand|marital/.test(k)) cv.personal.maritalStatus = v;
+        if (/e[-\s]?mail|correo/.test(k)) cv.personal.email = v;
+        else if (/telefon|phone|tel[ée]fono/.test(k)) cv.personal.phone = v;
+        // Website vor Ort: „Portfolio“ enthält „ort“.
+        else if (/website|web|portfolio|site|sitio/.test(k)) cv.personal.website = v;
+        else if (KEY_LOCATION.test(k)) cv.personal.location = v;
+        else if (/geburtsdatum|date of birth|date de naissance|fecha de nacimiento/.test(k)) cv.personal.birthDate = v;
+        else if (/führerschein|drivers? licen[sc]e|driving licen[sc]e|permis|permiso de conducir/.test(k)) cv.personal.driversLicense = v;
+        else if (/staatsangehörigkeit|nationality|nationalit[ée]|nacionalidad/.test(k)) cv.personal.nationality = v;
+        else if (/familienstand|marital|situation familiale|estado civil/.test(k)) cv.personal.maritalStatus = v;
         else {
           const plat = normalisePlatform(k);
           if (plat) {
@@ -335,7 +349,7 @@ export function markdownToCvData(md: string, existing: CVData): CVData {
             socials.push({ id: `s-${Date.now()}-${socials.length}`, platform: plat, value: v });
           }
         }
-        lastContact = /ort|location|adresse|address/.test(k) && !/e[-\s]?mail|telefon|phone|website|web|portfolio/.test(k) ? 'location' : '';
+        lastContact = KEY_LOCATION.test(k) && !KEY_NOT_LOCATION.test(k) ? 'location' : '';
       } else if (t && lastContact === 'location' && !/^[-*+]\s/.test(t)) {
         /* Zweizeilige Anschrift: Die zweite Zeile („21335 Lüneburg") steht
          * ohne Spiegelstrich unter „- Ort:". Bis zum 09.10.2026 fiel sie beim
@@ -451,25 +465,21 @@ export function clToMarkdown(cl: CoverLetterData, lang: string, template: string
   out.push('---');
   out.push('');
 
-  out.push('## Empfänger');
-  if (val(cl.company)) out.push(`- Firma: ${val(cl.company)}`);
-  if (val(cl.contactPerson)) out.push(`- Ansprechpartner: ${val(cl.contactPerson)}`);
-  if (val(cl.companyAddress)) out.push(`- Adresse: ${val(cl.companyAddress)}`);
+  const H = clHeadsOf(lang);
+  out.push(`## ${H.recipient}`);
+  if (val(cl.company)) out.push(`- ${H.company}: ${val(cl.company)}`);
+  if (val(cl.contactPerson)) out.push(`- ${H.contactPerson}: ${val(cl.contactPerson)}`);
+  if (val(cl.companyAddress)) out.push(`- ${H.companyAddress}: ${val(cl.companyAddress)}`);
   out.push('');
 
-  out.push('## Kopf');
-  if (val(cl.city)) out.push(`- Ort: ${val(cl.city)}`);
-  if (val(cl.date)) out.push(`- Datum: ${val(cl.date)}`);
+  out.push(`## ${H.header}`);
+  if (val(cl.city)) out.push(`- ${H.city}: ${val(cl.city)}`);
+  if (val(cl.date)) out.push(`- ${H.date}: ${val(cl.date)}`);
   out.push('');
 
-  if (val(cl.subject)) { out.push('## Betreff'); out.push(val(cl.subject)); out.push(''); }
-  if (val(cl.salutation)) { out.push('## Anrede'); out.push(val(cl.salutation)); out.push(''); }
-  if (val(cl.intro)) { out.push('## Einstieg'); out.push(val(cl.intro)); out.push(''); }
-  if (val(cl.mainBody)) { out.push('## Hauptteil'); out.push(val(cl.mainBody)); out.push(''); }
-  if (val(cl.companyReference)) { out.push('## Firmenbezug'); out.push(val(cl.companyReference)); out.push(''); }
-  if (val(cl.motivation)) { out.push('## Motivation'); out.push(val(cl.motivation)); out.push(''); }
-  if (val(cl.closing)) { out.push('## Abschluss'); out.push(val(cl.closing)); out.push(''); }
-  if (val(cl.signoff)) { out.push('## Grußformel'); out.push(val(cl.signoff)); out.push(''); }
+  for (const k of ['subject', 'salutation', 'intro', 'mainBody', 'companyReference', 'motivation', 'closing', 'signoff'] as const) {
+    if (val(cl[k])) { out.push(`## ${H[k]}`); out.push(val(cl[k])); out.push(''); }
+  }
   return out.join('\n');
 }
 
@@ -477,16 +487,17 @@ type ClSection = keyof CoverLetterData | 'recipient' | 'header' | null;
 
 function clSectionOf(title: string): ClSection {
   const t = title.toLowerCase();
-  if (/empf[äa]nger|recipient|adressat/.test(t)) return 'recipient';
-  if (/kopf|header|datum|date/.test(t)) return 'header';
-  if (/betreff|subject/.test(t)) return 'subject';
-  if (/anrede|salutation|hallo/.test(t)) return 'salutation';
+  // Reihenfolge zählt: „Formule d’appel“ (Anrede) vor „Formule de politesse“ (Gruß).
+  if (/empf[äa]nger|recipient|adressat|destinat/.test(t)) return 'recipient';
+  if (/kopf|header|datum|date|en-t[êe]te|encabezado/.test(t)) return 'header';
+  if (/betreff|subject|objet|asunto/.test(t)) return 'subject';
+  if (/anrede|salutation|hallo|formule d['’]appel|saludo/.test(t)) return 'salutation';
   if (/einstieg|intro|einleitung/.test(t)) return 'intro';
-  if (/hauptteil|main|body/.test(t)) return 'mainBody';
-  if (/firmenbezug|company.*ref|warum.*firma/.test(t)) return 'companyReference';
-  if (/motivation|warum.*ich/.test(t)) return 'motivation';
-  if (/abschluss|closing|schluss/.test(t)) return 'closing';
-  if (/grußformel|signoff|gruss|gru[ßs]/.test(t)) return 'signoff';
+  if (/hauptteil|main|body|corps|cuerpo/.test(t)) return 'mainBody';
+  if (/firmenbezug|company.*ref|warum.*firma|why.*company|pourquoi.*entreprise|por qu[ée].*empresa/.test(t)) return 'companyReference';
+  if (/motivation|motivaci[oó]n|warum.*ich/.test(t)) return 'motivation';
+  if (/abschluss|closing|schluss|conclusion|cierre/.test(t)) return 'closing';
+  if (/grußformel|sign-?off|gruss|gru[ßs]|politesse|despedida/.test(t)) return 'signoff';
   return null;
 }
 
@@ -524,12 +535,12 @@ export function markdownToCoverLetter(md: string, existing: CoverLetterData): Co
         if (!m) continue;
         const k = m.key.toLowerCase(), v = m.value;
         if (section === 'recipient') {
-          if (/firma|company/.test(k)) cl.company = v;
-          else if (/ansprechpartner|contact/.test(k)) cl.contactPerson = v;
-          else if (/adresse|address/.test(k)) cl.companyAddress = v;
+          if (/firma|company|entreprise|empresa/.test(k)) cl.company = v;
+          else if (/ansprechpartner|contact|interlocut/.test(k)) cl.contactPerson = v;
+          else if (/adresse|address|direcci[oó]n/.test(k)) cl.companyAddress = v;
         } else {
-          if (/ort|city/.test(k)) cl.city = v;
-          else if (/datum|date/.test(k)) cl.date = v;
+          if (/ort|city|lieu|lugar/.test(k)) cl.city = v;
+          else if (/datum|date|fecha/.test(k)) cl.date = v;
         }
       }
     } else if (CL_TEXT_FIELDS.has(section)) {

@@ -2,18 +2,32 @@
 // SMTP aus dem Admin-Bereich. Echter Dienst gegen echte Postgres-Instanz und
 // einen kleinen SMTP-Ersatz in diesem Prozess (kein Netz nach draußen).
 //
-// Ports: MAIL_PG_PORT (5771), MAIL_API_PORT (3471), MAIL_SMTP_PORT (2571).
+// Sprache der Konto- und Sicherheitsmails (17.11.2026): reine Vorlagen in
+// vier Sprachen und ein zweiter Dienst mit MAIL_CAPTURE_FILE, der prüft,
+// dass die Mails in der Sprache des Kontos bzw. der Anfrage hinausgehen und
+// die Fehler einen stabilen Code tragen.
+//
+// Ports: MAIL_PG_PORT (5771), MAIL_API_PORT (3471), MAIL_SMTP_PORT (2571),
+// MAIL_LANG_PG_PORT (5772), MAIL_LANG_API_PORT (3472).
 
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { solveChallenge } from 'altcha-lib';
+import { deriveKey } from 'altcha-lib/algorithms/pbkdf2';
 import { startPostgres, startServer, findPgBin, client } from './testkit.mjs';
 import { encryptSecret, decryptSecret, settingsKey, unsubscribeToken, verifyUnsubscribeToken, validateSettings } from './mailsettings.js';
 import { renderWorkflow, validateOverride, validateTiming, sampleCtx, TIPS_CONSENT_VERSION } from './mailflows.js';
 import { createMailer } from './mailqueue.js';
 import { runAccessNotices } from './access.js';
+import { tplInvite, tplPasswordReset, tplPasswordChanged, tplPasswordResetByAdmin, tplEmailChanged, tplLoginCode, tplOffboarding, tplAccessEnding } from './mail.js';
+import { tplConfirmEmailChange, tplEmailChangeTaken, tplEmailChangeRequested, tplRegisterExisting, tplPassEnding, tplWithdrawalLate, tplDeclarationUnmatched } from './mailtexts/index.js';
+import { LEGAL } from './mailtexts/legal.js';
 
 const PG_PORT = Number(process.env.MAIL_PG_PORT || 5771);
 const API_PORT = Number(process.env.MAIL_API_PORT || 3471);
@@ -405,6 +419,249 @@ describe('E-Mail-Workflows gegen die laufende API', { skip: PG_MISSING }, () => 
     for (const [m, p] of [['get', '/api/admin/mail'], ['post', '/api/admin/mail/smtp'], ['get', '/api/admin/mail/queue'], ['post', '/api/admin/mail/run']]) {
       const r = m === 'get' ? await K.get(p) : await K.post(p, {});
       assert.equal(r.status, 403, `${m} ${p}`);
+    }
+  });
+});
+
+/* ── Sprache der Konto- und Sicherheitsmails (17.11.2026) ─────────────── */
+
+const LANGS4 = ['de', 'en', 'fr', 'es'];
+const FOOTERS = {
+  de: 'Diese Nachricht wurde automatisch versendet.',
+  en: 'This message was sent automatically.',
+  fr: 'Ce message a été envoyé automatiquement.',
+  es: 'Este mensaje se ha enviado automáticamente.',
+};
+/** Typische Wörter, die nur in der deutschen Fassung stehen dürfen. */
+const GERMAN = /\b(dein|deine|Konto|Passwort|wurde|melde dich|Hallo|E-Mail-Adresse)\b/;
+
+test('Kontomails: jede Vorlage in vier Sprachen, mit Fuß und lang-Attribut, ohne deutsche Reste', () => {
+  const until = new Date(Date.now() + 5 * 86_400_000);
+  const make = l => ({
+    invite: tplInvite({ code: 'ABCD-1234', note: 'Notiz <b>x</b>', lang: l }),
+    reset: tplPasswordReset({ token: 't0k3n', base: BASE, lang: l }),
+    changed: tplPasswordChanged({ username: 'muster', lang: l }),
+    resetAdmin: tplPasswordResetByAdmin({ username: 'muster', lang: l }),
+    emailChanged: tplEmailChanged({ username: 'muster', newEmail: 'neu@example.test', lang: l }),
+    emailRemoved: tplEmailChanged({ username: 'muster', newEmail: null, lang: l }),
+    loginCode: tplLoginCode({ code: '493817', lang: l }),
+    deleted: tplOffboarding({ username: 'muster', deleted: true, retainedOrders: 2, lang: l }),
+    disabled: tplOffboarding({ username: 'muster', deleted: false, lang: l }),
+    accessEnding: tplAccessEnding({ username: 'muster', until, daysLeft: 5, base: BASE, lang: l }),
+    passEnding: tplPassEnding({ username: 'muster', until, daysLeft: 5, base: BASE, lang: l }),
+    confirmChange: tplConfirmEmailChange({ token: 'x'.repeat(30), base: BASE, lang: l }),
+    changeTaken: tplEmailChangeTaken({ base: BASE, lang: l }),
+    changeRequested: tplEmailChangeRequested({ username: 'muster', newEmail: 'neu@example.test', lang: l }),
+    registerExisting: tplRegisterExisting({ base: BASE, lang: l }),
+  });
+  const de = make('de');
+  for (const l of LANGS4) {
+    const all = make(l);
+    for (const [name, m] of Object.entries(all)) {
+      assert.ok(m.subject && m.html, `${name}/${l}`);
+      assert.ok(m.html.includes(`<html lang="${l}">`), `${name}/${l}: lang-Attribut`);
+      assert.ok(m.html.includes(FOOTERS[l]), `${name}/${l}: Fuß in der Sprache`);
+      assert.ok(!/\{\{|undefined|\[object/.test(m.subject + m.html), `${name}/${l}: kein offener Platzhalter`);
+      if (l !== 'de') {
+        assert.notEqual(m.subject, de[name].subject, `${name}/${l}: eigener Betreff`);
+        const visible = m.html.replace(/<[^>]+>/g, ' ').replace(/muster/g, '');
+        assert.doesNotMatch(visible, GERMAN, `${name}/${l}: keine deutschen Sätze`);
+      }
+    }
+    assert.ok(!all.invite.html.includes('<b>x</b>'), 'Notiz escaped');
+    assert.ok(!all.loginCode.subject.includes('493817'), 'Code nicht im Betreff');
+  }
+  // Französisch siezt, Spanisch duzt (wie Oberfläche und mailflows.js).
+  assert.match(make('fr').reset.html, /votre mot de passe/);
+  assert.match(make('es').reset.html, /tu contraseña/);
+  // Unbekannte Sprache: Deutsch.
+  assert.equal(tplPasswordReset({ token: 't', base: BASE, lang: 'pt' }).subject, de.reset.subject);
+});
+
+test('Hinweis vor Laufzeitende: mit Sprache einsprachig, ohne Sprache Deutsch und Englisch', () => {
+  const until = new Date(Date.now() + 3 * 86_400_000);
+  for (const tpl of [tplAccessEnding, tplPassEnding]) {
+    const both = tpl({ username: 'muster', until, daysLeft: 3, base: BASE });
+    assert.match(both.subject, / · /);
+    assert.match(both.html, /Noch 3 Tage/);
+    assert.match(both.html, /ends on/);
+    const fr = tpl({ username: 'muster', until, daysLeft: 3, base: BASE, lang: 'fr' });
+    assert.match(fr.html, /Plus que 3 jours/);
+    assert.ok(!/Noch 3 Tage|ends on/.test(fr.html), 'nur Französisch');
+  }
+  // Über den Workflow: Konto mit Sprache → einsprachig, ohne → zweisprachig.
+  const ctx = { ...sampleCtx('pass_ending', BASE), user: { username: 'muster', mail_lang: 'es' } };
+  assert.match(renderWorkflow('pass_ending', 'es', ctx).subject, /^Tu pase de candidatura termina el/);
+  assert.match(renderWorkflow('pass_ending', 'de', sampleCtx('pass_ending', BASE)).subject, /Bewerbungs-Pass endet am .* · Your pass ends on/);
+  // Auch die Workflow-Mails tragen jetzt den Fuß ihrer Sprache.
+  assert.ok(renderWorkflow('welcome', 'fr', sampleCtx('welcome', BASE)).html.includes(FOOTERS.fr));
+});
+
+test('Vertragsmails: englische Lesehilfe groß nach der Anrede, deutsche Fassung maßgeblich', () => {
+  for (const [name, m] of Object.entries(LEGAL.mails.en)) {
+    if (!m?.body) continue;
+    const i = m.body.findIndex(l => /^Hello\b.*,$/.test(l));
+    if (i < 0) continue;
+    const next = m.body.slice(i + 1).find(l => l.trim());
+    assert.match(next, /^[A-Z{]/, `${name}: nach „Hello …,“ groß weiter`);
+  }
+  assert.ok(LEGAL.mails.en.orderConfirmation.body.some(l => /German version is binding/.test(l)), 'Bestellbestätigung nennt die maßgebliche Fassung');
+  const order = { order_no: 'CV-2026-0001', billing_name: 'Erika Muster', locale: 'en' };
+  const late = tplWithdrawalLate({ order, statement: 'Hiermit widerrufe ich.', receivedAt: new Date(), base: BASE });
+  assert.match(late.subject, /^Acknowledgement/);
+  assert.match(late.text, /German version is binding/);
+  assert.match(late.text, /Hiermit widerrufe ich\./, 'Wortlaut unverändert');
+  assert.match(tplWithdrawalLate({ order: { ...order, locale: 'de' }, statement: 'x', receivedAt: new Date() }).subject, /^Eingangsbestätigung/);
+  // Französisch und Spanisch: englische Lesehilfe (Vertragstexte gibt es nur deutsch und englisch).
+  const un = tplDeclarationUnmatched({ type: 'withdrawal', statement: 'x', receivedAt: new Date(), lang: 'es' });
+  assert.match(un.subject, /^Acknowledgement of your declaration \(withdrawal\)/);
+  assert.match(un.text, /German version is binding/);
+  assert.match(tplDeclarationUnmatched({ type: 'cancellation', statement: 'x', receivedAt: new Date() }).subject, /Kündigung/);
+});
+
+async function solveAltcha(base) {
+  const ch = await (await fetch(`${base}/api/altcha/challenge`)).json();
+  const solution = await solveChallenge({ challenge: ch, deriveKey, timeout: 20_000 });
+  assert.ok(solution, 'ALTCHA-Aufgabe gelöst');
+  return Buffer.from(JSON.stringify({ challenge: ch, solution })).toString('base64');
+}
+
+describe('Mail-Sprache und Fehlercodes gegen die laufende API', { skip: PG_MISSING }, () => {
+  const LPG = Number(process.env.MAIL_LANG_PG_PORT || 5772);
+  const LAPI = Number(process.env.MAIL_LANG_API_PORT || 3472);
+  const pw = 'kunde-passwort-1';
+  let pgInst, api, db, dir, mailFile;
+  const ids = {};
+
+  const mails = () => (existsSync(mailFile) ? readFileSync(mailFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+  async function mailTo(to, re, from = 0) {
+    for (let i = 0; i < 100; i++) {
+      const m = mails().slice(from).find(x => x.to === to && (!re || re.test(x.subject)));
+      if (m) return m;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return assert.fail(`keine Mail an ${to}${re ? ` (${re})` : ''}`);
+  }
+  async function login(name) {
+    const c = client(api.base);
+    const r = await c.post('/api/auth/login', { username: name, password: pw });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    return c;
+  }
+
+  before(async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'cv-maillang-'));
+    mailFile = path.join(dir, 'mails.jsonl');
+    pgInst = await startPostgres(LPG);
+    api = await startServer({
+      DATABASE_URL: pgInst.url, JWT_SECRET: 'maillang-test-secret', NODE_ENV: 'test',
+      PUBLIC_BASE_URL: BASE, ALLOWED_ORIGINS: BASE, ADMIN_HOST: '', ADMIN_URL: '', ADMIN_EMAIL: 'admin@example.test',
+      ADMIN_USERNAME: 'root', ADMIN_PASSWORD: 'admin-passwort-1',
+      MAIL_CAPTURE_FILE: mailFile, SMTP_HOST: '', SMTP_USER: '', SMTP_PASS: '', SMTP_FORCE_ENV: '',
+      OPEN_REGISTRATION: '1', ALTCHA_HMAC_KEY: 'altcha-test-key-0123456789abcdef', ALTCHA_COST: '10', ALTCHA_COUNTER_MIN: '5', ALTCHA_COUNTER_MAX: '40',
+      JANITOR: '0', ACCESS_NOTICES: '0', BILLING_JOBS: '0', MAIL_JOBS: '0', TRUST_PROXY: '', TEST_RATE_LIMIT_FACTOR: '20',
+    }, { port: LAPI });
+    db = new pg.Pool({ connectionString: pgInst.url, max: 3 });
+    const hash = await bcrypt.hash(pw, 4);
+    const seed = [['fiona', 'fr'], ['sofia', 'es'], ['emma', 'en'], ['nils', null], ['tara', 'es']];
+    for (const [name, lang] of seed) {
+      const { rows } = await db.query(
+        `INSERT INTO users (username, password_hash, email, signup_source, password_changed_at, email_confirmed_at, mail_lang)
+         VALUES ($1, $2, $3, 'self', now(), now(), $4) RETURNING id`,
+        [name, hash, `${name}@example.test`, lang]);
+      ids[name] = rows[0].id;
+    }
+    await db.query('UPDATE users SET twofa_enabled = true WHERE id = $1', [ids.tara]);
+  });
+
+  after(async () => {
+    await db?.end().catch(() => {});
+    await api?.stop();
+    pgInst?.stop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('Passwort vergessen: Sprache des Kontos, sonst Body-Feld lang, sonst Accept-Language', async () => {
+    const C = client(api.base);
+    await C.post('/api/auth/forgot-password', { identifier: 'fiona@example.test', lang: 'en' }, { headers: { 'Accept-Language': 'es' } });
+    assert.match((await mailTo('fiona@example.test', /mot de passe/)).subject, /^Réinitialiser votre mot de passe/, 'Konto zuerst');
+    await C.post('/api/auth/forgot-password', { identifier: 'nils@example.test' }, { headers: { 'Accept-Language': 'pt-BR, es-ES;q=0.9, en;q=0.5' } });
+    assert.match((await mailTo('nils@example.test', /contraseña/)).subject, /^Restablecer la contraseña/, 'erste bekannte Sprache aus Accept-Language');
+    const n = mails().length;
+    await C.post('/api/auth/forgot-password', { identifier: 'nils@example.test', lang: 'en' }, { headers: { 'Accept-Language': 'es' } });
+    assert.match((await mailTo('nils@example.test', /password/i, n)).subject, /^Reset your password/, 'Body-Feld vor Header');
+  });
+
+  test('Passwort ändern, Login-Code, Adresswechsel und Löschen in der Sprache des Kontos', async () => {
+    const S = await login('sofia');
+    let r = await S.post('/api/auth/change-password', { currentPassword: pw, newPassword: 'neues-passwort-2' });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.match((await mailTo('sofia@example.test', /contraseña/)).subject, /^Tu contraseña se ha cambiado/);
+
+    // 2FA: Code-Mail auf Spanisch, falscher Code mit stabilem Fehlercode.
+    const T = client(api.base);
+    r = await T.post('/api/auth/login', { username: 'tara', password: pw });
+    assert.equal(r.data.twofa, true, JSON.stringify(r.data));
+    const codeMail = await mailTo('tara@example.test', /código/);
+    assert.match(codeMail.subject, /^Tu código de inicio de sesión/);
+    const real = />(\d{6})</.exec(codeMail.html)?.[1];
+    r = await T.post('/api/auth/verify-2fa', { challenge: r.data.challenge, code: real === '000000' ? '111111' : '000000' });
+    assert.equal(r.status, 401);
+    assert.equal(r.data.code, 'twofa_code_wrong');
+
+    // Adresswechsel (Englisch): Link an die neue, Hinweis an die alte Adresse.
+    const E = await login('emma');
+    r = await E.post('/api/auth/email', { email: 'emma.neu@example.test', currentPassword: pw }, { headers: { 'Accept-Language': 'de' } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.match((await mailTo('emma.neu@example.test')).subject, /^Please confirm your new email address/);
+    assert.match((await mailTo('emma@example.test', /requested/)).subject, /^New email address requested/);
+    // Vergebene Adresse: Hinweis in der Sprache des Kontos, dem sie gehört (Fiona, Französisch).
+    r = await E.post('/api/auth/email', { email: 'fiona@example.test', currentPassword: pw });
+    assert.equal(r.status, 200);
+    assert.match((await mailTo('fiona@example.test', /Information/)).subject, /^Information concernant votre compte/);
+    r = await E.post('/api/auth/email', { email: 'x@example.test', currentPassword: 'falsch' });
+    assert.equal(r.data.code, 'password_wrong');
+
+    // Konto löschen (Französisch).
+    const F = await login('fiona');
+    r = await F.post('/api/me/delete', { password: 'falsch' });
+    assert.equal(r.status, 401);
+    assert.equal(r.data.code, 'password_wrong');
+    r = await F.post('/api/me/delete', { password: pw });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.match((await mailTo('fiona@example.test', /supprimé/)).subject, /^Votre compte a été supprimé/);
+  });
+
+  test('Registrierung mit vorhandener Adresse: Hinweis in der Sprache der Anfrage', async () => {
+    const C = client(api.base);
+    const r = await C.post('/api/auth/register', { email: 'nils@example.test', password: 'irgendwas-langes', altcha: await solveAltcha(api.base), ageConfirmed16: true, lang: 'fr' });
+    assert.equal(r.status, 409, JSON.stringify(r.data));
+    assert.equal(r.data.code, 'email_taken');
+    assert.match((await mailTo('nils@example.test', /compte/)).subject, /^Vous avez déjà un compte/);
+  });
+
+  test('Fehler für Endnutzer tragen einen stabilen Code', async () => {
+    const C = client(api.base);
+    const cases = [
+      [await C.post('/api/auth/login', { username: 'nils', password: 'falsch' }), 401, 'credentials_wrong'],
+      [await C.post('/api/auth/verify-2fa', { challenge: 'x', code: '12' }), 400, 'twofa_code_format'],
+      [await C.post('/api/auth/verify-2fa', { challenge: 'abc', code: '123456' }), 400, 'twofa_code_expired'],
+      [await C.post('/api/auth/reset-password', { token: 'ungueltig', newPassword: 'neues-passwort-9' }), 400, 'token_invalid'],
+      [await C.post('/api/auth/reset-password', { token: 'x', newPassword: 'kurz' }), 400, 'password_short'],
+      [await C.get('/api/auth/me'), 401, 'auth_required'],
+      [await C.get('/api/share/0123456789abcdef'), 404, 'share_not_found'],
+    ];
+    const N = await login('nils');
+    cases.push(
+      [await N.get('/api/resumes/gibt-es-nicht'), 404, 'profile_not_found'],
+      [await N.get('/api/resumes/gibt-es-nicht/versions/1'), 404, 'version_not_found'],
+      [await N.post('/api/auth/change-password', { currentPassword: 'falsch', newPassword: 'neues-passwort-3' }), 403, 'password_wrong'],
+      [await N.post('/api/me/mail', { lang: 'xx' }), 400, 'lang_invalid'],
+    );
+    for (const [r, status, code] of cases) {
+      assert.equal(r.status, status, JSON.stringify(r.data));
+      assert.equal(r.data?.code, code, JSON.stringify(r.data));
+      assert.equal(typeof r.data.error, 'string', 'Klartext bleibt für ältere Clients');
     }
   });
 });

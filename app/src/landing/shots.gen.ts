@@ -1,4 +1,4 @@
-// Erzeugt von scripts/landing-shots.mjs am 2026-10-10. Nicht von Hand ändern.
+// Erzeugt von scripts/landing-shots.mjs am 2026-11-17. Nicht von Hand ändern.
 // Neu erzeugen: siehe Kopf von scripts/landing-shots.mjs.
 export interface ShotImage { w: number; h: number; v: string; avif: [string, number][]; webp: [string, number][]; png: [string, number] | null }
 export interface TextLine { t: string; side: boolean }
@@ -257,7 +257,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "hero-a-en-960.png",
    960
   ],
-  "v": "171ef61059"
+  "v": "373043929e"
  },
  "hero-b-en": {
   "w": 2880,
@@ -283,7 +283,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "8a3dcc4d12"
+  "v": "f01fd82a85"
  },
  "design-en": {
   "w": 2280,
@@ -312,7 +312,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "design-en-960.png",
    960
   ],
-  "v": "e3157251e6"
+  "v": "d63e061d01"
  },
  "hero-c-en": {
   "w": 2880,
@@ -338,7 +338,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "2229902346"
+  "v": "da9e32d90a"
  },
  "editor-en": {
   "w": 2280,
@@ -367,7 +367,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "editor-en-960.png",
    960
   ],
-  "v": "32ff3b57ff"
+  "v": "ffbd979093"
  },
  "check-en": {
   "w": 2280,
@@ -396,7 +396,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "check-en-960.png",
    960
   ],
-  "v": "931df1e7f1"
+  "v": "6388e3ac88"
  },
  "export-en": {
   "w": 1880,
@@ -425,7 +425,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "export-en-960.png",
    960
   ],
-  "v": "7a41edfd0b"
+  "v": "d589adb86f"
  },
  "phone-en": {
   "w": 780,
@@ -454,7 +454,7 @@ export const SHOTS: Record<string, ShotImage> = {
    "phone-en-390.png",
    390
   ],
-  "v": "c9c9e7f60a"
+  "v": "15b04d10ba"
  },
  "hero-a-fr": {
   "w": 2880,
@@ -1972,7 +1972,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "1cc491a51a"
+  "v": "9aec23f4d3"
  },
  "thumb-en-kopenhagen": {
   "w": 794,
@@ -1998,7 +1998,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "36d9a5f953"
+  "v": "08e084c202"
  },
  "thumb-en-oslo": {
   "w": 794,
@@ -2024,7 +2024,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "24618c8ef9"
+  "v": "1e4275e5e7"
  },
  "thumb-en-berlin": {
   "w": 794,
@@ -2050,7 +2050,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "677327fca5"
+  "v": "c5f9c93566"
  },
  "thumb-en-wien": {
   "w": 794,
@@ -2076,7 +2076,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "b2003c2c19"
+  "v": "d1a7c5412a"
  },
  "thumb-en-zuerich": {
   "w": 794,
@@ -2102,7 +2102,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "4d634acb64"
+  "v": "71ce5839ed"
  },
  "thumb-en-terrakotta": {
   "w": 794,
@@ -2128,7 +2128,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "9568a5c928"
+  "v": "1c493e9252"
  },
  "thumb-en-lissabon": {
   "w": 794,
@@ -2154,7 +2154,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "a541f60786"
+  "v": "78d63ed430"
  },
  "thumb-en-mailand": {
   "w": 794,
@@ -2180,7 +2180,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "59a495af6f"
+  "v": "52a4f4c9c9"
  },
  "thumb-en-bordeaux": {
   "w": 794,
@@ -2206,7 +2206,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "0a873f08ec"
+  "v": "68058e958e"
  },
  "thumb-en-amsterdam": {
   "w": 794,
@@ -2232,7 +2232,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "6a5d0c771a"
+  "v": "37683ce768"
  },
  "thumb-en-genf": {
   "w": 794,
@@ -2258,7 +2258,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "77977535c1"
+  "v": "7aa03abd37"
  },
  "thumb-en-patterson": {
   "w": 794,
@@ -2284,7 +2284,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "40f4854773"
+  "v": "ea44dc3ba9"
  },
  "thumb-en-karlsruhe": {
   "w": 794,
@@ -2310,7 +2310,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "219ae5d7e2"
+  "v": "872992393b"
  },
  "thumb-en-rosenheim": {
   "w": 794,
@@ -2336,7 +2336,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "cd4d84de19"
+  "v": "4e8daea0f2"
  },
  "thumb-en-espoo": {
   "w": 794,
@@ -2362,7 +2362,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "4b56947cc9"
+  "v": "8eb87a1e02"
  },
  "thumb-en-seoul": {
   "w": 794,
@@ -2388,7 +2388,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "4b94b41184"
+  "v": "5a8359b389"
  },
  "thumb-en-lyon": {
   "w": 794,
@@ -2414,7 +2414,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "518add8039"
+  "v": "37efce1fc1"
  },
  "thumb-en-lueneburg": {
   "w": 794,
@@ -2440,7 +2440,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "d6fb5bdbd1"
+  "v": "8be48b7cd1"
  },
  "thumb-en-husum": {
   "w": 794,
@@ -2466,7 +2466,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "5ab06c64bd"
+  "v": "953ef90cff"
  },
  "thumb-en-bregenz": {
   "w": 794,
@@ -2492,7 +2492,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "64a091867e"
+  "v": "6f68638a88"
  },
  "thumb-en-uppsala": {
   "w": 794,
@@ -2518,7 +2518,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "ccf75c2702"
+  "v": "c273843c65"
  },
  "thumb-en-aarhus": {
   "w": 794,
@@ -2544,7 +2544,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "6a1bc91fa5"
+  "v": "b80e97df92"
  },
  "thumb-en-lille": {
   "w": 794,
@@ -2570,7 +2570,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "5f2be600fa"
+  "v": "71c9ec6119"
  },
  "thumb-en-antwerpen": {
   "w": 794,
@@ -2596,7 +2596,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "fbf90a4e1d"
+  "v": "b15c355327"
  },
  "thumb-en-rotterdam": {
   "w": 794,
@@ -2622,7 +2622,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "e1af92648c"
+  "v": "a077b60d9d"
  },
  "thumb-en-bamberg": {
   "w": 794,
@@ -2648,7 +2648,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "5c4bf02de3"
+  "v": "0009224d55"
  },
  "thumb-en-weimar": {
   "w": 794,
@@ -2674,7 +2674,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "d5cdb883e0"
+  "v": "2179f60805"
  },
  "thumb-en-kiel": {
   "w": 794,
@@ -2700,7 +2700,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "85d7430b59"
+  "v": "08ae0e8c79"
  },
  "thumb-en-goettingen": {
   "w": 794,
@@ -2726,7 +2726,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "e1d8a31d74"
+  "v": "37a776ad6b"
  },
  "thumb-en-bergen": {
   "w": 794,
@@ -2752,7 +2752,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "72fea59994"
+  "v": "a1f057f1e8"
  },
  "thumb-en-porto": {
   "w": 794,
@@ -2778,7 +2778,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "d24221eaf2"
+  "v": "a110535a54"
  },
  "thumb-en-dublin": {
   "w": 794,
@@ -2804,7 +2804,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "606b74d74c"
+  "v": "01f9085f7f"
  },
  "thumb-en-luxemburg": {
   "w": 794,
@@ -2830,7 +2830,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "2ac02aa6ca"
+  "v": "ed961f0c19"
  },
  "thumb-en-freiburg": {
   "w": 794,
@@ -2856,7 +2856,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "c8a4a482a1"
+  "v": "bdce3bf71e"
  },
  "thumb-en-tallinn": {
   "w": 794,
@@ -2882,7 +2882,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "44824ad418"
+  "v": "161146ba71"
  },
  "thumb-en-graz": {
   "w": 794,
@@ -2908,7 +2908,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "6539c01d8b"
+  "v": "3cec9cd9c1"
  },
  "thumb-en-linz": {
   "w": 794,
@@ -2934,7 +2934,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "4f41886be0"
+  "v": "b7f1946746"
  },
  "thumb-en-luebeck": {
   "w": 794,
@@ -2960,7 +2960,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "770da0d546"
+  "v": "8a1c364b56"
  },
  "thumb-en-valencia": {
   "w": 794,
@@ -2986,7 +2986,7 @@ export const SHOTS: Record<string, ShotImage> = {
    ]
   ],
   "png": null,
-  "v": "c27b63a4d6"
+  "v": "5524c8196f"
  }
 };
 export const TEXTLAYER: Record<string, TextLayer> = {
@@ -3132,27 +3132,31 @@ export const TEXTLAYER: Record<string, TextLayer> = {
   "name": "Hamburg",
   "raw": [
    {
-    "t": "Lena Brandt",
+    "t": "Priya Raman",
     "side": false
    },
    {
-    "t": "SENIOR PRODUCT DESIGNER",
+    "t": "SENIOR BACKEND ENGINEER",
     "side": false
    },
    {
-    "t": "Senior product designer with seven years of experience across B2B SaaS and",
+    "t": "linkedin.com/in/priya-raman-example",
     "side": false
    },
    {
-    "t": "e-commerce. I focus on scalable design systems, research-driven product",
+    "t": "Backend engineer with nine years of experience in payments and logistics,",
     "side": false
    },
    {
-    "t": "work and close collaboration with engineering — from the first wireframe to",
+    "t": "the last three in Berlin. I design and run Java and Kotlin services on",
     "side": false
    },
    {
-    "t": "the shipped feature.",
+    "t": "PostgreSQL and Kafka and care about clear interfaces, good tests and quiet",
+    "side": false
+   },
+   {
+    "t": "on-call weeks. Looking for a senior role in a product team.",
     "side": false
    },
    {
@@ -3160,75 +3164,39 @@ export const TEXTLAYER: Record<string, TextLayer> = {
     "side": false
    },
    {
-    "t": "Senior Product Designer",
+    "t": "Senior Backend Engineer",
     "side": false
    },
    {
-    "t": "Nordhub GmbH · Hamburg",
+    "t": "Kesselhaus Mobility GmbH · Berlin",
     "side": false
    },
    {
-    "t": "01/2023 – today",
+    "t": "04/2023 – Present",
     "side": false
    },
    {
-    "t": "Owner of the design system (Figma + tokens) rolled out across four",
+    "t": "Split the booking monolith into four Kotlin and Spring Boot services;",
     "side": false
    },
    {
-    "t": "product areas",
+    "t": "releases went from weekly to daily",
     "side": false
    },
    {
-    "t": "Led discovery and delivery for three core features — from user interviews",
+    "t": "Cut p95 latency of the pricing API from 480 ms to 190 ms by reworking",
     "side": false
    },
    {
-    "t": "to hi-fi specs",
+    "t": "PostgreSQL indexes and caching",
     "side": false
    },
    {
-    "t": "Reworked the onboarding flow; analytics team reported a clear day-7",
-    "side": false
-   },
-   {
-    "t": "activation lift",
+    "t": "Introduced contract tests between eight services; integration incidents fell",
     "side": false
    }
   ],
   "layout": [
-   {
-    "t": "Lena Brandt",
-    "side": false
-   },
-   {
-    "t": "SENIOR PRODUCT DESIGNER",
-    "side": false
-   },
-   {
-    "t": "Senior product designer with seven years of experience across B2B SaaS and",
-    "side": false
-   },
-   {
-    "t": "e-commerce. I focus on scalable design systems, research-driven product",
-    "side": false
-   },
-   {
-    "t": "work and close collaboration with engineering — from the first wireframe to",
-    "side": false
-   },
-   {
-    "t": "the shipped feature.",
-    "side": false
-   },
-   {
-    "t": "PROFESSIONAL EXPERIENCE",
-    "side": false
-   },
-   {
-    "t": "Senior Product Designer",
-    "side": false
-   },
    {
     "t": "CONTACT",
     "side": true
@@ -3238,27 +3206,59 @@ export const TEXTLAYER: Record<string, TextLayer> = {
     "side": true
    },
    {
-    "t": "lena.brandt@example.com",
+    "t": "priya.raman@example.com",
     "side": true
    },
    {
-    "t": "01/2023 – today",
-    "side": false
-   },
-   {
-    "t": "Nordhub GmbH · Hamburg",
-    "side": false
-   },
-   {
-    "t": "Owner of the design system (Figma + tokens) rolled out across four",
-    "side": false
-   },
-   {
-    "t": "product areas",
-    "side": false
-   },
-   {
     "t": "PHONE",
+    "side": true
+   },
+   {
+    "t": "+49 30 23125 456",
+    "side": true
+   },
+   {
+    "t": "LOCATION",
+    "side": true
+   },
+   {
+    "t": "Berlin, Germany",
+    "side": true
+   },
+   {
+    "t": "PERSONAL DETAILS",
+    "side": true
+   },
+   {
+    "t": "Priya Raman",
+    "side": false
+   },
+   {
+    "t": "SENIOR BACKEND ENGINEER",
+    "side": false
+   },
+   {
+    "t": "linkedin.com/in/priya-raman-example",
+    "side": false
+   },
+   {
+    "t": "Backend engineer with nine years of experience in payments and logistics,",
+    "side": false
+   },
+   {
+    "t": "the last three in Berlin. I design and run Java and Kotlin services on",
+    "side": false
+   },
+   {
+    "t": "PostgreSQL and Kafka and care about clear interfaces, good tests and quiet",
+    "side": false
+   },
+   {
+    "t": "on-call weeks. Looking for a senior role in a product team.",
+    "side": false
+   },
+   {
+    "t": "NATIONALITY",
     "side": true
    }
   ],

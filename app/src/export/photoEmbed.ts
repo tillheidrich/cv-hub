@@ -41,11 +41,15 @@ export function stripPlaceholderPhoto(cv: CVData): CVData {
   };
 }
 
+/* Fehlertexte: werden hier aufgefangen und nicht angezeigt, stehen aber in
+ * der Konsole. Englisch, wie die übrigen Entwicklermeldungen. */
+const UNREADABLE = 'Photo could not be read';
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result || ''));
-    r.onerror = () => reject(r.error ?? new Error('Foto nicht lesbar'));
+    r.onerror = () => reject(r.error ?? new Error(UNREADABLE));
     r.readAsDataURL(blob);
   });
 }
@@ -87,7 +91,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const i = new Image();
     i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error('Foto nicht lesbar'));
+    i.onerror = () => reject(new Error(UNREADABLE));
     i.src = src;
   });
 }
@@ -138,7 +142,7 @@ export async function withEmbeddedPhoto(cv: CVData): Promise<CVData> {
   if (!photo) return out;
   const embedded = await photoAsDataUrl(photo);
   if (!embedded) {
-    console.warn('Foto konnte für den Export nicht geladen werden und wird weggelassen.');
+    console.warn('Photo could not be loaded for the export and is left out.');
     out.personal.photo = '';
     return out;
   }

@@ -56,7 +56,6 @@ export function setUiLang(lang: UiLang): void {
 export interface AuthStrings {
   welcomeBack: string;
   createAccount: string;
-  description: { login: string; register: string };
   username: string;
   password: string;
   inviteCode: string;
@@ -73,10 +72,6 @@ export const T: Record<UiLang, { auth: AuthStrings }> = {
     auth: {
       welcomeBack: 'Willkommen zurück.',
       createAccount: 'Leg dein Konto an.',
-      description: {
-        login: 'Editorial-Lebenslauf-Werkstatt. Schreib, drucke, teile. Gib einer KI Markdown, wenn du Lektorat brauchst.',
-        register: 'Registrierung nur mit Einladungscode. Wer dir den Link geschickt hat, hat einen für dich.',
-      },
       username: 'Nutzername',
       password: 'Passwort',
       inviteCode: 'Einladungscode',
@@ -92,10 +87,6 @@ export const T: Record<UiLang, { auth: AuthStrings }> = {
     auth: {
       welcomeBack: 'Welcome back.',
       createAccount: 'Create your account.',
-      description: {
-        login: 'Editorial resume workshop. Write, print, share. Hand the Markdown to an AI when you want proofreading.',
-        register: 'Registration is invite-only. Whoever shared the link has a code for you.',
-      },
       username: 'Username',
       password: 'Password',
       inviteCode: 'Invite code',
@@ -111,10 +102,6 @@ export const T: Record<UiLang, { auth: AuthStrings }> = {
     auth: {
       welcomeBack: 'Content de vous revoir.',
       createAccount: 'Créez votre compte.',
-      description: {
-        login: "Atelier éditorial de CV. Écrivez, imprimez, partagez. Donnez le Markdown à une IA quand vous voulez une relecture.",
-        register: "Inscription uniquement par code d'invitation. Celui qui vous a envoyé le lien en a un pour vous.",
-      },
       username: "Nom d'utilisateur",
       password: 'Mot de passe',
       inviteCode: "Code d'invitation",
@@ -130,10 +117,6 @@ export const T: Record<UiLang, { auth: AuthStrings }> = {
     auth: {
       welcomeBack: 'Bienvenido de nuevo.',
       createAccount: 'Crea tu cuenta.',
-      description: {
-        login: 'Taller editorial de CV. Escribe, imprime, comparte. Dale el Markdown a una IA cuando quieras una corrección.',
-        register: 'Registro solo con código de invitación. Quien te envió el enlace tiene uno para ti.',
-      },
       username: 'Nombre de usuario',
       password: 'Contraseña',
       inviteCode: 'Código de invitación',

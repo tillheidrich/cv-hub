@@ -1,5 +1,7 @@
-import type { CVData, CoverLetterData, PageFormat } from '../data/types';
+import type { CVData, CoverLetterData, Lang, PageFormat } from '../data/types';
 import { getPageFormat } from '../data/pageFormats';
+import { DEFAULT_COVER_LETTERS } from '../data/storage';
+import { cityOf } from './cityOf';
 import type { ResumeTheme, FontPairing } from './theme';
 import { TRACK_CAPS, TRACK_NAME, type Metrics } from './metrics';
 import { Ed, InlineEditCtx, type InlineEditApi } from './InlineEdit';
@@ -18,6 +20,15 @@ interface Props {
    *  besteht fast nur aus Fließtext. */
   inlineEdit?: InlineEditApi;
 }
+
+/** Fußzeile „Name · Anschreiben" in der Sprache des Briefs. Bis 17.11.2026
+ *  stand dort immer „Anschreiben", auch unter einem englischen Brief. */
+const FOOTER_LABEL: Record<Lang, string> = {
+  de: 'Anschreiben',
+  en: 'Cover letter',
+  fr: 'Lettre de motivation',
+  es: 'Carta de presentación',
+};
 
 export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing: P, metrics: M, measure, pageFormat = 'a4', inlineEdit }: Props) {
   /* Satz des Briefs (19.10.2026, Rückmeldung „alles untereinander
@@ -39,6 +50,14 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
   const { personal } = cvData;
   const banded = T.layout === 'header-band';
   const fmt = getPageFormat(pageFormat);
+  /* Sprache des Briefs = Sprache des Lebenslaufs, zu dem er gehört (das
+   * Anschreiben selbst trägt keine). Sie entscheidet über Fußzeile und die
+   * Grußformel, wenn keine eingetragen ist. */
+  const lang: Lang = (cvData.labels?.lang && FOOTER_LABEL[cvData.labels.lang] ? cvData.labels.lang : 'de');
+  /* Ort leer: der Ort aus der eigenen Anschrift, wie beim Unterschriftsblock
+   * des Lebenslaufs (ResumeRenderer `cityOf`). Früher stand hier für jede
+   * neue Fassung fest „Hamburg". */
+  const city = (clData.city || '').trim() || cityOf(personal.location || '').trim();
 
   const pageStyle: React.CSSProperties = {
     width: `${fmt.widthMm}mm`,
@@ -67,8 +86,6 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
   // gäbe es nichts, wo man hineinklicken könnte, und ausgerechnet diese drei
   // Zeilen ändern sich bei jeder Bewerbung.
   const recipient = inlineEdit ? recipientAll : recipientAll.filter(([, v]) => v.trim());
-  const senderDate = [clData.city, clData.date].filter(Boolean).join(', ');
-  void senderDate;
   // Feldnamen mitführen: die gefilterte Liste allein ließe sich nicht mehr auf
   // das Feld zurückrechnen, in das eine Änderung gehört.
   const bodyParas = ([
@@ -125,10 +142,10 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
               }}><Ed path={`cl.${k}`}>{line}</Ed></div>
             ))}
           </div>
-          {clData.showDateline !== false && (clData.city || clData.date) && (
+          {clData.showDateline !== false && (city || clData.date) && (
             <div style={{ fontFamily: P.body, fontSize: `${13 * d}px`, color: C.inkSoft, whiteSpace: 'nowrap' }}>
-              {clData.city && <Ed path="cl.city">{clData.city}</Ed>}
-              {clData.city && clData.date ? ', ' : ''}
+              {city && <Ed path="cl.city">{city}</Ed>}
+              {city && clData.date ? ', ' : ''}
               {clData.date && <Ed path="cl.date">{clData.date}</Ed>}
             </div>
           )}
@@ -160,7 +177,7 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
         <div style={{ marginTop: `${3 * sp}mm` }}>
           {/* Darunter Platz für die Unterschrift (etwa drei Leerzeilen). */}
           <p style={{ fontFamily: P.body, fontSize: `${BODY * d}px`, color: C.inkMid, margin: `0 0 ${11 * sp}mm` }}>
-            <Ed path="cl.signoff">{clData.signoff || 'Mit freundlichen Grüßen'}</Ed>
+            <Ed path="cl.signoff">{clData.signoff || DEFAULT_COVER_LETTERS[lang].signoff}</Ed>
           </p>
           {clData.showSignature !== false && (
             <>
@@ -177,7 +194,7 @@ export default function CoverLetterRenderer({ cvData, clData, theme: T, pairing:
         borderTop: `1px solid ${C.rule}`, padding: `${3.5 * sp}mm ${padX} ${3.5 * sp}mm ${padL}`,
         display: 'flex', justifyContent: 'space-between', background: banded ? C.panelBg : C.pageBg,
       }}>
-        <div style={{ fontFamily: P.body, fontSize: `${9.2 * d}px`, color: C.inkSoft }}>{personal.name} · Anschreiben</div>
+        <div style={{ fontFamily: P.body, fontSize: `${9.2 * d}px`, color: C.inkSoft }}>{[personal.name, FOOTER_LABEL[lang]].filter(Boolean).join(' · ')}</div>
         <div style={{ fontFamily: P.body, fontSize: `${9.2 * d}px`, color: C.inkSoft }}>{personal.email}</div>
       </div>
     </div>

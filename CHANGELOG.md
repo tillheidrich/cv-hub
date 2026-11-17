@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-11-17 — applying from abroad, English throughout, MCP
+
+**Applying to Germany from abroad.** The text import reads Indian resumes:
+headings such as "Academic Qualifications" or "Languages Known", dates like
+"Jul'21 – Till Date", tables and inline details. It leaves out what does not
+belong on a German CV (declaration, parents' names, religion, passport
+number, CTC) and lists what it left out. The check panel flags those details
+in an existing CV (`app/src/check/germanNorms.ts`), and the tips panel has a
+section on applying from abroad, with grade conversion, anabin/ZAB and
+official sources. The English, French and Spanish start pages have a new
+section "Applying in Germany" and two new FAQs.
+
+**English magazine.** Articles with `lang: en` are built under
+`/en/magazine/` with their own overview, topic pages, 404 page, sitemap
+entries and `hreflang` links to a German version that shares the same
+`translationKey`. Six English guides and a German/English article on the MCP
+connection come as sample content. German addresses are unchanged;
+`MAGAZIN_LANG` now defaults to `de` for `/magazin/`.
+
+**English throughout.** A new English demo CV (Priya Raman, a backend
+engineer in Berlin; the old one is kept for saved profiles), British
+English in the editor and the exports, design names (accents, paper,
+font pairings) in the interface language, file names and Markdown
+headings in the CV's language. Account and security mails now go out in
+the account's language (de, en, fr, es), and server errors carry a stable
+`code` that the interface shows in its own language. The access-request
+table gets a `lang` column (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`).
+
+**MCP.** Tool descriptions are in English, and new CVs created through MCP
+no longer default to German. The start page explains which assistants
+support custom MCP servers and links to the new article.
+
+**Also:** expressions in the text import that could backtrack on long input
+are linear now; the unused copy of the renderer in `pdf-service/renderer/`
+is gone; the English screenshots were taken again with the new demo.
+
 ## 2026-10-20 — sales switch in the admin area
 
 **Admin → Verkauf.** Selling no longer needs environment variables. Paste the

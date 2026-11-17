@@ -14,8 +14,9 @@
 //
 // Texte: Deutsch, Englisch und Spanisch duzen, Französisch siezt (wie die
 // Oberfläche). Die bestehenden Hinweise vor Laufzeitende (tplPassEnding,
-// tplAccessEnding) bleiben zweisprachig wie bisher und lassen sich hier nur
-// schalten und zeitlich einstellen, nicht umschreiben.
+// tplAccessEnding) lassen sich hier nur schalten und zeitlich einstellen,
+// nicht umschreiben; seit 17.11.2026 kommen sie in der Sprache des Kontos
+// (ohne gespeicherte Sprache zweisprachig wie bisher).
 //
 // Anpassungen aus dem Admin-Bereich: Betreff, Überschrift und Text je
 // Sprache. Der Text ist reiner Text (Absätze durch Leerzeilen, Zeilen mit
@@ -517,9 +518,12 @@ export function renderWorkflow(id, lang, ctx, opts = {}) {
   const L = mailLang(lang);
   const wf = WORKFLOWS[id];
   if (id === 'pass_ending' || id === 'access_ending') {
-    // Bestehende Vorlagen, zweisprachig, unverändert.
+    /* Bestehende Vorlagen, nicht anpassbar. Seit 17.11.2026 in der Sprache
+     * des Kontos; ohne gespeicherte Sprache (ältere Konten) zweisprachig wie
+     * bisher. ctx.lang übersteuert (Vorschau im Admin-Bereich). */
     const tpl = id === 'pass_ending' ? tplPassEnding : tplAccessEnding;
-    const m = tpl({ username: ctx.user?.username || '', until: ctx.until, daysLeft: ctx.daysLeft, base: ctx.base });
+    const known = ctx.lang || ctx.user?.mail_lang ? L : null;
+    const m = tpl({ username: ctx.user?.username || '', until: ctx.until, daysLeft: ctx.daysLeft, base: ctx.base, lang: known });
     return { ...m, headers: {}, tag: id };
   }
   const t = textFor(id, L, opts.overrides);
@@ -550,7 +554,7 @@ export function renderWorkflow(id, lang, ctx, opts = {}) {
     ...(ctx.base ? [`${t.button}: ${ctx.base}`] : []),
     ...textFooter,
   ].join('\n');
-  return withTag(id, { subject, html: layout(h(escapeHtml(fillText(t.heading, vars))) + bodyHtml + button + footer), text, headers });
+  return withTag(id, { subject, html: layout(h(escapeHtml(fillText(t.heading, vars))) + bodyHtml + button + footer, L), text, headers });
 }
 
 /** Beispielwerte für die Vorschau im Admin-Bereich. */

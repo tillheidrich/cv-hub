@@ -68,6 +68,14 @@
 .tp-code { display: inline-grid; place-items: center; min-width: 28px; height: 20px; padding: 0 5px; margin-right: 8px; border-radius: 6px; background: var(--ink); color: oklch(0.985 0.003 264); font-size: 11px; font-weight: 680; letter-spacing: 0.04em; vertical-align: 2px; }
 .tp-tool { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--accent-wash); font-size: var(--t-xs); line-height: 1.5; color: var(--ink); }
 .tp-tool b { color: var(--accent-ink); font-weight: 640; }
+/* Zielland (17.11.2026): steuert die Länderhinweise unter „Lebenslauf". */
+.tp-target { display: grid; gap: 6px; margin: 0 0 14px; }
+.tp-target label { font-size: var(--t-sm); font-weight: 620; color: var(--ink); }
+.tp-target select { justify-self: start; min-height: 44px; min-width: 220px; max-width: 100%; padding: 0 12px; border: 0; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px oklch(0.87 0.006 264); font: inherit; font-size: var(--t-sm); color: var(--ink); }
+.tp-target select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tp-target p { margin: 0; font-size: var(--t-xs); line-height: 1.5; color: var(--ink-2); }
+.tp-country[data-active="true"] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tp-jump .tp-jump-detail { margin-top: 3px; color: var(--ink); }
 
 /* Checkliste */
 .tp-progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; font-size: var(--t-xs); font-weight: 600; color: var(--ink); }

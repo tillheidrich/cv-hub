@@ -4,8 +4,9 @@ import type { UiLang } from '../ui/i18n';
 import { useUiLang } from '../ui/useUiLang';
 import { TIPPS_I18N, type TippsStrings } from '../ui/i18n/tipps';
 import { SOURCES } from './sources';
-import { MAGAZIN, magazinUrl } from './magazin';
-import { contextHints, type ContextHint } from './context';
+import { magazinLink, magazinEnUrl, MAGAZIN_EN } from './magazin';
+import { contextHints, DEFAULT_TARGET, TARGETS, type ContextHint, type Target } from './context';
+import { PRUEFEN_I18N } from '../ui/i18n/pruefen';
 import type { Country, Prompt, Tip, TipId, TipTab, TipsContent } from './types';
 import './tipps.css';
 
@@ -55,6 +56,12 @@ function readTab(): TipTab | null {
   try { const v = localStorage.getItem(TAB_KEY) as TipTab | null; return v && TABS.includes(v) ? v : null; } catch { return null; }
 }
 
+/** Zielland für die Länderhinweise (context.ts): nur in diesem Browser. */
+const TARGET_KEY = 'cv-tipps-target';
+function readTarget(): Target {
+  try { const v = localStorage.getItem(TARGET_KEY) as Target | null; return v && TARGETS.includes(v) ? v : DEFAULT_TARGET; } catch { return DEFAULT_TARGET; }
+}
+
 export default function KnowledgePanel({ data, coverLetter, docType, embedded }: {
   data?: CVData;
   coverLetter?: CoverLetterData;
@@ -72,7 +79,9 @@ export default function KnowledgePanel({ data, coverLetter, docType, embedded }:
   const bodyRef = useRef<HTMLDivElement>(null);
   const setTab = (x: TipTab) => { setTabState(x); try { localStorage.setItem(TAB_KEY, x); } catch { /* ohne Speicher */ } };
 
-  const hints = useMemo(() => contextHints(data, coverLetter, coverOpen ? 'cover' : 'resume'), [data, coverLetter, coverOpen]);
+  const [target, setTargetState] = useState<Target>(readTarget);
+  const setTarget = (x: Target) => { setTargetState(x); try { localStorage.setItem(TARGET_KEY, x); } catch { /* ohne Speicher */ } };
+  const hints = useMemo(() => contextHints(data, coverLetter, coverOpen ? 'cover' : 'resume', target), [data, coverLetter, coverOpen, target]);
 
   const jump = (h: ContextHint) => {
     setTab(h.tab);
@@ -94,29 +103,33 @@ export default function KnowledgePanel({ data, coverLetter, docType, embedded }:
       </div>
       <div className="tp-body" id="tp-panel" role="tabpanel" aria-labelledby={`tp-tab-${tab}`} ref={bodyRef}>
         {!content ? <p className="tp-loading" role="status">{t.loading}</p> : (
-          <TabBody tab={tab} content={content} t={t} lang={lang} hints={hints} openId={openId} setOpenId={setOpenId} onJump={jump} />
+          <TabBody tab={tab} content={content} t={t} lang={lang} hints={hints} openId={openId} setOpenId={setOpenId} onJump={jump} target={target} setTarget={setTarget} />
         )}
       </div>
     </div>
   );
 }
 
-function TabBody({ tab, content, t, lang, hints, openId, setOpenId, onJump }: {
+function TabBody({ tab, content, t, lang, hints, openId, setOpenId, onJump, target, setTarget }: {
   tab: TipTab; content: TipsContent; t: TippsStrings; lang: UiLang; hints: ContextHint[];
   openId: string | null; setOpenId: (id: string | null) => void; onJump: (h: ContextHint) => void;
+  target: Target; setTarget: (x: Target) => void;
 }) {
   const all = [...content.cv, ...content.letter];
   const titleOf = (id: TipId) => all.find(x => x.id === id)?.title ?? id;
   const hintIds = new Set(hints.map(h => h.tip));
+  const unusualText = PRUEFEN_I18N[lang].unusual;
   const forYou = hints.length > 0 && (tab === 'cv' || tab === 'letter') && (
     <section className="tp-foryou" data-tips-foryou>
       <h3>{t.forYou}</h3>
       <ul>
         {hints.map(h => (
           <li key={h.tip + h.reason}>
-            <button type="button" className="tp-jump" onClick={() => onJump(h)} data-jump={h.tip}>
+            <button type="button" className="tp-jump" onClick={() => onJump(h)} data-jump={h.tip} data-reason={h.reason}>
               <strong>{titleOf(h.tip)}</strong>
               <span>{t.reason[h.reason]}</span>
+              {/* In Deutschland Unübliches: je Fund ein Satz mit Grund (check/germanNorms.ts). */}
+              {h.unusual?.map(k => <span key={k} className="tp-jump-detail" data-unusual={k}>{unusualText[k]}</span>)}
             </button>
           </li>
         ))}
@@ -143,7 +156,15 @@ function TabBody({ tab, content, t, lang, hints, openId, setOpenId, onJump }: {
     return (
       <>
         <p className="tp-intro">{content.countriesIntro}</p>
-        <div className="tp-cards">{content.countries.map(c => <CountryCard key={c.code} c={c} t={t} />)}</div>
+        <div className="tp-target" data-target>
+          <label htmlFor="tp-target-select">{t.targetLabel}</label>
+          <select id="tp-target-select" value={target} onChange={e => setTarget(e.target.value as Target)} aria-describedby="tp-target-note" data-target-select>
+            {content.countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+            <option value="other">{t.targetOther}</option>
+          </select>
+          <p id="tp-target-note">{t.targetNote}</p>
+        </div>
+        <div className="tp-cards">{content.countries.map(c => <CountryCard key={c.code} c={c} t={t} active={c.code === target} />)}</div>
       </>
     );
   }
@@ -175,7 +196,7 @@ function Sources({ ids, t }: { ids: Tip['sources']; t: TippsStrings }) {
 
 function TipCard({ tip, t, lang, open, hint, onToggle }: { tip: Tip; t: TippsStrings; lang: UiLang; open: boolean; hint: boolean; onToggle: () => void }) {
   const paras = tip.body.split(/\n\n+/);
-  const hasMore = paras.length > 1 || paras[0].length > 180 || !!tip.before || !!tip.sources?.length || !!tip.magazin?.length;
+  const hasMore = paras.length > 1 || paras[0].length > 180 || !!tip.before || !!tip.sources?.length || !!tip.magazin?.length || !!tip.magazinEn?.length;
   const bodyId = `tip-${tip.id}-more`;
   return (
     <article className="tp-card" id={`tip-${tip.id}`} data-tip={tip.id} data-hint={hint} data-open={open}>
@@ -190,19 +211,29 @@ function TipCard({ tip, t, lang, open, hint, onToggle }: { tip: Tip; t: TippsStr
               <div className="tp-ba-after"><b>{t.after}</b>{tip.after}</div>
             </div>
           )}
-          {(tip.sources?.length || tip.magazin?.length) ? (
+          {(tip.sources?.length || tip.magazin?.length || tip.magazinEn?.length) ? (
             <div className="tp-meta">
               <Sources ids={tip.sources} t={t} />
-              {tip.magazin?.length ? (
+              {(tip.magazin?.length || tip.magazinEn?.length) ? (
                 <>
                   <h4>{t.magazin}</h4>
                   <ul>
-                    {tip.magazin.map(slug => (
+                    {(tip.magazinEn || []).map(slug => (
                       <li key={slug}>
-                        <a href={magazinUrl(slug)} target="_blank" rel="noopener" hrefLang="de" data-magazin={slug}>{MAGAZIN[slug]}</a>
-                        {lang !== 'de' && t.magazinLangNote ? ` ${t.magazinLangNote}` : ''}
+                        <a href={magazinEnUrl(slug)} target="_blank" rel="noopener" hrefLang="en" data-magazin={slug}>{MAGAZIN_EN[slug]}</a>
+                        {lang !== 'en' && t.magazinEnNote ? ` ${t.magazinEnNote}` : ''}
                       </li>
                     ))}
+                    {(tip.magazin || []).map(slug => {
+                      // Fassung in der Oberflächensprache, wenn es sie gibt; Sprachhinweis nur ohne.
+                      const m = magazinLink(slug, lang);
+                      return (
+                        <li key={slug}>
+                          <a href={m.href} target="_blank" rel="noopener" hrefLang={m.lang} data-magazin={slug}>{m.title}</a>
+                          {m.lang !== lang && t.magazinLangNote ? ` ${t.magazinLangNote}` : ''}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </>
               ) : null}
@@ -219,9 +250,9 @@ function TipCard({ tip, t, lang, open, hint, onToggle }: { tip: Tip; t: TippsStr
   );
 }
 
-function CountryCard({ c, t }: { c: Country; t: TippsStrings }) {
+function CountryCard({ c, t, active }: { c: Country; t: TippsStrings; active: boolean }) {
   return (
-    <article className="tp-card tp-country" data-country={c.code}>
+    <article className="tp-card tp-country" data-country={c.code} data-active={active}>
       <h3><span className="tp-code" aria-hidden>{c.code}</span>{c.name}</h3>
       <dl>
         {c.rows.map(([k, v]) => (<div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>))}

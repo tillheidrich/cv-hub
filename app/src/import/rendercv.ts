@@ -258,7 +258,7 @@ export async function buildRenderCvYaml(cv: CVData): Promise<string> {
 }
 
 export async function exportRenderCv(cv: CVData): Promise<void> {
-  saveText(exportFilename('lebenslauf', cv.personal.name, 'yaml'), await buildRenderCvYaml(cv), 'application/yaml');
+  saveText(exportFilename('lebenslauf', cv.personal.name, 'yaml', cv.labels?.lang), await buildRenderCvYaml(cv), 'application/yaml');
 }
 
 // ── Import ───────────────────────────────────────────────────────────────────

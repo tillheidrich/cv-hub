@@ -6,6 +6,7 @@ import type { UiLang } from '../ui/i18n';
 import { EP, PanelI18nCtx, usePanelT } from '../ui/editorI18n';
 import type { PanelStrings } from '../ui/editorI18n';
 import { LABELS } from '../data/labels';
+import { isPresentWord } from '../data/extraSections';
 import ChipInput from '../ui/ChipInput';
 import ExtraSectionsEditor from './ExtraSectionsEditor';
 
@@ -313,11 +314,12 @@ function SocialsEditor({ data, onChange }: { data: CVData; onChange: (d: CVData)
  *  Metadaten (EXIF, GPS, Gerät), höchstens `maxSide` Pixel an der langen
  *  Kante. Die EXIF-Ausrichtung wenden aktuelle Browser beim Zeichnen selbst
  *  an; das Ergebnis steht also richtig herum. Transparenz wird weiß. */
-async function reencodeImage(src: string, maxSide: number, quality: number): Promise<string> {
+async function reencodeImage(src: string, maxSide: number, quality: number, unreadable: string): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const i = new Image();
     i.onload = () => resolve(i);
-    i.onerror = () => reject(new Error('Bild nicht lesbar'));
+    // Meldung in der Oberflächensprache — sie landet im Hinweisfenster.
+    i.onerror = () => reject(new Error(unreadable));
     i.src = src;
   });
   const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
@@ -326,7 +328,7 @@ async function reencodeImage(src: string, maxSide: number, quality: number): Pro
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
-  if (!ctx) throw new Error('Canvas nicht verfügbar');
+  if (!ctx) throw new Error(unreadable);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
@@ -380,7 +382,7 @@ function PersonalEditor({ data, onChange, demoMode, onPhotoRemoved }: { data: CV
        * Server. Ein Canvas übernimmt nur die Bildpunkte (Befund Technik-Bericht
        * 08.10.2026). Im Lokalmodus wird es zudem kleiner gerechnet, weil der
        * Speicher des Browsers knapp ist. */
-      const original = await reencodeImage(dataUrl, demoMode ? 1200 : 2400, demoMode ? 0.85 : 0.9);
+      const original = await reencodeImage(dataUrl, demoMode ? 1200 : 2400, demoMode ? 0.85 : 0.9, t.imageUnreadable);
       frischesOriginal.current = original;
       setCropSrc(original);
     } catch (err) {
@@ -788,7 +790,7 @@ function ExperienceEditor({ data, onChange }: { data: CVData; onChange: (d: CVDa
                 <Field label={t.expLocation} value={exp.location} onChange={v => updateExp(idx, { ...exp, location: v })} />
                 <Field label={t.expFrom} value={exp.start} onChange={v => updateExp(idx, { ...exp, start: v })} placeholder={t.expFromPlaceholder} />
                 <div style={{ gridColumn: '1/-1' }}>
-                  <Field label={t.expTo} value={exp.end === 'present' || exp.end === 'heute' ? '' : exp.end} onChange={v => updateExp(idx, { ...exp, end: v || 'present' })} placeholder={t.expToPlaceholder} />
+                  <Field label={t.expTo} value={isPresentWord(exp.end) ? '' : exp.end} onChange={v => updateExp(idx, { ...exp, end: v || 'present' })} placeholder={t.expToPlaceholder} />
                 </div>
               </div>
 

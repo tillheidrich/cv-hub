@@ -77,7 +77,7 @@ const pruefungen = [
   ['Telefon gelesen', r.phone === '+49 151 22446688', r.phone],
   ['Ort gelesen', r.location === 'Hamburg, Deutschland', r.location],
   ['Drei Stationen', r.gefunden.stationen === 3, r.gefunden.stationen],
-  ['Laufende Stelle als „heute"', r.stationen[0].end === 'heute', r.stationen[0].end],
+  ['Laufende Stelle als „present" (Wort der Sprache setzt die Ausgabe)', r.stationen[0].end === 'present', r.stationen[0].end],
   ['Monatsname umgerechnet', r.stationen[1].start === '08/2018', r.stationen[1].start],
   ['Drei Stichpunkte aus mehrzeiliger Beschreibung', r.stationen[0].bullets.length === 3, r.stationen[0].bullets.length],
   ['Listenzeichen entfernt', !/^[•\-]/.test(r.stationen[0].bullets[0] || ''), r.stationen[0].bullets[0]],

@@ -16,6 +16,10 @@ import type { Offer } from '../billing/api';
 
 export interface MagazinArticle {
   slug: string;
+  /** Pfad des Artikels (/magazin/<slug>/ oder /en/magazine/<slug>/); fehlt in alten Indizes. */
+  url?: string;
+  /** Fassungen in anderen Sprachen (gleicher translationKey). */
+  alternates?: { lang: string; url: string }[];
   title: string;
   description: string;
   category: string | null;
@@ -54,10 +58,14 @@ export function embeddedLandingData(): LandingData | null {
 
 function isArticle(a: unknown): a is MagazinArticle {
   const x = a as MagazinArticle;
-  return !!x && typeof x.slug === 'string' && /^[a-z0-9-]+$/.test(x.slug) && typeof x.title === 'string';
+  return !!x && typeof x.slug === 'string' && /^[a-z0-9-]+$/.test(x.slug) && typeof x.title === 'string'
+    && (x.url === undefined || typeof x.url === 'string')
+    && (x.alternates === undefined || (Array.isArray(x.alternates) && x.alternates.every(y => !!y && typeof y.lang === 'string' && typeof y.url === 'string')));
 }
 
-/** Die neuesten Artikel: aus dem Datenblock, sonst einmal nachgeladen. */
+/** Die neuesten Artikel: aus dem Datenblock, sonst einmal nachgeladen (dann
+ *  alle; welche die Seite zeigt, entscheidet magazinAuswahl() in
+ *  knowledge/magazin.ts nach der Seitensprache). */
 export function useMagazinArticles(initial: MagazinArticle[] | null): MagazinArticle[] {
   const [list, setList] = useState<MagazinArticle[]>(() => initial ?? []);
   useEffect(() => {
@@ -66,7 +74,7 @@ export function useMagazinArticles(initial: MagazinArticle[] | null): MagazinArt
     fetch('/magazin/index.json', { headers: { Accept: 'application/json' } })
       .then(r => (r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null))
       .then((d: { articles?: unknown[] } | null) => {
-        if (alive && d && Array.isArray(d.articles)) setList(d.articles.filter(isArticle).slice(0, 6));
+        if (alive && d && Array.isArray(d.articles)) setList(d.articles.filter(isArticle));
       })
       .catch(() => { /* ohne Magazin bleibt der Abschnitt weg */ });
     return () => { alive = false; };

@@ -40,6 +40,7 @@ import { atsLabel, type AtsLevel } from '../templates/atsScore';
 import { LANDING_COPY, LANDING_LANGS, landingPath, langFromPath, type LandingCopy } from '../landing/copy';
 import { faqFor } from '../landing/faqFor';
 import { embeddedLandingData, useMagazinArticles, type MagazinArticle } from '../landing/data';
+import { magazinAuswahl, magazinLink, magazinStart, artikelHref, magazinEnUrl, MAGAZIN_NUR_DEUTSCH } from '../knowledge/magazin';
 import { useReveal } from '../landing/useReveal';
 import HeroShowcase from '../landing/HeroShowcase';
 import TextLayer from '../landing/TextLayer';
@@ -80,11 +81,15 @@ const NAV_DEMO: Record<UiLang, string> = { de: 'Demo starten', en: 'Try the demo
 const BACK_APP: Record<UiLang, string> = { de: 'Zu deinen Lebensläufen', en: 'Go to your CVs', fr: 'Aller à vos CV', es: 'Ir a tus currículums' };
 const LANG_SHORT: Record<UiLang, string> = { de: 'DE', en: 'EN', fr: 'FR', es: 'ES' };
 const SCRIPTS_URL = sourceFileUrl('app/scripts/pdfcheck.mjs');
-/** Magazin-Artikel, auf den der KI-Abschnitt verweist. */
-const AI_ARTICLE = '/magazin/lebenslauf-mit-ki-schreiben-ohne-erfindungen/';
+/** Magazin-Artikel, auf den der KI-Abschnitt verweist (Fassung in der
+ *  Seitensprache, wenn es sie gibt: knowledge/magazin.ts). */
+const AI_ARTICLE = 'lebenslauf-mit-ki-schreiben-ohne-erfindungen' as const;
+/** Artikel zur MCP-Verbindung (de, Fassung en). */
+const MCP_ARTICLE = 'lebenslauf-mcp-ki-verbinden' as const;
+const NUR_ENGLISCH: Record<UiLang, string> = { de: 'auf Englisch', en: '', fr: 'en anglais', es: 'en inglés' };
 const MD_SNIPPET: Record<UiLang, string> = {
   de: '---\nlang: de\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Berufserfahrung\n\n### Senior Product Designer\nNordhub GmbH · Hamburg · 01/2023 – heute\n- Design System für vier Produktbereiche',
-  en: '---\nlang: en\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Experience\n\n### Senior Product Designer\nNordhub GmbH · Hamburg · 01/2023 – present\n- Design system for four product areas',
+  en: '---\nlang: en\npageMode: one\n---\n\n# Priya Raman\n**Senior Backend Engineer**\n\n## Experience\n\n### Senior Backend Engineer\nKesselhaus Mobility GmbH · Berlin · 04/2023 – Present\n- Split the booking monolith into four Kotlin services',
   fr: '---\nlang: fr\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Expérience professionnelle\n\n### Senior Product Designer\nNordhub GmbH · Hambourg · 01/2023 – aujourd’hui\n- Design system pour quatre produits',
   es: '---\nlang: es\npageMode: one\n---\n\n# Lena Brandt\n**Senior Product Designer**\n\n## Experiencia\n\n### Senior Product Designer\nNordhub GmbH · Hamburgo · 01/2023 – actualidad\n- Design system para cuatro áreas de producto',
 };
@@ -117,7 +122,13 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
   // HTML), dann das vom Server. Antwortet der Server gar nicht, bleibt das vom Bau.
   const offer: Offer | null = isSsr ? ssr.offer : (loaded ? (liveOffer ?? embedded?.offer ?? null) : (embedded?.offer ?? null));
   const bt = billingFor(pageLang, offer);
-  const articles = useMagazinArticles(isSsr ? ssr.articles : (embedded ? embedded.articles : null)).slice(0, 6);
+  // Eigene Sprache zuerst, deutsche nur zum Auffüllen (gekennzeichnet).
+  const articles = magazinAuswahl(useMagazinArticles(isSsr ? ssr.articles : (embedded ? embedded.articles : null)), pageLang);
+  const magazinHref = magazinStart(pageLang);
+  const aiArticle = magazinLink(AI_ARTICLE, pageLang);
+  const mcpArticle = magazinLink(MCP_ARTICLE, pageLang);
+  /** Deutscher Artikel auf einer anderssprachigen Startseite: sichtbar kennzeichnen. */
+  const fremd = (a: MagazinArticle) => a.lang === 'de' && pageLang !== 'de' && !!MAGAZIN_NUR_DEUTSCH[pageLang];
   const faq = faqFor(pageLang, offer);
   // Vorlagen-Staffel: Kennzeichen „Pass" nur bei aktiver Gratis-Grenze.
   const limited = freeTierLimited(offer);
@@ -200,7 +211,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
       <a href="#vorlagen" onClick={() => setMenuOpen(false)}>{t.nav.templates}</a>
       <a href="#funktionen" onClick={() => setMenuOpen(false)}>{t.nav.features}</a>
       {offer && <a href={PATHS.pricing} onClick={linkClick(PATHS.pricing)}>{bt.pricing}</a>}
-      <a href="/magazin/">{t.nav.magazin}</a>
+      <a href={magazinHref}>{t.nav.magazin}</a>
       <a href="#faq" onClick={() => setMenuOpen(false)}>{t.nav.faq}</a>
     </>
   );
@@ -327,6 +338,34 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
           </div>
         </section>
 
+        {/* ── Bewerben in Deutschland (en/fr/es, 17.11.2026) ───────────── */}
+        {t.abroad && (
+          <section id="germany" className="lp-sect" aria-labelledby="lp-abroad-h" data-abroad>
+            <div className="lp-wrap">
+              <SectHead eyebrow={t.abroad.eyebrow} id="lp-abroad-h" h={t.abroad.h} lede={t.abroad.lede} split />
+              <ul className="lp-abroad-grid">
+                {t.abroad.items.map((it, i) => (
+                  <li key={it.title} className="lp-abroad-card" data-rv style={{ ['--i' as string]: i % 3 }}>
+                    <h3>{it.title}</h3>
+                    <p>{it.body}</p>
+                  </li>
+                ))}
+              </ul>
+              <div className="lp-abroad-links" data-rv>
+                <p className="lp-feat-tag">{t.abroad.linksLabel}</p>
+                <ul>
+                  {t.abroad.links.map(l => (
+                    <li key={l.slug}>
+                      <a className="lp-arrow-link" href={magazinEnUrl(l.slug)} lang={pageLang === 'en' ? undefined : 'en'} hrefLang={pageLang === 'en' ? undefined : 'en'}>{l.label}<Arrow /></a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="lp-note">{t.abroad.note}</p>
+            </div>
+          </section>
+        )}
+
         {/* ── Mit KI arbeiten ──────────────────────────────────────────── */}
         <section id="ki" className="lp-sect lp-sect-alt" aria-labelledby="lp-ai-h">
           <div className="lp-wrap">
@@ -341,11 +380,17 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
                 <p className="lp-feat-tag">{offer ? t.ai.mcp.tagPass : t.ai.mcp.tagAccount}</p>
                 <h3>{t.ai.mcp.title}</h3>
                 <p>{t.ai.mcp.body}</p>
+                <p data-mcp-clients>{t.ai.mcp.clients}</p>
+                <p className="lp-ai-card-link">
+                  <a className="lp-arrow-link" href={mcpArticle.href} lang={mcpArticle.lang === pageLang ? undefined : mcpArticle.lang} hrefLang={mcpArticle.lang === pageLang ? undefined : mcpArticle.lang}>
+                    {t.ai.mcp.link}{mcpArticle.lang !== pageLang && <> ({mcpArticle.lang === 'en' ? NUR_ENGLISCH[pageLang] : MAGAZIN_NUR_DEUTSCH[pageLang]})</>}<Arrow />
+                  </a>
+                </p>
               </li>
             </ul>
             <p className="lp-ai-foot" data-rv>
               {t.ai.foot}{' '}
-              <a className="lp-arrow-link" href={AI_ARTICLE} lang={pageLang === 'de' ? undefined : 'de'}>{t.ai.footLink}<Arrow /></a>
+              <a className="lp-arrow-link" href={aiArticle.href} lang={aiArticle.lang === pageLang ? undefined : aiArticle.lang} hrefLang={aiArticle.lang === pageLang ? undefined : aiArticle.lang}>{t.ai.footLink}<Arrow /></a>
             </p>
           </div>
         </section>
@@ -391,15 +436,20 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
                 {articles.map((a, i) => (
                   <li key={a.slug} data-rv style={{ ['--i' as string]: i % 3 }}>
                     <article className="lp-mag-card" lang={a.lang !== pageLang ? a.lang : undefined}>
-                      {a.categoryName && <p className="lp-mag-cat">{a.categoryName}</p>}
-                      <h3><a href={`/magazin/${a.slug}/`}>{a.title}</a></h3>
+                      {(a.categoryName || fremd(a)) && (
+                        <p className="lp-mag-cat">
+                          {a.categoryName}
+                          {fremd(a) && <>{a.categoryName ? ' · ' : ''}<span lang={pageLang} data-magazin-sprache={a.lang}>{MAGAZIN_NUR_DEUTSCH[pageLang]}</span></>}
+                        </p>
+                      )}
+                      <h3><a href={artikelHref(a)} hrefLang={a.lang !== pageLang ? a.lang : undefined}>{a.title}</a></h3>
                       <p className="lp-mag-desc">{a.description}</p>
                       <p className="lp-mag-meta"><time dateTime={a.updated}>{formatDate(a.updated, pageLang)}</time><span>{t.magazin.minutes(a.minutes)}</span></p>
                     </article>
                   </li>
                 ))}
               </ul>
-              <p className="lp-mag-all"><a className="lp-btn lp-btn-soft" href="/magazin/">{t.magazin.all}<span className="lp-btn-ico" aria-hidden><Arrow /></span></a></p>
+              <p className="lp-mag-all"><a className="lp-btn lp-btn-soft" href={magazinHref}>{t.magazin.all}<span className="lp-btn-ico" aria-hidden><Arrow /></span></a></p>
             </div>
           </section>
         )}
@@ -451,7 +501,7 @@ export default function LandingScreen({ onSignIn, onDemoStart, lang, onLangChang
                 <li><a href="#funktionen">{t.nav.features}</a></li>
                 <li><a href="#ats">{t.nav.ats}</a></li>
                 {offer && <li><a href={PATHS.pricing} onClick={linkClick(PATHS.pricing)}>{bt.pricing}</a></li>}
-                <li><a href="/magazin/">{t.nav.magazin}</a></li>
+                <li><a href={magazinHref}>{t.nav.magazin}</a></li>
                 {/* Der Quelltext ist das stärkste Argument der Seite: nachlesbar statt behauptet. */}
                 <li><a href={SOURCE_REPO_URL} target="_blank" rel="noopener noreferrer">{t.nav.source}</a></li>
               </ul>

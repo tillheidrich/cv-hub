@@ -3,8 +3,16 @@
 //
 // Benutzt von magazin-sync.mjs (schreibt die Dateien aus Outline),
 // magazin-build.mjs (macht daraus statisches HTML) und magazincheck.mjs.
-// Bewusst ohne YAML-Bibliothek: Das Frontmatter hat sechs flache Felder, und
+// Bewusst ohne YAML-Bibliothek: Das Frontmatter hat wenige flache Felder, und
 // ein eigener, strenger Leser meldet Fehler genauer als ein großzügiger.
+//
+// Mehrsprachig (17.11.2026): Ein Artikel hat genau eine Sprache (`lang`).
+// Deutsche Artikel liegen unter /magazin/<slug>/, englische unter
+// /en/magazine/<slug>/ (AUSGABEN). Französische und spanische Artikel haben
+// noch keine eigene Ausgabe und erscheinen wie bisher unter /magazin/.
+// Übersetzungen verbindet das Kannfeld `translationKey`: gleicher Wert =
+// dieselbe Geschichte in einer anderen Sprache. Die Slugs sind unabhängig,
+// müssen aber über alle Sprachen eindeutig sein (eine Datei je Slug im Ordner).
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
@@ -14,7 +22,7 @@ export const PFLICHTFELDER = ['title', 'slug', 'description', 'lang', 'updated']
 /** Felder, die zusätzlich erlaubt sind. category ist das Thema (siehe
  *  KATEGORIEN), outlineId fehlt bei Artikeln, die direkt im Repo geschrieben
  *  wurden; published ist das erste Erscheinen. */
-export const KANNFELDER = ['category', 'outlineId', 'published'];
+export const KANNFELDER = ['category', 'outlineId', 'published', 'translationKey'];
 export const SPRACHEN = ['de', 'en', 'fr', 'es'];
 
 /** Titel der Anleitung in der Outline-Sammlung. Ein Dokument mit genau diesem
@@ -27,7 +35,20 @@ export function istAnleitung(titel) {
   return t === ANLEITUNG_TITEL || ANLEITUNG_TITEL_ALT.includes(t);
 }
 /** Themen; gleichlautend in magazin-template/texte.mjs (KATEGORIEN). */
-export const KATEGORIEN = ['ats', 'bewerbung', 'recht', 'ki'];
+export const KATEGORIEN = ['ats', 'bewerbung', 'recht', 'ki', 'ausland'];
+
+/** Ausgaben des Magazins: Sprache → Pfade. Eine Sprache ohne eigene Ausgabe
+ *  (fr, es) erscheint in der deutschen. Gleichlautend in
+ *  magazin-template/texte.mjs (basis, themaSeg) und src/knowledge/magazin.ts. */
+export const AUSGABEN = {
+  de: { basis: '/magazin/', themaSeg: 'thema' },
+  en: { basis: '/en/magazine/', themaSeg: 'topic' },
+};
+export const ausgabeVon = lang => (AUSGABEN[lang] ? lang : 'de');
+/** Pfad eines Artikels, z. B. /magazin/<slug>/ oder /en/magazine/<slug>/. */
+export const artikelPfad = (lang, slug) => `${AUSGABEN[ausgabeVon(lang)].basis}${slug}/`;
+/** Slugs, die eine Übersicht selbst braucht (Themenseiten, Assets, Bilder). */
+export const RESERVIERTE_SLUGS = ['thema', 'topic', 'assets', 'img'];
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DATUM_RE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
@@ -98,6 +119,7 @@ export function pruefeMeta(meta, dateiname) {
   if (meta.slug && dateiname && basename(dateiname, '.md') !== meta.slug) fehler.push(`slug "${meta.slug}" passt nicht zum Dateinamen "${basename(dateiname)}"`);
   if (meta.category && !KATEGORIEN.includes(meta.category)) fehler.push(`category "${meta.category}" ist keins der Themen ${KATEGORIEN.join(', ')}`);
   if (meta.lang && !SPRACHEN.includes(meta.lang)) fehler.push(`lang "${meta.lang}" ist keine der Sprachen ${SPRACHEN.join(', ')}`);
+  if (meta.translationKey && (!SLUG_RE.test(meta.translationKey) || meta.translationKey.length > 80)) fehler.push(`translationKey "${meta.translationKey}" ist ungültig (nur a-z, 0-9 und einzelne Bindestriche, höchstens 80 Zeichen)`);
   for (const f of ['updated', 'published']) {
     if (meta[f] && (!DATUM_RE.test(meta[f]) || Number.isNaN(Date.parse(meta[f])))) fehler.push(`${f} "${meta[f]}" ist kein Datum der Form JJJJ-MM-TT`);
   }
@@ -136,16 +158,98 @@ export function artikelDateien(ordner) {
     .map(n => join(ordner, n));
 }
 
+/** Prüfungen über mehrere Artikel: Zwei Artikel derselben Sprache mit
+ *  demselben translationKey sind ein Fehler (welcher wäre die Übersetzung?).
+ *  Schreibt die Befunde in `fehler` der betroffenen Artikel (beide). */
+export function pruefeUebersetzungen(artikel) {
+  const gruppen = new Map();
+  for (const a of artikel) {
+    if (a.fehler.length || !a.meta.translationKey) continue;
+    const k = `${a.meta.lang}\u0000${a.meta.translationKey}`;
+    if (!gruppen.has(k)) gruppen.set(k, []);
+    gruppen.get(k).push(a);
+  }
+  for (const liste of gruppen.values()) {
+    if (liste.length < 2) continue;
+    for (const a of liste) {
+      const andere = liste.filter(x => x !== a).map(x => basename(x.datei)).join(', ');
+      a.fehler.push(`translationKey "${a.meta.translationKey}" steht in derselben Sprache (${a.meta.lang}) auch in ${andere}`);
+    }
+  }
+  return artikel;
+}
+
 /** Alle Artikel lesen; fehlerhafte kommen mit `fehler` zurück statt zu werfen. */
 export function leseArtikel(ordner) {
-  return artikelDateien(ordner).map(datei => {
+  return pruefeUebersetzungen(artikelDateien(ordner).map(datei => {
     try {
       const { meta, body } = parseFrontmatter(readFileSync(datei, 'utf8'));
       return { datei, meta, body, fehler: pruefeMeta(meta, datei) };
     } catch (e) {
       return { datei, meta: {}, body: '', fehler: [e.message] };
     }
-  });
+  }));
+}
+
+/**
+ * Übersetzungsgruppen: translationKey → Artikel (nur die übergebenen, also
+ * nach dem Aussortieren). Gibt zu jedem Artikel die ANDEREN Sprachfassungen
+ * zurück, neueste Sprache egal, Reihenfolge nach SPRACHEN.
+ * @template {{ meta: Record<string,string> }} T
+ * @param {T[]} artikel
+ * @returns {Map<T, T[]>}
+ */
+export function uebersetzungenVon(artikel) {
+  const nachKey = new Map();
+  for (const a of artikel) {
+    const k = a.meta.translationKey;
+    if (!k) continue;
+    if (!nachKey.has(k)) nachKey.set(k, []);
+    nachKey.get(k).push(a);
+  }
+  const out = new Map();
+  for (const a of artikel) {
+    const gruppe = a.meta.translationKey ? nachKey.get(a.meta.translationKey) : [a];
+    out.set(a, gruppe.filter(x => x !== a && x.meta.lang !== a.meta.lang).sort((p, q) => SPRACHEN.indexOf(p.meta.lang) - SPRACHEN.indexOf(q.meta.lang)));
+  }
+  return out;
+}
+
+const xmlEsc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Sitemap-Einträge des Magazins aus dist/magazin/index.json (eine Quelle für
+ * magazin-build.mjs und landing-prerender.mjs): je indexierbare Ausgabe die
+ * Übersicht und ihre Themenseiten, dazu alle Artikel. Wo es eine Fassung in
+ * einer anderen Sprache gibt, stehen alle Fassungen als hreflang daran.
+ * @param {{ editions?: any[], articles?: any[] }} index
+ * @param {string} basis  z. B. https://cv.example.test (ohne Schrägstrich)
+ */
+export function magazinSitemap(index, basis) {
+  const heute = new Date().toISOString().slice(0, 10);
+  const mit = (lang, url, alternates) => (alternates && alternates.length
+    ? [{ lang, href: basis + url }, ...alternates.map(x => ({ lang: x.lang, href: basis + x.url }))]
+    : []);
+  const eintraege = [];
+  for (const e of index.editions || []) {
+    if (!e.indexable) continue;
+    eintraege.push({ loc: basis + e.url, lastmod: e.updated || heute, changefreq: 'weekly', priority: '0.8', alternates: mit(e.lang, e.url, e.alternates) });
+    for (const t of e.topics || []) eintraege.push({ loc: basis + t.url, lastmod: e.updated || heute, changefreq: 'weekly', priority: '0.6', alternates: mit(e.lang, t.url, t.alternates) });
+  }
+  for (const a of index.articles || []) {
+    const url = a.url || artikelPfad(a.lang, a.slug);
+    eintraege.push({ loc: basis + url, lastmod: a.updated, changefreq: 'monthly', priority: '0.7', alternates: mit(a.lang, url, a.alternates) });
+  }
+  return eintraege;
+}
+
+/** Ein <url>-Eintrag; alternates als xhtml:link (x-default = die deutsche
+ *  Fassung), dafür braucht das <urlset> xmlns:xhtml. */
+export function sitemapUrlXml(e) {
+  const alt = (e.alternates || []).map(x => `\n    <xhtml:link rel="alternate" hreflang="${x.lang}" href="${xmlEsc(x.href)}"/>`);
+  const de = (e.alternates || []).find(x => x.lang === 'de');
+  if (de) alt.push(`\n    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEsc(de.href)}"/>`);
+  return `  <url>\n    <loc>${xmlEsc(e.loc)}</loc>${e.lastmod ? `\n    <lastmod>${e.lastmod}</lastmod>` : ''}\n    <changefreq>${e.changefreq}</changefreq>\n    <priority>${e.priority}</priority>${alt.join('')}\n  </url>`;
 }
 
 /** Datum für die Anzeige, ohne Zeitzonenverschiebung. */

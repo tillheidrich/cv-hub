@@ -46,6 +46,15 @@ const es: TipsContent = {
       sources: ['ads', 'ba-lebenslauf', 'ncs', 'harvard-resume'],
     },
     {
+      id: 'abroad',
+      title: 'Solicitar empleo en Alemania desde el extranjero',
+      body: 'Las empresas alemanas esperan un currículum en forma de tabla, el puesto más reciente primero y dos páginas como máximo. El servicio de la Agencia Federal de Empleo para candidatos internacionales (ZAV) añade que la foto no es obligatoria, pero la mayoría de las empresas aún la espera, y que el estado civil y la religión no hacen falta. Poner foto es decisión tuya; el consejo sobre la foto explica por qué.\n\nPon tu permiso de trabajo en los datos personales, por ejemplo «EU Blue Card holder», o «cumplo los requisitos de la tarjeta azul UE» si tu título y tu salario los cumplen. Indica tu nivel de alemán según el Marco Común Europeo (A1 a C2), aunque sea A2, y nombra el certificado si lo tienes. Make it in Germany recomienda esta escala.\n\nExplica cómo se compara tu título. Make it in Germany menciona dos vías: tu universidad figura como H+ en anabin y tu título como «entspricht» o «gleichwertig» (equivalente), o tienes una declaración de comparabilidad de la ZAB (200 euros en la KMK). Los empleos de informática no exigen reconocimiento, pero para la tarjeta azul UE o un visado de trabajo debes demostrar que tu título es comparable.\n\nIndica las notas tal como aparecen en el certificado y añade la equivalencia alemana. Las universidades alemanas usan la fórmula bávara modificada: nota alemana = 1 + 3 × (mejor nota posible menos tu nota) / (mejor nota posible menos nota mínima de aprobado). La nota mínima depende de tu universidad, como subraya uni-assist para la India; por eso no hay una tabla general de CGPA. Ejemplo: CGPA 8,5 sobre 10 con una nota mínima de 5,0 da 1 + 3 × 1,5 / 5 = 1,9.\n\nDeja fuera lo que es habitual en tu país pero no aquí: la declaración («I hereby declare …»), el nombre del padre o de la madre, la religión, la casta y el número de pasaporte. El salario no va en el currículum. Si la oferta pide tu expectativa, indícala en la carta como bruto anual en euros, no como CTC en lakhs. El plazo de preaviso o la fecha de incorporación también caben ahí.\n\nEnvía los certificados traducidos al alemán o al inglés (Make it in Germany) y pide a una persona de lengua materna alemana que lea tu currículum una vez, como recomienda la ZAV.',
+      before: 'Nombre del padre: R. Kumar · Religión: … · CTC actual: 18 LPA · Declaration: I hereby declare …',
+      after: 'Permiso de trabajo: EU Blue Card · Alemán: B1 (Goethe-Zertifikat) · Preaviso: tres meses',
+      sources: ['ba-zav-cv', 'mig-application', 'mig-degrees', 'anabin', 'zab-comparability', 'uni-assist-india'],
+      magazinEn: ['german-cv-guide', 'indian-resume-to-german-cv', 'cgpa-german-cv', 'cv-opportunity-card-blue-card'],
+    },
+    {
       id: 'length',
       title: 'Extensión: de una a dos páginas, en Suiza hasta tres',
       body: 'La Agencia Federal de Empleo de Alemania fija un máximo de dos páginas para un CV alemán; Transport for London habla de «ideally no more than 2 pages» para el Reino Unido. La orientación profesional del cantón de Berna calcula de dos a tres páginas como máximo para Suiza. Con poca experiencia, una página suele bastar.\n\nAcortar no significa reducir la letra. Primero fuera los puntos que no aportan nada para este puesto; la revisión con la oferta muestra cuáles son. Los puestos antiguos pueden ser más breves que los dos últimos.\n\nEn «Revisar → Página» ves si el contenido cabe en el número de páginas elegido y cuánto hay que condensarlo.',
@@ -54,7 +63,7 @@ const es: TipsContent = {
     {
       id: 'filename',
       title: 'Nombre del archivo y formato',
-      body: 'El nombre del archivo se ve antes que el contenido. «CV_Nombre-Apellido.pdf» dice qué es y de quién; «CV_final_nuevo2.pdf» dice otra cosa. La Agencia Federal de Empleo de Alemania aconseja enviar cada documento en PDF para conservar el formato, nombrar el archivo con claridad y no pasar de 10 MB.\n\nEsta herramienta nombra por ahora las descargas como Lebenslauf_Nombre-Apellido con fecha y hora, con la palabra alemana para CV. Si un portal pide Word expresamente, hay una versión para ello; si no, el PDF es la opción segura.',
+      body: 'El nombre del archivo se ve antes que el contenido. «CV_Nombre-Apellido.pdf» dice qué es y de quién; «CV_final_nuevo2.pdf» dice otra cosa. La Agencia Federal de Empleo de Alemania aconseja enviar cada documento en PDF para conservar el formato, nombrar el archivo con claridad y no pasar de 10 MB.\n\nEsta herramienta nombra las descargas como CV_Nombre-Apellido con la fecha, y la carta como Carta-de-presentacion_Nombre-Apellido. Si un portal pide Word expresamente, hay una versión para ello; si no, el PDF es la opción segura.',
       before: 'CV_final_nuevo2.pdf',
       after: 'CV_Lena-Brandt.pdf',
       sources: ['ba-checkliste'],

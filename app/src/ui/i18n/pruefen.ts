@@ -13,6 +13,7 @@
 import type { UiLang } from '../i18n';
 import type { FindingId, Severity } from '../../check/coverLetterCheck';
 import type { StyleKind } from '../../check/styleLists';
+import type { UnusualKind } from '../../check/germanNorms';
 import type { Lang } from '../../data/types';
 
 export type CheckDoc = 'resume' | 'cover' | 'both';
@@ -62,6 +63,9 @@ export interface PruefenStrings {
   bothTermsNote: string;
   langName: Record<Lang, string>;
   finding: Record<FindingId, (a: A) => string>;
+  /** In Deutschland unüblich (check/germanNorms.ts), je Fund ein kurzer Satz
+   *  mit Grund. Angezeigt in den Tipps unter „Passt gerade". */
+  unusual: Record<UnusualKind, string>;
 }
 
 const s = (a: A, i: number) => String(a[i] ?? '');
@@ -121,6 +125,14 @@ const de: PruefenStrings = {
   yes: 'ja', no: 'nein',
   bothTermsNote: 'Was in keinem der beiden steht, aber auf dich zutrifft, gehört zuerst in den Lebenslauf, in die Punkte unter der passenden Station.',
   langName: { de: 'Deutsch', en: 'Englisch', fr: 'Französisch', es: 'Spanisch' },
+  unusual: {
+    declaration: 'Erklärung („I hereby declare …"): in Deutschland unüblich. Am Ende stehen höchstens Ort, Datum und Unterschrift.',
+    parents: 'Name des Vaters oder der Mutter: in Deutschland unüblich und ohne Bezug zur Stelle.',
+    religion: 'Religion: für einen deutschen Lebenslauf nicht nötig (Bundesagentur für Arbeit).',
+    caste: 'Kaste: gehört nicht in einen deutschen Lebenslauf.',
+    passport: 'Pass- oder Ausweisnummer: gehört nicht in einen Lebenslauf, der weitergegeben wird.',
+    ctc: 'Gehalt als CTC oder in Lakhs: raus aus dem Lebenslauf. Wenn die Anzeige fragt, im Anschreiben als Jahresbrutto in Euro.',
+  },
   finding: {
     'name-missing': () => 'Im Lebenslauf fehlt dein Name. Das Anschreiben übernimmt ihn von dort, im Briefkopf steht deshalb gerade nichts.',
     'email-missing': () => 'Im Lebenslauf fehlt die E-Mail-Adresse. Briefkopf und Fußzeile des Anschreibens nehmen sie von dort.',
@@ -142,7 +154,7 @@ const de: PruefenStrings = {
     'salutation-missing': () => 'Keine Anrede eingetragen.',
     'salutation-generic': a => `Im Empfänger steht „${s(a, 1)}", die Anrede lautet aber „${s(a, 0)}". Sprich die Person mit Namen an.`,
     'salutation-ok': a => `Anrede: ${s(a, 0)}`,
-    'signoff-missing': () => 'Keine Grußformel eingetragen. Das PDF setzt dann „Mit freundlichen Grüßen" ein, auch in einem englischen Anschreiben.',
+    'signoff-missing': () => 'Keine Grußformel eingetragen. Das PDF setzt dann die übliche der Briefsprache ein, auf Deutsch „Mit freundlichen Grüßen".',
     'signoff-ok': a => `Gruß: ${s(a, 0)}`,
     'placeholder': a => `Platzhalter im Text: ${s(a, 0)}`,
     'sample-text': a => `${n(a, 0) === 1 ? 'Ein Absatz stammt' : `${n(a, 0)} Absätze stammen`} unverändert aus dem vorbelegten Muster. Das Muster ist nur dafür da, dass die Seite nicht leer ist.`,
@@ -164,6 +176,10 @@ const de: PruefenStrings = {
     'job-company-unknown': () => 'Die Firma konnten wir in der Anzeige nicht sicher erkennen. Trag sie oben ein, dann wird sie mitgeprüft.',
     'job-recipient-mismatch': a => `Der Empfänger „${s(a, 0)}" kommt in der Anzeige nicht vor. Stammt das Anschreiben noch von einer anderen Bewerbung?`,
     'job-contact-generic': a => `In der Anzeige steht eine Ansprechperson (${s(a, 0)}), die Anrede ist aber allgemein.`,
+    'jd-lang-mismatch': a => {
+      const jl = de.langName[s(a, 0) as Lang] ?? s(a, 0), dl = de.langName[s(a, 1) as Lang] ?? s(a, 1);
+      return `Die Stellenanzeige ist auf ${jl}, dein ${s(a, 2) === 'cover' ? 'Anschreiben' : 'Lebenslauf'} auf ${dl}. Die Begriffe werden Wort für Wort abgeglichen. Ergänze die Begriffe auf ${jl}, die auf dich zutreffen${s(a, 0) === 'de' ? ' (z. B. „Deutschkenntnisse B1")' : ''}, oder prüfe, ob der Arbeitgeber Bewerbungen auf ${dl} annimmt.`;
+    },
     'both-name': a => s(a, 0) ? `Der Name ${s(a, 0)} steht nicht in beiden Dokumenten als Text.` : 'Im Lebenslauf fehlt der Name und damit auch im Anschreiben.',
     'both-name-ok': a => `Name in beiden gleich: ${s(a, 0)}`,
     'both-email': a => `Die E-Mail-Adresse ${s(a, 0)} steht nicht in beiden Dokumenten als Text.`,
@@ -229,6 +245,14 @@ const en: PruefenStrings = {
   yes: 'yes', no: 'no',
   bothTermsNote: 'Anything that appears in neither but applies to you belongs in the CV first, in the bullet points under the matching role.',
   langName: { de: 'German', en: 'English', fr: 'French', es: 'Spanish' },
+  unusual: {
+    declaration: 'Declaration (“I hereby declare …”): not used in Germany. At most, place, date and signature go at the end.',
+    parents: 'Father’s or mother’s name: not used in Germany and unrelated to the job.',
+    religion: 'Religion: not needed on a German CV (German Federal Employment Agency).',
+    caste: 'Caste: does not belong on a German CV.',
+    passport: 'Passport or ID number: does not belong on a CV that gets passed around.',
+    ctc: 'Salary as CTC or in lakhs: take it off the CV. If the job ad asks, give annual gross salary in euros in the cover letter.',
+  },
   finding: {
     'name-missing': () => 'Your name is missing from the CV. The cover letter takes it from there, so the letterhead is currently empty.',
     'email-missing': () => 'The email address is missing from the CV. The letterhead and footer of the cover letter take it from there.',
@@ -250,7 +274,7 @@ const en: PruefenStrings = {
     'salutation-missing': () => 'No salutation entered.',
     'salutation-generic': a => `The recipient block names "${s(a, 1)}", but the salutation is "${s(a, 0)}". Address the person by name.`,
     'salutation-ok': a => `Salutation: ${s(a, 0)}`,
-    'signoff-missing': () => 'No closing entered. The PDF then inserts the German "Mit freundlichen Grüßen", even in an English cover letter.',
+    'signoff-missing': () => 'No sign-off entered. The PDF then uses the standard one for the letter\'s language; in English that is "Kind regards".',
     'signoff-ok': a => `Closing: ${s(a, 0)}`,
     'placeholder': a => `Placeholder in the text: ${s(a, 0)}`,
     'sample-text': a => `${n(a, 0) === 1 ? 'One paragraph comes' : `${n(a, 0)} paragraphs come`} unchanged from the pre-filled sample. The sample is only there so the page is not empty.`,
@@ -272,6 +296,10 @@ const en: PruefenStrings = {
     'job-company-unknown': () => 'We could not reliably find the company in the ad. Enter it above and it will be checked as well.',
     'job-recipient-mismatch': a => `The recipient "${s(a, 0)}" does not appear in the job ad. Is this cover letter left over from another application?`,
     'job-contact-generic': a => `The job ad names a contact person (${s(a, 0)}), but the salutation is generic.`,
+    'jd-lang-mismatch': a => {
+      const jl = en.langName[s(a, 0) as Lang] ?? s(a, 0), dl = en.langName[s(a, 1) as Lang] ?? s(a, 1);
+      return `The job ad is in ${jl} and your ${s(a, 2) === 'cover' ? 'cover letter' : 'CV'} is in ${dl}. Terms are matched word for word, so add the ${jl} terms that apply to you${s(a, 0) === 'de' ? ' (e.g. ‘Deutschkenntnisse B1’)' : ''} or check whether the employer accepts applications in ${dl}.`;
+    },
     'both-name': a => s(a, 0) ? `The name ${s(a, 0)} does not appear as text in both documents.` : 'The name is missing from the CV, and therefore from the cover letter too.',
     'both-name-ok': a => `Same name in both: ${s(a, 0)}`,
     'both-email': a => `The email address ${s(a, 0)} does not appear as text in both documents.`,
@@ -337,6 +365,14 @@ const fr: PruefenStrings = {
   yes: 'oui', no: 'non',
   bothTermsNote: 'Ce qui ne figure dans aucun des deux mais vous correspond va d’abord dans le CV, dans les points sous le poste concerné.',
   langName: { de: 'allemand', en: 'anglais', fr: 'français', es: 'espagnol' },
+  unusual: {
+    declaration: 'Déclaration (« I hereby declare … ») : inhabituelle en Allemagne. Tout au plus le lieu, la date et la signature figurent à la fin.',
+    parents: 'Nom du père ou de la mère : inhabituel en Allemagne et sans rapport avec le poste.',
+    religion: 'Religion : inutile dans un CV allemand (Agence fédérale pour l’emploi).',
+    caste: 'Caste : n’a pas sa place dans un CV allemand.',
+    passport: 'Numéro de passeport ou d’identité : n’a pas sa place dans un CV qui circule.',
+    ctc: 'Salaire en CTC ou en lakhs : à retirer du CV. Si l’annonce le demande, indiquez le salaire annuel brut en euros dans la lettre.',
+  },
   finding: {
     'name-missing': () => 'Votre nom manque dans le CV. La lettre le reprend de là, l’en-tête est donc vide pour l’instant.',
     'email-missing': () => 'L’adresse e-mail manque dans le CV. L’en-tête et le pied de page de la lettre la reprennent de là.',
@@ -358,7 +394,7 @@ const fr: PruefenStrings = {
     'salutation-missing': () => 'Aucune formule d’appel saisie.',
     'salutation-generic': a => `Le destinataire indique « ${s(a, 1)} », mais la formule d’appel est « ${s(a, 0)} ». Adressez-vous à la personne par son nom.`,
     'salutation-ok': a => `Formule d’appel : ${s(a, 0)}`,
-    'signoff-missing': () => 'Aucune formule de politesse saisie. Le PDF insère alors l’allemand « Mit freundlichen Grüßen », même dans une lettre en français.',
+    'signoff-missing': () => 'Aucune formule de politesse saisie. Le PDF reprend alors la formule usuelle de la langue de la lettre ; en français « Veuillez agréer, Madame, Monsieur, mes salutations distinguées. »',
     'signoff-ok': a => `Formule de politesse : ${s(a, 0)}`,
     'placeholder': a => `Espace réservé dans le texte : ${s(a, 0)}`,
     'sample-text': a => `${n(a, 0) === 1 ? 'Un paragraphe provient' : `${n(a, 0)} paragraphes proviennent`} sans modification du modèle prérempli. Le modèle sert seulement à ce que la page ne soit pas vide.`,
@@ -380,6 +416,10 @@ const fr: PruefenStrings = {
     'job-company-unknown': () => 'Nous n’avons pas pu repérer l’entreprise avec certitude. Saisissez-la ci-dessus pour qu’elle soit vérifiée aussi.',
     'job-recipient-mismatch': a => `Le destinataire « ${s(a, 0)} » ne figure pas dans l’offre. La lettre vient-elle d’une autre candidature ?`,
     'job-contact-generic': a => `L’offre nomme un interlocuteur (${s(a, 0)}), mais la formule d’appel est générale.`,
+    'jd-lang-mismatch': a => {
+      const jl = fr.langName[s(a, 0) as Lang] ?? s(a, 0), dl = fr.langName[s(a, 1) as Lang] ?? s(a, 1);
+      return `L’offre est en ${jl} et votre ${s(a, 2) === 'cover' ? 'lettre' : 'CV'} en ${dl}. Les termes sont comparés mot pour mot : ajoutez les termes en ${jl} qui vous correspondent${s(a, 0) === 'de' ? ' (par ex. « Deutschkenntnisse B1 »)' : ''} ou vérifiez si l’employeur accepte les candidatures en ${dl}.`;
+    },
     'both-name': a => s(a, 0) ? `Le nom ${s(a, 0)} ne figure pas sous forme de texte dans les deux documents.` : 'Le nom manque dans le CV, donc aussi dans la lettre.',
     'both-name-ok': a => `Même nom dans les deux : ${s(a, 0)}`,
     'both-email': a => `L’adresse e-mail ${s(a, 0)} ne figure pas sous forme de texte dans les deux documents.`,
@@ -445,6 +485,14 @@ const es: PruefenStrings = {
   yes: 'sí', no: 'no',
   bothTermsNote: 'Lo que no aparece en ninguno pero se aplica a ti va primero en el CV, en los puntos del puesto correspondiente.',
   langName: { de: 'alemán', en: 'inglés', fr: 'francés', es: 'español' },
+  unusual: {
+    declaration: 'Declaración («I hereby declare …»): no se usa en Alemania. Al final van, como mucho, lugar, fecha y firma.',
+    parents: 'Nombre del padre o de la madre: no se usa en Alemania y no tiene que ver con el puesto.',
+    religion: 'Religión: no hace falta en un currículum alemán (Agencia Federal de Empleo).',
+    caste: 'Casta: no va en un currículum alemán.',
+    passport: 'Número de pasaporte o documento: no va en un currículum que se reenvía.',
+    ctc: 'Salario como CTC o en lakhs: quítalo del currículum. Si la oferta lo pide, indica el bruto anual en euros en la carta.',
+  },
   finding: {
     'name-missing': () => 'Falta tu nombre en el CV. La carta lo toma de ahí, por eso el membrete está vacío ahora mismo.',
     'email-missing': () => 'Falta el correo electrónico en el CV. El membrete y el pie de la carta lo toman de ahí.',
@@ -466,7 +514,7 @@ const es: PruefenStrings = {
     'salutation-missing': () => 'No hay saludo.',
     'salutation-generic': a => `En el destinatario figura «${s(a, 1)}», pero el saludo es «${s(a, 0)}». Dirígete a la persona por su nombre.`,
     'salutation-ok': a => `Saludo: ${s(a, 0)}`,
-    'signoff-missing': () => 'No hay despedida. El PDF pone entonces el alemán «Mit freundlichen Grüßen», también en una carta en español.',
+    'signoff-missing': () => 'No hay despedida. El PDF pone entonces la habitual en el idioma de la carta; en español «Atentamente,».',
     'signoff-ok': a => `Despedida: ${s(a, 0)}`,
     'placeholder': a => `Marcador en el texto: ${s(a, 0)}`,
     'sample-text': a => `${n(a, 0) === 1 ? 'Un párrafo procede' : `${n(a, 0)} párrafos proceden`} sin cambios del modelo predefinido. El modelo solo está para que la página no esté vacía.`,
@@ -488,6 +536,10 @@ const es: PruefenStrings = {
     'job-company-unknown': () => 'No hemos podido detectar la empresa con seguridad. Escríbela arriba y también se revisará.',
     'job-recipient-mismatch': a => `El destinatario «${s(a, 0)}» no aparece en la oferta. ¿La carta es de otra candidatura?`,
     'job-contact-generic': a => `La oferta nombra a una persona de contacto (${s(a, 0)}), pero el saludo es genérico.`,
+    'jd-lang-mismatch': a => {
+      const jl = es.langName[s(a, 0) as Lang] ?? s(a, 0), dl = es.langName[s(a, 1) as Lang] ?? s(a, 1);
+      return `La oferta está en ${jl} y tu ${s(a, 2) === 'cover' ? 'carta' : 'CV'} en ${dl}. Los términos se comparan palabra por palabra: añade los términos en ${jl} que se apliquen a ti${s(a, 0) === 'de' ? ' (p. ej., «Deutschkenntnisse B1»)' : ''} o comprueba si la empresa acepta candidaturas en ${dl}.`;
+    },
     'both-name': a => s(a, 0) ? `El nombre ${s(a, 0)} no aparece como texto en ambos documentos.` : 'Falta el nombre en el CV y, por tanto, también en la carta.',
     'both-name-ok': a => `Mismo nombre en ambos: ${s(a, 0)}`,
     'both-email': a => `El correo ${s(a, 0)} no aparece como texto en ambos documentos.`,

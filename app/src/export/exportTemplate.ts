@@ -194,6 +194,119 @@ Erzeugt mit CV-Hub.
 `;
 }
 
+/** Dateinamen im Paket. Deutsch für deutsche Fassungen (Bestand, geprüft in
+ *  scripts/kitcheck.mjs), sonst Englisch — auch für FR/ES, deren Anleitung
+ *  englisch ist (seit 17.11.2026; vorher hieß alles deutsch). */
+interface KitNames { html: string; docx: string; data: string; example: string; guide: string; zip: (id: string) => string }
+
+const KIT_NAMES_DE: KitNames = {
+  html: 'vorlage.html', docx: 'vorlage.docx', data: 'daten.json', example: 'beispiel.json', guide: 'ANLEITUNG.md',
+  zip: id => `vorlage-${id}.zip`,
+};
+const KIT_NAMES_EN: KitNames = {
+  html: 'template.html', docx: 'template.docx', data: 'data.json', example: 'example.json', guide: 'GUIDE.md',
+  zip: id => `template-${id}.zip`,
+};
+
+export function kitNames(lang: Lang): KitNames {
+  return lang === 'de' ? KIT_NAMES_DE : KIT_NAMES_EN;
+}
+
+/** Anleitung auf Englisch — für EN, FR und ES. */
+function guideEn(themeName: string, themeId: string, lang: Lang): string {
+  const L = LABELS[lang];
+  const N = KIT_NAMES_EN;
+  return `# Template “${themeName}”, without data
+
+These files are the design, not your CV. They are yours; you do not need
+this tool to use them.
+
+## What is inside
+
+| File | What for |
+|---|---|
+| \`${N.html}\` | The design as a standalone file, with placeholders instead of content. Opens in any browser; for printing see below. |
+| \`${N.docx}\` | The same as a Word file with real styles (Heading 1/2, bullet list). Opens in Word **and** LibreOffice. |
+| \`${N.data}\` | An empty form in exactly the shape this tool reads back in. |
+| \`${N.example}\` | The same, filled in, as a sample. |
+| \`${N.guide}\` | This file. |
+
+## The quick way
+
+1. Fill in \`${N.data}\` (or let an AI do it, see below).
+2. Upload it in the tool under **Export → Import**.
+3. Choose the template “${themeName}” and export the PDF.
+
+## The free way, without this tool
+
+Open \`${N.html}\` in an editor and replace every placeholder \`{{…}}\` with
+your text. The names match \`${N.data}\`, so \`{{experience[0].role}}\` is the
+job title of your first position.
+
+For printing: the layout on the sheet is the same as in the tool, because it
+is the same file. What happens around it is decided by your browser’s print
+dialogue, not by the file. Set **Margins: None**, **Background graphics: On**
+and **Headers and footers: Off**, otherwise you get white edges and the file
+path printed across the page. Chrome and Firefox can do this; Safari does not
+honour all three and leaves a margin. If you need a clean sheet, export the
+PDF from the tool.
+
+## For an AI
+
+If you give this folder to an AI, this instruction is enough:
+
+> Fill in \`${N.data}\` from my CV below. Keep the existing structure, do not
+> invent fields, leave unknown fields empty (\`""\`). Write bullets as
+> complete sentences without a full stop at the end, 100–160 characters
+> each. Return only the JSON file.
+
+A few rules are built into this design and should not be broken. They are
+measured, not guessed:
+
+* **Letter spacing at most 0.08 em.** From 0.11 em the text layer of a PDF
+  splits spaced capitals into single letters (“E X P E R I E N C E”), and
+  these are exactly the lines an applicant tracking system uses to split the
+  CV into sections. This holds at any font size.
+* **No type below 8.2 pt.** Sizes up to 8 pt are a documented cause of
+  parsing errors (Personio), and nobody enjoys reading them. 8.2 pt is the
+  floor this tool never goes below (\`MIN_FONT_PX\`).
+* **The order in the text stream is not the order on paper.** In this
+  template the name comes BEFORE the sidebar in the HTML, even if it sits
+  next to it on the page. A parser without layout analysis reads the HTML
+  order. If you move blocks, keep that in mind.
+* **No hidden text.** No white text on white, no hidden keyword lists. Spam
+  filters look for exactly that.
+
+## More sections
+
+Besides experience and education, \`${N.data}\` knows five sections that only
+appear when they contain something:
+
+| Field | Content |
+|---|---|
+| \`projects\` | Projects: \`title\`, \`role\`, \`start\`, \`end\`, \`url\`, \`description\`, \`bullets\` |
+| \`certificates\` | Certifications: \`name\`, \`issuer\`, \`date\`, \`credentialId\`, \`url\` |
+| \`volunteering\` | Volunteering, built like a job: \`role\`, \`organization\`, \`location\`, \`start\`, \`end\`, \`bullets\` |
+| \`publications\` | Publications: \`title\`, \`publisher\`, \`date\`, \`url\`, \`description\` |
+| \`customSections\` | Your own sections with a heading (\`title\`): plain bullets in \`items\` and/or entries in \`entries\` (\`title\`, \`subtitle\`, \`date\`, \`text\`) |
+
+Whatever stays empty is left out of the document. Nobody needs to delete
+empty entries.
+
+## Headings and labels
+
+The headings and labels (\`labels\`) are part of the data, not of the design.
+If you would rather call “${L.sections.experience}” something else, change it
+there: in \`${N.data}\` under \`labels.sections.experience\`. A running job
+gets \`"end": "present"\`; the document prints “${L.misc.present}”.
+
+---
+
+Template: \`${themeId}\` · Language of the labels: \`${lang}\` ·
+Made with CV-Hub.
+`;
+}
+
 /** Baut das Paket und lädt es herunter. */
 /* Das Beispiel ist eine Musterperson, NICHT der eigene Lebenslauf.
  *
@@ -226,13 +339,14 @@ export async function exportTemplateKit(
    * Design gewählt. */
   const docx = await Packer.toBlob(buildDocx(ph, { ...cfg, hiddenSections: [], sectionOrder: undefined }, 'design'));
 
+  const N = kitNames(lang);
   const zip = new JSZip();
-  zip.file('vorlage.html', html);
-  zip.file('vorlage.docx', docx);
-  zip.file('daten.json', JSON.stringify(emptyData(lang), null, 2));
-  zip.file('beispiel.json', JSON.stringify(example, null, 2));
-  zip.file('ANLEITUNG.md', anleitung(theme.name, theme.id, lang));
+  zip.file(N.html, html);
+  zip.file(N.docx, docx);
+  zip.file(N.data, JSON.stringify(emptyData(lang), null, 2));
+  zip.file(N.example, JSON.stringify(example, null, 2));
+  zip.file(N.guide, lang === 'de' ? anleitung(theme.name, theme.id, lang) : guideEn(theme.name, theme.id, lang));
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  saveBlob(`vorlage-${theme.id}.zip`, blob);
+  saveBlob(N.zip(theme.id), blob);
 }

@@ -1,10 +1,20 @@
-// Baut das Magazin als statisches HTML: dist/magazin/<slug>/index.html,
-// die Übersicht dist/magazin/index.html, Themenseiten
-// dist/magazin/thema/<thema>/index.html, eine 404-Seite, den Index
-// dist/magazin/index.json (für die Startseite) sowie sitemap.xml und
-// robots.txt. Läuft in `npm run build` nach `vite build`; danach ergänzt
-// scripts/landing-prerender.mjs die Sitemap um die Sprachfassungen der
-// Startseite.
+// Baut das Magazin als statisches HTML, je Ausgabe (magazin-lib.mjs,
+// AUSGABEN) in einen eigenen Zielordner:
+//   Deutsch   dist/magazin/<slug>/, dist/magazin/thema/<thema>/, …/404.html
+//   Englisch  dist/en/magazine/<slug>/, dist/en/magazine/topic/<thema>/, …/404.html
+// jeweils mit Übersicht (index.html). Dazu der Index dist/magazin/index.json
+// (alle Artikel beider Ausgaben, für Startseite, Sitemap und llms.txt) sowie
+// sitemap.xml und robots.txt. CSS, Schriften und Bilder gibt es nur einmal,
+// unter /magazin/assets/ und /magazin/img/; die englischen Seiten verweisen
+// mit absoluten Pfaden dorthin. Läuft in `npm run build` nach `vite build`;
+// danach ergänzt scripts/landing-prerender.mjs die Sitemap um die
+// Sprachfassungen der Startseite.
+//
+// Übersetzungen (Frontmatter `translationKey`, gleicher Wert = gleicher
+// Artikel in einer anderen Sprache) bekommen hreflang (mit x-default = die
+// deutsche Fassung), og:locale:alternate, workTranslation/translationOfWork
+// im JSON-LD und einen sichtbaren Hinweis über dem Artikel. Ohne Partner
+// bleibt ein translationKey folgenlos.
 //
 // Bis 10.10.2026 hieß das Magazin „Ratgeber" und lag unter /ratgeber/; nginx
 // leitet die alten Adressen mit 301 hierher um.
@@ -19,7 +29,8 @@
 //                         FALLBACK_BASE_URL aus src/landing/brand.js,
 //                         https://cv.example.com). Die EINE Stelle, an der
 //                         die Domain steht.
-//   MAGAZIN_LANG         Sprache der Übersicht (Standard en)
+//   MAGAZIN_LANG         Sprache der Übersicht der deutschen Ausgabe
+//                        (/magazin/, Standard de); die englische ist englisch
 //   MAGAZIN_CONTENT_DIR  Quelle (Standard content/magazin)
 //   MAGAZIN_IMG_DIR      Bilder (Standard public/magazin/img)
 //   MAGAZIN_OUT_DIR      Ziel (Standard dist)
@@ -33,17 +44,17 @@ import { join, dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
-import { leseArtikel, hinweiseMeta, datumAnzeige, slugify } from './magazin-lib.mjs';
+import { leseArtikel, hinweiseMeta, datumAnzeige, slugify, AUSGABEN, ausgabeVon, artikelPfad, RESERVIERTE_SLUGS, uebersetzungenVon, magazinSitemap, sitemapUrlXml } from './magazin-lib.mjs';
 import { pruefeText } from './magazin-sperrmuster.mjs';
 import { artikelSeite, uebersichtSeite, nichtGefundenSeite, esc, kategorieName } from '../magazin-template/seiten.mjs';
-import { TEXTE, KATEGORIEN, FAQ_UEBERSCHRIFTEN } from '../magazin-template/texte.mjs';
+import { TEXTE, KATEGORIEN, FAQ_UEBERSCHRIFTEN, themaPfad } from '../magazin-template/texte.mjs';
 import { FALLBACK_BASE_URL } from '../src/landing/brand.js';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CONTENT = resolve(process.env.MAGAZIN_CONTENT_DIR || join(APP, 'content', 'magazin'));
 const IMG = resolve(process.env.MAGAZIN_IMG_DIR || join(APP, 'public', 'magazin', 'img'));
 const OUT = resolve(process.env.MAGAZIN_OUT_DIR || join(APP, 'dist'));
-const LANG = TEXTE[process.env.MAGAZIN_LANG] ? process.env.MAGAZIN_LANG : 'en';
+const LANG = TEXTE[process.env.MAGAZIN_LANG] ? process.env.MAGAZIN_LANG : 'de';
 const TEMPLATE = join(APP, 'magazin-template');
 
 const log = (...a) => console.log('[magazin:build]', ...a);
@@ -291,10 +302,11 @@ function klartext(md) {
     .trim();
 }
 
-/** Bis zu drei verwandte Artikel: gleiches Thema zuerst, dann gleiche
- *  Sprache, jeweils die neuesten. */
+/** Bis zu drei verwandte Artikel aus derselben Ausgabe (ein englischer
+ *  Artikel verweist nie auf einen deutschen): gleiches Thema zuerst, dann
+ *  gleiche Sprache, jeweils die neuesten. */
 function verwandteZu(a, alle) {
-  const andere = alle.filter(x => x.meta.slug !== a.meta.slug);
+  const andere = alle.filter(x => x.meta.slug !== a.meta.slug && x.ausgabe === a.ausgabe);
   const rang = x => (x.meta.category && x.meta.category === a.meta.category ? 0 : 2) + (x.meta.lang === a.meta.lang ? 0 : 1);
   return andere
     .map((x, i) => ({ x, i }))
@@ -324,27 +336,33 @@ function aufrufBild() {
   }
 }
 
-function sitemap(artikel) {
-  const heute = new Date().toISOString().slice(0, 10);
-  const neueste = artikel.reduce((m, a) => (a.meta.updated > m ? a.meta.updated : m), '');
-  const themen = [...new Set(artikel.map(a => a.meta.category).filter(Boolean))];
+/** Sitemap des Magazins (eigenständig; im normalen Bau schreibt
+ *  landing-prerender.mjs sie danach mit den Startseiten neu, aus denselben
+ *  Einträgen: magazinSitemap() in magazin-lib.mjs). */
+function sitemap(index) {
   const eintraege = [
     { loc: `${BASIS}/`, changefreq: 'weekly', priority: '1.0' },
     { loc: `${BASIS}/preise`, changefreq: 'monthly', priority: '0.8' },
-    { loc: `${BASIS}/magazin/`, lastmod: neueste ? neueste.slice(0, 10) : heute, changefreq: 'weekly', priority: '0.8' },
-    ...themen.map(k => ({ loc: `${BASIS}/magazin/thema/${k}/`, lastmod: neueste.slice(0, 10) || heute, changefreq: 'weekly', priority: '0.6' })),
-    ...artikel.map(a => ({ loc: `${BASIS}/magazin/${a.meta.slug}/`, lastmod: a.meta.updated.slice(0, 10), changefreq: 'monthly', priority: '0.7' })),
+    ...magazinSitemap(index, BASIS),
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${eintraege.map(e => `  <url>
-    <loc>${esc(e.loc)}</loc>${e.lastmod ? `
-    <lastmod>${e.lastmod}</lastmod>` : ''}
-    <changefreq>${e.changefreq}</changefreq>
-    <priority>${e.priority}</priority>
-  </url>`).join('\n')}
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${eintraege.map(sitemapUrlXml).join('\n')}
 </urlset>
 `;
+}
+
+/** Zielordner einer Ausgabe: dist/magazin, dist/en/magazine. */
+const ordnerVon = ausgabe => join(OUT, ...AUSGABEN[ausgabe].basis.split('/').filter(Boolean));
+
+/** Alte Artikel- und Themenordner einer Ausgabe entfernen, damit
+ *  zurückgezogene Artikel verschwinden. assets/ und img/ gehören der
+ *  deutschen Ausgabe und bleiben (die englische benutzt sie mit). */
+function aufraeumen(ziel) {
+  if (!existsSync(ziel)) return;
+  for (const n of readdirSync(ziel, { withFileTypes: true })) {
+    if (n.isDirectory() && n.name !== 'assets' && n.name !== 'img') rmSync(join(ziel, n.name), { recursive: true, force: true });
+  }
 }
 
 /** robots.txt aus public/robots.txt übernehmen, Sitemap-Zeile auf die Basis. */
@@ -368,7 +386,7 @@ function main() {
     const name = a.datei.split('/').pop();
     if (a.fehler.length) { uebersprungen++; warn(`${name} übersprungen: ${a.fehler.join('; ')}`); continue; }
     if (slugs.has(a.meta.slug)) { uebersprungen++; warn(`${name} übersprungen: slug doppelt`); continue; }
-    if (a.meta.slug === 'thema' || a.meta.slug === 'assets' || a.meta.slug === 'img') { uebersprungen++; warn(`${name} übersprungen: slug "${a.meta.slug}" ist für das Magazin selbst reserviert`); continue; }
+    if (RESERVIERTE_SLUGS.includes(a.meta.slug)) { uebersprungen++; warn(`${name} übersprungen: slug "${a.meta.slug}" ist für das Magazin selbst reserviert`); continue; }
     const treffer = pruefeText(`${a.meta.title}\n${a.meta.description}\n${a.body}`, { outlineUrl: process.env.OUTLINE_URL, publicBaseUrl: BASIS });
     if (treffer.length) {
       uebersprungen++;
@@ -384,16 +402,13 @@ function main() {
   // Neueste zuerst; bei gleichem Datum das zuerst erschienene später, dann alphabetisch.
   ok.sort((x, y) => (y.meta.updated.localeCompare(x.meta.updated)) || String(y.meta.published || '').localeCompare(String(x.meta.published || '')) || x.meta.title.localeCompare(y.meta.title, 'de'));
 
-  const ziel = join(OUT, 'magazin');
-  // Alte Artikelordner entfernen, damit zurückgezogene Artikel verschwinden.
-  if (existsSync(ziel)) {
-    for (const n of readdirSync(ziel, { withFileTypes: true })) {
-      if (n.isDirectory() && n.name !== 'assets' && n.name !== 'img') rmSync(join(ziel, n.name), { recursive: true, force: true });
-    }
-  }
+  const ausgaben = Object.keys(AUSGABEN);
+  const ziel = ordnerVon('de');
+  for (const e of ausgaben) aufraeumen(ordnerVon(e));
 
   // Erst alle Artikel vorbereiten (Lesezeit, Datum, FAQ), dann schreiben —
-  // „Verwandte Artikel" braucht die fertigen Daten der anderen.
+  // „Verwandte Artikel" und die Sprachfassungen brauchen die fertigen Daten
+  // der anderen.
   const bilder = new Set();
   const fertig = ok.map(a => {
     const r = renderMarkdown(a.body, a.meta.lang);
@@ -404,32 +419,76 @@ function main() {
     // oder ab 900 Wörtern mit mindestens zwei.
     const h2 = r.toc.filter(h => h.tiefe === 2).length;
     const toc = (h2 >= 4 || (woerter >= 900 && h2 >= 2)) ? r.toc : [];
-    return { meta: a.meta, html: r.html, toc, minuten, datum: datumAnzeige(a.meta.updated, a.meta.lang), faq: faqAus(a.body) };
+    const pfad = artikelPfad(a.meta.lang, a.meta.slug);
+    return {
+      meta: a.meta, pfad, url: `${BASIS}${pfad}`, ausgabe: ausgabeVon(a.meta.lang),
+      html: r.html, toc, minuten, datum: datumAnzeige(a.meta.updated, a.meta.lang), faq: faqAus(a.body),
+    };
   });
+  const paare = uebersetzungenVon(fertig);
+  const fassungen = a => paare.get(a).map(x => ({ lang: x.meta.lang, title: x.meta.title, pfad: x.pfad, url: x.url }));
+  for (const a of fertig) {
+    if (a.meta.translationKey && !paare.get(a).length) log(`Hinweis ${a.meta.slug}: translationKey "${a.meta.translationKey}" ohne Gegenstück in einer anderen Sprache`);
+  }
 
   for (const a of fertig) {
     const html = artikelSeite({
-      meta: a.meta, html: a.html, toc: a.toc, minuten: a.minuten, datum: a.datum, css, schrift, ogImage,
-      canonical: `${BASIS}/magazin/${a.meta.slug}/`, basis: BASIS, faq: a.faq, verwandt: verwandteZu(a, fertig), bild,
+      meta: a.meta, pfad: a.pfad, ausgabe: a.ausgabe, html: a.html, toc: a.toc, minuten: a.minuten, datum: a.datum, css, schrift, ogImage,
+      canonical: a.url, basis: BASIS, faq: a.faq, verwandt: verwandteZu(a, fertig), bild, uebersetzungen: fassungen(a),
     });
-    mkdirSync(join(ziel, a.meta.slug), { recursive: true });
-    writeFileSync(join(ziel, a.meta.slug, 'index.html'), html);
+    const ordner = join(ordnerVon(a.ausgabe), a.meta.slug);
+    mkdirSync(ordner, { recursive: true });
+    writeFileSync(join(ordner, 'index.html'), html);
   }
 
-  const vorhanden = new Set(fertig.map(a => a.meta.category).filter(Boolean));
-  writeFileSync(join(ziel, 'index.html'), uebersichtSeite({ lang: LANG, artikel: fertig, canonical: `${BASIS}/magazin/`, basis: BASIS, css, schrift, ogImage, vorhanden }));
-  for (const k of KATEGORIEN) {
-    if (!vorhanden.has(k)) continue;
-    mkdirSync(join(ziel, 'thema', k), { recursive: true });
-    writeFileSync(join(ziel, 'thema', k, 'index.html'), uebersichtSeite({ lang: LANG, artikel: fertig, kategorie: k, canonical: `${BASIS}/magazin/thema/${k}/`, basis: BASIS, css, schrift, ogImage, vorhanden }));
+  // Übersicht, Themenseiten und 404 je Ausgabe. Die englische Übersicht
+  // zeigt unter den eigenen Artikeln einen gekennzeichneten Block mit den
+  // deutschen Artikeln, die (noch) keine englische Fassung haben: Ohne ihn
+  // wäre sie bei wenigen Übersetzungen fast leer, und wer Englisch liest,
+  // fände die deutschen Artikel nicht. Die Themenseiten bleiben einsprachig.
+  // Ohne einen einzigen eigenen Artikel ist eine Übersicht noindex und fehlt
+  // in der Sitemap (die deutsche ist immer indexierbar, wie bisher).
+  const proAusgabe = Object.fromEntries(ausgaben.map(e => {
+    const liste = fertig.filter(a => a.ausgabe === e);
+    return [e, { liste, themen: new Set(liste.map(a => a.meta.category).filter(Boolean)), indexierbar: e === 'de' || liste.length > 0 }];
+  }));
+  const neuestes = liste => liste.reduce((m, a) => (a.meta.updated > m ? a.meta.updated : m), '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const editions = [];
+  for (const e of ausgaben) {
+    const { liste, themen, indexierbar } = proAusgabe[e];
+    const dir = ordnerVon(e);
+    mkdirSync(dir, { recursive: true });
+    const lang = e === 'de' ? LANG : e;
+    const andere = ausgaben.filter(x => x !== e && proAusgabe[x].indexierbar);
+    const alternatesUebersicht = indexierbar && andere.length ? [{ lang: e, href: `${BASIS}${AUSGABEN[e].basis}` }, ...andere.map(x => ({ lang: x, href: `${BASIS}${AUSGABEN[x].basis}` }))] : [];
+    const nurDeutsch = e === 'de' ? [] : fertig.filter(a => a.meta.lang === 'de' && !paare.get(a).some(x => x.meta.lang === e));
+    writeFileSync(join(dir, 'index.html'), uebersichtSeite({
+      lang, ausgabe: e, artikel: liste, canonical: `${BASIS}${AUSGABEN[e].basis}`, basis: BASIS, css, schrift, ogImage, vorhanden: themen,
+      nurDeutsch, alternates: alternatesUebersicht, robots: indexierbar ? '' : 'noindex, follow',
+    }));
+    const topics = [];
+    for (const k of KATEGORIEN) {
+      if (!themen.has(k)) continue;
+      const pfad = themaPfad(k, e);
+      const gegen = andere.filter(x => proAusgabe[x].themen.has(k));
+      const alternates = gegen.length ? [{ lang: e, href: `${BASIS}${pfad}` }, ...gegen.map(x => ({ lang: x, href: `${BASIS}${themaPfad(k, x)}` }))] : [];
+      mkdirSync(join(OUT, ...pfad.split('/').filter(Boolean)), { recursive: true });
+      writeFileSync(join(OUT, ...pfad.split('/').filter(Boolean), 'index.html'), uebersichtSeite({ lang, ausgabe: e, artikel: liste, kategorie: k, canonical: `${BASIS}${pfad}`, basis: BASIS, css, schrift, ogImage, vorhanden: themen, alternates }));
+      topics.push({ key: k, url: pfad, alternates: gegen.map(x => ({ lang: x, url: themaPfad(k, x) })) });
+    }
+    writeFileSync(join(dir, '404.html'), nichtGefundenSeite({ lang, ausgabe: e, css, schrift }));
+    editions.push({ lang: e, url: AUSGABEN[e].basis, indexable: indexierbar, count: liste.length, updated: neuestes(liste), topics, alternates: indexierbar ? andere.map(x => ({ lang: x, url: AUSGABEN[x].basis })) : [] });
   }
-  writeFileSync(join(ziel, '404.html'), nichtGefundenSeite({ lang: LANG, css, schrift }));
 
-  // Index für die Startseite (Abschnitt „Magazin") und für llms.txt.
-  writeFileSync(join(ziel, 'index.json'), JSON.stringify({
+  // Index für die Startseite (Abschnitt „Magazin"), Sitemap und llms.txt:
+  // alle Artikel beider Ausgaben, neueste zuerst, je mit Pfad (url), Sprache
+  // und den anderen Sprachfassungen (alternates).
+  const index = {
     generated: new Date().toISOString(),
+    editions,
     articles: fertig.map(a => ({
       slug: a.meta.slug,
+      url: a.pfad,
       title: a.meta.title,
       description: a.meta.description,
       category: a.meta.category || null,
@@ -439,8 +498,10 @@ function main() {
       published: (a.meta.published || a.meta.updated).slice(0, 10),
       minutes: a.minuten,
       faq: a.faq.length,
+      alternates: paare.get(a).map(x => ({ lang: x.meta.lang, url: x.pfad, title: x.meta.title })),
     })),
-  }, null, 2) + '\n');
+  };
+  writeFileSync(join(ziel, 'index.json'), JSON.stringify(index, null, 2) + '\n');
 
   // Benutzte Bilder ins Ziel (vite kopiert public/ ohnehin; für eigene
   // Zielordner und als Sicherheit, falls public/magazin/img fehlt).
@@ -449,11 +510,14 @@ function main() {
     for (const b of bilder) copyFileSync(join(IMG, b), join(ziel, 'img', b));
   }
 
-  writeFileSync(join(OUT, 'sitemap.xml'), sitemap(fertig));
+  writeFileSync(join(OUT, 'sitemap.xml'), sitemap(index));
   writeFileSync(join(OUT, 'robots.txt'), robots());
 
   const mitFaq = fertig.filter(a => a.faq.length).length;
-  log(`${fertig.length} Artikel gebaut (${vorhanden.size} Themen, ${mitFaq} mit FAQ-Block)${uebersprungen ? `, ${uebersprungen} übersprungen` : ''} → ${join(ziel)} (Basis ${BASIS})`);
+  const themenZahl = new Set(fertig.map(a => a.meta.category).filter(Boolean)).size;
+  const jeAusgabe = ausgaben.map(e => `${e} ${proAusgabe[e].liste.length}`).join(', ');
+  const paarZahl = fertig.filter(a => paare.get(a).length).length;
+  log(`${fertig.length} Artikel gebaut (${jeAusgabe}; ${themenZahl} Themen, ${mitFaq} mit FAQ-Block, ${paarZahl} mit Sprachfassung)${uebersprungen ? `, ${uebersprungen} übersprungen` : ''} → ${ausgaben.map(ordnerVon).join(', ')} (Basis ${BASIS})`);
 }
 
 try {

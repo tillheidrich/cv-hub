@@ -1,6 +1,16 @@
 // Feste Texte und Markenangaben der Magazin-Seiten, in allen vier Sprachen
 // der App. Die Sprache einer Artikelseite folgt dem Feld `lang` im
-// Frontmatter; Übersicht und Themenseiten folgen MAGAZIN_LANG (Standard de).
+// Frontmatter. Es gibt zwei Ausgaben (scripts/magazin-lib.mjs, AUSGABEN):
+// Deutsch unter /magazin/ und Englisch unter /en/magazine/, jede mit eigener
+// Übersicht, eigenen Themenseiten und eigener 404. Französische und spanische
+// Artikel erscheinen bis zu einer eigenen Ausgabe in der deutschen; deren
+// Übersicht folgt MAGAZIN_LANG (Standard de).
+//
+// Je Sprache: basis (Pfad der Ausgabe), themaSeg (Pfadteil der Themenseiten),
+// startseite (Startseite in dieser Sprache) und je Thema ein eigener
+// Pfadteil (`kategorie.<k>.slug`): Die englischen Themenseiten heißen
+// /en/magazine/topic/applying/ statt …/bewerbung/. Die deutschen Pfade sind
+// die Schlüssel selbst und bleiben, wie sie waren.
 //
 // Marke und Herausgeber kommen aus src/landing/brand.js (eine Stelle für
 // Startseite und Magazin) und lassen sich beim Bau überschreiben
@@ -8,6 +18,7 @@
 // nur Umgebungsvariablen braucht.
 
 import { BRAND } from '../src/landing/brand.js';
+import { AUSGABEN, KATEGORIEN as KATEGORIEN_LIB } from '../scripts/magazin-lib.mjs';
 
 // Standard wie in src/brand.ts: VITE_APP_NAME, sonst BRAND.name („CV-Hub").
 // Herausgeber ohne eigene Angabe ist der Produktname.
@@ -22,8 +33,10 @@ export const MARKE = {
 export const OG_LOCALE = { de: 'de_DE', en: 'en_GB', fr: 'fr_FR', es: 'es_ES' };
 
 /** Themen des Magazins. Der Schlüssel steht im Frontmatter (`category`) und
- *  ist zugleich der Pfad der Themenseite: /magazin/thema/<schluessel>/. */
-export const KATEGORIEN = ['ats', 'bewerbung', 'recht', 'ki'];
+ *  ist im deutschen Magazin zugleich der Pfad der Themenseite
+ *  (/magazin/thema/<schluessel>/); andere Ausgaben haben eigene Pfadteile
+ *  (TEXTE.<lang>.kategorie.<k>.slug). Eine Liste mit magazin-lib.mjs. */
+export const KATEGORIEN = KATEGORIEN_LIB;
 
 /** Überschriften, unter denen ein FAQ-Block erkannt wird (H2, je Sprache).
  *  Die H3 darunter sind die Fragen, der Text bis zur nächsten H3 die Antwort. */
@@ -31,6 +44,13 @@ export const FAQ_UEBERSCHRIFTEN = /^(häufige fragen|häufig gestellte fragen|fa
 
 export const TEXTE = {
   de: {
+    basis: AUSGABEN.de.basis,
+    themaSeg: AUSGABEN.de.themaSeg,
+    startseite: '/',
+    sprachName: { de: 'Deutsch', en: 'Englisch', fr: 'Französisch', es: 'Spanisch' },
+    auchIn: sprache => `Auch auf ${sprache}`,
+    nurDeutschTitel: 'Artikel auf Deutsch',
+    nurDeutschLede: 'Noch nicht übersetzt.',
     skip: 'Zum Inhalt springen',
     nav: 'Hauptnavigation',
     home: 'Startseite',
@@ -54,6 +74,7 @@ export const TEXTE = {
       bewerbung: { name: 'Bewerbung', lede: 'Lebenslauf, Anschreiben und Unterlagen: Formate, Aufbau und die Fragen, die vor dem Absenden auftauchen.' },
       recht: { name: 'Recht und Datenschutz', lede: 'Was in eine Bewerbung gehört, was nicht, und welche Rechte du gegenüber Arbeitgebern und Portalen hast.' },
       ki: { name: 'KI', lede: 'Sprachmodelle beim Schreiben von Lebenslauf und Anschreiben nutzen, ohne dass etwas erfunden wird.' },
+      ausland: { name: 'Bewerben aus dem Ausland', lede: 'Aus dem Ausland nach Deutschland bewerben: Unterlagen, Anerkennung, Sprache und was hier anders erwartet wird.' },
     },
     themaTitel: name => `${name} · Magazin`,
     leer: 'Hier erscheinen bald die ersten Artikel.',
@@ -83,6 +104,13 @@ export const TEXTE = {
     code: 'Codebeispiel',
   },
   en: {
+    basis: AUSGABEN.en.basis,
+    themaSeg: AUSGABEN.en.themaSeg,
+    startseite: '/en/',
+    sprachName: { de: 'German', en: 'English', fr: 'French', es: 'Spanish' },
+    auchIn: sprache => `Also available in ${sprache}`,
+    nurDeutschTitel: 'Articles in German',
+    nurDeutschLede: 'Not translated yet. These articles are only available in German for now.',
     skip: 'Skip to content',
     nav: 'Main navigation',
     home: 'Home',
@@ -102,10 +130,11 @@ export const TEXTE = {
     themen: 'Topics',
     alleThemen: 'All topics',
     kategorie: {
-      ats: { name: 'ATS and portals', lede: 'How applicant tracking systems read CVs, what the vendors say themselves and what you can check.' },
-      bewerbung: { name: 'Applying', lede: 'CV, cover letter and documents: formats, structure and the questions that come up before you hit send.' },
-      recht: { name: 'Law and privacy', lede: 'What belongs in an application, what does not, and your rights towards employers and portals.' },
-      ki: { name: 'AI', lede: 'Using language models for your CV and cover letter without anything being made up.' },
+      ats: { name: 'ATS and portals', slug: 'ats', lede: 'How applicant tracking systems read CVs, what the vendors say themselves and what you can check.' },
+      bewerbung: { name: 'Applying', slug: 'applying', lede: 'CV, cover letter and documents: formats, structure and the questions that come up before you hit send.' },
+      recht: { name: 'Law and privacy', slug: 'law-and-privacy', lede: 'What belongs in an application, what does not, and your rights towards employers and portals.' },
+      ki: { name: 'AI', slug: 'ai', lede: 'Using language models for your CV and cover letter without anything being made up.' },
+      ausland: { name: 'Applying from abroad', slug: 'applying-from-abroad', lede: 'Applying to German employers from abroad: documents, recognition of qualifications, language and what is expected differently here.' },
     },
     themaTitel: name => `${name} · Magazine`,
     leer: 'The first articles will appear here soon.',
@@ -135,6 +164,13 @@ export const TEXTE = {
     code: 'Code example',
   },
   fr: {
+    basis: AUSGABEN.de.basis,
+    themaSeg: AUSGABEN.de.themaSeg,
+    startseite: '/fr/',
+    sprachName: { de: 'allemand', en: 'anglais', fr: 'français', es: 'espagnol' },
+    auchIn: sprache => `Aussi disponible en ${sprache}`,
+    nurDeutschTitel: 'Articles en allemand',
+    nurDeutschLede: 'Pas encore traduits.',
     skip: 'Aller au contenu',
     nav: 'Navigation principale',
     home: 'Accueil',
@@ -158,6 +194,7 @@ export const TEXTE = {
       bewerbung: { name: 'Candidature', lede: 'CV, lettre et dossier : formats, structure et les questions qui se posent avant l’envoi.' },
       recht: { name: 'Droit et données', lede: 'Ce qui a sa place dans une candidature, ce qui ne l’a pas, et vos droits face aux employeurs et aux portails.' },
       ki: { name: 'IA', lede: 'Utiliser les modèles de langage pour le CV et la lettre sans que rien ne soit inventé.' },
+      ausland: { name: 'Postuler depuis l’étranger', lede: 'Postuler en Allemagne depuis l’étranger : dossier, reconnaissance des diplômes, langue et ce qui est attendu différemment ici.' },
     },
     themaTitel: name => `${name} · Magazine`,
     leer: 'Les premiers articles arrivent bientôt.',
@@ -187,6 +224,13 @@ export const TEXTE = {
     code: 'Exemple de code',
   },
   es: {
+    basis: AUSGABEN.de.basis,
+    themaSeg: AUSGABEN.de.themaSeg,
+    startseite: '/es/',
+    sprachName: { de: 'alemán', en: 'inglés', fr: 'francés', es: 'español' },
+    auchIn: sprache => `También disponible en ${sprache}`,
+    nurDeutschTitel: 'Artículos en alemán',
+    nurDeutschLede: 'Aún sin traducir.',
     skip: 'Saltar al contenido',
     nav: 'Navegación principal',
     home: 'Inicio',
@@ -210,6 +254,7 @@ export const TEXTE = {
       bewerbung: { name: 'Candidatura', lede: 'Currículum, carta y documentos: formatos, estructura y las dudas que surgen antes de enviar.' },
       recht: { name: 'Derecho y privacidad', lede: 'Qué va en una candidatura, qué no, y tus derechos frente a empresas y portales.' },
       ki: { name: 'IA', lede: 'Usar modelos de lenguaje para el currículum y la carta sin que se invente nada.' },
+      ausland: { name: 'Postularse desde el extranjero', lede: 'Postularse en Alemania desde el extranjero: documentos, reconocimiento de títulos, idioma y lo que aquí se espera de otra forma.' },
     },
     themaTitel: name => `${name} · Revista`,
     leer: 'Pronto aparecerán aquí los primeros artículos.',
@@ -239,6 +284,19 @@ export const TEXTE = {
     code: 'Ejemplo de código',
   },
 };
+
+/** Pfadteil der Themenseite eines Themas in einer Ausgabe (deutsch: der
+ *  Schlüssel selbst, englisch: eigener Pfadteil). */
+export function themaSlug(kat, ausgabe) {
+  const t = TEXTE[ausgabe] || TEXTE.de;
+  return (t.kategorie[kat] && t.kategorie[kat].slug) || kat;
+}
+
+/** Pfad der Themenseite, z. B. /magazin/thema/ats/ oder /en/magazine/topic/applying/. */
+export function themaPfad(kat, ausgabe) {
+  const t = TEXTE[ausgabe] || TEXTE.de;
+  return `${t.basis}${t.themaSeg}/${themaSlug(kat, ausgabe)}/`;
+}
 
 /** Rechtliche Links wie in der Fußzeile der App (billing/route.ts PATHS). */
 export const RECHTS_LINKS = [

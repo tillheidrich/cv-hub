@@ -139,7 +139,7 @@ export const LOCAL_I18N: Record<UiLang, LocalStrings> = {
     reminderNever: 'Your CVs live only in this browser.',
     reminderOld: d => `Last backup ${d} days ago.`,
     reminderBody: 'Download a backup file. It brings everything back, on another device too.',
-    safariNote: 'Safari deletes data of sites you have not visited for 7 days.',
+    safariNote: 'Safari deletes data from sites you have not visited for 7 days.',
     evictNote: 'If disk space runs low, the browser may delete this data.',
     backupNow: 'Back up now',
     later: 'Later',

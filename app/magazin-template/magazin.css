@@ -321,6 +321,15 @@ a.chip:hover { background: oklch(0.55 0.216 264 / 0.15); }
 @media (min-width: 1000px) { .karten-klein { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .kopf-nav ul { flex-wrap: wrap; }
 
+/* ── Sprachfassungen (17.11.2026): Hinweis über dem Artikel, Block „Artikel
+ *    auf Deutsch" in der Übersicht der englischen Ausgabe ──────────────── */
+.sprachwechsel { margin: 10px 0 0; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); }
+.sprachwechsel a { color: var(--accent-ink); font-weight: 560; text-decoration: underline; text-underline-offset: 3px; }
+.sprachwechsel a:hover { color: var(--ink); }
+.nur-deutsch { max-width: 1000px; margin: 44px auto 0; }
+.nur-deutsch h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.015em; font-weight: 650; }
+.nur-deutsch-lede { margin: 0 0 16px; color: var(--ink-2); font-size: 15.5px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }

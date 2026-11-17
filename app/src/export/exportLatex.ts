@@ -184,6 +184,43 @@ const HEAD_COMMENT: Record<Lang, string[]> = {
   ],
 };
 
+/** Kommentare in der Präambel, in der Sprache des Dokuments (bis 17.11.2026
+ *  immer Deutsch). */
+const PRE_COMMENT: Record<Lang, { unicode: string; section: string; head: string; sub: string; line: string; hyph: string }> = {
+  de: {
+    unicode: 'Zeichen ohne pdfLaTeX-Schnitt: XeLaTeX oder LuaLaTeX setzen sie richtig.',
+    section: 'Abschnittsüberschrift mit Linie',
+    head: 'Eintragskopf: Titel links, Zeitraum rechts',
+    sub: 'Zweite Zeile: Firma oder Einrichtung links, Ort rechts',
+    line: 'Zeile aus Bezeichnung und Wert (Eckdaten, Kenntnisse, Sprachen)',
+    hyph: 'Keine Silbentrennung: getrennte Wörter lesen Parser als zwei Wörter.',
+  },
+  en: {
+    unicode: 'Characters pdfLaTeX has no glyph for: XeLaTeX or LuaLaTeX set them correctly.',
+    section: 'Section heading with rule',
+    head: 'Entry heading: title on the left, dates on the right',
+    sub: 'Second line: company or institution on the left, place on the right',
+    line: 'Label and value row (personal details, skills, languages)',
+    hyph: 'No hyphenation: parsers read a hyphenated word as two words.',
+  },
+  fr: {
+    unicode: 'Caractères sans glyphe pdfLaTeX : XeLaTeX ou LuaLaTeX les composent correctement.',
+    section: 'Titre de section avec filet',
+    head: 'En-tête d’entrée : titre à gauche, période à droite',
+    sub: 'Deuxième ligne : entreprise ou établissement à gauche, lieu à droite',
+    line: 'Ligne libellé et valeur (informations, compétences, langues)',
+    hyph: 'Pas de césure : les logiciels de tri lisent un mot coupé comme deux mots.',
+  },
+  es: {
+    unicode: 'Caracteres sin glifo en pdfLaTeX: XeLaTeX o LuaLaTeX los componen bien.',
+    section: 'Título de sección con línea',
+    head: 'Cabecera de entrada: título a la izquierda, fechas a la derecha',
+    sub: 'Segunda línea: empresa o centro a la izquierda, lugar a la derecha',
+    line: 'Fila de etiqueta y valor (datos, competencias, idiomas)',
+    hyph: 'Sin división silábica: los sistemas leen una palabra partida como dos.',
+  },
+};
+
 /** Baut den LaTeX-Quelltext. Rein (ohne Download), damit die Prüfung ihn
  *  übersetzen kann. */
 export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): string {
@@ -247,7 +284,7 @@ export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): s
       if (!list.length) continue;
       section(sec.experience);
       for (const e of list) {
-        head(t1(e.role), t1(dateRange(e.start, e.end, present)));
+        head(t1(e.role), t1(dateRange(e.start, e.end, present, true)));
         sub(t1(e.company), t1(e.location));
         items(e.bullets);
       }
@@ -316,6 +353,7 @@ export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): s
   const unicode = [...extra].sort((a, b) => a - b)
     .map(cp => `  \\DeclareUnicodeCharacter{${cp.toString(16).toUpperCase().padStart(4, '0')}}{?}`);
   const today = new Date().toISOString().slice(0, 10);
+  const C = PRE_COMMENT[lang] ?? PRE_COMMENT.de;
   const pre = [
     /* Kommentarzeile: Zeilenwechsel im Namen würden den Kommentar beenden
      * und den Rest als Quelltext lesen lassen — deshalb einzeilig. */
@@ -328,7 +366,7 @@ export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): s
     '  \\usepackage[utf8]{inputenc}',
     '  \\usepackage[T1]{fontenc}',
     '  \\usepackage{lmodern}',
-    ...(unicode.length ? ['  % Zeichen ohne pdfLaTeX-Schnitt: XeLaTeX oder LuaLaTeX setzen sie richtig.', ...unicode] : []),
+    ...(unicode.length ? [`  % ${C.unicode}`, ...unicode] : []),
     '\\else',
     '  \\usepackage{fontspec}',
     '\\fi',
@@ -340,18 +378,18 @@ export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): s
     `\\definecolor{cvsoft}{HTML}{${soft}}`,
     `\\hypersetup{pdftitle={${t1(p.name)} \\textendash\\ ${t1(L.misc.cvLabel)}}, pdfauthor={${t1(p.name)}}}`,
     '',
-    '% Abschnittsüberschrift mit Linie',
+    `% ${C.section}`,
     '\\newcommand{\\cvsection}[1]{\\par\\addvspace{10pt}{\\large\\bfseries\\color{cvaccent}#1\\par}\\vspace{2pt}{\\color{cvsoft}\\hrule}\\vspace{5pt}}',
-    '% Eintragskopf: Titel links, Zeitraum rechts',
+    `% ${C.head}`,
     '\\newcommand{\\cvhead}[2]{\\par\\addvspace{5pt}\\noindent\\textbf{#1}\\hfill{\\small\\color{cvsoft}#2}\\par}',
-    '% Zweite Zeile: Firma oder Einrichtung links, Ort rechts',
+    `% ${C.sub}`,
     '\\newcommand{\\cvsub}[2]{\\noindent{\\color{cvaccent}#1}\\hfill{\\small\\color{cvsoft}#2}\\par}',
-    '% Zeile aus Bezeichnung und Wert (Eckdaten, Kenntnisse, Sprachen)',
+    `% ${C.line}`,
     '\\newcommand{\\cvline}[2]{\\par\\noindent\\parbox[t]{34mm}{\\raggedright\\small\\leavevmode\\color{cvsoft}#1}\\hspace{4mm}\\parbox[t]{\\dimexpr\\linewidth-38mm\\relax}{\\raggedright #2}\\par\\vspace{2pt}}',
     '\\setlist[itemize]{leftmargin=1.2em,itemsep=1pt,parsep=0pt,topsep=3pt,label={\\color{cvaccent}\\textbullet}}',
     '\\setlength{\\parindent}{0pt}',
     '\\setlength{\\parskip}{2pt}',
-    '% Keine Silbentrennung: getrennte Wörter lesen Parser als zwei Wörter.',
+    `% ${C.hyph}`,
     '\\hyphenpenalty=10000',
     '\\exhyphenpenalty=10000',
     '\\pagestyle{empty}',
@@ -364,7 +402,7 @@ export function buildLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): s
 
 /** Lädt die .tex-Datei herunter. */
 export function exportLatex(cv: CVData, cfg: Partial<ExportRenderConfig> = {}): void {
-  saveText(exportFilename('lebenslauf', cv.personal.name, 'tex'), buildLatex(cv, cfg), 'application/x-tex');
+  saveText(exportFilename('lebenslauf', cv.personal.name, 'tex', cv.labels?.lang), buildLatex(cv, cfg), 'application/x-tex');
 }
 
 // ── Oberfläche ───────────────────────────────────────────────────────────────

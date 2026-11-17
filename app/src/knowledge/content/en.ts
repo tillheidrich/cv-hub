@@ -46,6 +46,15 @@ const en: TipsContent = {
       sources: ['ads', 'ba-lebenslauf', 'ncs', 'harvard-resume'],
     },
     {
+      id: 'abroad',
+      title: 'Applying to Germany from abroad',
+      body: 'German employers expect a CV in table form, most recent role first, two pages at most. The Federal Employment Agency\'s service for international applicants (ZAV) adds that a photo is not required but still expected by most employers, and that marital status and religion are not needed. Whether you add a photo is your choice; the tip on photos explains why.\n\nPut your right to work in the personal details, for example "EU Blue Card holder", or "eligible for an EU Blue Card" if your degree and salary meet the conditions. Give your German level on the CEFR scale (A1 to C2), even if it is A2, and name the certificate if you have one. Make it in Germany asks for language levels on this scale.\n\nSay how your degree compares. Make it in Germany names two ways: your university is rated H+ in anabin and your degree is listed as "entspricht" or "gleichwertig" (equivalent), or you have a Statement of Comparability from the ZAB (the KMK charges EUR 200). IT jobs do not require recognition, but for the EU Blue Card or a work visa you have to show that your degree is comparable.\n\nGive grades as they appear on your certificate and add the German equivalent. German universities use the modified Bavarian formula: German grade = 1 + 3 × (best possible grade minus your grade) / (best possible grade minus lowest pass mark). The lowest pass mark depends on your university, as uni-assist stresses for India, so there is no general CGPA table. Example: CGPA 8.5 out of 10 with a pass mark of 5.0 gives 1 + 3 × 1.5 / 5 = 1.9.\n\nLeave out what is common at home but not here: the declaration ("I hereby declare …"), your father\'s or mother\'s name, religion, caste and passport number. Salary does not go on the CV. If the ad asks for your expectations, give them in the cover letter as an annual gross amount in euros, not as CTC in lakhs. Your notice period or earliest start date fits there too.\n\nSend certificates translated into German or English (Make it in Germany), and have a native German speaker read your CV once, as the ZAV recommends.',
+      before: 'Father\'s name: R. Kumar · Religion: … · Current CTC: 18 LPA · Declaration: I hereby declare …',
+      after: 'Work permit: EU Blue Card holder · German: B1 (Goethe-Zertifikat) · Notice period: three months',
+      sources: ['ba-zav-cv', 'mig-application', 'mig-degrees', 'anabin', 'zab-comparability', 'uni-assist-india'],
+      magazinEn: ['german-cv-guide', 'indian-resume-to-german-cv', 'cgpa-german-cv', 'cv-opportunity-card-blue-card'],
+    },
+    {
       id: 'length',
       title: 'Length: one to two pages, in Switzerland up to three',
       body: 'The German Federal Employment Agency sets a maximum of two pages for a German CV; Transport for London says "ideally no more than 2 pages" for the UK. Career guidance in the canton of Bern allows two to at most three pages for Switzerland. If you are early in your career, one page is usually enough.\n\nCutting does not mean shrinking the font. First remove the points that add nothing for this job; the check with the job ad shows which ones those are. Older roles can be shorter than the last two.\n\nUnder "Check → Page" you can see whether the content fits the chosen number of pages and how much it has to be condensed.',
@@ -54,9 +63,9 @@ const en: TipsContent = {
     {
       id: 'filename',
       title: 'File name and format',
-      body: 'People see the file name before the content. "CV_Firstname-Lastname.pdf" says what it is and whose it is; "CV_final_new2.pdf" says something else. The German Federal Employment Agency advises sending every document as a PDF so the formatting is preserved, naming the file clearly and staying under 10 MB.\n\nThis tool currently names downloads Lebenslauf_Firstname-Lastname with date and time, using the German word for CV. If a portal explicitly asks for Word, there is a separate version for that; otherwise PDF is the safe choice.',
+      body: 'People see the file name before the content. "CV_Firstname-Lastname.pdf" says what it is and whose it is; "CV_final_new2.pdf" says something else. The German Federal Employment Agency advises sending every document as a PDF so the formatting is preserved, naming the file clearly and staying under 10 MB.\n\nThis tool names downloads CV_Firstname-Lastname with the date, and the cover letter Cover-Letter_Firstname-Lastname. If a portal explicitly asks for Word, there is a separate version for that; otherwise PDF is the safe choice.',
       before: 'CV_final_new2.pdf',
-      after: 'CV_Lena-Brandt.pdf',
+      after: 'CV_Priya-Raman.pdf',
       sources: ['ba-checkliste'],
       magazin: ['lebenslauf-pdf-oder-word', 'lebenslauf-maschinenlesbar-checkliste'],
     },

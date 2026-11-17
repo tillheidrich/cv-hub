@@ -1,10 +1,16 @@
 // HTML-Gerüst der Magazin-Seiten: Kopf, Fuß, Artikel, Übersicht, Themen, 404.
 //
 // Reines HTML ohne JavaScript. Das einzige <script> ist JSON-LD (wird nicht
-// ausgeführt). Keine style-Attribute: Die CSP für /magazin/ erlaubt nur
-// Stylesheets von derselben Herkunft.
+// ausgeführt). Keine style-Attribute: Die CSP für /magazin/ und
+// /en/magazine/ erlaubt nur Stylesheets von derselben Herkunft.
+//
+// Zwei Größen je Seite: `lang` ist die Sprache der Seite (feste Texte,
+// <html lang>), `ausgabe` die Ausgabe, in der sie liegt (Pfade). Für
+// deutsche und englische Seiten sind beide gleich; ein französischer Artikel
+// liegt in der deutschen Ausgabe. Alle Pfade kommen aus texte.mjs (basis,
+// themaSeg, startseite, themaPfad), keiner steht hier fest.
 
-import { MARKE, TEXTE, OG_LOCALE, RECHTS_LINKS, KATEGORIEN } from './texte.mjs';
+import { MARKE, TEXTE, OG_LOCALE, RECHTS_LINKS, KATEGORIEN, themaPfad } from './texte.mjs';
 
 export function esc(s) {
   return String(s ?? '')
@@ -30,7 +36,7 @@ function markenWort() {
 }
 
 function marke(t) {
-  return `<a class="marke" href="/" aria-label="${esc(MARKE.name)} – ${esc(t.home)}">${MARK_SVG}<span class="marke-wort">${markenWort()}</span></a>`;
+  return `<a class="marke" href="${esc(t.startseite)}" aria-label="${esc(MARKE.name)} – ${esc(t.home)}">${MARK_SVG}<span class="marke-wort">${markenWort()}</span></a>`;
 }
 
 export function kategorieName(kat, lang) {
@@ -38,14 +44,16 @@ export function kategorieName(kat, lang) {
   return kat && t.kategorie[kat] ? t.kategorie[kat].name : '';
 }
 
-function kopf(t, aktuell) {
+const pfade = ausgabe => TEXTE[ausgabe] || TEXTE.de;
+
+function kopf(t, aktuell, ausgabe) {
   return `<header class="kopf">
   <div class="kopf-inner">
     ${marke(t)}
     <nav class="kopf-nav" aria-label="${esc(t.nav)}">
       <ul>
-        <li><a href="/magazin/"${aktuell === 'magazin' ? ' aria-current="page"' : ''}>${esc(t.magazin)}</a></li>
-        <li><a href="/#vorlagen">${esc(t.vorlagen)}</a></li>
+        <li><a href="${esc(pfade(ausgabe).basis)}"${aktuell === 'magazin' ? ' aria-current="page"' : ''}>${esc(t.magazin)}</a></li>
+        <li><a href="${esc(t.startseite)}#vorlagen">${esc(t.vorlagen)}</a></li>
         <li><a href="/preise">${esc(t.pricing)}</a></li>
       </ul>
     </nav>
@@ -65,8 +73,20 @@ function fuss(t) {
 </footer>`;
 }
 
-function huelle({ lang, titel, beschreibung, canonical, ogType, css, schrift, jsonld, robots, aktuell, inhalt, ogImage, modified, preload }) {
+/** hreflang-Verweise: nur für echte Paare (mindestens zwei Sprachen), die
+ *  eigene Fassung eingeschlossen; x-default ist die deutsche Fassung.
+ *  @param {{ lang: string, href: string }[]} alternates */
+function alternateLinks(alternates) {
+  if (!alternates || alternates.length < 2) return [];
+  const zeilen = alternates.map(x => `<link rel="alternate" hreflang="${x.lang}" href="${esc(x.href)}">`);
+  const de = alternates.find(x => x.lang === 'de');
+  if (de) zeilen.push(`<link rel="alternate" hreflang="x-default" href="${esc(de.href)}">`);
+  return zeilen;
+}
+
+function huelle({ lang, ausgabe, titel, beschreibung, canonical, ogType, css, schrift, jsonld, robots, aktuell, inhalt, ogImage, modified, preload, alternates }) {
   const t = TEXTE[lang] || TEXTE.de;
+  const paar = canonical && alternates && alternates.length > 1 ? alternates : [];
   const meta = [
     `<meta charset="utf-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1">`,
@@ -74,6 +94,7 @@ function huelle({ lang, titel, beschreibung, canonical, ogType, css, schrift, js
     beschreibung ? `<meta name="description" content="${esc(beschreibung)}">` : '',
     robots ? `<meta name="robots" content="${robots}">` : '',
     canonical ? `<link rel="canonical" href="${esc(canonical)}">` : '',
+    ...alternateLinks(paar),
     `<meta name="theme-color" content="#eef0f5">`,
     `<link rel="icon" type="image/svg+xml" href="/favicon.svg">`,
     `<link rel="preload" href="${esc(schrift)}" as="font" type="font/woff2" crossorigin>`,
@@ -88,6 +109,7 @@ function huelle({ lang, titel, beschreibung, canonical, ogType, css, schrift, js
       `<meta property="og:description" content="${esc(beschreibung)}">`,
       `<meta property="og:url" content="${esc(canonical)}">`,
       `<meta property="og:locale" content="${OG_LOCALE[lang] || 'de_DE'}">`,
+      ...paar.filter(x => x.lang !== lang).map(x => `<meta property="og:locale:alternate" content="${OG_LOCALE[x.lang] || 'de_DE'}">`),
       `<meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}">`,
       `<meta name="twitter:title" content="${esc(titel)}">`,
       `<meta name="twitter:description" content="${esc(beschreibung)}">`,
@@ -103,7 +125,7 @@ ${meta.filter(Boolean).join('\n')}
 </head>
 <body>
 <a class="skip" href="#inhalt">${esc(t.skip)}</a>
-${kopf(t, aktuell)}
+${kopf(t, aktuell, ausgabe || 'de')}
 <main id="inhalt" tabindex="-1">
 ${inhalt}
 </main>
@@ -131,11 +153,11 @@ function tocListe(toc) {
   return html + '</ol>';
 }
 
-function themaChip(kat, lang, mitLink = true) {
+function themaChip(kat, lang, ausgabe, mitLink = true) {
   const name = kategorieName(kat, lang);
   if (!name) return '';
   return mitLink
-    ? `<a class="chip" href="/magazin/thema/${kat}/">${esc(name)}</a>`
+    ? `<a class="chip" href="${esc(themaPfad(kat, ausgabe))}">${esc(name)}</a>`
     : `<span class="chip">${esc(name)}</span>`;
 }
 
@@ -163,31 +185,43 @@ function aufruf(t, bild) {
   </aside>`;
 }
 
+/** Karte eines Artikels; `a.pfad` ist sein Pfad in seiner Ausgabe. */
 function karteHtml(a, lang, ueberschrift = 'h2') {
   const t = TEXTE[lang] || TEXTE.de;
   const ta = TEXTE[a.meta.lang] || t;
   return `<li><article class="karte"${a.meta.lang !== lang ? ` lang="${a.meta.lang}"` : ''}>
     ${a.meta.category ? `<p class="karte-thema">${esc(kategorieName(a.meta.category, a.meta.lang))}</p>` : ''}
-    <${ueberschrift}><a href="/magazin/${a.meta.slug}/">${esc(a.meta.title)}</a></${ueberschrift}>
+    <${ueberschrift}><a href="${esc(a.pfad)}"${a.meta.lang !== lang ? ` hreflang="${a.meta.lang}"` : ''}>${esc(a.meta.title)}</a></${ueberschrift}>
     <p>${esc(a.meta.description)}</p>
     <p class="meta"><time datetime="${esc(a.meta.updated)}">${esc(a.datum)}</time><span>${esc(ta.minuten(a.minuten))}</span></p>
   </article></li>`;
 }
 
+/** Hinweis über dem Artikel auf die anderen Sprachfassungen, z. B. „Auch auf
+ *  Englisch: <Titel>". Der Titel trägt lang und hreflang der Fassung. */
+function sprachwechsel(t, uebersetzungen) {
+  if (!uebersetzungen || !uebersetzungen.length) return '';
+  const teile = uebersetzungen.map(u => `${esc(t.auchIn(t.sprachName[u.lang] || u.lang))}: <a href="${esc(u.pfad)}" lang="${u.lang}" hreflang="${u.lang}">${esc(u.title)}</a>`);
+  return `<p class="sprachwechsel">${teile.join(' · ')}</p>`;
+}
+
 /**
  * Artikelseite.
- * @param {{ meta, html, toc, minuten, canonical, basis, css, schrift, ogImage, datum, faq, verwandt, bild }} a
+ * @param {{ meta, pfad, ausgabe, html, toc, minuten, canonical, basis, css, schrift, ogImage, datum, faq, verwandt, bild,
+ *           uebersetzungen?: { lang: string, title: string, pfad: string, url: string }[] }} a
  */
 export function artikelSeite(a) {
   const lang = a.meta.lang;
+  const ausgabe = a.ausgabe || 'de';
   const t = TEXTE[lang] || TEXTE.de;
   const mitToc = a.toc.length > 0;
   const stufen = [
-    { name: t.home, pfad: '/' },
-    { name: t.magazin, pfad: '/magazin/' },
-    ...(a.meta.category ? [{ name: kategorieName(a.meta.category, lang), pfad: `/magazin/thema/${a.meta.category}/` }] : []),
-    { name: a.meta.title, pfad: `/magazin/${a.meta.slug}/` },
+    { name: t.home, pfad: t.startseite },
+    { name: t.magazin, pfad: pfade(ausgabe).basis },
+    ...(a.meta.category ? [{ name: kategorieName(a.meta.category, lang), pfad: themaPfad(a.meta.category, ausgabe) }] : []),
+    { name: a.meta.title, pfad: a.pfad },
   ];
+  const uebersetzungen = a.uebersetzungen || [];
   const krumen = brotkrumen(t, a.basis, stufen);
   const herausgeber = { '@type': 'Organization', name: MARKE.herausgeber, url: `${a.basis}/` };
   const artikel = {
@@ -205,6 +239,12 @@ export function artikelSeite(a) {
   };
   if (a.meta.category) artikel.articleSection = kategorieName(a.meta.category, lang);
   if (a.ogImage) artikel.image = a.ogImage;
+  // Übersetzungen (schema.org): Die deutsche Fassung gilt als das Werk, die
+  // anderen als seine Übersetzungen — dieselbe Richtung wie x-default.
+  const ref = u => ({ '@type': 'Article', url: u.url, inLanguage: u.lang, headline: u.title });
+  const deutsch = uebersetzungen.find(u => u.lang === 'de');
+  if (lang === 'de' && uebersetzungen.length) artikel.workTranslation = uebersetzungen.map(ref);
+  else if (deutsch) artikel.translationOfWork = ref(deutsch);
   const graph = [artikel, krumen.ld];
   if (a.faq && a.faq.length) {
     graph.push({
@@ -226,8 +266,8 @@ export function artikelSeite(a) {
 ${tocSeite}
 <article class="blatt">
   <header class="artikel-kopf">
-    ${krumen.html}
-    ${a.meta.category ? `<p class="thema-zeile">${themaChip(a.meta.category, lang)}</p>` : ''}
+    ${krumen.html}${uebersetzungen.length ? `\n    ${sprachwechsel(t, uebersetzungen)}` : ''}
+    ${a.meta.category ? `<p class="thema-zeile">${themaChip(a.meta.category, lang, ausgabe)}</p>` : ''}
     <h1>${esc(a.meta.title)}</h1>
     <p class="lede">${esc(a.meta.description)}</p>
     <p class="meta"><span>${esc(t.updated)} <time datetime="${esc(a.meta.updated)}">${esc(a.datum)}</time></span><span>${esc(t.minuten(a.minuten))}</span><span>${esc(t.herausgeber(MARKE.herausgeber))}</span></p>
@@ -242,35 +282,45 @@ ${a.html}
 </div>
 ${verwandt}`;
 
+  const alternates = uebersetzungen.length ? [{ lang, href: a.canonical }, ...uebersetzungen.map(u => ({ lang: u.lang, href: u.url }))] : [];
   return huelle({
-    lang, titel: `${a.meta.title} · ${MARKE.name}`, beschreibung: a.meta.description, canonical: a.canonical,
+    lang, ausgabe, titel: `${a.meta.title} · ${MARKE.name}`, beschreibung: a.meta.description, canonical: a.canonical,
     ogType: 'article', css: a.css, schrift: a.schrift, jsonld: { '@context': 'https://schema.org', '@graph': graph }, aktuell: 'magazin', inhalt, ogImage: a.ogImage,
-    modified: a.meta.updated,
+    modified: a.meta.updated, alternates,
   });
 }
 
-function themenNav(t, lang, aktiv, vorhanden) {
-  const eintraege = [`<li><a href="/magazin/"${!aktiv ? ' aria-current="page"' : ''}>${esc(t.alleThemen)}</a></li>`]
-    .concat(KATEGORIEN.filter(k => vorhanden.has(k)).map(k => `<li><a href="/magazin/thema/${k}/"${aktiv === k ? ' aria-current="page"' : ''}>${esc(t.kategorie[k].name)}</a></li>`));
+function themenNav(t, ausgabe, aktiv, vorhanden) {
+  const eintraege = [`<li><a href="${esc(pfade(ausgabe).basis)}"${!aktiv ? ' aria-current="page"' : ''}>${esc(t.alleThemen)}</a></li>`]
+    .concat(KATEGORIEN.filter(k => vorhanden.has(k)).map(k => `<li><a href="${esc(themaPfad(k, ausgabe))}"${aktiv === k ? ' aria-current="page"' : ''}>${esc(t.kategorie[k].name)}</a></li>`));
   return `<nav class="themen" aria-label="${esc(t.themen)}"><ul>${eintraege.join('')}</ul></nav>`;
 }
 
 /**
- * Übersicht /magazin/ und Themenseiten /magazin/thema/<kat>/.
- * @param {{ lang, artikel: {meta, minuten, datum}[], canonical, basis, css, schrift, ogImage, kategorie?, vorhanden }} u
+ * Übersicht (/magazin/, /en/magazine/) und Themenseiten
+ * (/magazin/thema/<kat>/, /en/magazine/topic/<slug>/).
+ * `nurDeutsch`: deutsche Artikel ohne Fassung in dieser Sprache, als eigener,
+ * gekennzeichneter Block unter den eigenen (nur Übersicht der englischen
+ * Ausgabe). `alternates`: dieselbe Seite in der anderen Ausgabe (hreflang).
+ * @param {{ lang, ausgabe, artikel: {meta, pfad, minuten, datum}[], canonical, basis, css, schrift, ogImage, kategorie?, vorhanden,
+ *           nurDeutsch?: {meta, pfad, minuten, datum}[], alternates?: {lang, href}[], robots?: string }} u
  */
 export function uebersichtSeite(u) {
   const t = TEXTE[u.lang] || TEXTE.de;
+  const ausgabe = u.ausgabe || 'de';
   const kat = u.kategorie || '';
   const liste = kat ? u.artikel.filter(a => a.meta.category === kat) : u.artikel;
   const karten = liste.length
     ? `<ul class="karten">${liste.map(a => karteHtml(a, u.lang)).join('')}</ul>`
     : `<p class="leer">${esc(t.leer)}</p>`;
+  const fremd = !kat && u.nurDeutsch && u.nurDeutsch.length
+    ? `<section class="nur-deutsch" aria-labelledby="nur-deutsch-h"><h2 id="nur-deutsch-h">${esc(t.nurDeutschTitel)}</h2><p class="nur-deutsch-lede">${esc(t.nurDeutschLede)}</p><ul class="karten karten-klein">${u.nurDeutsch.map(a => karteHtml(a, u.lang, 'h3')).join('')}</ul></section>`
+    : '';
   const name = kat ? t.kategorie[kat].name : t.uebersichtTitel;
   const titel = kat ? `${t.themaTitel(name)} · ${MARKE.name}` : `${t.uebersichtTitel} · ${MARKE.name}`;
   const beschreibung = kat ? t.kategorie[kat].lede : t.uebersichtBeschreibung;
-  const stufen = [{ name: t.home, pfad: '/' }, { name: t.magazin, pfad: '/magazin/' }];
-  if (kat) stufen.push({ name, pfad: `/magazin/thema/${kat}/` });
+  const stufen = [{ name: t.home, pfad: t.startseite }, { name: t.magazin, pfad: pfade(ausgabe).basis }];
+  if (kat) stufen.push({ name, pfad: themaPfad(kat, ausgabe) });
   const krumen = brotkrumen(t, u.basis, stufen);
   const jsonld = {
     '@context': 'https://schema.org',
@@ -281,31 +331,32 @@ export function uebersichtSeite(u) {
       url: u.canonical,
       inLanguage: u.lang,
       publisher: { '@type': 'Organization', name: MARKE.herausgeber, url: `${u.basis}/` },
-      hasPart: liste.map(a => ({ '@type': 'Article', headline: a.meta.title, url: `${u.basis}/magazin/${a.meta.slug}/`, dateModified: a.meta.updated })),
+      hasPart: liste.map(a => ({ '@type': 'Article', headline: a.meta.title, url: `${u.basis}${a.pfad}`, dateModified: a.meta.updated })),
     }, krumen.ld],
   };
   const inhalt = `<header class="uebersicht-kopf">
   ${krumen.html}
   <h1>${esc(kat ? name : t.uebersichtH1)}</h1>
   <p class="lede">${esc(kat ? t.kategorie[kat].lede : t.uebersichtLede)}</p>
-  ${themenNav(t, u.lang, kat, u.vorhanden)}
+  ${themenNav(t, ausgabe, kat, u.vorhanden)}
 </header>
-${karten}`;
+${karten}${fremd ? `\n${fremd}` : ''}`;
   return huelle({
-    lang: u.lang, titel, beschreibung, canonical: u.canonical,
+    lang: u.lang, ausgabe, titel, beschreibung, canonical: u.canonical, robots: u.robots,
     ogType: 'website', css: u.css, schrift: u.schrift, jsonld, aktuell: 'magazin', inhalt, ogImage: u.ogImage,
+    alternates: u.alternates,
   });
 }
 
-/** 404 für unbekannte Adressen unter /magazin/ (nginx error_page). */
-export function nichtGefundenSeite({ lang, css, schrift }) {
+/** 404 für unbekannte Adressen einer Ausgabe (nginx error_page). */
+export function nichtGefundenSeite({ lang, ausgabe = 'de', css, schrift }) {
   const t = TEXTE[lang] || TEXTE.de;
   const inhalt = `<div class="layout"><div class="blatt">
   <header class="artikel-kopf">
     <h1>${esc(t.nichtGefundenTitel)}</h1>
     <p class="lede">${esc(t.nichtGefundenText)}</p>
-    <p><a class="btn btn-primaer" href="/magazin/">${esc(t.alle)}</a></p>
+    <p><a class="btn btn-primaer" href="${esc(pfade(ausgabe).basis)}">${esc(t.alle)}</a></p>
   </header>
 </div></div>`;
-  return huelle({ lang, titel: `${t.nichtGefundenTitel} · ${MARKE.name}`, beschreibung: '', canonical: '', css, schrift, robots: 'noindex', aktuell: 'magazin', inhalt });
+  return huelle({ lang, ausgabe, titel: `${t.nichtGefundenTitel} · ${MARKE.name}`, beschreibung: '', canonical: '', css, schrift, robots: 'noindex', aktuell: 'magazin', inhalt });
 }

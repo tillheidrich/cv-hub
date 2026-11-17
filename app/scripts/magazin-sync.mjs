@@ -26,12 +26,23 @@
 //   - Ist ein Dokument in Outline nicht mehr veröffentlicht, wird seine Datei
 //     gelöscht, aber nur, wenn die Liste vollständig geladen werden konnte.
 //     Dateien ohne outlineId (direkt im Repo geschrieben) fasst der Sync nie an.
+//   - Sprache und Übersetzung (17.11.2026): Eine Zeile „Sprache: en" (auch
+//     „Language: en", Werte de/en/fr/es oder der Name der Sprache) unter den
+//     ersten fünf Zeilen macht das Dokument zu einem Artikel dieser Sprache
+//     (englisch: /en/magazine/<slug>/); ohne sie gilt die Sprache des
+//     Outline-Dokuments, sonst Deutsch. Eine Zeile „Übersetzung: <schlüssel>"
+//     (auch „Translation:") setzt translationKey: Dokumente verschiedener
+//     Sprache mit gleichem Schlüssel sind Übersetzungen voneinander. Ohne die
+//     Zeile bleibt ein schon gesetzter translationKey der Datei stehen (auch
+//     ein von Hand im Repo ergänzter). Beide Zeilen werden aus dem Text
+//     entfernt; nur gültige Werte zählen, sonst bleibt die Zeile Text.
+//     Querverweise zeigen auf den Pfad in der Ausgabe des Ziels.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { leseArtikel, slugify, stringifyFrontmatter, pruefeMeta, nurDatum, istAnleitung, SPRACHEN, KATEGORIEN } from './magazin-lib.mjs';
+import { leseArtikel, slugify, stringifyFrontmatter, pruefeMeta, nurDatum, istAnleitung, artikelPfad, SPRACHEN, KATEGORIEN } from './magazin-lib.mjs';
 import { pruefeText } from './magazin-sperrmuster.mjs';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -148,6 +159,52 @@ function kategorie(text, bisher, titel) {
   return { text, kat: bisher || '' };
 }
 
+/** Eine Kopfzeile „Name: wert" unter den ersten `fenster` nicht leeren
+ *  Zeilen suchen. `lesen` bildet den Rohwert auf einen gültigen Wert ab
+ *  (oder null). Nur bei gültigem Wert wird die Zeile entfernt; sonst bleibt
+ *  der Text, wie er ist (eine gewöhnliche Zeile im Artikel ist kein Fehler). */
+function kopfzeile(text, namenRe, lesen, fenster = 5) {
+  const zeilen = text.split('\n');
+  let gesehen = 0;
+  for (let i = 0; i < zeilen.length && gesehen < fenster; i++) {
+    if (!zeilen[i].trim()) continue;
+    gesehen++;
+    const m = new RegExp(`^\\s*(?:>\\s*)?(?:\\*\\*|__)?(?:${namenRe})(?:\\*\\*|__)?\\s*:\\s*(?:\\*\\*|__)?\\s*([^*_\\s][^*]*?)\\s*(?:\\*\\*|__)?\\s*$`, 'i').exec(zeilen[i]);
+    if (!m) continue;
+    const wert = lesen(m[1].trim());
+    if (wert === null) continue;
+    zeilen.splice(i, 1);
+    return { text: zeilen.join('\n').trim(), wert };
+  }
+  return { text, wert: null };
+}
+
+const SPRACH_NAMEN = {
+  de: ['de', 'deutsch', 'german'],
+  en: ['en', 'englisch', 'english', 'en-gb', 'en_gb'],
+  fr: ['fr', 'französisch', 'franzoesisch', 'french', 'français', 'francais'],
+  es: ['es', 'spanisch', 'spanish', 'español', 'espanol'],
+};
+const spracheAus = roh => {
+  const w = roh.toLowerCase();
+  return SPRACHEN.find(l => (SPRACH_NAMEN[l] || [l]).includes(w)) || null;
+};
+const SCHLUESSEL_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const schluesselAus = roh => (SCHLUESSEL_RE.test(roh) && roh.length <= 80 ? roh : null);
+
+/** Sprache: Zeile „Sprache: en" > Sprache des Outline-Dokuments > bisherige Datei > de. */
+function sprache(text, doc, bisher) {
+  const r = kopfzeile(text, 'sprache|language|lang', spracheAus);
+  const lang = r.wert || (SPRACHEN.includes(doc.language) ? doc.language : '') || bisher || 'de';
+  return { text: r.text, lang };
+}
+
+/** Übersetzung: Zeile „Übersetzung: <schlüssel>" > bisheriger translationKey. */
+function uebersetzung(text, bisher) {
+  const r = kopfzeile(text, 'übersetzung|uebersetzung|translation|translationkey', schluesselAus);
+  return { text: r.text, key: r.wert || bisher || '' };
+}
+
 const BILD_RE = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+[^)]*)?\)/g;
 
 function istAnhang(url) {
@@ -206,8 +263,9 @@ async function ladeBild(url) {
   throw new Error('zu viele Weiterleitungen');
 }
 
-/** Verweise auf andere Dokumente derselben Sammlung auf /magazin/<slug>/
- *  umbiegen. Verweise auf Wiki-Dokumente, die nicht (mehr) veröffentlicht
+/** Verweise auf andere Dokumente derselben Sammlung auf ihren Pfad
+ *  umbiegen (/magazin/<slug>/ oder /en/magazine/<slug>/, je nach Sprache
+ *  des Ziels; `urlIdZuSlug` liefert den Pfad ohne Anker). Verweise auf Wiki-Dokumente, die nicht (mehr) veröffentlicht
  *  sind oder in anderen Sammlungen liegen, werden zu reinem Text: Ihr Titel
  *  in der Adresse verriete interne Seiten, und ein toter Link hilft niemandem.
  *  Was danach noch nach /doc/ aussieht (fremde Hosts), fängt die Sperrliste. */
@@ -215,8 +273,8 @@ function verweiseUmbiegen(text, urlIdZuSlug, titel) {
   const outlineHost = new URL(OUTLINE_URL).host;
   return text.replace(/\[([^\]]*)\]\(((?:https?:\/\/([^/\s)]+))?\/doc\/[^)\s#]*?([A-Za-z0-9]{10})(#[^)\s]*)?)\)/g, (ganz, linktext, _url, host, urlId, anker) => {
     if (host && host !== outlineHost) return ganz;
-    const slug = urlIdZuSlug.get(urlId);
-    if (!slug) {
+    const pfad = urlIdZuSlug.get(urlId);
+    if (!pfad) {
       warn(`„${titel}": Verweis auf ein Wiki-Dokument außerhalb des Magazins („${linktext.slice(0, 40)}") – Link entfernt, Text bleibt.`);
       return linktext;
     }
@@ -225,7 +283,7 @@ function verweiseUmbiegen(text, urlIdZuSlug, titel) {
       // Outline-Anker heißen „#h-ueberschrift"; der Bau vergibt „#ueberschrift".
       a = '#' + slugify(decodeURIComponent(anker.slice(1)).replace(/^h-/, ''));
     }
-    return `[${linktext}](/magazin/${slug}/${a})`;
+    return `[${linktext}](${pfad}${a})`;
   });
 }
 
@@ -256,20 +314,30 @@ async function main() {
       if (belegt && belegt.meta.outlineId && belegt.meta.outlineId !== d.id) slug = `${slug}-${(d.urlId || d.id).slice(0, 6).toLowerCase()}`;
     }
     vergeben.add(slug);
-    plan.push({ d, slug });
+    // Text und Sprache schon hier: Querverweise brauchen den Pfad des Ziels,
+    // und der hängt an seiner Sprache (/magazin/ oder /en/magazine/).
+    const titel = String(d.title).trim();
+    const bisher = dateiNachSlug.get(slug);
+    const eigen = bisher && bisher.meta.outlineId === d.id ? bisher : null;
+    try {
+      const { text, lang } = sprache(normalisiere(await markdownVon(d), titel), d, eigen ? eigen.meta.lang : '');
+      plan.push({ d, slug, titel, eigen, text, lang });
+    } catch (e) {
+      plan.push({ d, slug, titel, eigen, fehler: e });
+    }
   }
-  const urlIdZuSlug = new Map(plan.filter(p => p.d.urlId).map(p => [p.d.urlId, p.slug]));
+  // Ein Dokument, dessen Text gerade nicht ladbar war, behält seine Datei;
+  // Verweise darauf gehen deshalb weiter auf deren Pfad.
+  const urlIdZuSlug = new Map(plan.filter(p => p.d.urlId).map(p => [p.d.urlId, artikelPfad(p.lang || (p.eigen ? p.eigen.meta.lang : '') || 'de', p.slug)]));
 
   let geschrieben = 0, unveraendert = 0, gesperrt = 0;
   const gueltigeIds = new Set();
-  for (const { d, slug } of plan) {
+  for (const { d, slug, titel, eigen, text: roh, lang, fehler: ladefehler } of plan) {
     gueltigeIds.add(d.id);
-    const titel = String(d.title).trim();
     try {
-      const roh = normalisiere(await markdownVon(d), titel);
-      const bisher = dateiNachSlug.get(slug);
-      const eigen = bisher && bisher.meta.outlineId === d.id ? bisher : null;
-      const { text: ohneKat, kat } = kategorie(roh, eigen ? eigen.meta.category : '', titel);
+      if (ladefehler) throw ladefehler;
+      const { text: ohneUeb, key } = uebersetzung(roh, eigen ? eigen.meta.translationKey : '');
+      const { text: ohneKat, kat } = kategorie(ohneUeb, eigen ? eigen.meta.category : '', titel);
       const { text: ohneBeschr, desc } = beschreibung(ohneKat, eigen ? eigen.meta.description : '');
       const umgebogen = verweiseUmbiegen(ohneBeschr, urlIdZuSlug, titel);
       const { text: mitPlatzhaltern, bilder } = bilderHerausloesen(umgebogen, titel);
@@ -301,7 +369,6 @@ async function main() {
         text = text.replace(`MAGAZINBILD${i}ENDE`, ersatz);
       }
 
-      const lang = SPRACHEN.includes(d.language) ? d.language : 'de';
       const meta = {
         title: titel,
         slug,
@@ -311,6 +378,7 @@ async function main() {
         updated: nurDatum(d.updatedAt || d.publishedAt),
         outlineId: d.id,
         published: nurDatum(d.publishedAt),
+        translationKey: key || undefined,
       };
       const fehler = pruefeMeta(meta, `${slug}.md`);
       if (fehler.length) { warn(`„${titel}" nicht übernommen: ${fehler.join('; ')}`); fehlerZahl++; continue; }

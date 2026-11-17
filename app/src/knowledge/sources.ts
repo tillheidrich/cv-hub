@@ -19,6 +19,20 @@
  *   wiki-ai     Wikipedia, „Signs of AI writing" (WikiProject AI Cleanup) —
  *               Sammlung von Beobachtungen, keine Studie.
  *   coe-cefr    Europarat, Gemeinsamer Europäischer Referenzrahmen.
+ *
+ * Seit 17.11.2026 (internationale Fachkräfte, von Hand geprüft):
+ *   ba-zav-cv   Zentrale Auslands- und Fachvermittlung der Bundesagentur —
+ *               Behörde. Höchstens zwei Seiten, Neuestes zuerst, Foto nicht
+ *               Pflicht, aber meist erwartet; Familienstand und Religion
+ *               nicht nötig; Soft Skills ins Anschreiben.
+ *   mig-*       Make it in Germany, Portal der Bundesregierung. Tabelle,
+ *               umgekehrt chronologisch, Sprachniveaus nach GER, Zeugnisse
+ *               übersetzt; Vergleichbarkeit des Abschlusses (anabin H+ und
+ *               „entspricht/gleichwertig" oder ZAB), für die Blaue Karte nötig.
+ *   anabin, zab-comparability  Kultusministerkonferenz — Behörde. Gebühr
+ *               der Zeugnisbewertung laut KMK 200 € (Stand 11/2026).
+ *   uni-assist-india  Arbeits- und Servicestelle der Hochschulen. Mindestnote
+ *               hängt von der Hochschule ab, keine pauschale CGPA-Tabelle.
  */
 export interface Source { label: string; url: string; checked: string }
 
@@ -40,6 +54,12 @@ export const SOURCES = {
   'openai': { label: 'OpenAI: New AI classifier for indicating AI-written text (Hinweis vom 20.07.2023)', url: 'https://openai.com/index/new-ai-classifier-for-indicating-ai-written-text/', checked: '10/2026' },
   'wiki-ai': { label: 'Wikipedia: Signs of AI writing', url: 'https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing', checked: '10/2026' },
   'coe-cefr': { label: 'Europarat: Gemeinsamer Europäischer Referenzrahmen für Sprachen', url: 'https://www.coe.int/en/web/common-european-framework-reference-languages', checked: '10/2026' },
+  'ba-zav-cv': { label: 'Bundesagentur für Arbeit (ZAV): Working and living in Germany 01/2026, Curriculum vitae', url: 'https://www.arbeitsagentur.de/vor-ort/zav/working-and-living-in-germany/iss-en/issue-01-2026/application-cv', checked: '11/2026' },
+  'mig-application': { label: 'Make it in Germany: Applying for a job', url: 'https://www.make-it-in-germany.com/en/jobs/applying-for-a-job/application', checked: '11/2026' },
+  'mig-degrees': { label: 'Make it in Germany: Evaluation of academic degrees', url: 'https://www.make-it-in-germany.com/en/visa-recognition/recognition/evaluation-academic-degrees', checked: '11/2026' },
+  'anabin': { label: 'anabin (KMK): Infoportal zu ausländischen Bildungsabschlüssen', url: 'https://anabin.kmk.org/', checked: '11/2026' },
+  'zab-comparability': { label: 'ZAB (KMK): Statement of Comparability', url: 'https://zab.kmk.org/en/statement-comparability', checked: '11/2026' },
+  'uni-assist-india': { label: 'uni-assist: Country information India (grading system)', url: 'https://www.uni-assist.de/en/tools/info-country-by-country/details-country/country/in/', checked: '11/2026' },
 } satisfies Record<string, Source>;
 
 export type SourceId = keyof typeof SOURCES;

@@ -1,8 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { PICKABLE_THEMES, ACCENTS, PAPERS, FONT_PAIRING_LIST, getTheme, resolveThemeId, templateStructure } from '../templates/theme';
+import { PICKABLE_THEMES, ACCENTS, PAPERS, FONT_PAIRING_LIST, getTheme, resolveThemeId, templateStructure, accentName, paperName, pairingText } from '../templates/theme';
 import { atsLevelForLayout, atsLabel } from '../templates/atsScore';
 import { USER_SCALE, FS, FLOOR, MIN_FONT_PX } from '../templates/metrics';
-import { PAGE_FORMAT_LIST, LONG_CV_HINT, MAX_CV_PAGES } from '../data/pageFormats';
+import { PAGE_FORMAT_LIST, LONG_CV_HINT, MAX_CV_PAGES, pageFormatHint } from '../data/pageFormats';
 import type { AppProfile, CVData, PageMode, PageFormat, SectionKey, FontPairingId } from '../data/types';
 import type { FitInfo, EditorTab } from '../preview/DocumentPreview';
 import { suggestCuts } from '../preview/shorten';
@@ -22,7 +22,11 @@ type Settings = AppProfile['settings'];
 type View = 'main' | 'type' | 'page' | 'sections';
 type Cat = 'all' | 'klassisch' | 'modern' | 'kreativ' | 'minimal';
 
-const pt = (px: number) => (px * 0.75).toFixed(1).replace('.', ',');
+/** Punktgröße mit dem Dezimalzeichen der Oberfläche: „8,3 pt“, „8.3 pt“. */
+const pt = (px: number, lang: string = 'de') => {
+  const s = (px * 0.75).toFixed(1);
+  return lang === 'en' ? s : s.replace('.', ',');
+};
 
 /**
  * Gestaltung — Vorlagenwahl und Darstellung in einem Paneel.
@@ -75,8 +79,8 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
     if (view !== 'main') bodyRef.current?.querySelector<HTMLButtonElement>('[data-back]')?.focus();
   }, [view]);
 
-  const pairingName = fontPairing === 'auto' ? d.typeFromTemplate : (FONT_PAIRING_LIST.find(p => p.id === fontPairing)?.name ?? '');
-  const bodyPt = pt(FS.body * fontScale);
+  const pairingName = fontPairing === 'auto' ? d.typeFromTemplate : pairingText(fontPairing, uiLang).name;
+  const bodyPt = pt(FS.body * fontScale, uiLang);
   const formatLabel = PAGE_FORMAT_LIST.find(f => f.id === pageFormat)?.label ?? 'A4';
 
   const back = (title: string) => (
@@ -119,12 +123,12 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
           </div>
 
           <div className="ui-section">
-            <div className="ui-label">{d.accent}<small>{settings.accent && settings.accent !== 'auto' ? ACCENTS.find(a => a.id === settings.accent)?.name : d.accentAuto}</small></div>
+            <div className="ui-label">{d.accent}<small>{settings.accent && settings.accent !== 'auto' ? accentName(settings.accent, uiLang) : d.accentAuto}</small></div>
             <div className="ui-swatches" role="radiogroup" aria-label={d.accent}>
               {ACCENTS.map(a => (
                 <button key={a.id} type="button" role="radio" className="ui-swatch"
-                  aria-checked={(settings.accent ?? 'auto') === a.id} title={a.id === 'auto' ? d.accentAuto : a.name}
-                  aria-label={a.id === 'auto' ? d.accentAuto : a.name}
+                  aria-checked={(settings.accent ?? 'auto') === a.id} title={a.id === 'auto' ? d.accentAuto : accentName(a.id, uiLang)}
+                  aria-label={a.id === 'auto' ? d.accentAuto : accentName(a.id, uiLang)}
                   onClick={() => onSettings({ accent: a.id })}
                   style={{ background: a.value ?? `conic-gradient(from 210deg, ${getTheme(current).colors.accent} 0 50%, ${getTheme(current).colors.panelBg} 50% 100%)` }} />
               ))}
@@ -132,12 +136,12 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
           </div>
 
           <div className="ui-section">
-            <div className="ui-label">{d.paper}<small>{settings.paper && settings.paper !== 'auto' ? PAPERS.find(p => p.id === settings.paper)?.name : d.paperAuto}</small></div>
+            <div className="ui-label">{d.paper}<small>{settings.paper && settings.paper !== 'auto' ? paperName(settings.paper, uiLang) : d.paperAuto}</small></div>
             <div className="ui-swatches" role="radiogroup" aria-label={d.paper}>
               {PAPERS.map(p => (
                 <button key={p.id} type="button" role="radio" className="ui-swatch"
-                  aria-checked={(settings.paper ?? 'auto') === p.id} title={p.id === 'auto' ? d.paperAuto : p.name}
-                  aria-label={p.id === 'auto' ? d.paperAuto : p.name}
+                  aria-checked={(settings.paper ?? 'auto') === p.id} title={p.id === 'auto' ? d.paperAuto : paperName(p.id, uiLang)}
+                  aria-label={p.id === 'auto' ? d.paperAuto : paperName(p.id, uiLang)}
                   onClick={() => onSettings({ paper: p.id })}
                   style={{ background: p.value ?? `linear-gradient(135deg, #fff 50%, ${getTheme(current, settings.accent).colors.pageBg} 50%)` }} />
               ))}
@@ -168,7 +172,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
               onChange={e => onSettings({ fontScale: parseFloat(e.target.value) })}
               style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }} />
             <div className="ui-num" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-xs)', color: 'var(--ink-2)' }}>
-              <span>{pt(FS.body * USER_SCALE.min)} pt</span><span>{pt(FS.body)} pt</span><span>{pt(FS.body * USER_SCALE.max)} pt</span>
+              <span>{pt(FS.body * USER_SCALE.min, uiLang)} pt</span><span>{pt(FS.body, uiLang)} pt</span><span>{pt(FS.body * USER_SCALE.max, uiLang)} pt</span>
             </div>
             {FS.body * fontScale * 0.75 < 8.05 && (
               <p className="ui-hint" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '12px', background: 'var(--ats-low-bg)', color: 'var(--ats-low-ink)' }}>{d.under8pt}</p>
@@ -182,8 +186,8 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
                   className="ui-menu-item" onClick={() => onSettings({ fontPairing: p.id })}
                   style={fontPairing === p.id ? { background: 'var(--accent-wash)' } : undefined}>
                   <span style={{ flex: 1 }}>
-                    <span style={{ display: 'block', fontWeight: 600 }}>{p.id === 'auto' ? d.pairingAuto : p.name}</span>
-                    <span className="ui-menu-sub">{p.note}</span>
+                    <span style={{ display: 'block', fontWeight: 600 }}>{p.id === 'auto' ? d.pairingAuto : pairingText(p.id, uiLang).name}</span>
+                    <span className="ui-menu-sub">{pairingText(p.id, uiLang).note}</span>
                   </span>
                   {fontPairing === p.id && <span aria-hidden style={{ color: 'var(--accent-ink)' }}>✓</span>}
                 </button>
@@ -205,7 +209,7 @@ export default function DesignPanel({ uiLang, settings, onSettings, fit, data, o
                   style={pageFormat === f.id ? { background: 'var(--accent-wash)' } : undefined}>
                   <span style={{ flex: 1 }}>
                     <span style={{ display: 'block', fontWeight: 600 }}>{f.label}</span>
-                    <span className="ui-menu-sub"><span className="ui-num">{f.widthMm} × {f.heightMm} mm</span> · {f.hint}</span>
+                    <span className="ui-menu-sub"><span className="ui-num">{f.widthMm} × {f.heightMm} mm</span> · {pageFormatHint(f.id, uiLang)}</span>
                   </span>
                   {pageFormat === f.id && <span aria-hidden style={{ color: 'var(--accent-ink)' }}>✓</span>}
                 </button>
@@ -304,18 +308,18 @@ export function FitSummary({ fit, pageMode, data, onJump, uiLang }: {
   const d = DESIGN_I18N[uiLang];
   const et = ET[uiLang];
   const cuts = useMemo(
-    () => (fit?.overflow ? suggestCuts(data, fit.overflowLines, fit.charsPerLine) : { cuts: [], covered: 0, deficitChars: 0, hopeless: false }),
-    [data, fit],
+    () => (fit?.overflow ? suggestCuts(data, fit.overflowLines, fit.charsPerLine, uiLang) : { cuts: [], covered: 0, deficitChars: 0, hopeless: false }),
+    [data, fit, uiLang],
   );
   if (!fit) return null;
   const wishN = pageMode === 'one' ? 1 : pageMode === 'two' ? 2 : pageMode === 'three' ? 3 : MAX_CV_PAGES;
-  const floor = pt(Math.max(MIN_FONT_PX, FS.body * FLOOR.t));
+  const floor = pt(Math.max(MIN_FONT_PX, FS.body * FLOOR.t), uiLang);
   const tone = fit.overflow ? 'low' : fit.condense > 0.05 ? 'medium' : 'high';
   const text = fit.overflow
     ? d.fitOverflow(d.pagesText(wishN), fit.pages, floor, pageMode === 'one' && fit.pages === 2)
     : fit.condense > 0.05
-      ? d.fitCondensed(d.pagesText(fit.pages), pt(FS.body * fit.metrics.t))
-      : d.fitOk(d.pagesText(fit.pages), pt(FS.body * fit.metrics.t));
+      ? d.fitCondensed(d.pagesText(fit.pages), pt(FS.body * fit.metrics.t, uiLang))
+      : d.fitOk(d.pagesText(fit.pages), pt(FS.body * fit.metrics.t, uiLang));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <p style={{ margin: 0, fontSize: 'var(--t-sm)', lineHeight: 1.5, color: tone === 'low' ? 'var(--ats-low-ink)' : 'var(--ink-2)' }}>{text}</p>

@@ -101,7 +101,10 @@ step('A. Inhalte');
     const noProfile = h({ ...cv, profile: { text: '' } }, undefined, 'resume');
     const noNums = h({ ...cv, experience: cv.experience.map(e => ({ ...e, bullets: (e.bullets || []).map(b => b.replace(/\d+/g, 'viele')) })) }, undefined, 'resume');
     const gap = h({ ...cv, experience: [{ ...cv.experience[0], start: '01/2024', end: 'heute' }, { ...cv.experience[1], start: '01/2020', end: '03/2022' }] }, undefined, 'resume');
-    const intl = h({ ...demo.data.en, personal: { ...demo.data.en.personal, photo: 'data:image/png;base64,AAAA' } }, undefined, 'resume');
+    // Seit 17.11.2026 entscheidet das Zielland (Vorgabe Deutschland), nicht die Sprache des Lebenslaufs.
+    const withPhoto = { ...demo.data.en, personal: { ...demo.data.en.personal, photo: 'data:image/png;base64,AAAA' } };
+    const intl = ctxm.contextHints(withPhoto, undefined, 'resume', 'UK').map(x => `${x.tip}:${x.reason}`);
+    const intlDe = h(withPhoto, undefined, 'resume');
     const cover = h(cv, st.DEFAULT_COVER_LETTERS.de, 'cover');
     const coverOwn = h(cv, { ...st.DEFAULT_COVER_LETTERS.de, intro: 'Sie suchen jemanden für die Wartungsplanung.', mainBody: 'Eigener Text.', companyReference: 'Eigener Text zur Firma.', motivation: 'Eigene Motivation.', closing: 'Ich freue mich auf das Gespräch.' }, 'cover');
     return {
@@ -109,7 +112,7 @@ step('A. Inhalte');
       missingSources: [...used].filter(s => !sourceIds.has(s)), badUrls: Object.values(src.SOURCES).filter(s => !/^https:\/\//.test(s.url)).map(s => s.url),
       slugs: [...slugs], magTitles: mag.MAGAZIN, magBase: mag.MAGAZIN_BASE, magUrl: mag.magazinUrl([...slugs][0]), dashes, pctNoSource,
       counts: Object.fromEntries(langs.map(l => [l, [c[l].cv.length, c[l].letter.length, c[l].countries.length, c[l].checklist.length, c[l].prompts.length]])),
-      none, noProfile, noNums, gap, intl, cover, coverOwn,
+      none, noProfile, noNums, gap, intl, intlDe, cover, coverOwn,
     };
   }, LANGS);
 
@@ -129,7 +132,8 @@ step('A. Inhalte');
   check(r.noProfile.includes('profile:no-profile'), 'Kontext: ohne Profil → Profil-Tipp');
   check(r.noNums.includes('impact:no-numbers'), 'Kontext: keine Zahl in den Punkten → Ergebnis-Tipp', r.noNums.join(','));
   check(r.gap.includes('gaps:gap'), 'Kontext: Lücke über sechs Monate → Lücken-Tipp', r.gap.join(','));
-  check(r.intl.includes('photo:intl-photo'), 'Kontext: englischer Lebenslauf mit Foto → Foto-Tipp', r.intl.join(','));
+  check(r.intl.includes('photo:intl-photo'), 'Kontext: Bewerbung in Großbritannien mit Foto → Foto-Tipp', r.intl.join(','));
+  check(!r.intlDe.includes('photo:intl-photo'), 'Kontext: englischer Lebenslauf mit Foto für Deutschland → kein Foto-Tipp', r.intlDe.join(','));
   check(r.cover.includes('letter-opening:cover-sample') && r.cover.includes('letter-structure:cover-open'), 'Kontext: Anschreiben mit Mustertext → Einstieg + Aufbau', r.cover.join(','));
   check(!r.coverOwn.some(x => x.startsWith('letter-opening')), 'Kontext: eigenes Anschreiben ohne Formel → kein Einstiegs-Hinweis', r.coverOwn.join(','));
   await ctx.close();

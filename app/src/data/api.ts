@@ -2,6 +2,7 @@
 import type { AppProfile } from './types';
 import { PDF_SERVICE_I18N } from '../ui/i18n/local';
 import { detectInitialUiLang } from '../ui/i18n';
+import { serverErrorText, STATUS_FALLBACK, PDF_STATUS_FALLBACK, type ServerErrorData } from '../ui/i18n/servererrors';
 
 const BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined) || '/pdfapi';
@@ -181,6 +182,12 @@ export class ApiError extends Error {
   /** Der übrige Antwortkörper (z. B. `receivedAt` bei einem schon benutzten
    *  Bestätigungslink). Nur lesen, nie anzeigen ohne Prüfung. */
   data?: Record<string, unknown>;
+  /** Steht `message` in der Oberflächensprache (übersetzter Code bzw. der
+   *  deutsche Servertext bei deutscher Oberfläche)? Dann kann sie so, wie sie
+   *  ist, angezeigt werden (17.11.2026). */
+  localized?: boolean;
+  /** Der Klartext des Servers (deutsch), falls `message` übersetzt wurde. */
+  serverMessage?: string;
   constructor(message: string, status: number, code?: string, retryAfter?: number) {
     super(message);
     this.name = 'ApiError';
@@ -200,14 +207,32 @@ export function parseRetryAfter(h: string | null): number | undefined {
   return undefined;
 }
 
-/** Fehlerantwort in einen ApiError übersetzen — Klartext des Servers
- *  bleibt erhalten, ebenso Code und Wartezeit. */
+/** Admin-Wege bleiben deutsch und werden nicht übersetzt. */
+function isAdminUrl(url: string | undefined): boolean {
+  return /\/api\/admin(\/|$|\?)/.test(String(url || ''));
+}
+
+/** Fehlerantwort in einen ApiError übersetzen — Code und Wartezeit bleiben
+ *  erhalten. Seit 17.11.2026 steht die Meldung in der Oberflächensprache:
+ *  Bekannte Codes übersetzt ui/i18n/servererrors.ts, auf Deutsch gewinnt
+ *  der (genauere) Servertext. Ohne bekannten Code bleibt der Klartext des
+ *  Servers, ohne jeden Text „Fehler 502“ in der Oberflächensprache. */
 export async function apiErrorFrom(r: Response): Promise<ApiError> {
-  const data = await r.json().catch(() => ({})) as { error?: unknown; code?: unknown };
+  const data = await r.json().catch(() => ({})) as { error?: unknown; code?: unknown; retryAfter?: unknown };
   const answered = typeof data.error === 'string' && !!data.error;
-  const msg = answered ? data.error as string : `Fehler ${r.status}`;
-  const err = new ApiError(msg, r.status, typeof data.code === 'string' ? data.code : undefined, parseRetryAfter(r.headers.get('Retry-After')));
+  const code = typeof data.code === 'string' ? data.code : undefined;
+  const retryAfter = parseRetryAfter(r.headers?.get?.('Retry-After') ?? null)
+    ?? (typeof data.retryAfter === 'number' && Number.isFinite(data.retryAfter) ? Math.ceil(data.retryAfter) : undefined);
+  const admin = isAdminUrl(r.url);
+  const lang = detectInitialUiLang();
+  const translated = !admin && !(lang === 'de' && answered)
+    ? serverErrorText(code, lang, { ...(data as ServerErrorData), retryAfter })
+    : null;
+  const msg = translated ?? (answered ? data.error as string : (admin ? STATUS_FALLBACK.de : STATUS_FALLBACK[lang])(r.status));
+  const err = new ApiError(msg, r.status, code, retryAfter);
   if (answered) err.answered = true;
+  if (translated) { err.localized = true; if (answered) err.serverMessage = data.error as string; }
+  else if (answered && lang === 'de') err.localized = true;
   if (data && typeof data === 'object') err.data = data as Record<string, unknown>;
   return err;
 }
@@ -239,16 +264,24 @@ export async function pdfErrorFrom(r: Response): Promise<ApiError> {
   if (r.status === 429) err.message = T.tooMany(err.retryAfter);
   else if (r.status === 413) err.message = T.tooLarge;
   else if (r.status === 503 && err.answered && err.retryAfter) err.message = T.busy(err.retryAfter);
-  else if (r.status === 503 && err.retryAfter) err.message = `${err.message} ${T.retryIn(err.retryAfter)}`;
-  else if (/^Fehler \d+$/.test(err.message)) err.message = `PDF-Dienst antwortete mit ${r.status}`;
+  else if (r.status === 503 && err.retryAfter && !err.localized) err.message = `${err.message} ${T.retryIn(err.retryAfter)}`;
+  else if (!err.answered) err.message = PDF_STATUS_FALLBACK[detectInitialUiLang()](r.status);
   return err;
+}
+
+/** Kopfzeilen jeder Anfrage an cv-api. Accept-Language trägt die
+ *  Oberflächensprache: Danach richtet der Server die Sprache von Mails vor
+ *  dem Konto (Passwort vergessen, Registrierung) und für Konten ohne
+ *  gespeicherte Mail-Sprache (17.11.2026). */
+export function apiHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { 'Content-Type': 'application/json', 'Accept-Language': detectInitialUiLang(), ...extra };
 }
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: apiHeaders(opts.headers as Record<string, string> | undefined),
   });
   if (!r.ok) throw await apiErrorFrom(r);
   return await r.json().catch(() => ({})) as T;

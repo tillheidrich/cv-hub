@@ -193,8 +193,11 @@ await page.waitForTimeout(400);
 await page.getByRole('button', { name: /Änderungen übernehmen|Apply changes/ }).click();
 await page.waitForTimeout(1500);
 const nachher = (await profiles()).find(p => p.displayName === 'Bewerbung Stadtwerke')?.data.en;
+/* Ein laufendes Ende („heute", „today", „present") schreibt die Brücke seit
+ * 17.11.2026 im Wort der Dokumentsprache („Present") — gleichbedeutend. */
+const laufend = e => (/^(present|today|heute|aktuell|bis heute)$/i.test(String(e || '').trim()) ? 'present' : e);
 const kern = cv => JSON.stringify([cv?.personal?.name, cv?.personal?.email, cv?.personal?.title,
-  (cv?.experience || []).map(e => [e.role, e.company, e.location, e.start, e.end, e.bullets])]);
+  (cv?.experience || []).map(e => [e.role, e.company, e.location, e.start, laufend(e.end), e.bullets])]);
 check(!!vorher && kern(vorher) === kern(nachher), 'Markdown hin und zurück ohne Verlust', kern(vorher) === kern(nachher) ? '' : `${kern(vorher)} ≠ ${kern(nachher)}`);
 check(!/^template:/m.test(mdBack), 'Markdown ohne Einstellungen trägt keine template:-Zeile');
 

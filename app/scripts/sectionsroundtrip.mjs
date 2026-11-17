@@ -67,6 +67,21 @@ const res = await page.evaluate(async (serverPath) => {
   out.push({ name: 'Browser- und Server-Schreiber: gleicher Text', bad: body(serverMd) === body(md) ? [] : ['Text weicht ab'] });
   out.push({ name: 'Zweiter Durchgang stabil', bad: buildMarkdown(viaBrowser) === md ? [] : ['Markdown ändert sich'] });
 
+  /* Englisch (17.11.2026): Überschriften und Schlüssel in der Sprache des
+   * Lebenslaufs, Rundlauf über beide Leser, beide Schreiber gleich. */
+  const { LABELS } = await import('/src/data/labels.ts');
+  for (const lang of ['en', 'fr', 'es']) {
+    const cvL = { ...cv, labels: LABELS[lang] };
+    const mdL = buildMarkdown(cvL);
+    const deutsch = ['## Kontakt', '## Berufserfahrung', '## Projekte', '- Telefon:', 'Zeitraum:', 'Aussteller:'].filter(h => mdL.includes(h));
+    out.push({ name: `Markdown ${lang}: keine deutschen Überschriften`, bad: deutsch });
+    if (lang === 'en') out.push({ name: 'Markdown en: „## Experience“', bad: /\n## Experience\n/.test(mdL) ? [] : ['fehlt'] });
+    out.push({ name: `Markdown ${lang} Browser hin und zurück`, bad: diff(norm(markdownToCvData(mdL, cvL)), want) });
+    const profL = { settings: { lang }, data: { [lang]: cvL } };
+    out.push({ name: `Markdown ${lang} aus dem Browser, gelesen am Server`, bad: diff(norm(server.markdownToCV(mdL, profL).data[lang]), want) });
+    out.push({ name: `Markdown ${lang}: Browser- und Server-Schreiber gleich`, bad: body(server.cvToMarkdown(profL)) === body(mdL) ? [] : ['Text weicht ab'] });
+  }
+
   const jr = cvToJsonResume(cv);
   const std = ['projects', 'certificates', 'volunteer', 'publications'].filter(k => !Array.isArray(jr[k]) || !jr[k].length);
   out.push({ name: 'JSON Resume nutzt die Standardfelder', bad: std.map(k => `${k} fehlt`) });

@@ -175,11 +175,16 @@ export function ownProfileCount(profiles: AppProfile[]): number {
 export function hasOwnCoverLetter(p: AppProfile | null | undefined, lang: Lang): boolean {
   const cl = p?.coverLetters?.[lang];
   if (!cl) return false;
-  const strip = (c: CoverLetterData) => { const { date: _d, ...rest } = c; void _d; return rest; };
+  /* Ort zählt wie das Datum nicht mit: Bis 17.11.2026 stand im Muster fest
+   * „Hamburg“, seitdem ist er leer (data/storage.ts). */
+  const strip = (c: CoverLetterData) => { const { date: _d, city: _c, ...rest } = c; void _d; void _c; return rest; };
   const mine = strip(cl);
   if (!Object.values(mine).some(v => typeof v === 'string' && v.trim())) return false;
   const def = DEFAULT_COVER_LETTERS[lang];
-  return JSON.stringify(mine) !== JSON.stringify(strip(def));
+  /* Das Anschreiben der englischen Demo (seit 17.11.2026, demo-en.ts) ist
+   * so wenig ein eigenes wie das allgemeine Muster. */
+  const demo = createDemoProfile('').coverLetters[lang];
+  return JSON.stringify(mine) !== JSON.stringify(strip(def)) && JSON.stringify(mine) !== JSON.stringify(strip(demo));
 }
 
 /* ── Zustand für die Oberfläche ──────────────────────────────────────────── */

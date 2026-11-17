@@ -46,6 +46,8 @@ export type FindingId =
   | 'job-title-missing' | 'job-title-ok' | 'job-title-unknown'
   | 'job-company-missing' | 'job-company-ok' | 'job-company-unknown'
   | 'job-recipient-mismatch' | 'job-contact-generic'
+  // Anzeige in anderer Sprache als das Dokument (Abgleich ist wörtlich)
+  | 'jd-lang-mismatch'
   // Beide Unterlagen
   | 'both-name' | 'both-name-ok' | 'both-email' | 'both-email-ok' | 'both-phone'
   | 'both-lang' | 'both-lang-ok' | 'both-title';
@@ -333,6 +335,22 @@ export function checkAgainstJobAd(cl: CoverLetterData, facts: JobAdFacts, jd: st
     f.push({ id: 'job-contact-generic', sev: 'hinweis', args: [facts.contact] });
   }
   return sortFindings(f);
+}
+
+/**
+ * Stellenanzeige in einer anderen Sprache als das Dokument (17.11.2026).
+ *
+ * Der Abgleich der Begriffe ist wörtlich: Ein englischer Lebenslauf trifft
+ * die Begriffe einer deutschen Anzeige kaum, auch wenn alles passt. Das ist
+ * für internationale Bewerberinnen der häufigste Fall (englischer
+ * Lebenslauf, deutsche Anzeige). `docKind` sagt, welches Dokument gemeint
+ * ist ('cv' oder 'cover'), für den Satz.
+ */
+export function jdLangFinding(jd: string, docLang: Lang | null | undefined, docKind: 'cv' | 'cover'): Finding | null {
+  if (!docLang || jd.trim().length < JD_MIN) return null;
+  const jl = guessLang(jd);
+  if (!jl || jl === docLang) return null;
+  return { id: 'jd-lang-mismatch', sev: 'hinweis', args: [jl, docLang, docKind] };
 }
 
 export interface TermRow { term: string; inJd: number; cv: boolean; cl: boolean }

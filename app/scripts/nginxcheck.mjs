@@ -24,7 +24,9 @@
 //      /en → /en/, unbekannte Pfade bekommen die App-Hülle (noindex),
 //      /ratgeber/… leitet dauerhaft auf /magazin/… um, /magazin/ ist
 //      statisch mit strenger CSP, unbekannte Artikel 404, /landing/ mit
-//      langer Zwischenspeicherung und 404 statt App
+//      langer Zwischenspeicherung und 404 statt App; /en/magazine/ (17.11.2026)
+//      statisch mit denselben Köpfen wie /magazin/, /en/magazine → 301,
+//      eigene englische 404, /en/ bleibt die Startseite
 //   9. Admin-Host (Runde 8b, 10.10.2026): nginx.conf ist eine Vorlage mit
 //      ${ADMIN_HOST}. Mit Admin-Host liefert er nur admin.html (strenge CSP,
 //      noindex, frame-ancestors 'none', kein Umami), reicht nur
@@ -243,6 +245,31 @@ try {
     const mj = await get('/magazin/index.json');
     ok(mj.status === 200 && /json/.test(mj.h('content-type')), '/magazin/index.json als JSON', mj.h('content-type'));
   }
+  // Englische Ausgabe (17.11.2026): statisch, eigene 404, dieselben Köpfe wie /magazin/.
+  if (existsSync(join(DIST, 'en', 'magazine', 'index.html'))) {
+    const de = await get('/magazin/');
+    const en = await get('/en/magazine/');
+    ok(en.status === 200 && /<html lang="en"/.test(en.body) && !/id="root"/.test(en.body), '/en/magazine/: statische englische Übersicht, keine App', `${en.status}`);
+    for (const k of ['content-security-policy', 'x-frame-options', 'x-content-type-options', 'referrer-policy', 'strict-transport-security', 'permissions-policy', 'cache-control']) {
+      ok(en.h(k) && en.h(k) === de.h(k) && (en.raw[k] || []).length === 1, `/en/magazine/: ${k} wie /magazin/`, `${en.h(k)} | ${de.h(k)}`);
+    }
+    const en301 = await get('/en/magazine');
+    ok(en301.status === 301 && en301.h('location') === '/en/magazine/', '/en/magazine → 301 /en/magazine/ (relativ)', `${en301.status} ${en301.h('location')}`);
+    const en404 = await get('/en/magazine/does-not-exist/');
+    ok(en404.status === 404 && /<html lang="en"/.test(en404.body) && /noindex/.test(en404.body) && !/id="root"/.test(en404.body) && /script-src 'none'/.test(en404.h('content-security-policy')), '/en/magazine/<unbekannt>/ → englische 404 (keine App, strenge CSP)', `${en404.status}`);
+    const enCss = await get('/en/magazine/x.css');
+    ok(enCss.status === 404 && !/id="root"/.test(enCss.body), '/en/magazine/x.css → 404 (Asset-Regel greift nicht vor dem Magazin-Block)', `${enCss.status}`);
+    const enLand = await get('/en/');
+    ok(enLand.status === 200 && /id="prerender"/.test(enLand.body), '/en/ bleibt die vorgerenderte Startseite', `${enLand.status}`);
+    const idx = JSON.parse(readFileSync(join(DIST, 'magazin', 'index.json'), 'utf8'));
+    const ersterEn = (idx.articles || []).find(a => a.lang === 'en');
+    if (ersterEn) {
+      const ea = await get(ersterEn.url);
+      ok(ea.status === 200 && /<html lang="en"/.test(ea.body), `${ersterEn.url}: englischer Artikel ausgeliefert`, `${ea.status}`);
+      const ohne = await get(ersterEn.url.replace(/\/$/, ''));
+      ok(ohne.status === 301 && ohne.h('location') === ersterEn.url, `${ersterEn.url.replace(/\/$/, '')} → 301 mit Schrägstrich`, `${ohne.status} ${ohne.h('location')}`);
+    }
+  } else ok(false, 'dist/en/magazine/index.html vorhanden (scripts/magazin-build.mjs)');
   const lf = existsSync(join(DIST, 'landing')) ? readdirSync(join(DIST, 'landing')).find(f => /\.(webp|avif)$/.test(f)) : null;
   if (lf) {
     const l = await get(`/landing/${lf}?v=1`);
@@ -264,7 +291,7 @@ try {
     const aj = await get(adminJs, { headers: A });
     ok(aj.status === 200 && /immutable/.test(aj.h('cache-control')) && aj.h('x-content-type-options') === 'nosniff', `Admin-Host: Bündel ${adminJs} ausgeliefert`, `${aj.status}`);
   } else ok(false, 'Admin-Host: admin.html verweist auf ein eigenes Bündel /assets/admin-*.js');
-  for (const path of ['/magazin/', '/preise', '/impressum', '/u/script.js', '/mcp', '/pdfapi/api/resumes', '/pdfapi/api/auth/me', '/pdfapi/api/ADMIN/overview', '/assets/gibt-es-nicht.js']) {
+  for (const path of ['/magazin/', '/en/magazine/', '/preise', '/impressum', '/u/script.js', '/mcp', '/pdfapi/api/resumes', '/pdfapi/api/auth/me', '/pdfapi/api/ADMIN/overview', '/assets/gibt-es-nicht.js']) {
     const r = await get(path, { headers: A });
     ok(r.status === 404 && !/id="root"/.test(r.body), `Admin-Host ${path} → 404`, `${r.status}`);
   }

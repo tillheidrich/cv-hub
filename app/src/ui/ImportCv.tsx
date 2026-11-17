@@ -11,12 +11,18 @@
  * Alles läuft im Browser (import/readImport.ts), also auch in der Demo.
  * Was der Parser nicht sicher zuordnen kann, kommt in einen eigenen
  * Abschnitt „Weitere Angaben", statt verloren zu gehen.
+ *
+ * Seit 17.11.2026 (internationale Fachkräfte): Was in deutschen Lebensläufen
+ * nicht steht (Declaration, Name des Vaters, Religion, Passnummer, CTC …),
+ * kommt NICHT in den Lebenslauf, steht aber hier mit Grund („Nicht
+ * übernommen"), aufgeklappt. Dazu Hinweise zum Übernommenen (Career
+ * Objective umschreiben, Noten umrechnen).
  */
 import { useEffect, useRef, useState } from 'react';
 import type { Lang } from '../data/types';
 import { createBlankProfile } from '../data/storage';
 import { readImportFile, readText, ImportError, type ImportResult } from '../import/readImport';
-import { CHATGPT_PROMPT } from '../import/textImport';
+import { CHATGPT_PROMPT, type DroppedItem, type DroppedKind } from '../import/textImport';
 import { IMPORTCV_I18N, type ImportCvStrings } from './i18n/importcv';
 import { useUiLang } from './useUiLang';
 import { Portal } from './Overlay';
@@ -31,6 +37,13 @@ function errText(e: unknown, s: ImportCvStrings): string {
     if (e.kind === 'empty') return s.errEmpty;
   }
   return s.errUnknown;
+}
+
+/** Nicht Übernommenes nach Art, in der Reihenfolge des ersten Auftretens. */
+function groupDropped(items: DroppedItem[]): [DroppedKind, string[]][] {
+  const m = new Map<DroppedKind, string[]>();
+  for (const d of items) { const a = m.get(d.kind) ?? []; a.push(d.text); m.set(d.kind, a); }
+  return [...m.entries()];
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -147,6 +160,28 @@ export function ImportPanel({ cvLang, onParsed, autoFocus = false }: {
                 ? <p style={{ margin: 0, fontSize: 'var(--t-sm)', color: 'var(--ink)' }}><strong>{s.foundTitle}:</strong> {s.found(f)}</p>
                 : <p style={{ margin: 0, fontSize: 'var(--t-sm)', color: 'var(--ats-low-ink)' }}>{s.nothingFound}</p>
             ) : <p style={{ margin: 0, fontSize: 'var(--t-sm)', color: 'var(--ink)' }}>{s.from(res.what)}</p>}
+            {(res.notes?.length ?? 0) > 0 && (
+              <div style={{ marginTop: '8px' }} data-import-notes>
+                <p style={{ margin: 0, fontSize: 'var(--t-sm)', fontWeight: 620, color: 'var(--ink)' }}>{s.notesTitle}</p>
+                <ul style={{ ...small, margin: '4px 0 0', paddingLeft: '18px', listStyle: 'disc' }}>
+                  {res.notes!.map(n => <li key={n} data-note={n} style={{ marginBottom: '4px' }}>{s.note[n]}</li>)}
+                </ul>
+              </div>
+            )}
+            {(res.dropped?.length ?? 0) > 0 && (
+              <details style={{ marginTop: '8px' }} open data-import-dropped>
+                <summary style={{ cursor: 'pointer', fontSize: 'var(--t-sm)', color: 'var(--ink)' }}>{s.droppedTitle(res.dropped!.length)}</summary>
+                <p style={{ ...small, margin: '6px 0' }}>{s.droppedHint}</p>
+                <ul style={{ ...small, margin: 0, paddingLeft: '18px', listStyle: 'disc' }}>
+                  {groupDropped(res.dropped!).map(([kind, texts]) => (
+                    <li key={kind} data-dropped={kind} style={{ marginBottom: '6px' }}>
+                      <strong style={{ color: 'var(--ink)', fontWeight: 620 }}>{s.dropped[kind].label}.</strong> {s.dropped[kind].why}
+                      <span style={{ display: 'block', fontSize: 'var(--t-xs)', overflowWrap: 'anywhere' }}>{texts.join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {res.unsorted.length > 0 && (
               <details style={{ marginTop: '8px' }}>
                 <summary style={{ cursor: 'pointer', fontSize: 'var(--t-sm)', color: 'var(--ink)' }}>{s.unsortedTitle(res.unsorted.length)}</summary>

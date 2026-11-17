@@ -90,7 +90,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
     coverLetterSubject: 'Anschreiben-Betreff:',
   },
   en: {
-    locale: 'en-US',
+    locale: 'en-GB',
     title: 'Versions',
     subtitle: 'Automatic backups before MD/JSON imports and AI edits, the last 25.',
     close: 'Close',
@@ -108,7 +108,7 @@ export const VERSIONS_I18N: Record<UiLang, VersionsStrings> = {
     daysAgo: n => `${n} days ago`,
     sources: {
       manual: 'manual edit',
-      md_import: 'résumé MD import',
+      md_import: 'CV MD import',
       cl_md_import: 'cover letter MD import',
       ai_cover: 'AI cover letter generated',
       json_import: 'JSON import',

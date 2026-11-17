@@ -515,6 +515,11 @@ function makeParts(
     });
 
   const sec = cv.labels.sections;
+  /* „today“, „heute“ … und ein leeres Ende einer Stelle werden zur
+   * Beschriftung der Dokumentsprache, wie in Vorschau und PDF
+   * (data/extraSections.ts, `dateRange`). Bis 17.11.2026 stand hier das
+   * rohe `present` im Word-Dokument. */
+  const presentLbl = cv.labels?.misc?.present || 'present';
   const fields = cv.labels.fields;
 
   /** Hauptspalte: Profil, Beruf, Ausbildung — die Abschnitte, die gelesen werden.
@@ -540,7 +545,7 @@ function makeParts(
         if (!exp.length) continue;
         out.push(...H1(sec.experience));
         for (const e of exp) {
-          const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
+          const dates = dateRange(val2(e.start), val2(e.end), presentLbl, true);
           if (val2(e.role)) out.push(H2Dated(val2(e.role), dates));
           const m = [val2(e.company), val2(e.location)].filter(Boolean).join('  ·  ');
           if (m) out.push(meta(m, { bold: true }));
@@ -553,7 +558,7 @@ function makeParts(
         if (!(cv.education || []).length) continue;
         out.push(...H1(sec.education));
         for (const e of cv.education) {
-          const dates = [val2(e.start), val2(e.end)].filter(Boolean).join(' – ');
+          const dates = dateRange(val2(e.start), val2(e.end), presentLbl);
           if (val2(e.degree)) out.push(H2Dated(val2(e.degree), dates));
           const m = [val2(e.institution), val2(e.location)].filter(Boolean).join('  ·  ');
           if (m) out.push(meta(m));
@@ -852,9 +857,13 @@ export function buildDocx(cv: CVData, cfg: ExportRenderConfig, variant: DocxVari
       }],
     }],
   };
+  /* Sprache des Dokuments als Standard für jeden Lauf (w:lang). Ohne sie
+   * prüft Word einen englischen CV mit deutscher Rechtschreibung und
+   * unterkringelt jedes zweite Wort. */
+  const docLang = ({ de: 'de-DE', en: 'en-GB', fr: 'fr-FR', es: 'es-ES' } as Record<string, string>)[cv.labels?.lang ?? 'de'] ?? 'de-DE';
   const styles = {
     default: {
-      document: { run: { font: fonts.body, size: 21, color: ink } },
+      document: { run: { font: fonts.body, size: 21, color: ink, language: { value: docLang } } },
       title: { run: { font: fonts.heading, size: 44, bold: true, color: ink }, paragraph: { spacing: { after: 40 } } },
       heading1: { run: { font: fonts.body, size: 19, bold: true, color: accent }, paragraph: { spacing: { before: 240, after: 80 } } },
       heading2: { run: { font: fonts.heading, size: 23, bold: true, color: ink } },
@@ -1201,7 +1210,7 @@ export async function photoAsRaster(
     img.crossOrigin = 'anonymous';
     const loaded = new Promise<void>((res, rej) => {
       img.onload = () => res();
-      img.onerror = () => rej(new Error('Bild nicht ladbar'));
+      img.onerror = () => rej(new Error('Image could not be loaded'));
     });
     img.src = v;
     await loaded;
@@ -1298,6 +1307,6 @@ export async function exportDocx(cv: CVData, cfg: ExportRenderConfig, variant: D
    * Postfach des Empfängers lag eine Datei, die nicht nach Bewerbung aussah.
    * Die ATS-Fassung behält ihre Kennzeichnung, sonst sind die beiden Dateien
    * im Ordner nicht auseinanderzuhalten. */
-  const name = exportFilename('lebenslauf', val(cv.personal?.name), 'docx');
+  const name = exportFilename('lebenslauf', val(cv.personal?.name), 'docx', cv.labels?.lang);
   saveBlob(variant === 'ats' ? name.replace(/\.docx$/, '-ATS.docx') : name, blob);
 }

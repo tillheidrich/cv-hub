@@ -387,7 +387,7 @@ Bitte:
     exportTitle: (doc) => `Export ${doc}`,
     exportSubtitle: 'Pick a format and start the download',
 
-    statusLabel: 'Being exported',
+    statusLabel: 'Exporting',
     statusDocument: 'Document',
     statusName: 'Name',
     statusLanguage: 'Language',
@@ -417,7 +417,7 @@ Bitte:
     kitLabel: 'Template without data',
     kitSub: 'ZIP with HTML, Word, an empty JSON and instructions: the design to fill in yourself, even without this tool.',
 
-    bringCv: 'Bring your own résumé',
+    bringCv: 'Import your CV',
     bringCvHint: 'You do not have to retype what you already have. The archive is read in your browser and goes to no server, not even ours.',
     liReading: 'Reading archive…',
     liLabel: 'LinkedIn data export',
@@ -434,10 +434,10 @@ Bitte:
 
     importSection: 'Import',
     importHintCl: 'Restore the cover letter from Markdown, or load a complete profile JSON back in.',
-    importHintCv: 'Restore the résumé from Markdown, or load a complete profile JSON back in.',
+    importHintCv: 'Restore the CV from Markdown, or load a complete profile JSON back in.',
     uploadMd: 'Upload Markdown',
     uploadMdSubCl: 'Imports into the cover letter',
-    uploadMdSubCv: 'Imports into the résumé',
+    uploadMdSubCv: 'Imports into the CV',
     emptyMdTemplate: 'Empty Markdown template',
     emptyMdTemplateSub: 'To fill in with your editor (LM Studio, VS Code, Obsidian …)',
     uploadJson: 'Upload JSON',
@@ -475,7 +475,7 @@ Bitte:
 
     aiSection: 'Edit with AI',
     aiHintCl: 'Download your cover letter as .md above and paste the text into your AI chat. The AI hands you a revised version, which you import here.',
-    aiHintCv: 'Give the AI your résumé as a Markdown link. It can read it and hand you a corrected Markdown version, which you import here.',
+    aiHintCv: 'Give the AI your CV as a Markdown link. It can read it and hand you a corrected Markdown version, which you import here.',
     aiNeedLink: 'Create a link above first.',
     aiPromptCopied: 'Prompt copied',
     aiCopyPrompt: 'Copy prompt + Markdown link',
@@ -486,7 +486,7 @@ Bitte:
     aiImportBack: '↑ Import the corrected Markdown version',
 
     promptResumeInline: (md) =>
-      `Here is my résumé as Markdown:
+      `Here is my CV as Markdown:
 
 ${md}
 
@@ -494,11 +494,11 @@ Please:
 1. Suggest improvements: sharpen the bullets along "action + context + result/impact", make the profile more concise, use standard English application language. Do NOT invent any numbers.
 2. At the end, give me a COMPLETE, updated Markdown version, in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
     promptResumeUrl: (url) =>
-      `Here is my résumé as Markdown:
+      `Here is my CV as Markdown:
 ${url}
 
 Please:
-1. Read my résumé (load the URL above, or ask me to paste the Markdown text directly if you cannot read URLs).
+1. Read my CV (load the URL above, or ask me to paste the Markdown text directly if you cannot read URLs).
 2. Suggest improvements: sharpen the bullets along "action + context + result/impact", make the profile more concise, use standard English application language. Do NOT invent any numbers.
 3. At the end, give me a COMPLETE, updated Markdown version, in exactly the same format including the frontmatter (---), so I can import it straight back into my tool.`,
     promptCoverUrl: (url) =>
@@ -512,7 +512,7 @@ Please:
 
     modalReviewTitle: 'Check the changes before applying',
     modalImportClTitle: 'Import cover letter from Markdown',
-    modalImportCvTitle: 'Import résumé from Markdown',
+    modalImportCvTitle: 'Import CV from Markdown',
     modalReviewBody: 'These fields change. The current version is saved automatically before the changes are applied.',
     modalImportClBody: 'Paste the revised cover-letter Markdown (with or without frontmatter). The existing cover letter is overwritten.',
     modalImportCvBody: 'Paste the Markdown version the AI gave back, including the frontmatter block (---). Your photo is kept. You get a diff preview before anything is applied.',

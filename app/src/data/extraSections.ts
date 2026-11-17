@@ -93,12 +93,35 @@ export function hasExtra(cv: CVData, key: ExtraSectionKey): boolean {
 
 // ── Kleinteile für die Ausgabe ───────────────────────────────────────────────
 
+/** Wörter, mit denen ein laufendes Ende im Datenbestand steht. Intern ist es
+ *  `present`, aber Demo, LinkedIn-Import, Markdown von einer KI und ältere
+ *  Profile bringen „today", „heute", „bis heute", „aktuell" … mit. Bis zum
+ *  17.11.2026 kannte die Ausgabe nur `present` und `heute` — ein englischer
+ *  Lebenslauf druckte dann „03/2021 – today". */
+const PRESENT_WORDS = /^(?:present|today|now|current(?:ly)?|ongoing|till date|to date|heute|bis heute|aktuell|derzeit|hoy|actualidad|la actualidad|presente|aujourd['’]hui|présent|à ce jour|en cours)$/i;
+
+/** Steht `end` für „läuft noch"? */
+export function isPresentWord(end: unknown): boolean {
+  return PRESENT_WORDS.test(s(end).replace(/[.\s]+$/, ''));
+}
+
+/** Anzeigeform des Endes: ein Synonym für „läuft noch" wird zur Beschriftung
+ *  der Dokumentsprache. Mit `openEnded` gilt das auch für ein leeres Ende bei
+ *  vorhandenem Anfang — so für Stellen: wer bei einer Stelle nur den Beginn
+ *  einträgt, hat sie noch. (Bei Ausbildung und Projekten heißt ein einzelnes
+ *  Datum oft etwas anderes, dort bleibt es beim Anfang allein.) */
+export function endLabel(start: unknown, end: unknown, presentLabel: string, openEnded = false): string {
+  const raw = s(end);
+  if (isPresentWord(raw)) return presentLabel;
+  if (!raw && openEnded && s(start)) return presentLabel;
+  return raw;
+}
+
 /** „01/2023 – 06/2024", „seit 2019" gibt es nicht: fehlt ein Ende, steht nur
  *  der Anfang; fehlt der Anfang, nur das Ende. `present` wird übersetzt. */
-export function dateRange(start: unknown, end: unknown, presentLabel: string): string {
+export function dateRange(start: unknown, end: unknown, presentLabel: string, openEnded = false): string {
   const a = s(start);
-  const raw = s(end);
-  const b = raw === 'present' || raw === 'heute' ? presentLabel : raw;
+  const b = endLabel(start, end, presentLabel, openEnded);
   if (a && b) return `${a} – ${b}`;
   return a || b;
 }

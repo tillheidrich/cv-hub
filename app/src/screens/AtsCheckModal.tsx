@@ -99,7 +99,7 @@ export default function AtsCheckModal({ data, coverLetter, exportConfig, initial
       : <KeywordMatchView data={data} jd={jd} setJd={setJd} />;
   } else if (doc === 'cover' && report && coverLetter) {
     body = tab === 'text' ? <CoverReadView report={report} />
-      : tab === 'job' ? <CoverJobView cl={coverLetter} jd={jd} setJd={setJd} />
+      : tab === 'job' ? <CoverJobView cl={coverLetter} jd={jd} setJd={setJd} lang={docLang(data)} />
       : <StyleView cl={coverLetter} lang={docLang(data)} />;
   } else if (doc === 'both' && report && coverLetter) {
     body = <BothView cv={data} cl={coverLetter} cvText={cvText} clText={report.text} jd={jd} setJd={setJd} />;
@@ -313,7 +313,7 @@ function KeywordMatchView({ data, jd, setJd }: { data: CVData; jd: string; setJd
   return (
     <>
       <p className="ck-intro">{t.keywordIntro}</p>
-      <JdBox jd={jd} setJd={setJd} t={tp} id="ck-jd-resume" />
+      <JdBox jd={jd} setJd={setJd} t={tp} id="ck-jd-resume" docLang={docLang(data)} />
 
       {result && (
         <>

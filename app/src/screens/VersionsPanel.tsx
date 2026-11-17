@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../data/api';
+import { api, ApiError } from '../data/api';
 import type { AppProfile } from '../data/types';
 import { useUiLang } from '../ui/useUiLang';
 import { VERSIONS_I18N, type VersionsStrings } from '../ui/i18n/klein';
@@ -39,6 +39,14 @@ function relativeTime(iso: string, T: VersionsStrings): string {
   return new Date(iso).toLocaleDateString(T.locale);
 }
 
+/** Fehlertext: Meldungen des Servers kommen über den Code übersetzt an
+ *  (data/api.ts); ohne Text vom Server der eigene Satz, Fehler des lokalen
+ *  Speichers wie bisher. */
+function errMsg(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) return e.answered || e.localized ? e.message : fallback;
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 /* Zwei Quellen, eine Anzeige.
  *
  * Mit Konto kommen die Versionen vom Server (Sicherungen vor Importen und
@@ -64,7 +72,7 @@ export default function VersionsPanel({ resumeId, onClose, onRestored, local: lo
   useEffect(() => {
     (local ? listLocalVersions(resumeId).then(versions => ({ versions })) : api.listVersions(resumeId))
       .then(d => setVersions(d.versions))
-      .catch(e => setErr(e instanceof Error ? e.message : T.loadFailed));
+      .catch(e => setErr(errMsg(e, T.loadFailed)));
     /* T bewusst nicht in den Abhängigkeiten: die Liste soll bei einem
      * Sprachwechsel nicht neu geladen werden. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,7 +84,7 @@ export default function VersionsPanel({ resumeId, onClose, onRestored, local: lo
       const d = local ? { version: await getLocalVersion(resumeId, v.id) } : await api.getVersion(resumeId, v.id);
       setPreviewing({ id: v.id, preview: d.version.payload, createdAt: d.version.created_at });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : T.previewFailed);
+      setErr(errMsg(e, T.previewFailed));
     } finally {
       setBusy(null);
     }
@@ -90,7 +98,7 @@ export default function VersionsPanel({ resumeId, onClose, onRestored, local: lo
       onRestored(payload);
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : T.restoreFailed);
+      setErr(errMsg(e, T.restoreFailed));
     } finally {
       setBusy(null);
     }

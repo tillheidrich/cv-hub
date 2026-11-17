@@ -8,9 +8,10 @@ import type { InlinePath } from '../data/inlineEdit';
 import { Ed, EntryTools, InlineEditCtx, type InlineEditApi } from './InlineEdit';
 import { textWidthPx } from './textWidth';
 import { shortUrl } from '../data/urls';
+import { cityOf } from './cityOf';
 import {
   sectionHeading, projectsOf, certificatesOf, volunteeringOf, publicationsOf,
-  customSectionsOf, customEntriesOf, customItemsOf, bulletsOf, dateRange, shortLink, linkHref,
+  customSectionsOf, customEntriesOf, customItemsOf, bulletsOf, dateRange, endLabel, shortLink, linkHref,
   type FixedExtraKey,
 } from '../data/extraSections';
 export type { InlineEditApi };
@@ -787,8 +788,11 @@ function Photo({ data, T, C, widthMm }: { data: CVData; T: ResumeTheme; C: Theme
 
 // ── Experience + Education ──────────────────────────────────────────────────
 
-function present(data: CVData, end: string) {
-  return end === 'present' || end === 'heute' ? data.labels.misc.present : end;
+/** Ende einer Stelle: „today", „heute", „aktuell" … und ein leeres Ende bei
+ *  vorhandenem Beginn werden zur Beschriftung der Dokumentsprache
+ *  (data/extraSections.ts, `endLabel` — dieselbe Regel wie in den Exporten). */
+function present(data: CVData, start: string, end: string) {
+  return endLabel(start, end, data.labels.misc.present, true);
 }
 
 function DateChip({ children, C, P, M, onPanel, align, font }: {
@@ -879,8 +883,8 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
     <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`experience.${e.id}.start`}>{e.start}</Ed>
       {/* Nur ein Datum (etwa aus einem Import): kein einsamer Strich. */}
-      {e.start && e.end ? ' – ' : ''}
-      <Ed path={`experience.${e.id}.end`}>{present(data, e.end)}</Ed>
+      {e.start && present(data, e.start, e.end) ? ' – ' : ''}
+      <Ed path={`experience.${e.id}.end`}>{present(data, e.start, e.end)}</Ed>
     </DateChip>
   );
 
@@ -933,12 +937,14 @@ function ExperienceHead({ e, data, C, P, M, tabular, timeline, isLast, rail, dat
   );
 }
 
-function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont, variant, dateCol = DATE_COL_MM, labelRight, wide }: {
+function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont, variant, dateCol = DATE_COL_MM, labelRight, wide, presentLabel = '' }: {
   e: CVData['education'][number]; C: ThemeColors; P: FontPairing; M: Metrics; tabular: boolean;
   rail?: string; dateFont?: 'mono' | 'heading';
   variant?: 'split' | 'line'; dateCol?: number; labelRight?: boolean;
   /** Notiz über die volle Satzbreite (`wideMeasure`). */
   wide?: boolean;
+  /** „heute"/„Present" der Dokumentsprache für ein laufendes Studium. */
+  presentLabel?: string;
 }) {
   const body = (
     <div style={{ minWidth: 0 }}>
@@ -957,7 +963,7 @@ function EducationEntryBlock({ e, C, P, M, tabular, rail, dateFont, variant, dat
     <DateChip C={C} P={P} M={M} align={tabular ? 'right' : undefined} font={dateFont}>
       <Ed path={`education.${e.id}.start`}>{e.start}</Ed>
       {e.start && e.end ? ' – ' : ''}
-      <Ed path={`education.${e.id}.end`}>{e.end}</Ed>
+      <Ed path={`education.${e.id}.end`}>{presentLabel ? endLabel(e.start, e.end, presentLabel) : e.end}</Ed>
     </DateChip>
   );
   if (variant) {
@@ -1214,17 +1220,6 @@ function ContinuationHead({ data, C, P, M, pageIndex, pageCount }: {
   );
 }
 
-/** Aus „Isestraße 88, 20149 Hamburg" wird „Hamburg".
- *  Unter einer Unterschrift steht der Ort, nicht die Anschrift — der
- *  Rückgriff auf das Adressfeld ergab sonst eine Zeile wie
- *  „Isestraße 88, 20149 Hamburg, 14. September 2026". */
-function cityOf(location: string): string {
-  // Getrennt wird an Komma UND an echtem Zeilenumbruch: seit die Anschrift
-  // zweizeilig sein darf, steht der Ort meistens hinter einem Umbruch, nicht
-  // hinter einem Komma.
-  const last = (location || '').split(/[,\n]/).pop()?.trim() ?? '';
-  return last.replace(/^\d{4,5}\s+/, '') || location;
-}
 
 /** Heutiges Datum in der Sprache des Dokuments — ausgeschrieben, wie es unter
  *  einer Unterschrift steht („14. September 2026"). */
@@ -1530,7 +1525,7 @@ export default function ResumeRenderer({
           id: `education:${e.id}`, section: 'education', gap: i === 0 ? GAP_HEAD : GAP_ENTRY,
           node: (
             <>
-              {onEdge(<EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} wide={T.wideMeasure} />)}
+              {onEdge(<EducationEntryBlock e={e} C={C} P={P} M={M} tabular={tabular} rail={rail} dateFont={T.dateFont} {...headOpts} wide={T.wideMeasure} presentLabel={data.labels.misc.present} />)}
               <EntryTools kind="education" id={e.id} index={i} count={data.education.length} />
             </>
           ),

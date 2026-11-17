@@ -95,13 +95,14 @@ export default function KeysPanel({ onClose, onAccountDeleted }: { onClose: () =
   }
 
   /** Fehlertext für die Oberfläche: bekannte Fälle in der Oberflächensprache,
-   *  sonst der Klartext des Servers. */
+   *  sonst die Meldung des Servers (über den Code übersetzt, data/api.ts),
+   *  ohne Text vom Server der allgemeine Satz. */
   function errText(e: unknown, wrongPw: string): string {
     if (e instanceof ApiError) {
       if (e.code === 'password_required') return t.emailPasswordRequired;
-      if (e.code === 'password_wrong' || e.status === 403) return wrongPw;
+      if (e.code === 'password_wrong' || (e.status === 403 && !e.code)) return wrongPw;
       if (e.status === 429) return t.tooManyAttempts(e.retryAfter);
-      return e.message || t.genericError;
+      return e.answered || e.localized ? e.message : t.genericError;
     }
     return e instanceof Error ? e.message : t.genericError;
   }

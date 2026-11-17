@@ -13,12 +13,13 @@ import type { BillingStrings } from '../ui/i18n/billing';
 import { freeTierLimited } from './freeTier';
 
 /** Fehlermeldung für die Oberfläche: 429 in der Oberflächensprache, sonst
- *  der Klartext des Servers, notfalls ein allgemeiner Satz. */
+ *  die Meldung des Servers (seit 17.11.2026 über den Code übersetzt, siehe
+ *  ui/i18n/servererrors.ts), notfalls ein allgemeiner Satz. */
 export function errorText(e: unknown, lang: UiLang): string {
   const t = BILLING_I18N[lang];
   if (e instanceof ApiError) {
     if (e.status === 429) return t.errTooMany(e.retryAfter);
-    if (e.message && !/^Fehler \d+$/.test(e.message)) return e.message;
+    if (e.message && (e.answered || e.localized)) return e.message;
   }
   return t.errGeneric;
 }

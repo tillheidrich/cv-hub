@@ -261,7 +261,7 @@ const EN: KontoStrings = {
   errRequired: 'Please fill in both fields.',
   errWrong: 'That did not match. Check your username or email address and password. If you are unsure, reset the password.',
   errLocked: m => `Too many attempts in a row. Try again in ${m} ${m === 1 ? 'minute' : 'minutes'} or reset your password.`,
-  errDisabled: 'This account is disabled. If that is a mistake, get in touch via the address in the imprint.',
+  errDisabled: 'This account is disabled. If that is a mistake, get in touch via the address in the legal notice.',
   errNetwork: 'The server cannot be reached right now. Check your connection and try again in a moment.',
   errGeneric: 'That did not work. Please try again.',
   errCode: 'The code is wrong or has expired. Check the latest email or sign in again.',

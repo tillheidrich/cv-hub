@@ -4,8 +4,8 @@
  * filled-out template imports cleanly without parser warnings.
  *
  * Two variants exist:
- *   - cv:de / cv:en  → Lebenslauf / Resume
- *   - cl:de / cl:en  → Anschreiben / Cover Letter
+ *   - cv:de / cv:en  → Lebenslauf / CV
+ *   - cl:de / cl:en  → Anschreiben / cover letter
  *
  * Ohne `template:`-Zeile (seit 08.10.2026): Eine ausgefüllte Vorlage soll die
  * gewählte Vorlage des Profils behalten. Vorher stand hier „hamburg", und
@@ -98,6 +98,9 @@ Eigener Abschnitt: Überschrift „Abschnitt: Dein Titel“, darunter Stichpunkt
 Leere Abschnitte einfach weglassen. -->
 `;
 
+/* Englische Vorlage mit englischen Überschriften und Schlüsseln (seit
+ * 17.11.2026, export/markdownHeads.ts). Vorher stand hier „## Kontakt",
+ * „## Berufserfahrung" und der Hinweis, die deutschen Schlüssel zu behalten. */
 const CV_EN = `---
 lang: en
 fontScale: 1.0
@@ -108,31 +111,31 @@ pageMode: one
 # First Last
 **Job Title**
 
-## Kontakt
-- E-Mail: name@example.com
-- Telefon: +1 555 123 4567
-- Ort: Berlin
+## Contact
+- Email: name@example.com
+- Phone: +49 151 12345678
+- Location: Berlin
 - Website: yourdomain.com
 - LinkedIn: linkedin.com/in/your-handle
 
-## Profil
+## Profile
 Short summary, 2-3 sentences: who you are, your focus, what sets you apart.
-Example: "Senior product designer with seven years in B2B SaaS. Focus on design systems, research-driven product work, and tight engineering collaboration."
+Example: "Backend engineer with six years in Java and AWS, now focusing on platform reliability and developer tooling."
 
-## Berufserfahrung
+## Experience
 
 ### Current Role
-Company · Location · 01/2023 – present
-- Bullet 1: what you did (action + context + outcome/impact)
-- Bullet 2: next responsibility with measurable outcome
-- Bullet 3: relevant tools, methods, skills aligned with the target role
+Company · Location · 01/2023 – Present
+- Bullet 1: what you did (action + context + outcome)
+- Bullet 2: next responsibility with a measurable result
+- Bullet 3: relevant tools, methods and skills for the target role
 
 ### Previous Role
 Company · Location · 06/2020 – 12/2022
 - Bullet 1
 - Bullet 2
 
-## Ausbildung
+## Education
 
 ### Degree or Programme
 University · Location · 2017 – 2020
@@ -147,37 +150,40 @@ University · Location · 2017 – 2020
 - Method 1
 - Method 2
 
-## Sprachen
+## Languages
 - English — Native (5/5)
 - German — B2 (3/5)
 - French — A2 (2/5)
 
-## Projekte
+## Projects
 
 ### Project name
-Rolle: your role in the project
-Zeitraum: 03/2023 – 11/2023
+Role: your role in the project
+Period: 03/2023 – 11/2023
 Link: example.org/project
-One sentence: what it was about and what came out of it.
+One sentence on what it was about and what came out of it.
 - Outcome with a number
 
-## Zertifikate
+## Certifications
 
 ### Certification name
-Aussteller: issuing body
-Datum: 05/2024
+Issuer: issuing body
+Date: 05/2024
 
-## Weiteres
+## Additional information
 - Interests, talks
 
-<!-- More sections, add as their own heading when needed (keep the German keys, they are parser keys):
-Volunteering: heading "Ehrenamt", entries like a job (role, then Organisation · Place · 2019 – present).
-Publications: heading "Publikationen", per title the lines Verlag, Datum and Link.
-Own section: heading "Abschnitt: Your title", then bullets or entries.
-Leave empty sections out. -->
+<!-- More sections, each under its own heading when needed:
+Volunteering: heading "Volunteering", entries like a job (role, then Organisation · Place · 2019 – Present).
+Publications: heading "Publications", per title the lines Publisher, Date and Link.
+Your own section: heading "Section: Your title", then bullets or entries.
+Leave out empty sections. -->
 `;
 
-const CL_DE = `---
+/* Datum beim Abruf, nicht beim Laden des Moduls. */
+const today = (loc: string) => new Date().toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+
+const CL_DE = () => `---
 doc: cover-letter
 lang: de
 ---
@@ -189,7 +195,7 @@ lang: de
 
 ## Kopf
 - Ort: Hamburg
-- Datum: ${new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })}
+- Datum: ${today('de-DE')}
 
 ## Betreff
 Bewerbung als [Position]
@@ -217,55 +223,56 @@ Mit freundlichen Grüßen
 Dein Name
 `;
 
-const CL_EN = `---
+/* Bewerbung nach Deutschland: deutsche Musteranschrift, britisches Datum. */
+const CL_EN = () => `---
 doc: cover-letter
 lang: en
 ---
 
-## Empfänger
-- Firma: Acme Ltd
-- Ansprechpartner: Ms Smith
-- Adresse: 1 Sample Street, London EC1A 1AA
+## Recipient
+- Company: Example GmbH
+- Contact person: Ms Schneider
+- Address: Musterstraße 1, 20095 Hamburg
 
-## Kopf
-- Ort: Berlin
-- Datum: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+## Header
+- City: Berlin
+- Date: ${today('en-GB')}
 
-## Betreff
+## Subject
 Application for [Position]
 
-## Anrede
-Dear Ms Smith,
+## Salutation
+Dear Ms Schneider,
 
-## Einstieg
-One or two sentences: why this role, why now. Direct opener, no clichés.
+## Introduction
+One or two sentences: why this role, why now. Get straight to the point.
 
-## Hauptteil
-Three to five sentences: concrete stations from the CV that match the role. Echo bullets from your current position verbatim.
+## Main body
+Three to five sentences: concrete roles from your CV that match the job. Reuse the strongest bullets from your current position.
 
-## Firmenbezug
-Two to three sentences: what convinces you about the company — product, mission, team. Specific, not generic.
+## Why this company
+Two or three sentences: what draws you to the company (product, mission, team). Specific, not generic.
 
 ## Motivation
 Two sentences: what you want to contribute.
 
-## Abschluss
-One sentence: interview invitation.
+## Closing
+One sentence asking for an interview.
 
-## Grußformel
+## Sign-off
 Kind regards
 Your name
 `;
 
-/** Full language union — FR/ES reuse the EN starter body (English section
- *  markers parse fine server-side) but the frontmatter `lang:` is stamped with
- *  the real language so the import writes to the correct variant instead of
- *  clobbering DE/EN. */
+/** Full language union — FR/ES reuse the EN starter body (the parser reads
+ *  English headings in every language) but the frontmatter `lang:` is stamped
+ *  with the real language so the import writes to the correct variant instead
+ *  of clobbering DE/EN. */
 export type MdTemplateFullLang = 'de' | 'en' | 'fr' | 'es';
 
 export function getMdTemplate(kind: MdTemplateKind, lang: MdTemplateFullLang): string {
   const body = kind === 'cl'
-    ? (lang === 'de' ? CL_DE : CL_EN)
+    ? (lang === 'de' ? CL_DE() : CL_EN())
     : (lang === 'de' ? CV_DE : CV_EN);
   // Rewrite the frontmatter language line to the actual target language.
   return body.replace(/^lang: (de|en)$/m, `lang: ${lang}`);

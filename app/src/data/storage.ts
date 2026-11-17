@@ -1,6 +1,6 @@
 import type { CVData, CoverLetterData, AppProfile, Lang } from './types';
 import { demoDE as tillDE } from './demo-de';
-import { demoEN as tillEN } from './demo-en';
+import { demoEN as tillEN, DEMO_COVER_LETTER_EN } from './demo-en';
 import { LABELS, ALL_LANGS } from './labels';
 import {
   STORE, getAll, getOne, getMeta, setMeta, runTx, clearAll, requestPersistence,
@@ -16,13 +16,20 @@ const PROFILES_KEY = 'appstudio-profiles-v2';
 const ACTIVE_ID_KEY = 'appstudio-active-v2';
 
 // ── Default cover letter content ──────────────────────────────────────────────
+/* Ort und Datum (17.11.2026): Bis dahin stand hier fest „Hamburg" und ein
+ * Datum, das beim Laden des Moduls berechnet wurde — wer den Tab über Nacht
+ * offen ließ, legte morgens eine Fassung mit gestrigem Datum an, und jede neue
+ * Fassung schrieb aus Hamburg. Jetzt: Ort leer (der Brief nimmt dann den Ort
+ * aus der eigenen Anschrift, templates/CoverLetterRenderer.tsx), Datum wird
+ * beim Anlegen berechnet (`freshCoverLetter`). Die Konstanten bleiben die
+ * Vergleichsbasis für „unverändertes Muster" (billing/freeTier.ts, check/). */
 
 export const DEFAULT_COVER_LETTER_DE: CoverLetterData = {
   company: '',
   contactPerson: '',
   companyAddress: '',
-  city: 'Hamburg',
-  date: new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }),
+  city: '',
+  date: '',
   subject: 'Bewerbung als ',
   salutation: 'Sehr geehrte Damen und Herren,',
   intro: 'mit großem Interesse habe ich Ihre Stellenausschreibung gelesen und bewerbe mich hiermit um die ausgeschriebene Position.',
@@ -37,8 +44,8 @@ export const DEFAULT_COVER_LETTER_EN: CoverLetterData = {
   company: '',
   contactPerson: '',
   companyAddress: '',
-  city: 'Hamburg',
-  date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+  city: '',
+  date: '',
   subject: 'Application for the position of ',
   salutation: 'Dear Hiring Manager,',
   intro: 'I am writing to express my strong interest in the position you have advertised and to submit my application.',
@@ -53,8 +60,8 @@ export const DEFAULT_COVER_LETTER_FR: CoverLetterData = {
   company: '',
   contactPerson: '',
   companyAddress: '',
-  city: 'Hamburg',
-  date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+  city: '',
+  date: '',
   subject: 'Candidature au poste de ',
   salutation: 'Madame, Monsieur,',
   intro: "Actuellement à la recherche de nouvelles opportunités, je me permets de vous soumettre ma candidature pour le poste que vous proposez.",
@@ -69,8 +76,8 @@ export const DEFAULT_COVER_LETTER_ES: CoverLetterData = {
   company: '',
   contactPerson: '',
   companyAddress: '',
-  city: 'Hamburg',
-  date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+  city: '',
+  date: '',
   subject: 'Candidatura para el puesto de ',
   salutation: 'Estimados señores:',
   intro: 'Me dirijo a ustedes con gran interés para presentar mi candidatura al puesto que han publicado.',
@@ -88,6 +95,65 @@ export const DEFAULT_COVER_LETTERS: Record<Lang, CoverLetterData> = {
   fr: DEFAULT_COVER_LETTER_FR,
   es: DEFAULT_COVER_LETTER_ES,
 };
+
+const LETTER_DATE_LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-GB', fr: 'fr-FR', es: 'es-ES' };
+
+/** Heutiges Datum, wie es im Briefkopf steht: „21. Mai 2026", „21 May 2026". */
+export function letterDate(lang: Lang, d = new Date()): string {
+  return d.toLocaleDateString(LETTER_DATE_LOCALE[lang] ?? 'de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Neues Muster-Anschreiben mit dem Datum von heute (nicht vom Laden der Seite). */
+export function freshCoverLetter(lang: Lang): CoverLetterData {
+  return { ...DEFAULT_COVER_LETTERS[lang], date: letterDate(lang) };
+}
+
+/** Alle vier Muster-Anschreiben, frisch datiert. */
+export function freshCoverLetters(): Record<Lang, CoverLetterData> {
+  return { de: freshCoverLetter('de'), en: freshCoverLetter('en'), fr: freshCoverLetter('fr'), es: freshCoverLetter('es') };
+}
+
+/* Bestehende Anschreiben behalten ihren Ort (auch das frühere Muster-
+ * „Hamburg“): Er steht so im PDF, das die Person kennt, und ein Abgleich
+ * „unverändertes Muster“ kann eine bewusst eingetippte Stadt nicht von der
+ * alten Vorgabe unterscheiden. billing/freeTier.ts (`hasOwnCoverLetter`)
+ * lässt den Ort deshalb wie das Datum aus dem Vergleich. */
+
+/** Beschriftungen, deren Vorgabe sich geändert hat (17.11.2026). Steht im
+ *  Profil noch genau der alte Wortlaut, gilt der neue — eine eigene
+ *  Überschrift bleibt, wie sie ist. */
+const RETIRED_LABELS: { lang: Lang; group: 'sections' | 'fields' | 'misc'; key: string; old: string }[] = [
+  { lang: 'en', group: 'sections', key: 'additional', old: 'Additional' },
+  { lang: 'en', group: 'fields', key: 'web', old: 'Portfolio' },
+  { lang: 'en', group: 'fields', key: 'driversLicense', old: "Driver's licence" },
+  { lang: 'en', group: 'misc', key: 'present', old: 'present' },
+  { lang: 'fr', group: 'fields', key: 'web', old: 'Portfolio' },
+  { lang: 'es', group: 'fields', key: 'web', old: 'Portafolio' },
+];
+
+/** Trägt die englische Fassung noch alle alten Vorgaben? */
+function hasLegacyEnLabels(cv: CVData | undefined): boolean {
+  const L = cv?.labels;
+  if (!L || L.lang !== 'en') return false;
+  return RETIRED_LABELS.filter(r => r.lang === 'en')
+    .every(r => ((L[r.group] ?? {}) as unknown as Record<string, string>)[r.key] === r.old);
+}
+
+function withCurrentLabels(cv: CVData, lang: Lang): CVData {
+  const L = cv.labels;
+  if (!L) return cv;
+  let next: CVData['labels'] | null = null;
+  for (const r of RETIRED_LABELS) {
+    if (r.lang !== lang) continue;
+    const grp = (L[r.group] ?? {}) as unknown as Record<string, string>;
+    if (grp[r.key] !== r.old) continue;
+    const fresh = (LABELS[lang][r.group] as unknown as Record<string, string>)[r.key];
+    if (!fresh || fresh === r.old) continue;
+    next = next ?? { ...L, sections: { ...L.sections }, fields: { ...L.fields }, misc: { ...L.misc } };
+    (next[r.group] as unknown as Record<string, string>)[r.key] = fresh;
+  }
+  return next ? { ...cv, labels: next } : cv;
+}
 
 // ── Standardvorlage ───────────────────────────────────────────────────────────
 
@@ -149,14 +215,22 @@ export function withAllLangs(p: AppProfile): AppProfile {
     (data.en ? 'en' : undefined) ??
     present[0];
 
+  /* Beschriftungen vom 17.11.2026 nachziehen — nur, wenn die englische
+   * Fassung noch ALLE alten Vorgaben trägt (unverändertes Altprofil).
+   * withAllLangs läuft auch bei jeder Änderung (App.tsx); eine einzelne
+   * bewusst eingetippte „Additional“-Überschrift bleibt so stehen. */
+  const legacyLabels = hasLegacyEnLabels(data.en);
+
   for (const l of ALL_LANGS) {
     if (!data[l]) {
       data[l] = cloneCVForLang(src ? data[src]! : tillDE, l);
     } else if (data[l]!.labels?.lang !== l) {
       // Heal a stale/missing label pack so a variant renders in its own language.
       data[l] = { ...data[l]!, labels: LABELS[l] };
+    } else if (legacyLabels) {
+      data[l] = withCurrentLabels(data[l]!, l);
     }
-    if (!coverLetters[l]) coverLetters[l] = { ...DEFAULT_COVER_LETTERS[l] };
+    if (!coverLetters[l]) coverLetters[l] = freshCoverLetter(l);
   }
 
   return {
@@ -172,7 +246,8 @@ export function createDemoProfile(displayName = 'Lena Brandt (Demo)'): AppProfil
     displayName,
     createdAt: new Date().toISOString(),
     data: { de: tillDE, en: tillEN, fr: cloneCVForLang(tillDE, 'fr'), es: cloneCVForLang(tillDE, 'es') },
-    coverLetters: { ...DEFAULT_COVER_LETTERS },
+    /* Englisch seit 17.11.2026 mit eigenem Demo-Anschreiben (demo-en.ts). */
+    coverLetters: { ...freshCoverLetters(), en: { ...DEMO_COVER_LETTER_EN } },
     settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
   };
 }
@@ -202,6 +277,13 @@ export function createBlankProfile(displayName: string): AppProfile {
     skillGroups: [],
     languages: [],
     additionalExperience: [],
+    /* Die englische Demo hat seit 17.11.2026 ein Zertifikat: Nichts aus
+     * den Demo-Abschnitten darf in ein leeres Profil wandern. */
+    projects: undefined,
+    certificates: undefined,
+    volunteering: undefined,
+    publications: undefined,
+    customSections: undefined,
   });
 
   return {
@@ -214,7 +296,7 @@ export function createBlankProfile(displayName: string): AppProfile {
       fr: { ...blankCV(tillDE), labels: LABELS.fr },
       es: { ...blankCV(tillDE), labels: LABELS.es },
     },
-    coverLetters: { ...DEFAULT_COVER_LETTERS },
+    coverLetters: freshCoverLetters(),
     settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
   };
 }
@@ -569,8 +651,8 @@ function readLegacyLocalStorage(): { profiles: AppProfile[]; skipped: number; pa
           en: parsedCv.en ? { ...tillEN, ...parsedCv.en, personal: { ...tillEN.personal, ...parsedCv.en.personal }, labels: tillEN.labels } : tillEN,
         } as Record<Lang, CVData>,
         coverLetters: {
-          de: { ...DEFAULT_COVER_LETTER_DE, ...(parsedCl.de ?? {}) },
-          en: { ...DEFAULT_COVER_LETTER_EN, ...(parsedCl.en ?? {}) },
+          de: { ...freshCoverLetter('de'), ...(parsedCl.de ?? {}) },
+          en: { ...freshCoverLetter('en'), ...(parsedCl.en ?? {}) },
         } as Record<Lang, CoverLetterData>,
         settings: { template: DEFAULT_TEMPLATE, fontScale: 1.0, fontPairing: 'auto', pageMode: 'one', lang: 'de' },
       };
@@ -1316,15 +1398,15 @@ export function resetData(): Record<Lang, CVData> {
 export function loadCoverLetters(): Record<Lang, CoverLetterData> {
   try {
     const raw = localStorage.getItem(LEGACY_CL_KEY);
-    if (!raw) return { ...DEFAULT_COVER_LETTERS };
+    if (!raw) return freshCoverLetters();
     const parsed = JSON.parse(raw) as Partial<Record<Lang, Partial<CoverLetterData>>>;
-    const out = { ...DEFAULT_COVER_LETTERS };
+    const out = freshCoverLetters();
     for (const l of ALL_LANGS) {
-      if (parsed[l]) out[l] = { ...DEFAULT_COVER_LETTERS[l], ...parsed[l] };
+      if (parsed[l]) out[l] = { ...out[l], ...parsed[l] };
     }
     return out;
   } catch {
-    return { ...DEFAULT_COVER_LETTERS };
+    return freshCoverLetters();
   }
 }
 

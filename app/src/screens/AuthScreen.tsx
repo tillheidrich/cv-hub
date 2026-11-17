@@ -86,11 +86,13 @@ export function Wordmark() {
 /** Fehler aus der API in einen Satz, der sagt, was jetzt zu tun ist. */
 function friendlyError(err: unknown, x: KontoStrings, lang: UiLang): string {
   if (err instanceof ApiError) {
-    if (err.status === 401) return x.errWrong;
-    if (err.status === 429) return x.errLocked(Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)));
-    if (err.status === 403 && /gesperrt|disabled/i.test(err.message)) return x.errDisabled;
+    // Falscher 2FA-Code bzw. zu viele davon: eigene Meldung über den Code, nicht „Passwort prüfen“.
+    if (err.status === 401 && err.code !== 'twofa_code_wrong') return x.errWrong;
+    if (err.status === 429 && err.code !== 'twofa_too_many') return x.errLocked(Math.max(1, Math.ceil((err.retryAfter ?? 60) / 60)));
+    if (err.status === 403 && (err.code === 'account_disabled' || /gesperrt|disabled/i.test(err.serverMessage ?? err.message))) return x.errDisabled;
     if (err.status >= 500 && !err.answered) return x.errNetwork;
-    if (err.message) return lang === 'de' ? err.message : x.errServerSays(err.message);
+    // Bekannte Codes kommen schon übersetzt an (data/api.ts); nur Unbekanntes bleibt „Der Server sagt: …“.
+    if (err.message) return lang === 'de' || err.localized ? err.message : x.errServerSays(err.message);
     return x.errGeneric;
   }
   if (err instanceof TypeError) return x.errNetwork;

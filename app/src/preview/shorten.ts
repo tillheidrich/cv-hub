@@ -27,13 +27,55 @@ export interface CutSuggestion {
 
 const linesFor = (chars: number, cpl: number) => Math.max(1, Math.round(chars / Math.max(20, cpl)));
 
+type CutLang = 'de' | 'en' | 'fr' | 'es';
+
+/** Beschriftungen der Vorschläge in der Oberflächensprache (bis 17.11.2026
+ *  nur Deutsch). */
+const CUT_TEXT: Record<CutLang, {
+  section: (name: string, n: number) => string;
+  group: (name: string, n: number) => string;
+  note: (degree: string) => string;
+  bullet: (i: number, where: string) => string;
+  profile: (now: number) => string;
+}> = {
+  de: {
+    section: (s, n) => `Abschnitt „${s}“ (${n} Einträge)`,
+    group: (s, n) => `Skill-Gruppe „${s}“ (${n} Einträge)`,
+    note: s => `Notiz bei „${s}“`,
+    bullet: (i, s) => `Stichpunkt ${i} bei „${s}“`,
+    profile: n => `Profiltext auf rund 240 Zeichen kürzen (heute ${n})`,
+  },
+  en: {
+    section: (s, n) => `Section “${s}” (${n} ${n === 1 ? 'entry' : 'entries'})`,
+    group: (s, n) => `Skill group “${s}” (${n} ${n === 1 ? 'entry' : 'entries'})`,
+    note: s => `Note under “${s}”`,
+    bullet: (i, s) => `Bullet ${i} under “${s}”`,
+    profile: n => `Cut the profile to about 240 characters (now ${n})`,
+  },
+  fr: {
+    section: (s, n) => `Section « ${s} » (${n} ${n === 1 ? 'entrée' : 'entrées'})`,
+    group: (s, n) => `Groupe de compétences « ${s} » (${n} ${n === 1 ? 'entrée' : 'entrées'})`,
+    note: s => `Note sous « ${s} »`,
+    bullet: (i, s) => `Point ${i} sous « ${s} »`,
+    profile: n => `Ramener le profil à environ 240 caractères (actuellement ${n})`,
+  },
+  es: {
+    section: (s, n) => `Sección «${s}» (${n} ${n === 1 ? 'entrada' : 'entradas'})`,
+    group: (s, n) => `Grupo de competencias «${s}» (${n} ${n === 1 ? 'entrada' : 'entradas'})`,
+    note: s => `Nota en «${s}»`,
+    bullet: (i, s) => `Punto ${i} en «${s}»`,
+    profile: n => `Acortar el perfil a unos 240 caracteres (ahora ${n})`,
+  },
+};
+
 /**
  * Vorschläge, bis das Defizit gedeckt ist.
  *
  * @param deficitLines  wie viele Zeilen nicht mehr passen (gemessen)
  * @param cpl           Zeichen je Zeile im gesetzten Dokument (gemessen)
+ * @param uiLang        Sprache der Beschriftungen (Oberfläche)
  */
-export function suggestCuts(data: CVData, deficitLines: number, cpl: number): {
+export function suggestCuts(data: CVData, deficitLines: number, cpl: number, uiLang: string = 'de'): {
   cuts: CutSuggestion[];
   /** Summe der vorgeschlagenen Zeilen — deckt sie das Defizit? */
   covered: number;
@@ -42,26 +84,27 @@ export function suggestCuts(data: CVData, deficitLines: number, cpl: number): {
    *  lang, sondern das Layout zu teuer. */
   hopeless: boolean;
 } {
+  const T = CUT_TEXT[uiLang as CutLang] ?? CUT_TEXT.de;
   const cand: CutSuggestion[] = [];
 
   // 1. „Weiteres" — der Abschnitt, den niemand vermisst, wenn er fehlt.
   const add = data.additionalExperience ?? [];
   if (add.length) {
     const chars = add.reduce((n, s) => n + s.length, 0);
-    cand.push({ label: `Abschnitt „${data.labels.sections.additional}" (${add.length} Einträge)`, chars, lines: linesFor(chars, cpl) + 1, tab: 'skills' });
+    cand.push({ label: T.section(data.labels.sections.additional, add.length), chars, lines: linesFor(chars, cpl) + 1, tab: 'skills' });
   }
 
   // 2. Skill-Gruppen ab der dritten: die ersten zwei stehen in der
   //    Seitenspalte und kosten die Hauptspalte nichts.
   data.skillGroups.slice(2).forEach(g => {
     const chars = g.items.reduce((n, s) => n + s.length, 0);
-    cand.push({ label: `Skill-Gruppe „${g.label}" (${g.items.length} Einträge)`, chars, lines: g.items.length + 1, tab: 'skills' });
+    cand.push({ label: T.group(g.label, g.items.length), chars, lines: g.items.length + 1, tab: 'skills' });
   });
 
   // 3. Notizen an Ausbildungsstationen — Beiwerk, kein Nachweis.
   data.education.forEach(e => {
     if (!e.notes?.trim()) return;
-    cand.push({ label: `Notiz bei „${e.degree}"`, chars: e.notes.length, lines: linesFor(e.notes.length, cpl), tab: 'bildung' });
+    cand.push({ label: T.note(e.degree), chars: e.notes.length, lines: linesFor(e.notes.length, cpl), tab: 'bildung' });
   });
 
   // 4. Die längsten Stichpunkte der ÄLTESTEN Stationen zuerst: was zwölf Jahre
@@ -72,7 +115,7 @@ export function suggestCuts(data: CVData, deficitLines: number, cpl: number): {
     sorted.slice(0, 2).forEach(({ b, i }) => {
       if (b.length < 40) return;
       bullets.push({
-        label: `Stichpunkt ${i + 1} bei „${e.company || e.role}"`,
+        label: T.bullet(i + 1, e.company || e.role),
         chars: b.length, lines: linesFor(b.length, cpl),
         tab: 'erfahrung',
       });
@@ -87,7 +130,7 @@ export function suggestCuts(data: CVData, deficitLines: number, cpl: number): {
   const pt = data.profile.text.trim();
   if (pt.length > 260) {
     const save = pt.length - 240;
-    cand.push({ label: `Profiltext auf rund 240 Zeichen kürzen (heute ${pt.length})`, chars: save, lines: linesFor(save, cpl), tab: 'profil' });
+    cand.push({ label: T.profile(pt.length), chars: save, lines: linesFor(save, cpl), tab: 'profil' });
   }
 
   /* Höchstens sechs Vorschläge. Eine Liste mit elf Einträgen beantwortet die

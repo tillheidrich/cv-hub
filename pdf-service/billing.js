@@ -1029,7 +1029,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     } else if (channel === 'public') {
       await sendPlainReceipt('cancellation', email, receivedAt, { name, orderNo: orderNo || null });
     } else {
-      await send({ to: email, ...tplDeclarationUnmatched({ type: 'cancellation', statement, receivedAt }) }).catch(() => false);
+      await send({ to: email, ...tplDeclarationUnmatched({ type: 'cancellation', statement, receivedAt, lang: orders[0]?.locale }) }).catch(() => false);
     }
     if (manual) await notifyAdmin({ type: 'cancellation', reason: !done.length ? 'keine laufende Bestellung zuzuordnen' : 'außerordentliche Kündigung, Erstattung prüfen', statement, receivedAt, orderNos: orders.map(o => o.order_no) });
     log(`billing: Kündigung (${channel}, ${input.kind}) für ${done.length} Bestellung(en)`);
@@ -1043,9 +1043,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     const receivedAt = new Date();
     let orders;
     if (body?.orderId) {
-      if (!UUID_RE.test(String(body.orderId))) return { status: 404, body: { error: 'Bestellung nicht gefunden.' } };
+      if (!UUID_RE.test(String(body.orderId))) return { status: 404, body: { error: 'Bestellung nicht gefunden.', code: 'order_not_found' } };
       ({ rows: orders } = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [body.orderId, user.id]));
-      if (!orders.length) return { status: 404, body: { error: 'Bestellung nicht gefunden.' } };
+      if (!orders.length) return { status: 404, body: { error: 'Bestellung nicht gefunden.', code: 'order_not_found' } };
     } else {
       ({ rows: orders } = await pool.query(`SELECT * FROM orders WHERE user_id = $1 AND status = 'paid' AND cancelled_at IS NULL AND pass_until > now()`, [user.id]));
     }
@@ -1356,9 +1356,9 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     });
 
     const ownOrder = async (req, res) => {
-      if (!UUID_RE.test(String(req.params.id || ''))) { res.status(404).json({ error: 'Bestellung nicht gefunden.' }); return null; }
+      if (!UUID_RE.test(String(req.params.id || ''))) { res.status(404).json({ error: 'Bestellung nicht gefunden.', code: 'order_not_found' }); return null; }
       const { rows } = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
-      if (!rows[0]) { res.status(404).json({ error: 'Bestellung nicht gefunden.' }); return null; }
+      if (!rows[0]) { res.status(404).json({ error: 'Bestellung nicht gefunden.', code: 'order_not_found' }); return null; }
       return rows[0];
     };
 
@@ -1384,7 +1384,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     app.get('/api/billing/orders/:id/invoice.pdf', rateLimit({ route: 'invoice', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
       const o = await ownOrder(req, res);
       if (!o) return;
-      if (!o.invoice_no) return res.status(404).json({ error: 'Für diese Bestellung gibt es keine Rechnung.' });
+      if (!o.invoice_no) return res.status(404).json({ error: 'Für diese Bestellung gibt es keine Rechnung.', code: 'invoice_not_found' });
       try {
         const pdf = await invoicePdf(o);
         res.setHeader('Content-Type', 'application/pdf');
@@ -1393,7 +1393,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         res.send(pdf);
       } catch (err) {
         log(`billing: Rechnung ${o.id} nicht erstellt (${err?.message || err})`);
-        res.status(503).json({ error: 'Die Rechnung lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.' });
+        res.status(503).json({ error: 'Die Rechnung lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.', code: 'invoice_unavailable' });
       }
     });
 
@@ -1401,7 +1401,7 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
     app.get('/api/billing/orders/:id/credit-note.pdf', rateLimit({ route: 'invoice', max: 30, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
       const o = await ownOrder(req, res);
       if (!o) return;
-      if (!o.invoice_no || !['withdrawn', 'refunded'].includes(o.status)) return res.status(404).json({ error: 'Für diese Bestellung gibt es keinen Stornobeleg.' });
+      if (!o.invoice_no || !['withdrawn', 'refunded'].includes(o.status)) return res.status(404).json({ error: 'Für diese Bestellung gibt es keinen Stornobeleg.', code: 'credit_note_not_found' });
       try {
         const pdf = await creditNotePdf(o);
         res.setHeader('Content-Type', 'application/pdf');
@@ -1410,19 +1410,19 @@ export function createBilling({ pool, config = billingConfig(), mollie, renderPd
         res.send(pdf);
       } catch (err) {
         log(`billing: Stornobeleg ${o.id} nicht erstellt (${err?.message || err})`);
-        res.status(503).json({ error: 'Der Stornobeleg lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.' });
+        res.status(503).json({ error: 'Der Stornobeleg lässt sich gerade nicht erstellen. Bitte gleich noch einmal versuchen.', code: 'credit_note_unavailable' });
       }
     });
 
     app.post('/api/billing/withdraw', rateLimit({ route: 'withdraw', max: 20, windowMs: 60 * 60 * 1000 }), requireAuth, async (req, res) => {
       const id = String(req.body?.orderId || '');
-      if (!UUID_RE.test(id)) return res.status(404).json({ error: 'Bestellung nicht gefunden.' });
+      if (!UUID_RE.test(id)) return res.status(404).json({ error: 'Bestellung nicht gefunden.', code: 'order_not_found' });
       const { rows } = await pool.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2', [id, req.user.id]);
-      if (!rows[0]) return res.status(404).json({ error: 'Bestellung nicht gefunden.' });
+      if (!rows[0]) return res.status(404).json({ error: 'Bestellung nicht gefunden.', code: 'order_not_found' });
       const r = await withdraw(id, { channel: 'account' });
       if (r.result === 'not_paid') return res.status(409).json({ error: 'Diese Bestellung ist nicht bezahlt und kann deshalb nicht widerrufen werden.', code: 'not_withdrawable' });
-      if (r.result === 'late') return res.status(409).json({ error: `Die Widerrufsfrist dieser Bestellung ist am ${berlinDate(withdrawableUntil(r.order.paid_at).getTime() - 1)} abgelaufen.`, code: 'withdrawal_period_over' });
-      if (r.result === 'missing') return res.status(404).json({ error: 'Bestellung nicht gefunden.' });
+      if (r.result === 'late') return res.status(409).json({ error: `Die Widerrufsfrist dieser Bestellung ist am ${berlinDate(withdrawableUntil(r.order.paid_at).getTime() - 1)} abgelaufen.`, code: 'withdrawal_period_over', lastDay: new Date(withdrawableUntil(r.order.paid_at).getTime() - 1).toISOString() });
+      if (r.result === 'missing') return res.status(404).json({ error: 'Bestellung nicht gefunden.', code: 'order_not_found' });
       res.json({ ok: true, receivedAt: r.receivedAt, refund: { status: r.refundStatus || 'requested' }, already: r.result === 'already' || undefined });
     });
 

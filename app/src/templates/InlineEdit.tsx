@@ -1,6 +1,7 @@
 import React from 'react';
 import { isMultiline, type InlinePath } from '../data/inlineEdit';
 import { useUiLang } from '../ui/useUiLang';
+import { detectInitialUiLang } from '../ui/i18n';
 import { DESIGN_I18N } from '../ui/i18n/design';
 
 // ── Direktes Bearbeiten in der Vorschau ─────────────────────────────────────
@@ -43,10 +44,16 @@ export const InlineEditCtx = React.createContext<InlineEditApi | null>(null);
  *
  *  Ein beschreibbares Feld ohne Beschriftung meldet sich bei einem Screenreader
  *  nur mit seinem Inhalt — bei fünfzig Feldern auf einer Seite ist das nutzlos.
- *  Der Pfad trägt die Information ohnehin, sie muss nur übersetzt werden. */
-function fieldLabel(path: InlinePath): string {
-  const p = path.split('.');
-  const name: Record<string, string> = {
+ *  Der Pfad trägt die Information ohnehin, sie muss nur übersetzt werden.
+ *
+ *  In der Sprache der Oberfläche (seit 17.11.2026; vorher immer Deutsch).
+ *  Gelesen wird sie hier ohne Hook: `Ed` steht hundertfach auf einer Seite,
+ *  ein Ereignis-Abonnement je Feld wäre zu teuer. Beim Umschalten der Sprache
+ *  zeichnet die Vorschau ohnehin neu. */
+type FieldLang = 'de' | 'en' | 'fr' | 'es';
+
+const FIELD_NAMES: Record<FieldLang, Record<string, string>> = {
+  de: {
     name: 'Name', title: 'Position', text: 'Profiltext',
     role: 'Position', company: 'Firma', location: 'Ort', start: 'Beginn', end: 'Ende',
     degree: 'Abschluss', institution: 'Institution', notes: 'Notiz',
@@ -58,27 +65,108 @@ function fieldLabel(path: InlinePath): string {
     address: 'Adresse', web: 'Web', phone: 'Telefon', email: 'E-Mail',
     birthDate: 'Geburtsdatum', birthPlace: 'Geburtsort', maritalStatus: 'Familienstand',
     nationality: 'Staatsangehörigkeit', driversLicense: 'Führerschein',
-  };
+  },
+  en: {
+    name: 'Name', title: 'Job title', text: 'Profile',
+    role: 'Job title', company: 'Company', location: 'Location', start: 'Start', end: 'End',
+    degree: 'Degree', institution: 'Institution', notes: 'Note',
+    language: 'Language', level: 'Level',
+    subject: 'Subject', salutation: 'Salutation', intro: 'Introduction', mainBody: 'Main body',
+    companyReference: 'Why this company', motivation: 'Motivation', closing: 'Closing',
+    signoff: 'Sign-off', contactPerson: 'Contact person', companyAddress: 'Address',
+    city: 'City', date: 'Date',
+    address: 'Address', web: 'Website', phone: 'Phone', email: 'Email',
+    birthDate: 'Date of birth', birthPlace: 'Place of birth', maritalStatus: 'Marital status',
+    nationality: 'Nationality', driversLicense: 'Driving licence',
+  },
+  fr: {
+    name: 'Nom', title: 'Poste', text: 'Profil',
+    role: 'Poste', company: 'Entreprise', location: 'Lieu', start: 'Début', end: 'Fin',
+    degree: 'Diplôme', institution: 'Établissement', notes: 'Note',
+    language: 'Langue', level: 'Niveau',
+    subject: 'Objet', salutation: 'Formule d’appel', intro: 'Introduction', mainBody: 'Corps',
+    companyReference: 'Pourquoi cette entreprise', motivation: 'Motivation', closing: 'Conclusion',
+    signoff: 'Formule de politesse', contactPerson: 'Interlocuteur', companyAddress: 'Adresse',
+    city: 'Lieu', date: 'Date',
+    address: 'Adresse', web: 'Site web', phone: 'Téléphone', email: 'E-mail',
+    birthDate: 'Date de naissance', birthPlace: 'Lieu de naissance', maritalStatus: 'Situation familiale',
+    nationality: 'Nationalité', driversLicense: 'Permis de conduire',
+  },
+  es: {
+    name: 'Nombre', title: 'Puesto', text: 'Perfil',
+    role: 'Puesto', company: 'Empresa', location: 'Lugar', start: 'Inicio', end: 'Fin',
+    degree: 'Título', institution: 'Institución', notes: 'Nota',
+    language: 'Idioma', level: 'Nivel',
+    subject: 'Asunto', salutation: 'Saludo', intro: 'Introducción', mainBody: 'Cuerpo',
+    companyReference: 'Por qué esta empresa', motivation: 'Motivación', closing: 'Cierre',
+    signoff: 'Despedida', contactPerson: 'Persona de contacto', companyAddress: 'Dirección',
+    city: 'Lugar', date: 'Fecha',
+    address: 'Dirección', web: 'Sitio web', phone: 'Teléfono', email: 'Correo electrónico',
+    birthDate: 'Fecha de nacimiento', birthPlace: 'Lugar de nacimiento', maritalStatus: 'Estado civil',
+    nationality: 'Nacionalidad', driversLicense: 'Permiso de conducir',
+  },
+};
+
+const SECTION_NAMES: Record<FieldLang, Record<string, string>> = {
+  de: { personal: 'Kontakt', details: 'Eckdaten', profile: 'Profil', experience: 'Berufserfahrung', education: 'Ausbildung', languages: 'Sprachen', additional: 'Weiteres' },
+  en: { personal: 'Contact', details: 'Personal details', profile: 'Profile', experience: 'Experience', education: 'Education', languages: 'Languages', additional: 'Additional information' },
+  fr: { personal: 'Contact', details: 'Informations personnelles', profile: 'Profil', experience: 'Expérience', education: 'Formation', languages: 'Langues', additional: 'Divers' },
+  es: { personal: 'Contacto', details: 'Datos personales', profile: 'Perfil', experience: 'Experiencia', education: 'Formación', languages: 'Idiomas', additional: 'Información adicional' },
+};
+
+const PHRASES: Record<FieldLang, {
+  heading: (s: string) => string; fieldLabel: (s: string) => string; footer: string; label: (s: string) => string;
+  social: string; skillGroup: (n: number) => string; letter: (s: string) => string; profile: string;
+  additional: (n: number) => string; skill: (n: number) => string; entry: (s: string, n: number) => string;
+  bullet: (n: number) => string; field: string;
+}> = {
+  de: {
+    heading: s => `Überschrift „${s}“`, fieldLabel: s => `Feldbezeichnung „${s}“`, footer: 'Fußzeile', label: s => `Beschriftung ${s}`,
+    social: 'Profil-Adresse', skillGroup: n => `Überschrift der Skill-Gruppe ${n}`, letter: s => `${s} (Anschreiben)`, profile: 'Profiltext',
+    additional: n => `Weiteres, Punkt ${n}`, skill: n => `Skill ${n}`, entry: (s, n) => `${s}, Eintrag ${n}`,
+    bullet: n => `Stichpunkt ${n}`, field: 'Feld',
+  },
+  en: {
+    heading: s => `Heading “${s}”`, fieldLabel: s => `Field label “${s}”`, footer: 'Footer', label: s => `Label ${s}`,
+    social: 'Profile link', skillGroup: n => `Heading of skill group ${n}`, letter: s => `${s} (cover letter)`, profile: 'Profile',
+    additional: n => `Additional information, item ${n}`, skill: n => `Skill ${n}`, entry: (s, n) => `${s}, entry ${n}`,
+    bullet: n => `Bullet ${n}`, field: 'Field',
+  },
+  fr: {
+    heading: s => `Titre « ${s} »`, fieldLabel: s => `Libellé « ${s} »`, footer: 'Pied de page', label: s => `Intitulé ${s}`,
+    social: 'Lien de profil', skillGroup: n => `Titre du groupe de compétences ${n}`, letter: s => `${s} (lettre de motivation)`, profile: 'Profil',
+    additional: n => `Divers, point ${n}`, skill: n => `Compétence ${n}`, entry: (s, n) => `${s}, entrée ${n}`,
+    bullet: n => `Point ${n}`, field: 'Champ',
+  },
+  es: {
+    heading: s => `Título «${s}»`, fieldLabel: s => `Etiqueta «${s}»`, footer: 'Pie de página', label: s => `Rótulo ${s}`,
+    social: 'Enlace de perfil', skillGroup: n => `Título del grupo de competencias ${n}`, letter: s => `${s} (carta de presentación)`, profile: 'Perfil',
+    additional: n => `Información adicional, punto ${n}`, skill: n => `Competencia ${n}`, entry: (s, n) => `${s}, entrada ${n}`,
+    bullet: n => `Punto ${n}`, field: 'Campo',
+  },
+};
+
+function fieldLabel(path: InlinePath): string {
+  const lang = detectInitialUiLang();
+  const name = FIELD_NAMES[lang] ?? FIELD_NAMES.de;
+  const T = PHRASES[lang] ?? PHRASES.de;
+  const p = path.split('.');
   if (p[0] === 'labels') {
-    const sec: Record<string, string> = {
-      personal: 'Kontakt', details: 'Eckdaten', profile: 'Profil',
-      experience: 'Berufserfahrung', education: 'Ausbildung',
-      languages: 'Sprachen', additional: 'Weiteres',
-    };
-    if (p[1] === 'sections') return `Überschrift „${sec[p[2]] ?? p[2]}"`;
-    if (p[1] === 'fields') return `Feldbezeichnung „${name[p[2]] ?? p[2]}"`;
-    return p[2] === 'cvLabel' ? 'Fußzeile' : `Beschriftung ${p[2]}`;
+    const sec = SECTION_NAMES[lang] ?? SECTION_NAMES.de;
+    if (p[1] === 'sections') return T.heading(sec[p[2]] ?? p[2]);
+    if (p[1] === 'fields') return T.fieldLabel(name[p[2]] ?? p[2]);
+    return p[2] === 'cvLabel' ? T.footer : T.label(p[2]);
   }
-  if (p[0] === 'socials') return 'Profil-Adresse';
-  if (p[0] === 'skills' && p[2] === 'label') return `Überschrift der Skill-Gruppe ${Number(p[1]) + 1}`;
-  if (p[0] === 'cl') return `${name[p[1]] ?? p[1]} (Anschreiben)`;
-  if (p[0] === 'profile') return 'Profiltext';
+  if (p[0] === 'socials') return T.social;
+  if (p[0] === 'skills' && p[2] === 'label') return T.skillGroup(Number(p[1]) + 1);
+  if (p[0] === 'cl') return T.letter(name[p[1]] ?? p[1]);
+  if (p[0] === 'profile') return T.profile;
   if (p[0] === 'personal') return name[p[1]] ?? p[1];
-  if (p[0] === 'additional') return `Weiteres, Punkt ${Number(p[1]) + 1}`;
-  if (p[0] === 'skills') return `Skill ${Number(p[3]) + 1}`;
-  if (p[0] === 'languages') return `${name[p[2]] ?? p[2]}, Eintrag ${Number(p[1]) + 1}`;
-  if (p[2] === 'bullets') return `Stichpunkt ${Number(p[3]) + 1}`;
-  return name[p[2]] ?? p[2] ?? 'Feld';
+  if (p[0] === 'additional') return T.additional(Number(p[1]) + 1);
+  if (p[0] === 'skills') return T.skill(Number(p[3]) + 1);
+  if (p[0] === 'languages') return T.entry(name[p[2]] ?? p[2], Number(p[1]) + 1);
+  if (p[2] === 'bullets') return T.bullet(Number(p[3]) + 1);
+  return name[p[2]] ?? p[2] ?? T.field;
 }
 
 export function Ed({ path, children, block }: { path?: InlinePath; children: React.ReactNode; block?: boolean }) {

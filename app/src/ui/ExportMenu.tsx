@@ -166,7 +166,7 @@ export default function ExportMenu({ uiLang, data, coverLetter, exportConfig, do
             <MenuItem sub={coverLocked ? ft.priceLine : undefined} onSelect={run(() => {
               if (coverLocked) { ft.open('coverLetter'); return; }
               if (!coverLetter) return;
-              saveText(exportFilename('anschreiben', data.personal.name, 'md'),
+              saveText(exportFilename('anschreiben', data.personal.name, 'md', data.labels?.lang),
                 clToMarkdown(coverLetter, data.labels?.lang ?? 'de', exportConfig.themeId || 'espoo'), 'text/markdown');
             })} icon={coverLocked ? <LockGlyph size={15} /> : <Icon name="markdown" size={15} />}>{d.clMd}</MenuItem>
           </>

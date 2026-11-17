@@ -32,6 +32,11 @@ export interface ImportResult {
   /** Nicht sicher zugeordnete Zeilen. */
   unsorted: string[];
   found?: TextImportResult['found'];
+  /** Bewusst nicht übernommen (Erklärung, Name des Vaters, Religion …), mit
+   *  Art für den Grund in der Oberfläche. Kommt nie in den Lebenslauf. */
+  dropped?: TextImportResult['dropped'];
+  /** Hinweise zum Übernommenen (Career Objective, Noten umrechnen). */
+  notes?: TextImportResult['notes'];
 }
 
 export class ImportError extends Error {
@@ -61,7 +66,7 @@ export function withUnsorted(cv: CVData, unsorted: string[], title: string): CVD
 export function readText(text: string, base: CVData, lang: Lang, what = 'Text'): ImportResult {
   if (!text.trim()) throw new ImportError('empty');
   const r = importCvText(text, base, lang);
-  return { cv: r.cv, what, unsorted: r.unsorted, found: r.found };
+  return { cv: r.cv, what, unsorted: r.unsorted, found: r.found, dropped: r.dropped, notes: r.notes };
 }
 
 export async function readImportFile(file: File, base: CVData, lang: Lang): Promise<ImportResult> {

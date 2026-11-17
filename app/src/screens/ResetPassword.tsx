@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../data/api';
+import { api, ApiError } from '../data/api';
 import { useUiLang } from '../ui/useUiLang';
 import { RESET_I18N } from '../ui/i18n/klein';
 
@@ -38,7 +38,8 @@ export default function ResetPassword({ token }: { token: string }) {
       await api.resetPassword(token, pw);
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : T.failed);
+      // Meldung des Servers kommt über den Code schon übersetzt an (data/api.ts).
+      setError(err instanceof ApiError && (err.answered || err.localized) ? err.message : T.failed);
     } finally {
       setBusy(false);
     }

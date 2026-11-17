@@ -5,6 +5,7 @@
  * Spanisch duzt, wie in der übrigen App.
  */
 import type { UiLang } from '../i18n';
+import type { DroppedKind, ImportNote } from '../../import/textImport';
 
 export interface ImportCvStrings {
   title: string;
@@ -36,6 +37,13 @@ export interface ImportCvStrings {
   unsortedTitle: (n: number) => string;
   unsortedHint: string;
   unsortedSection: string;
+  /** Bewusst nicht übernommen (17.11.2026, Lebensläufe aus Indien u. a.):
+   *  Überschrift, Erklärung, je Art Bezeichnung und Grund. */
+  droppedTitle: (n: number) => string;
+  droppedHint: string;
+  dropped: Record<DroppedKind, { label: string; why: string }>;
+  notesTitle: string;
+  note: Record<ImportNote, string>;
   targetNew: string;
   targetNewSub: string;
   targetReplace: string;
@@ -96,6 +104,25 @@ const DE: ImportCvStrings = {
   unsortedTitle: n => `${n} ${n === 1 ? 'Zeile' : 'Zeilen'} konnte das Werkzeug nicht sicher zuordnen`,
   unsortedHint: 'Die kommen in einen eigenen Abschnitt „Weitere Angaben". Dort kannst du sie verschieben oder löschen. Es geht nichts verloren.',
   unsortedSection: 'Weitere Angaben',
+  droppedTitle: n => `Nicht übernommen (${n})`,
+  droppedHint: 'Diese Teile kommen nicht in deinen Lebenslauf, weil sie in deutschen Lebensläufen nicht stehen. Verloren ist nichts: Hier siehst du sie, und du kannst alles von Hand wieder ergänzen.',
+  dropped: {
+    declaration: { label: 'Erklärung („I hereby declare …")', why: 'In deutschen Lebensläufen unüblich. Am Ende stehen höchstens Ort, Datum und Unterschrift, die setzt die Vorlage auf Wunsch.' },
+    strengths: { label: 'Stärken', why: 'Soft Skills gehören ins Anschreiben, am besten mit einem Beispiel (Bundesagentur für Arbeit).' },
+    references: { label: 'Referenzen', why: 'In deutschen Lebensläufen meist nicht üblich. Arbeitgeber fragen danach, wenn sie welche brauchen.' },
+    parents: { label: 'Namen der Eltern', why: 'In deutschen Lebensläufen unüblich und ohne Bezug zur Arbeit.' },
+    religion: { label: 'Religion', why: 'Für einen deutschen Lebenslauf nicht nötig (Bundesagentur für Arbeit).' },
+    caste: { label: 'Kaste', why: 'In deutschen Lebensläufen unüblich.' },
+    gender: { label: 'Geschlecht', why: 'Für einen deutschen Lebenslauf nicht nötig.' },
+    idNumber: { label: 'Pass- oder Ausweisnummer', why: 'Gehört nicht in einen Lebenslauf, der weitergegeben und gespeichert wird.' },
+    salary: { label: 'Gehalt', why: 'Steht nicht im Lebenslauf. Fragt die Anzeige danach, nenn es im Anschreiben als Jahresbrutto in Euro.' },
+    biodata: { label: 'Größe, Gewicht, Blutgruppe', why: 'In deutschen Lebensläufen unüblich.' },
+  },
+  notesTitle: 'Bitte ansehen',
+  note: {
+    objective: 'Dein „Career Objective" steht jetzt im Profil. Üblich ist in Deutschland ein kurzes Profil: zwei, drei Sätze dazu, was du machst und was du suchst. Schreib es um, bevor du den Lebenslauf verschickst.',
+    grades: 'Noten als CGPA oder Prozent: Lass das Original stehen und ergänze die deutsche Note (modifizierte bayerische Formel mit der Mindestnote deiner Hochschule). Wie das geht, steht im Tipp „Aus dem Ausland nach Deutschland bewerben".',
+  },
   targetNew: 'Als neuen Lebenslauf anlegen',
   targetNewSub: 'Der jetzige bleibt, wie er ist.',
   targetReplace: 'Diesen Lebenslauf ersetzen',
@@ -121,9 +148,9 @@ const DE: ImportCvStrings = {
 };
 
 const EN: ImportCvStrings = {
-  title: 'Bring in your CV',
-  railItem: 'Bring in',
-  menuItem: 'Bring in a CV …',
+  title: 'Import your CV',
+  railItem: 'Import',
+  menuItem: 'Import a CV …',
   menuSub: 'Paste text from ChatGPT or Word',
   lede: 'Already have a CV in Word, as a PDF or in ChatGPT? Paste the text here. The tool sorts it into name, positions, education, skills and languages. Then you can check and change everything at your own pace.',
   tabPaste: 'Paste text',
@@ -153,11 +180,30 @@ const EN: ImportCvStrings = {
   unsortedTitle: n => `${n} ${n === 1 ? 'line' : 'lines'} couldn’t be placed with certainty`,
   unsortedHint: 'They go into a section of their own, “Further information”. You can move or delete them there. Nothing gets lost.',
   unsortedSection: 'Further information',
+  droppedTitle: n => `Not included (${n})`,
+  droppedHint: 'These parts are not taken into your CV because German CVs leave them out. Nothing is lost: they are listed here, and you can add anything back by hand.',
+  dropped: {
+    declaration: { label: 'Declaration (“I hereby declare …”)', why: 'Not used on German CVs. At most, place, date and signature go at the end, and the template can add them.' },
+    strengths: { label: 'Strengths', why: 'Soft skills belong in the cover letter, ideally with an example (German Federal Employment Agency).' },
+    references: { label: 'References', why: 'Not usually part of a German CV. Employers ask for references when they need them.' },
+    parents: { label: 'Parents’ names', why: 'Not used on German CVs, and nothing to do with your work.' },
+    religion: { label: 'Religion', why: 'Not needed on a German CV (German Federal Employment Agency).' },
+    caste: { label: 'Caste', why: 'Not used on German CVs.' },
+    gender: { label: 'Gender', why: 'Not needed on a German CV.' },
+    idNumber: { label: 'Passport or ID number', why: 'Does not belong on a CV, which is passed around and stored.' },
+    salary: { label: 'Salary', why: 'Not on the CV. If the job ad asks for it, give it in the cover letter as annual gross salary in euros.' },
+    biodata: { label: 'Height, weight, blood group', why: 'Not used on German CVs.' },
+  },
+  notesTitle: 'Worth a look',
+  note: {
+    objective: 'Your “Career Objective” is now the profile. German CVs use a short profile instead: two or three sentences on what you do and what you are looking for. Rewrite it before you send the CV.',
+    grades: 'Grades as CGPA or percentages: keep the original and add the German equivalent (modified Bavarian formula with your university’s minimum pass mark). The tip “Applying to Germany from abroad” explains how.',
+  },
   targetNew: 'Create a new CV',
   targetNewSub: 'The current one stays as it is.',
   targetReplace: 'Replace this CV',
   targetReplaceSub: 'The content in this language is overwritten. Earlier states are under “Versions”.',
-  apply: 'Bring in',
+  apply: 'Import',
   applyNew: 'Create CV',
   cancel: 'Cancel',
   close: 'Close',
@@ -210,6 +256,25 @@ const FR: ImportCvStrings = {
   unsortedTitle: n => `${n} ${n === 1 ? 'ligne n’a' : 'lignes n’ont'} pas pu être classée${n === 1 ? '' : 's'} avec certitude`,
   unsortedHint: 'Elles vont dans une section à part, « Informations complémentaires ». Vous pouvez les déplacer ou les supprimer. Rien n’est perdu.',
   unsortedSection: 'Informations complémentaires',
+  droppedTitle: n => `Non repris (${n})`,
+  droppedHint: 'Ces éléments ne sont pas repris dans votre CV, car les CV allemands ne les contiennent pas. Rien n’est perdu : ils sont listés ici et vous pouvez les rajouter à la main.',
+  dropped: {
+    declaration: { label: 'Déclaration (« I hereby declare … »)', why: 'Inhabituel dans un CV allemand. Tout au plus le lieu, la date et la signature figurent à la fin ; le modèle peut les ajouter.' },
+    strengths: { label: 'Points forts', why: 'Les qualités personnelles ont leur place dans la lettre, de préférence avec un exemple (Agence fédérale pour l’emploi).' },
+    references: { label: 'Références', why: 'Rarement dans un CV allemand. Les employeurs les demandent s’ils en ont besoin.' },
+    parents: { label: 'Noms des parents', why: 'Inhabituel dans un CV allemand et sans rapport avec votre travail.' },
+    religion: { label: 'Religion', why: 'Inutile dans un CV allemand (Agence fédérale pour l’emploi).' },
+    caste: { label: 'Caste', why: 'Inhabituel dans un CV allemand.' },
+    gender: { label: 'Sexe', why: 'Inutile dans un CV allemand.' },
+    idNumber: { label: 'Numéro de passeport ou d’identité', why: 'N’a pas sa place dans un CV, qui circule et est conservé.' },
+    salary: { label: 'Salaire', why: 'Pas dans le CV. Si l’annonce le demande, indiquez-le dans la lettre en salaire annuel brut en euros.' },
+    biodata: { label: 'Taille, poids, groupe sanguin', why: 'Inhabituel dans un CV allemand.' },
+  },
+  notesTitle: 'À vérifier',
+  note: {
+    objective: 'Votre « Career Objective » est maintenant le profil. En Allemagne, on écrit plutôt un court profil : deux ou trois phrases sur ce que vous faites et ce que vous cherchez. Reformulez-le avant d’envoyer le CV.',
+    grades: 'Notes en CGPA ou en pourcentage : gardez l’original et ajoutez l’équivalent allemand (formule bavaroise modifiée avec la note minimale de votre université). Le conseil « Postuler en Allemagne depuis l’étranger » explique comment.',
+  },
   targetNew: 'Créer un nouveau CV',
   targetNewSub: 'Le CV actuel reste tel quel.',
   targetReplace: 'Remplacer ce CV',
@@ -267,6 +332,25 @@ const ES: ImportCvStrings = {
   unsortedTitle: n => `${n} ${n === 1 ? 'línea no se pudo' : 'líneas no se pudieron'} asignar con seguridad`,
   unsortedHint: 'Van a una sección propia, «Más información». Allí puedes moverlas o borrarlas. No se pierde nada.',
   unsortedSection: 'Más información',
+  droppedTitle: n => `No incluido (${n})`,
+  droppedHint: 'Estas partes no pasan a tu currículum porque en los currículums alemanes no aparecen. No se pierde nada: aquí las ves y puedes añadir lo que quieras a mano.',
+  dropped: {
+    declaration: { label: 'Declaración («I hereby declare …»)', why: 'No se usa en currículums alemanes. Al final van, como mucho, lugar, fecha y firma, y la plantilla puede ponerlos.' },
+    strengths: { label: 'Puntos fuertes', why: 'Las competencias personales van en la carta, mejor con un ejemplo (Agencia Federal de Empleo).' },
+    references: { label: 'Referencias', why: 'No suelen ir en un currículum alemán. Las empresas las piden cuando las necesitan.' },
+    parents: { label: 'Nombres de los padres', why: 'No se usa en currículums alemanes y no tiene que ver con tu trabajo.' },
+    religion: { label: 'Religión', why: 'No hace falta en un currículum alemán (Agencia Federal de Empleo).' },
+    caste: { label: 'Casta', why: 'No se usa en currículums alemanes.' },
+    gender: { label: 'Sexo', why: 'No hace falta en un currículum alemán.' },
+    idNumber: { label: 'Número de pasaporte o documento', why: 'No va en un currículum, que se reenvía y se guarda.' },
+    salary: { label: 'Salario', why: 'No va en el currículum. Si la oferta lo pide, indícalo en la carta como salario bruto anual en euros.' },
+    biodata: { label: 'Altura, peso, grupo sanguíneo', why: 'No se usa en currículums alemanes.' },
+  },
+  notesTitle: 'Para revisar',
+  note: {
+    objective: 'Tu «Career Objective» es ahora el perfil. En Alemania se usa un perfil breve: dos o tres frases sobre lo que haces y lo que buscas. Reescríbelo antes de enviar el currículum.',
+    grades: 'Notas en CGPA o en porcentaje: deja el original y añade la equivalencia alemana (fórmula bávara modificada con la nota mínima de tu universidad). El consejo «Solicitar empleo en Alemania desde el extranjero» explica cómo.',
+  },
   targetNew: 'Crear un currículum nuevo',
   targetNewSub: 'El actual se queda como está.',
   targetReplace: 'Sustituir este currículum',

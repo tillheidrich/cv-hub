@@ -94,6 +94,100 @@ function normalisePlatform(k) {
   return KNOWN_SOCIALS.includes(lower) ? lower : null;
 }
 
+// ── Überschriften und Feldschlüssel je Sprache (seit 17.11.2026) ────────────
+//
+// Bis dahin schrieb die Brücke immer deutsche Überschriften („## Kontakt",
+// „## Berufserfahrung", „- Telefon:"), auch in einen englischen CV — die
+// Startseite verspricht aber `## Experience`, und wer seine Datei einer KI
+// gibt, bekommt sonst ein deutsch-englisches Gemisch zurück. Jetzt schreibt
+// jede Sprache ihre eigenen Wörter. Gelesen werden weiterhin ALLE vier
+// Sprachen (sectionOf, extraSectionOf, FIELD_RE, Kontaktschlüssel): eine
+// ältere deutsche Datei und ein Gemisch aus Kopien bleiben lesbar.
+//
+// Dieselbe Tabelle steht in app/src/export/exportMarkdown.ts (Schreiben im
+// Browser) und app/src/import/markdownBridge.ts (Anschreiben im Browser).
+// Wer hier ein Wort ändert, ändert es dort auch — und prüft, dass die Parser
+// es noch erkennen (markdown.test.mjs, app/scripts/sectionsroundtrip.mjs).
+
+export const MD_LANGS = ['de', 'en', 'fr', 'es'];
+
+export const MD_HEADS = {
+  de: {
+    contact: 'Kontakt', profile: 'Profil', experience: 'Berufserfahrung', education: 'Ausbildung',
+    skills: 'Skills', languages: 'Sprachen', additional: 'Weiteres', projects: 'Projekte',
+    certificates: 'Zertifikate', volunteering: 'Ehrenamt', publications: 'Publikationen', custom: 'Abschnitt',
+    email: 'E-Mail', phone: 'Telefon', location: 'Ort', website: 'Website', birthDate: 'Geburtsdatum',
+    driversLicense: 'Führerschein', nationality: 'Staatsangehörigkeit', maritalStatus: 'Familienstand',
+    role: 'Rolle', period: 'Zeitraum', link: 'Link', issuer: 'Aussteller', date: 'Datum',
+    credentialId: 'Kennung', publisher: 'Verlag', subtitle: 'Untertitel', present: 'heute',
+  },
+  en: {
+    contact: 'Contact', profile: 'Profile', experience: 'Experience', education: 'Education',
+    skills: 'Skills', languages: 'Languages', additional: 'Additional information', projects: 'Projects',
+    certificates: 'Certifications', volunteering: 'Volunteering', publications: 'Publications', custom: 'Section',
+    email: 'Email', phone: 'Phone', location: 'Location', website: 'Website', birthDate: 'Date of birth',
+    driversLicense: 'Driving licence', nationality: 'Nationality', maritalStatus: 'Marital status',
+    role: 'Role', period: 'Period', link: 'Link', issuer: 'Issuer', date: 'Date',
+    credentialId: 'ID', publisher: 'Publisher', subtitle: 'Subtitle', present: 'Present',
+  },
+  fr: {
+    contact: 'Contact', profile: 'Profil', experience: 'Expérience professionnelle', education: 'Formation',
+    skills: 'Compétences', languages: 'Langues', additional: 'Informations complémentaires', projects: 'Projets',
+    certificates: 'Certifications', volunteering: 'Bénévolat', publications: 'Publications', custom: 'Section',
+    email: 'E-mail', phone: 'Téléphone', location: 'Adresse', website: 'Site web', birthDate: 'Date de naissance',
+    driversLicense: 'Permis de conduire', nationality: 'Nationalité', maritalStatus: 'Situation familiale',
+    role: 'Rôle', period: 'Période', link: 'Lien', issuer: 'Émetteur', date: 'Date',
+    credentialId: 'Identifiant', publisher: 'Éditeur', subtitle: 'Sous-titre', present: 'à ce jour',
+  },
+  es: {
+    contact: 'Contacto', profile: 'Perfil', experience: 'Experiencia profesional', education: 'Formación',
+    skills: 'Competencias', languages: 'Idiomas', additional: 'Información adicional', projects: 'Proyectos',
+    certificates: 'Certificaciones', volunteering: 'Voluntariado', publications: 'Publicaciones', custom: 'Sección',
+    email: 'Correo electrónico', phone: 'Teléfono', location: 'Ubicación', website: 'Sitio web', birthDate: 'Fecha de nacimiento',
+    driversLicense: 'Permiso de conducir', nationality: 'Nacionalidad', maritalStatus: 'Estado civil',
+    role: 'Rol', period: 'Periodo', link: 'Enlace', issuer: 'Emisor', date: 'Fecha',
+    credentialId: 'ID', publisher: 'Editorial', subtitle: 'Subtítulo', present: 'actualidad',
+  },
+};
+
+export const CL_HEADS = {
+  de: {
+    recipient: 'Empfänger', company: 'Firma', contactPerson: 'Ansprechpartner', companyAddress: 'Adresse',
+    header: 'Kopf', city: 'Ort', date: 'Datum', subject: 'Betreff', salutation: 'Anrede', intro: 'Einstieg',
+    mainBody: 'Hauptteil', companyReference: 'Firmenbezug', motivation: 'Motivation', closing: 'Abschluss', signoff: 'Grußformel',
+  },
+  en: {
+    recipient: 'Recipient', company: 'Company', contactPerson: 'Contact person', companyAddress: 'Address',
+    header: 'Header', city: 'City', date: 'Date', subject: 'Subject', salutation: 'Salutation', intro: 'Introduction',
+    mainBody: 'Main body', companyReference: 'Why this company', motivation: 'Motivation', closing: 'Closing', signoff: 'Sign-off',
+  },
+  fr: {
+    recipient: 'Destinataire', company: 'Entreprise', contactPerson: 'Interlocuteur', companyAddress: 'Adresse',
+    header: 'En-tête', city: 'Lieu', date: 'Date', subject: 'Objet', salutation: 'Formule d’appel', intro: 'Introduction',
+    mainBody: 'Corps', companyReference: 'Pourquoi cette entreprise', motivation: 'Motivation', closing: 'Conclusion', signoff: 'Formule de politesse',
+  },
+  es: {
+    recipient: 'Destinatario', company: 'Empresa', contactPerson: 'Persona de contacto', companyAddress: 'Dirección',
+    header: 'Encabezado', city: 'Lugar', date: 'Fecha', subject: 'Asunto', salutation: 'Saludo', intro: 'Introducción',
+    mainBody: 'Cuerpo', companyReference: 'Por qué esta empresa', motivation: 'Motivación', closing: 'Cierre', signoff: 'Despedida',
+  },
+};
+
+const headsOf = lang => MD_HEADS[lang] || MD_HEADS.de;
+
+/** Wörter für „läuft noch" — wie `isPresentWord` in app/src/data/extraSections.ts. */
+const PRESENT_WORDS = /^(?:present|today|now|current(?:ly)?|ongoing|till date|to date|heute|bis heute|aktuell|derzeit|hoy|actualidad|la actualidad|presente|aujourd['’]hui|présent|à ce jour|en cours)$/i;
+const isPresentWord = v => PRESENT_WORDS.test(val(v).replace(/[.\s]+$/, ''));
+
+/** Ende einer Stelle in der Sprache des CV: Synonym für „läuft noch" oder
+ *  leeres Ende bei vorhandenem Beginn → Beschriftung (`labels.misc.present`). */
+function jobEnd(cv, lang, start, end) {
+  const label = val(cv?.labels?.misc?.present) || headsOf(lang).present;
+  if (isPresentWord(end)) return label;
+  if (!val(end) && val(start)) return label;
+  return val(end);
+}
+
 export function cvToMarkdown(profile, targetLang) {
   // targetLang erlaubt, eine ANDERE Sprachfassung zu lesen als die gerade
   // eingestellte. Ohne das kommt man über die Brücke nur an die aktive
@@ -113,16 +207,17 @@ export function cvToMarkdown(profile, targetLang) {
   out.push('---');
   out.push('');
 
+  const H = headsOf(lang);
   const p = cv.personal || {};
   out.push(`# ${val(p.name)}`);
   if (val(p.title)) out.push(`**${val(p.title)}**`);
   out.push('');
 
-  out.push('## Kontakt');
-  if (val(p.email)) out.push(`- E-Mail: ${val(p.email)}`);
-  if (val(p.phone)) out.push(`- Telefon: ${val(p.phone)}`);
-  if (val(p.location)) out.push(`- Ort: ${val(p.location)}`);
-  if (val(p.website)) out.push(`- Website: ${val(p.website)}`);
+  out.push(`## ${H.contact}`);
+  if (val(p.email)) out.push(`- ${H.email}: ${val(p.email)}`);
+  if (val(p.phone)) out.push(`- ${H.phone}: ${val(p.phone)}`);
+  if (val(p.location)) out.push(`- ${H.location}: ${val(p.location)}`);
+  if (val(p.website)) out.push(`- ${H.website}: ${val(p.website)}`);
   // Socials — emit both the new list and the legacy fields if present
   if (Array.isArray(p.socials)) {
     for (const s of p.socials) {
@@ -131,25 +226,25 @@ export function cvToMarkdown(profile, targetLang) {
   }
   if (val(p.linkedin)) out.push(`- LinkedIn: ${val(p.linkedin)}`);
   if (val(p.instagram)) out.push(`- Instagram: ${val(p.instagram)}`);
-  if (val(p.birthDate)) out.push(`- Geburtsdatum: ${val(p.birthDate)}`);
-  if (val(p.driversLicense)) out.push(`- Führerschein: ${val(p.driversLicense)}`);
-  if (val(p.nationality)) out.push(`- Staatsangehörigkeit: ${val(p.nationality)}`);
-  if (val(p.maritalStatus)) out.push(`- Familienstand: ${val(p.maritalStatus)}`);
+  if (val(p.birthDate)) out.push(`- ${H.birthDate}: ${val(p.birthDate)}`);
+  if (val(p.driversLicense)) out.push(`- ${H.driversLicense}: ${val(p.driversLicense)}`);
+  if (val(p.nationality)) out.push(`- ${H.nationality}: ${val(p.nationality)}`);
+  if (val(p.maritalStatus)) out.push(`- ${H.maritalStatus}: ${val(p.maritalStatus)}`);
   out.push('');
 
   if (val(cv.profile?.text)) {
-    out.push('## Profil');
+    out.push(`## ${H.profile}`);
     out.push(val(cv.profile.text));
     out.push('');
   }
 
   if (Array.isArray(cv.experience) && cv.experience.length) {
-    out.push('## Berufserfahrung');
+    out.push(`## ${H.experience}`);
     out.push('');
     for (const e of cv.experience) {
       if (e.hidden) continue;
       out.push(`### ${val(e.role)}`);
-      const dates = `${val(e.start)} – ${val(e.end)}`.trim();
+      const dates = `${val(e.start)} – ${jobEnd(cv, lang, e.start, e.end)}`.trim();
       const meta = [val(e.company), val(e.location), dates !== '–' ? dates : ''].filter(Boolean).join(' · ');
       if (meta) out.push(meta);
       for (const b of (e.bullets || [])) if (val(b)) out.push(`- ${val(b)}`);
@@ -158,7 +253,7 @@ export function cvToMarkdown(profile, targetLang) {
   }
 
   if (Array.isArray(cv.education) && cv.education.length) {
-    out.push('## Ausbildung');
+    out.push(`## ${H.education}`);
     out.push('');
     for (const e of cv.education) {
       out.push(`### ${val(e.degree)}`);
@@ -171,7 +266,7 @@ export function cvToMarkdown(profile, targetLang) {
   }
 
   if (Array.isArray(cv.skillGroups) && cv.skillGroups.length) {
-    out.push('## Skills');
+    out.push(`## ${H.skills}`);
     out.push('');
     for (const g of cv.skillGroups) {
       out.push(`### ${val(g.label)}`);
@@ -181,7 +276,7 @@ export function cvToMarkdown(profile, targetLang) {
   }
 
   if (Array.isArray(cv.languages) && cv.languages.length) {
-    out.push('## Sprachen');
+    out.push(`## ${H.languages}`);
     for (const l of cv.languages) {
       // Dot scale gets emitted as a trailing "(N/5)" so the round-trip
       // through an LLM editor preserves the visual rating. The parser
@@ -193,12 +288,12 @@ export function cvToMarkdown(profile, targetLang) {
   }
 
   if (Array.isArray(cv.additionalExperience) && cv.additionalExperience.length) {
-    out.push('## Weiteres');
+    out.push(`## ${H.additional}`);
     for (const item of cv.additionalExperience) if (val(item)) out.push(`- ${val(item)}`);
     out.push('');
   }
 
-  out.push(...extraSectionsToMarkdown(cv));
+  out.push(...extraSectionsToMarkdown(cv, lang));
 
   return out.join('\n');
 }
@@ -235,13 +330,14 @@ const isArr = Array.isArray;
 const extraList = v => (isArr(v) ? v.filter(x => x && typeof x === 'object') : []);
 const extraLines = v => (isArr(v) ? v.map(val).filter(Boolean) : []);
 /** Zeitraum so, dass Anfang und Ende auch einzeln wieder lesbar sind. */
-function periodLine(start, end) {
+function periodLine(start, end, key = 'Zeitraum') {
   const a = val(start), b = val(end);
   if (!a && !b) return '';
-  return `Zeitraum: ${[a, '–', b].filter(Boolean).join(' ')}`;
+  return `${key}: ${[a, '–', b].filter(Boolean).join(' ')}`;
 }
 
-export function extraSectionsToMarkdown(cv) {
+export function extraSectionsToMarkdown(cv, lang) {
+  const H = headsOf(lang || cv?.labels?.lang);
   const out = [];
   const heading = t => out.push(t ? `### ${t}` : '###');
   const field = (k, v) => { if (val(v)) out.push(`${k}: ${val(v)}`); };
@@ -250,12 +346,12 @@ export function extraSectionsToMarkdown(cv) {
 
   const projects = extraList(cv.projects).filter(p => val(p.title) || val(p.role) || val(p.description) || val(p.url) || extraLines(p.bullets).length);
   if (projects.length) {
-    out.push('## Projekte', '');
+    out.push(`## ${H.projects}`, '');
     for (const p of projects) {
       heading(val(p.title));
-      field('Rolle', p.role);
-      const per = periodLine(p.start, p.end); if (per) out.push(per);
-      field('Link', p.url);
+      field(H.role, p.role);
+      const per = periodLine(p.start, p.end, H.period); if (per) out.push(per);
+      field(H.link, p.url);
       text(p.description);
       bullets(p.bullets);
       out.push('');
@@ -264,20 +360,20 @@ export function extraSectionsToMarkdown(cv) {
 
   const certs = extraList(cv.certificates).filter(c => val(c.name) || val(c.issuer) || val(c.credentialId) || val(c.url));
   if (certs.length) {
-    out.push('## Zertifikate', '');
+    out.push(`## ${H.certificates}`, '');
     for (const c of certs) {
       heading(val(c.name));
-      field('Aussteller', c.issuer);
-      field('Datum', c.date);
-      field('Kennung', c.credentialId);
-      field('Link', c.url);
+      field(H.issuer, c.issuer);
+      field(H.date, c.date);
+      field(H.credentialId, c.credentialId);
+      field(H.link, c.url);
       out.push('');
     }
   }
 
   const vols = extraList(cv.volunteering).filter(v => val(v.role) || val(v.organization) || extraLines(v.bullets).length);
   if (vols.length) {
-    out.push('## Ehrenamt', '');
+    out.push(`## ${H.volunteering}`, '');
     for (const v of vols) {
       heading(val(v.role));
       const dates = (val(v.start) || val(v.end)) ? `${val(v.start)} – ${val(v.end)}`.trim() : '';
@@ -290,12 +386,12 @@ export function extraSectionsToMarkdown(cv) {
 
   const pubs = extraList(cv.publications).filter(p => val(p.title) || val(p.publisher) || val(p.url) || val(p.description));
   if (pubs.length) {
-    out.push('## Publikationen', '');
+    out.push(`## ${H.publications}`, '');
     for (const p of pubs) {
       heading(val(p.title));
-      field('Verlag', p.publisher);
-      field('Datum', p.date);
-      field('Link', p.url);
+      field(H.publisher, p.publisher);
+      field(H.date, p.date);
+      field(H.link, p.url);
       text(p.description);
       out.push('');
     }
@@ -305,13 +401,13 @@ export function extraSectionsToMarkdown(cv) {
     const items = extraLines(c.items);
     const entries = extraList(c.entries).filter(e => val(e.title) || val(e.subtitle) || val(e.text));
     if (!items.length && !entries.length) continue;
-    out.push(`## Abschnitt: ${val(c.title)}`.trimEnd());
+    out.push(`## ${H.custom}: ${val(c.title)}`.trimEnd());
     for (const it of items) out.push(`- ${it}`);
     out.push('');
     for (const e of entries) {
       heading(val(e.title));
-      field('Untertitel', e.subtitle);
-      field('Datum', e.date);
+      field(H.subtitle, e.subtitle);
+      field(H.date, e.date);
       text(e.text);
       out.push('');
     }
@@ -323,20 +419,25 @@ export function extraSectionsToMarkdown(cv) {
  *  Abschnitten geprüft: „Volunteer experience" ist kein Berufsweg. */
 export function extraSectionOf(title) {
   const t = val(title).toLowerCase();
-  if (/^(abschnitt|section)\s*:/.test(t)) return 'custom';
-  if (/^(projekte?|projects?)\b/.test(t)) return 'projects';
+  if (/^(abschnitt|section|secci[oó]n)\s*:/.test(t)) return 'custom';
+  if (/^(projekte?|projects?|projets?|proyectos?)\b/.test(t)) return 'projects';
   if (/zertifikat|certific/.test(t)) return 'certificates';
-  if (/ehrenamt|volunteer/.test(t)) return 'volunteering';
-  if (/publikation|publication|veröffentlichung/.test(t)) return 'publications';
+  if (/ehrenamt|volunteer|b[ée]n[ée]volat|voluntariado/.test(t)) return 'volunteering';
+  if (/publikation|publication|veröffentlichung|publicaci[oó]n/.test(t)) return 'publications';
   return null;
 }
 
-const FIELD_RE = /^(rolle|role|zeitraum|period|dates?|link|url|aussteller|issuer|datum|kennung|id|credential(?:\s*id)?|verlag|publisher|ort\/verlag|untertitel|subtitle)\s*:\s*(.*)$/i;
+/* Feldschlüssel aller vier Sprachen (MD_HEADS). Im Wörterbuch FIELD_KEY
+ * klein geschrieben, wie `toLowerCase()` sie liefert. */
+const FIELD_RE = /^(rolle|role|rôle|rol|zeitraum|period|période|periodo|dates?|link|lien|enlace|url|aussteller|issuer|émetteur|emisor|datum|fecha|kennung|identifiant|id|credential(?:\s*id)?|verlag|publisher|éditeur|editorial|ort\/verlag|untertitel|subtitle|sous-titre|subtítulo)\s*:\s*(.*)$/i;
 const FIELD_KEY = {
-  rolle: 'role', role: 'role', zeitraum: 'period', period: 'period', date: 'date', dates: 'period',
-  link: 'url', url: 'url', aussteller: 'issuer', issuer: 'issuer', datum: 'date',
-  kennung: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
-  verlag: 'publisher', publisher: 'publisher', 'ort/verlag': 'publisher', untertitel: 'subtitle', subtitle: 'subtitle',
+  rolle: 'role', role: 'role', 'rôle': 'role', rol: 'role',
+  zeitraum: 'period', period: 'period', 'période': 'period', periodo: 'period', date: 'date', dates: 'period',
+  link: 'url', lien: 'url', enlace: 'url', url: 'url',
+  aussteller: 'issuer', issuer: 'issuer', 'émetteur': 'issuer', emisor: 'issuer', datum: 'date', fecha: 'date',
+  kennung: 'credentialId', identifiant: 'credentialId', id: 'credentialId', credential: 'credentialId', 'credential id': 'credentialId', credentialid: 'credentialId',
+  verlag: 'publisher', publisher: 'publisher', 'éditeur': 'publisher', editorial: 'publisher', 'ort/verlag': 'publisher',
+  untertitel: 'subtitle', subtitle: 'subtitle', 'sous-titre': 'subtitle', 'subtítulo': 'subtitle',
 };
 /** Welche Feldzeilen in welchem Abschnitt Felder sind — alles andere ist Text. */
 const FIELDS_IN = {
@@ -419,7 +520,7 @@ export function parseExtraSection(kind, title, sectionLines, cv, uid) {
     if (!cv.customSections) cv.customSections = [];
     cv.customSections.push({
       id: uid('sec'),
-      title: clipField(val(title).replace(/^(abschnitt|section)\s*:\s*/i, ''), SHORT),
+      title: clipField(val(title).replace(/^(abschnitt|section|secci[oó]n)\s*:\s*/i, ''), SHORT),
       items,
       entries: entries.map(e => ({ id: uid('ent'), title: e.title, subtitle: e.fields.subtitle || '', date: e.fields.date || '', text: clipField(e.text, LONG) })),
     });
@@ -431,7 +532,7 @@ export function parseExtraSection(kind, title, sectionLines, cv, uid) {
 function parseMeta(line) {
   const parts = line.split('·').map(p => p.trim());
   const out = { company: '', location: '', start: '', end: '' };
-  const dateIdx = parts.findIndex(p => /\d{2,4}|heute|present|today/i.test(p) && /[–\-—]/.test(p));
+  const dateIdx = parts.findIndex(p => /\d{2,4}|heute|present|today|actualidad|à ce jour/i.test(p) && /[–\-—]/.test(p));
   let dated = '';
   if (dateIdx >= 0) { dated = parts[dateIdx]; parts.splice(dateIdx, 1); }
   if (dated) {
@@ -444,17 +545,24 @@ function parseMeta(line) {
   return out;
 }
 
+/* Erkennt die Überschriften aller vier Sprachen (MD_HEADS). „Weiteres" vor
+ * „Ausbildung": „Información adicional" und „Informations complémentaires"
+ * enthalten „formación"/„formation". */
 function sectionOf(title) {
   const t = title.toLowerCase();
-  if (/profil/.test(t)) return 'profile';
-  if (/berufserfahrung|experience|werdegang/.test(t)) return 'experience';
-  if (/ausbildung|education/.test(t)) return 'education';
-  if (/skills|kenntnisse|fähigkeiten/.test(t)) return 'skills';
-  if (/sprachen|languages/.test(t)) return 'languages';
-  if (/weiteres|additional/.test(t)) return 'additional';
+  if (/profil|perfil/.test(t)) return 'profile';
+  if (/berufserfahrung|experience|exp[ée]rience|experiencia|werdegang/.test(t)) return 'experience';
+  if (/weiteres|additional|compl[ée]mentaires|divers|adicional/.test(t)) return 'additional';
+  if (/ausbildung|education|formation|formaci[oó]n/.test(t)) return 'education';
+  if (/skills|kenntnisse|fähigkeiten|comp[ée]tences|competencias|habilidades/.test(t)) return 'skills';
+  if (/sprachen|languages|langues|idiomas/.test(t)) return 'languages';
   if (/kontakt|contact/.test(t)) return 'contact';
   return null;
 }
+
+/* Kontaktschlüssel aller vier Sprachen (MD_HEADS). */
+const KEY_LOCATION = /ort|location|adresse|address|ubicaci[oó]n|direcci[oó]n/;
+const KEY_NOT_LOCATION = /e[-\s]?mail|correo|telefon|phone|tel[ée]fono|website|web|portfolio|site|sitio/;
 
 export function markdownToCV(md, existing, targetLang) {
   if (String(md ?? '').length > MAX_MARKDOWN_CHARS) throw new Error(`Markdown zu groß (höchstens ${MAX_MARKDOWN_CHARS / 1000} KB)`);
@@ -555,14 +663,15 @@ export function markdownToCV(md, existing, targetLang) {
       const m = splitKeyLine(t);   // ohne Backtracking (Runde 6)
       if (m) {
         const k = m.key.toLowerCase(), v = clipField(m.value.trim(), 240);
-        if (/e[-\s]?mail/.test(k)) cv.personal.email = v;
-        else if (/telefon|phone/.test(k)) cv.personal.phone = v;
-        else if (/ort|location|adresse|address/.test(k)) cv.personal.location = v;
-        else if (/website|web|portfolio/.test(k)) cv.personal.website = v;
-        else if (/geburtsdatum|date of birth/.test(k)) cv.personal.birthDate = v;
-        else if (/führerschein|drivers? licen[sc]e/.test(k)) cv.personal.driversLicense = v;
-        else if (/staatsangehörigkeit|nationality/.test(k)) cv.personal.nationality = v;
-        else if (/familienstand|marital/.test(k)) cv.personal.maritalStatus = v;
+        if (/e[-\s]?mail|correo/.test(k)) cv.personal.email = v;
+        else if (/telefon|phone|tel[ée]fono/.test(k)) cv.personal.phone = v;
+        // Website vor Ort: „Portfolio" enthält „ort".
+        else if (/website|web|portfolio|site|sitio/.test(k)) cv.personal.website = v;
+        else if (KEY_LOCATION.test(k)) cv.personal.location = v;
+        else if (/geburtsdatum|date of birth|date de naissance|fecha de nacimiento/.test(k)) cv.personal.birthDate = v;
+        else if (/führerschein|drivers? licen[sc]e|driving licen[sc]e|permis|permiso de conducir/.test(k)) cv.personal.driversLicense = v;
+        else if (/staatsangehörigkeit|nationality|nationalit[ée]|nacionalidad/.test(k)) cv.personal.nationality = v;
+        else if (/familienstand|marital|situation familiale|estado civil/.test(k)) cv.personal.maritalStatus = v;
         else {
           // Try to recognise the key as a social platform
           const plat = normalisePlatform(k);
@@ -571,7 +680,7 @@ export function markdownToCV(md, existing, targetLang) {
             cv.personal.socials.push({ id: `s-${Date.now()}-${cv.personal.socials.length}`, platform: plat, value: v });
           }
         }
-        lastContact = /ort|location|adresse|address/.test(k) && !/e[-\s]?mail|telefon|phone|website|web|portfolio/.test(k) ? 'location' : '';
+        lastContact = KEY_LOCATION.test(k) && !KEY_NOT_LOCATION.test(k) ? 'location' : '';
       } else if (t && lastContact === 'location' && !/^[-*+]\s/.test(t)) {
         // Zweizeilige Anschrift: die zweite Zeile steht ohne Spiegelstrich
         // unter „- Ort:" und fiel bis zum 09.10.2026 beim Einlesen weg.
@@ -699,43 +808,41 @@ export function clToMarkdown(profile, targetLang) {
   out.push('---');
   out.push('');
 
-  // Header (recipient block)
-  out.push('## Empfänger');
-  if (val(cl.company)) out.push(`- Firma: ${val(cl.company)}`);
-  if (val(cl.contactPerson)) out.push(`- Ansprechpartner: ${val(cl.contactPerson)}`);
-  if (val(cl.companyAddress)) out.push(`- Adresse: ${val(cl.companyAddress)}`);
+  // Header (recipient block) — Überschriften in der Sprache des Briefs (CL_HEADS).
+  const H = CL_HEADS[lang] || CL_HEADS.de;
+  out.push(`## ${H.recipient}`);
+  if (val(cl.company)) out.push(`- ${H.company}: ${val(cl.company)}`);
+  if (val(cl.contactPerson)) out.push(`- ${H.contactPerson}: ${val(cl.contactPerson)}`);
+  if (val(cl.companyAddress)) out.push(`- ${H.companyAddress}: ${val(cl.companyAddress)}`);
   out.push('');
 
-  out.push('## Kopf');
-  if (val(cl.city)) out.push(`- Ort: ${val(cl.city)}`);
-  if (val(cl.date)) out.push(`- Datum: ${val(cl.date)}`);
+  out.push(`## ${H.header}`);
+  if (val(cl.city)) out.push(`- ${H.city}: ${val(cl.city)}`);
+  if (val(cl.date)) out.push(`- ${H.date}: ${val(cl.date)}`);
   out.push('');
 
-  if (val(cl.subject)) { out.push('## Betreff'); out.push(val(cl.subject)); out.push(''); }
-  if (val(cl.salutation)) { out.push('## Anrede'); out.push(val(cl.salutation)); out.push(''); }
-
-  if (val(cl.intro)) { out.push('## Einstieg'); out.push(val(cl.intro)); out.push(''); }
-  if (val(cl.mainBody)) { out.push('## Hauptteil'); out.push(val(cl.mainBody)); out.push(''); }
-  if (val(cl.companyReference)) { out.push('## Firmenbezug'); out.push(val(cl.companyReference)); out.push(''); }
-  if (val(cl.motivation)) { out.push('## Motivation'); out.push(val(cl.motivation)); out.push(''); }
-  if (val(cl.closing)) { out.push('## Abschluss'); out.push(val(cl.closing)); out.push(''); }
-  if (val(cl.signoff)) { out.push('## Grußformel'); out.push(val(cl.signoff)); out.push(''); }
+  for (const k of ['subject', 'salutation', 'intro', 'mainBody', 'companyReference', 'motivation', 'closing', 'signoff']) {
+    if (val(cl[k])) { out.push(`## ${H[k]}`); out.push(val(cl[k])); out.push(''); }
+  }
 
   return out.join('\n');
 }
 
+/* Überschriften aller vier Sprachen (CL_HEADS). Die Reihenfolge zählt:
+ * „Formule d’appel" (Anrede) vor „Formule de politesse" (Gruß),
+ * „Why this company" erst nach den übrigen. */
 function clSectionOf(title) {
   const t = title.toLowerCase();
-  if (/empf[äa]nger|recipient|adressat/.test(t)) return 'recipient';
-  if (/kopf|header|datum|date/.test(t)) return 'header';
-  if (/betreff|subject/.test(t)) return 'subject';
-  if (/anrede|salutation|hallo/.test(t)) return 'salutation';
+  if (/empf[äa]nger|recipient|adressat|destinat/.test(t)) return 'recipient';
+  if (/kopf|header|datum|date|en-t[êe]te|encabezado/.test(t)) return 'header';
+  if (/betreff|subject|objet|asunto/.test(t)) return 'subject';
+  if (/anrede|salutation|hallo|formule d['’]appel|saludo/.test(t)) return 'salutation';
   if (/einstieg|intro|einleitung/.test(t)) return 'intro';
-  if (/hauptteil|main|body/.test(t)) return 'mainBody';
-  if (/firmenbezug|company.*ref|warum.*firma/.test(t)) return 'companyReference';
-  if (/motivation|warum.*ich/.test(t)) return 'motivation';
-  if (/abschluss|closing|schluss/.test(t)) return 'closing';
-  if (/grußformel|signoff|gruss|gru[ßs]/.test(t)) return 'signoff';
+  if (/hauptteil|main|body|corps|cuerpo/.test(t)) return 'mainBody';
+  if (/firmenbezug|company.*ref|warum.*firma|why.*company|pourquoi.*entreprise|por qu[ée].*empresa/.test(t)) return 'companyReference';
+  if (/motivation|motivaci[oó]n|warum.*ich/.test(t)) return 'motivation';
+  if (/abschluss|closing|schluss|conclusion|cierre/.test(t)) return 'closing';
+  if (/grußformel|sign-?off|gruss|gru[ßs]|politesse|despedida/.test(t)) return 'signoff';
   return null;
 }
 
@@ -791,12 +898,12 @@ export function markdownToCl(md, existing, targetLang) {
         if (!m) continue;
         const k = m.key.toLowerCase(), v = m.value.trim();
         if (section === 'recipient') {
-          if (/firma|company/.test(k)) cl.company = v;
-          else if (/ansprechpartner|contact/.test(k)) cl.contactPerson = v;
-          else if (/adresse|address/.test(k)) cl.companyAddress = v;
+          if (/firma|company|entreprise|empresa/.test(k)) cl.company = v;
+          else if (/ansprechpartner|contact|interlocut/.test(k)) cl.contactPerson = v;
+          else if (/adresse|address|direcci[oó]n/.test(k)) cl.companyAddress = v;
         } else {
-          if (/ort|city/.test(k)) cl.city = v;
-          else if (/datum|date/.test(k)) cl.date = v;
+          if (/ort|city|lieu|lugar/.test(k)) cl.city = v;
+          else if (/datum|date|fecha/.test(k)) cl.date = v;
         }
       }
     } else if (Object.prototype.hasOwnProperty.call(cl, section)) {

@@ -293,7 +293,7 @@ else if (kopf.ueberhang > 2) problems.push(`Kopfleiste scrollt waagerecht (${kop
 }
 
 // Dokumenttyp: Lebenslauf/Anschreiben steht direkt in der Kopfleiste.
-const typen = await page.locator('header button').filter({ hasText: /Anschreiben|Cover Letter|Lettre|Carta/ }).count();
+const typen = await page.locator('header button').filter({ hasText: /Anschreiben|Cover letter|Lettre|Carta/i }).count();
 if (!typen) problems.push('Kopfleiste: Anschreiben ist auf dem Telefon nicht erreichbar');
 
 // Gestaltung, Prüfen (mit Tipps), Export: jedes Paneel einmal öffnen.

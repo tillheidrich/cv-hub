@@ -567,5 +567,231 @@ await check('13 docxToText: Überschrift, Absatz, Liste, Tabelle', async () => {
   await assert.rejects(() => docxToText(new TextEncoder().encode('kein zip').buffer as ArrayBuffer));
 });
 
+// (14) Indischer Lebenslauf (erfundene Musterperson) ─────────────────────────
+// Internationale Fachkräfte (17.11.2026): typische Überschriften, Datumsformen
+// und Angaben, die in Deutschland nicht in den Lebenslauf gehören. Die werden
+// nicht übernommen, sondern in `dropped` genannt — nie stillschweigend im CV.
+const INDIA_1 = `RESUME
+
+ARJUN KUMAR SHARMA
+Email: arjun.sharma@example.com | Mobile: +91 98765 43210
+LinkedIn: linkedin.com/in/arjun-sharma-example
+Address: 12, 4th Cross, Example Layout, Bengaluru 560001
+
+CAREER OBJECTIVE
+To work in a challenging environment where I can utilise my skills and grow along with the organisation.
+
+EXPERIENCE SUMMARY
+Software Engineer | Example Infotech Pvt. Ltd. | Bengaluru | Jun'21 – till date
+• Built REST APIs in Java and Spring Boot for a payments module used by 40 branches
+• Reduced report generation time from 9 to 2 minutes
+Key Achievements:
+• Star Performer award, Q3 2022
+
+Associate Engineer, Sample Systems Ltd., Pune    Jul-2019 to May-2021
+- Maintained the claims portal (Java, Oracle)
+
+INTERNSHIP EXPERIENCE
+Intern – Demo Labs, Chennai (Jan 2019 - Jun 2019)
+- Wrote unit tests for the billing service
+
+ACADEMIC QUALIFICATIONS
+B.Tech in Computer Science | Example Institute of Technology, Bengaluru | 2015 – 2019
+- CGPA: 8.2/10
+Class XII (CBSE) | Sample Public School, Bengaluru | 2015
+- 88%
+
+TECHNICAL PROFICIENCY
+Languages: Java, Python, SQL
+Frameworks: Spring Boot, React
+Tools: Git, Docker, Jenkins
+
+PROJECTS UNDERTAKEN
+Inventory Tracker | 06/2018 – 12/2018
+- Built a stock tracking app for the college canteen
+
+CERTIFICATIONS & TRAININGS
+- Example Cloud Practitioner | Example Academy | 03/2022
+
+ACHIEVEMENTS & AWARDS
+- Best Outgoing Student, 2019
+
+EXTRA-CURRICULAR ACTIVITIES
+- Organised the college tech fest (1,200 visitors)
+
+STRENGTHS
+- Quick learner
+- Team player
+
+LANGUAGES KNOWN
+English, Hindi, Kannada
+
+PERSONAL DETAILS
+Father's Name: Ramesh Kumar Sharma
+Date of Birth: 15/08/1997
+Gender: Male
+Marital Status: Single
+Nationality: Indian
+Religion: Example
+Passport No.: X1234567
+Current CTC: 9.5 LPA
+Hobbies: Cricket, Reading
+
+DECLARATION
+I hereby declare that the above information is true to the best of my knowledge.
+
+Place: Bengaluru
+Date:
+(ARJUN KUMAR SHARMA)`;
+
+await check('14 indischer Lebenslauf: Überschriften, Datumsformen, Biodata', () => {
+  const r = importCvText(INDIA_1, base('en'), 'en');
+  const p = r.cv.personal;
+  assert.equal(p.name, 'Arjun Kumar Sharma');
+  assert.equal(p.email, 'arjun.sharma@example.com');
+  assert.equal(p.phone, '+91 98765 43210');
+  assert.equal(p.birthDate, '15/08/1997');
+  assert.equal(p.nationality, 'Indian');
+  // Career Objective wird Profil, mit Hinweis zum Umschreiben.
+  assert.match(r.cv.profile.text, /^To work in a challenging environment/);
+  assert.ok(r.notes.includes('objective'), 'Hinweis Career Objective');
+  assert.ok(r.notes.includes('grades'), 'Hinweis Noten (CGPA/Prozent)');
+  assert.equal(r.cv.experience.length, 3);
+  exp(r, 0, { role: 'Software Engineer', company: 'Example Infotech Pvt. Ltd.', location: 'Bengaluru', start: '06/2021', end: 'present', bullets: 3 });
+  exp(r, 1, { role: 'Associate Engineer', company: 'Sample Systems Ltd.', location: 'Pune', start: '07/2019', end: '05/2021', bullets: 1 });
+  exp(r, 2, { role: 'Intern', company: 'Demo Labs', location: 'Chennai', start: '01/2019', end: '06/2019', bullets: 1 });
+  assert.deepEqual(r.cv.education.map(e => [e.degree, e.institution, e.location, e.start, e.end, e.notes]), [
+    ['B.Tech in Computer Science', 'Example Institute of Technology', 'Bengaluru', '2015', '2019', 'CGPA: 8.2/10'],
+    ['Class XII (CBSE)', 'Sample Public School', 'Bengaluru', '', '2015', '88%'],
+  ]);
+  assert.deepEqual(r.cv.skillGroups.map(g => g.label), ['Languages', 'Frameworks', 'Tools']);
+  assert.deepEqual(r.cv.languages.map(l => l.language), ['English', 'Hindi', 'Kannada']);
+  assert.deepEqual(r.cv.projects?.map(x => [x.title, x.start, x.end]), [['Inventory Tracker', '06/2018', '12/2018']]);
+  assert.deepEqual(r.cv.certificates?.map(c => [c.name, c.issuer, c.date]), [['Example Cloud Practitioner', 'Example Academy', '03/2022']]);
+  assert.deepEqual(r.cv.customSections?.map(s => s.title), ['Achievements & awards', 'Extra-curricular activities', 'Hobbies']);
+  assert.deepEqual(r.unsorted, []);
+  // Nicht übernommen, aber genannt:
+  assert.deepEqual(r.dropped.map(d => d.kind), ['strengths', 'parents', 'gender', 'religion', 'idNumber', 'salary', 'declaration']);
+  assert.match(r.dropped.find(d => d.kind === 'declaration')!.text, /^I hereby declare/);
+  // … und wirklich nirgends im Lebenslauf.
+  const all = JSON.stringify(r.cv);
+  for (const s of ['Ramesh', 'X1234567', 'Religion', 'hereby declare', 'CTC', 'Quick learner', 'Gender']) assert.ok(!all.includes(s), `„${s}" steht im Lebenslauf`);
+});
+
+await check('15 indischer Lebenslauf, zweite Form: Tabelle, Inline-Angaben, Erklärung ohne Überschrift', () => {
+  const text = `Neha Iyer
+Data Analyst
+neha.iyer@example.com · +91 91234 56789 · Hyderabad
+
+Summary of Qualifications
+Data analyst with four years of experience in retail reporting, SQL and Power BI.
+
+Employment Details
+Data Analyst, Sample Retail Pvt. Ltd., Hyderabad
+June 2021 to Present
+- Built 12 Power BI dashboards for regional managers
+
+Junior Analyst | Example Analytics LLP | Chennai | 06/2019 - 2021-05
+- Cleaned and merged sales data from 30 stores
+
+Internships
+Analytics Intern | Demo Research | 2019-01 – 2019-04
+
+Educational Qualifications
+| Degree | Institute | Year | CGPA/% |
+|---|---|---|---|
+| B.Sc. Statistics | Example College, Chennai | 2016 – 2019 | 78% |
+
+Skill Set
+SQL, Python (pandas), Power BI, Excel
+
+Tools & Technologies
+Git, Jira
+
+Linguistic Proficiency
+- English: Fluent
+- Tamil: Native
+- German: A1
+
+Trainings
+- Data Visualisation Workshop | Example Institute | 2020
+
+Positions of Responsibility
+- Class representative, 2017 – 2018
+
+Open Source Contributions
+Example Charts Library | Contributor | 2022 – to date
+- Fixed axis label rendering
+
+Patents
+- Method for estimating shelf stock from images (pending)
+
+Personal Profile
+Mother's Name: Example Iyer
+Sex: Female
+Caste: Example
+Aadhaar No: 1234 5678 9012
+Languages Known: English, Tamil, Hindi
+
+Strengths: Hardworking, punctual
+
+References available on request.
+
+I hereby declare that all the information given above is true.
+Place: Hyderabad`;
+  const r = importCvText(text, base('en'), 'en');
+  assert.equal(r.cv.personal.name, 'Neha Iyer');
+  assert.equal(r.cv.personal.title, 'Data Analyst');
+  assert.match(r.cv.profile.text, /^Data analyst with four years/);
+  assert.ok(!r.notes.includes('objective'));
+  assert.deepEqual(r.cv.experience.map(e => [e.role, e.company, e.start, e.end]), [
+    ['Data Analyst', 'Sample Retail Pvt. Ltd.', '06/2021', 'present'],
+    ['Junior Analyst', 'Example Analytics LLP', '06/2019', '05/2021'],
+    ['Analytics Intern', 'Demo Research', '01/2019', '04/2019'],
+  ]);
+  assert.deepEqual(r.cv.education.map(e => [e.degree, e.institution, e.start, e.end, e.notes]), [['B.Sc. Statistics', 'Example College, Chennai', '2016', '2019', '78%']]);
+  assert.deepEqual(r.cv.skillGroups.map(g => [g.label, g.items.length]), [['Skill Set', 4], ['Tools & Technologies', 2]]);
+  // „Languages Known" in den persönlichen Angaben doppelt die Sprachen nicht.
+  assert.deepEqual(r.cv.languages.map(l => [l.language, l.level]), [['English', 'Fluent'], ['Tamil', 'Native'], ['German', 'A1'], ['Hindi', '']]);
+  assert.deepEqual(r.cv.certificates?.map(c => c.name), ['Data Visualisation Workshop']);
+  assert.deepEqual(r.cv.projects?.map(x => [x.title, x.role, x.start, x.end]), [['Example Charts Library', 'Contributor', '2022', 'present']]);
+  assert.deepEqual(r.cv.customSections?.map(s => s.title), ['Positions of Responsibility', 'Patents']);
+  assert.deepEqual(r.dropped.map(d => d.kind), ['parents', 'gender', 'caste', 'idNumber', 'strengths', 'references', 'declaration']);
+  assert.deepEqual(r.unsorted, []);
+  const all = JSON.stringify(r.cv);
+  for (const s of ['5678 9012', 'Caste', 'hereby', 'Hardworking', 'on request', 'Place: Hyderabad']) assert.ok(!all.includes(s), `„${s}" steht im Lebenslauf`);
+});
+
+await check('16 Datumsformen und Gegenproben', () => {
+  const r = importCvText(`## Experience
+### Engineer | Alpha Ltd. | Jun-2021 – Present
+### Engineer | Beta Ltd. | Jun-21 – Mar-22
+### Engineer | Gamma Ltd. | June 2019 – 2020-12
+### Engineer | Delta Ltd. | 06/2017 – 05/2019`, base('en'), 'en');
+  assert.deepEqual(r.cv.experience.map(e => [e.start, e.end]), [['06/2021', 'present'], ['06/2021', '03/2022'], ['06/2019', '12/2020'], ['06/2017', '05/2019']]);
+  // Deutsch bleibt: „Stärken" sind Kenntnisse, „Referenzen" kein Sonderfall,
+  // „Erfolge:" unter einer Station bleibt dort.
+  const de = importCvText(`Erika Probe
+
+Berufserfahrung
+Teamleitung | Musterbau GmbH | 2019 – heute
+Erfolge:
+- Durchlaufzeit halbiert
+
+Stärken
+Planung, Organisation`, base('de'), 'de');
+  exp(de, 0, { role: 'Teamleitung', company: 'Musterbau GmbH', start: '2019', end: 'present', bullets: ['Durchlaufzeit halbiert'] });
+  assert.deepEqual(de.cv.skillGroups.map(g => [g.label, g.items]), [['Stärken', ['Planung', 'Organisation']]]);
+  assert.deepEqual(de.dropped, []);
+  assert.deepEqual(de.notes, []);
+  // Englisch: „Achievements:" unter einer Station ist kein eigener Abschnitt.
+  const en = importCvText(`## Work Experience
+### Engineer | Alpha Ltd. | 2020 – 2022
+Achievements:
+- Shipped the new checkout`, base('en'), 'en');
+  exp(en, 0, { role: 'Engineer', company: 'Alpha Ltd.', bullets: ['Shipped the new checkout'] });
+  assert.equal(en.cv.customSections?.length ?? 0, 0);
+});
+
 console.log(`\n${passed} bestanden, ${failures.length} fehlgeschlagen${failures.length ? ': ' + failures.join(', ') : ''}`);
 if (failures.length) process.exit(1);

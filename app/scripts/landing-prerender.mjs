@@ -36,6 +36,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FALLBACK_BASE_URL } from '../src/landing/brand.js';
+import { magazinSitemap, sitemapUrlXml, artikelPfad } from './magazin-lib.mjs';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(process.env.PRERENDER_OUT_DIR || join(APP, 'dist'));
@@ -99,11 +100,28 @@ async function holeAngebot() {
   }
 }
 
+/** dist/magazin/index.json (scripts/magazin-build.mjs): Ausgaben und alle
+ *  Artikel beider Sprachen, je mit url, lang und alternates. */
 function magazinIndex() {
   const f = join(DIST, 'magazin', 'index.json');
-  if (!existsSync(f)) return [];
-  try { return JSON.parse(readFileSync(f, 'utf8')).articles || []; }
-  catch (e) { warn(`magazin/index.json nicht lesbar: ${e.message}`); return []; }
+  if (!existsSync(f)) return { editions: [], articles: [] };
+  try {
+    const d = JSON.parse(readFileSync(f, 'utf8'));
+    const articles = (d.articles || []).map(a => ({ ...a, url: a.url || artikelPfad(a.lang, a.slug), alternates: Array.isArray(a.alternates) ? a.alternates : [] }));
+    return { editions: Array.isArray(d.editions) ? d.editions : [], articles };
+  } catch (e) { warn(`magazin/index.json nicht lesbar: ${e.message}`); return { editions: [], articles: [] }; }
+}
+
+/** Artikel für den Magazin-Abschnitt einer Startseite: die sechs neuesten
+ *  in der Sprache der Seite und die sechs neuesten deutschen. Welche davon
+ *  erscheinen (eigene Sprache zuerst, deutsche nur zum Auffüllen und dann
+ *  gekennzeichnet), entscheidet die Seite selbst: magazinAuswahl() in
+ *  src/knowledge/magazin.ts, dieselbe Regel beim Vorrendern und in der App. */
+function artikelFuerStartseite(alle, lang) {
+  const knapp = a => ({ slug: a.slug, url: a.url, title: a.title, description: a.description, category: a.category ?? null, categoryName: a.categoryName ?? null, lang: a.lang, updated: a.updated, published: a.published, minutes: a.minutes, alternates: a.alternates.map(x => ({ lang: x.lang, url: x.url })) });
+  const eigene = alle.filter(a => a.lang === lang).slice(0, 6);
+  const deutsch = lang === 'de' ? [] : alle.filter(a => a.lang === 'de').slice(0, 6);
+  return [...eigene, ...deutsch].map(knapp);
 }
 
 /** Geist-Datei aus dem Vite-Bau (Name mit Hash) für den Preload. */
@@ -256,18 +274,20 @@ function seite(vorlage, { lang, kopf, body, kind }) {
   return html;
 }
 
-function sitemap(articles, langs) {
+/** Sitemap: die vier Startseiten (gegenseitig per hreflang), /preise und das
+ *  Magazin beider Ausgaben (Übersichten, Themenseiten, alle Artikel; hreflang
+ *  an Übersetzungspaaren), aus denselben Einträgen wie magazin-build.mjs. */
+function sitemap(magazin, langs) {
   const heute = new Date().toISOString().slice(0, 10);
   const alt = langs.map(l => `    <xhtml:link rel="alternate" hreflang="${l}" href="${esc(BASIS + pathOf(l))}"/>`).concat(`    <xhtml:link rel="alternate" hreflang="x-default" href="${esc(BASIS)}/"/>`).join('\n');
   const eintraege = [];
   for (const l of langs) eintraege.push(`  <url>\n    <loc>${esc(BASIS + pathOf(l))}</loc>\n    <lastmod>${heute}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${l === 'de' ? '1.0' : '0.9'}</priority>\n${alt}\n  </url>`);
   eintraege.push(`  <url>\n    <loc>${esc(BASIS)}/preise</loc>\n    <lastmod>${heute}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`);
-  const neueste = articles.reduce((m, a) => (a.updated > m ? a.updated : m), '') || heute;
-  eintraege.push(`  <url>\n    <loc>${esc(BASIS)}/magazin/</loc>\n    <lastmod>${neueste}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`);
-  for (const k of [...new Set(articles.map(a => a.category).filter(Boolean))]) {
-    eintraege.push(`  <url>\n    <loc>${esc(BASIS)}/magazin/thema/${k}/</loc>\n    <lastmod>${neueste}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>`);
-  }
-  for (const a of articles) eintraege.push(`  <url>\n    <loc>${esc(BASIS)}/magazin/${a.slug}/</loc>\n    <lastmod>${a.updated}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>`);
+  // Ohne index.json (Magazin-Bau fehlgeschlagen) wenigstens die Übersicht, wie bisher.
+  const mag = magazin.editions.length || magazin.articles.length
+    ? magazinSitemap(magazin, BASIS)
+    : [{ loc: `${BASIS}/magazin/`, lastmod: heute, changefreq: 'weekly', priority: '0.8' }];
+  for (const e of mag) eintraege.push(sitemapUrlXml(e));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${eintraege.join('\n')}\n</urlset>\n`;
 }
 
@@ -280,7 +300,9 @@ function robots() {
 
 /** llms.txt: ehrlich und aus dem Stand dieses Baus (Vorlagenzahl, Formate,
  *  Angebot, Artikel). Formate werden an den Modulen im Code erkannt. */
-function llms(ssr, offer, articles) {
+function llms(ssr, offer, magazin) {
+  const articles = magazin.articles.filter(a => a.lang !== 'en');
+  const englisch = magazin.articles.filter(a => a.lang === 'en');
   const brand = ssr.SSR_INFO.brand.name;
   const n = ssr.SSR_INFO.templates.length;
   // Vorlagen-Staffel (10.10.2026): Zahl der Gratis-Vorlagen aus
@@ -304,8 +326,12 @@ function llms(ssr, offer, articles) {
         ? `Ohne Konto kostenlos im Browser, alle Vorlagen und Exporte inklusive. Bewerbungs-Pass: ${betrag} einmalig für ${offer.days} Tage, kein Abo, endet von selbst; er bringt Speichern über Geräte, Sharelinks, Versionen am Server und die MCP-Verbindung. Details: ${BASIS}/preise`
         : `Geplant: ${staffel} Der Verkauf ist zum Zeitpunkt dieses Stands noch nicht geöffnet; bis dahin ist im Browser alles frei. Details: ${BASIS}/preise`;
   const artikel = articles.length
-    ? articles.map(a => `- [${a.title}](${BASIS}/magazin/${a.slug}/): ${a.description}`).join('\n')
+    ? articles.map(a => `- [${a.title}](${BASIS}${a.url}): ${a.description}`).join('\n')
     : '- (noch keine Artikel)';
+  // Englische Ausgabe: eigener Abschnitt auf Englisch, nur mit Artikeln.
+  const magazinEn = englisch.length
+    ? `\n\n## Magazine (English)\n\n${englisch.map(a => `- [${a.title}](${BASIS}${a.url}): ${a.description}`).join('\n')}\n\nOverview: ${BASIS}/en/magazine/`
+    : '';
   return `# ${brand}
 
 > ${brand} ist ein Werkzeug für Lebenslauf und Anschreiben im Browser, gemacht für die Arbeit mit der KI, die man ohnehin nutzt. Man schreibt direkt in der Vorschau oder gibt den Lebenslauf als Markdown an ein Sprachmodell eigener Wahl und holt die überarbeitete Fassung zurück; Claude und andere MCP-Programme verbinden sich mit Konto direkt. Gesetzt wird in ${n} Vorlagen als PDF mit echter Textebene, deren Lesereihenfolge Prüfskripte gegen die Vorschau vergleichen. Für Bewerbungsportale gibt es zu jeder Vorlage dieselbe Fassung einspaltig. Starten geht ohne Konto. Keine eingebaute KI, keine Guthaben. Quelloffen unter AGPL-3.0.
@@ -347,7 +373,7 @@ Stand: ${new Date().toISOString().slice(0, 10)}. Website auf Deutsch (${BASIS}/)
 
 ${artikel}
 
-Übersicht: ${BASIS}/magazin/
+Übersicht: ${BASIS}/magazin/${magazinEn}
 
 ## Für KI-Agenten ohne MCP-Server
 
@@ -388,8 +414,7 @@ async function main() {
 
   const ssr = await import(pathToFileURL(SSR).href + `?t=${Date.now()}`);
   const offer = await holeAngebot();
-  const alle = magazinIndex();
-  const articles = alle.slice(0, 6).map(a => ({ slug: a.slug, title: a.title, description: a.description, category: a.category ?? null, categoryName: a.categoryName ?? null, lang: a.lang, updated: a.updated, published: a.published, minutes: a.minutes }));
+  const magazin = magazinIndex();
   const font = geistFont();
   if (!font) warn('Geist-Schrift im Bau nicht gefunden – kein Preload');
 
@@ -399,8 +424,11 @@ async function main() {
     .replace('<!--cv:head-->', '<!--cv:head-->\n    <meta name="robots" content="noindex, follow" />');
   writeFileSync(huelle, vorlage.replace(KOPF_RE, shellKopf));
 
+  const imAbschnitt = {};
   for (const lang of ssr.SSR_INFO.langs) {
+    const articles = artikelFuerStartseite(magazin.articles, lang);
     const body = ssr.renderLanding({ lang, offer, articles });
+    imAbschnitt[lang] = (body.match(/class="lp-mag-card"/g) || []).length;
     const html = seite(vorlage, { lang, kind: 'landing', kopf: kopfLanding(ssr, lang, offer, articles, font), body });
     const ziel = lang === 'de' ? DIST : join(DIST, lang);
     mkdirSync(ziel, { recursive: true });
@@ -410,10 +438,10 @@ async function main() {
   mkdirSync(join(DIST, 'preise'), { recursive: true });
   writeFileSync(join(DIST, 'preise', 'index.html'), seite(vorlage, { lang: 'de', kind: 'pricing', kopf: kopfPreise(ssr, offer, font), body: preise }));
 
-  writeFileSync(join(DIST, 'sitemap.xml'), sitemap(alle, ssr.SSR_INFO.langs));
+  writeFileSync(join(DIST, 'sitemap.xml'), sitemap(magazin, ssr.SSR_INFO.langs));
   writeFileSync(join(DIST, 'robots.txt'), robots());
-  writeFileSync(join(DIST, 'llms.txt'), llms(ssr, offer, alle));
-  log(`vorgerendert: / /en/ /fr/ /es/ /preise · ${ssr.SSR_INFO.templates.length} Vorlagen · ${articles.length} Artikel auf der Startseite · Angebot ${offer ? (offer.enabled ? 'offen' : 'geschlossen') : 'keins'} · Basis ${BASIS}`);
+  writeFileSync(join(DIST, 'llms.txt'), llms(ssr, offer, magazin));
+  log(`vorgerendert: / /en/ /fr/ /es/ /preise · ${ssr.SSR_INFO.templates.length} Vorlagen · Magazin-Karten je Startseite ${Object.entries(imAbschnitt).map(([l, n]) => `${l} ${n}`).join(', ')} · Angebot ${offer ? (offer.enabled ? 'offen' : 'geschlossen') : 'keins'} · Basis ${BASIS}`);
 }
 
 main().catch(e => {

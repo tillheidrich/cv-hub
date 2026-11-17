@@ -11,8 +11,10 @@ import { SOURCES, type SourceId } from '../knowledge/sources';
 import type { CoverReport } from './useCoverReport';
 import {
   analyzeJobAd, bodyParagraphs, checkAgainstJobAd, checkBoth, coverOwnText, termRows, JD_MIN,
+  jdLangFinding, docLang as cvDocLang,
   type Finding, type Severity,
 } from './coverLetterCheck';
+import { guessLang } from './docText';
 import { styleHits, type StyleHit } from './styleLists';
 import './check.css';
 
@@ -84,14 +86,28 @@ export function SourceLine({ ids, t }: { ids: SourceId[]; t: PruefenStrings }) {
   );
 }
 
-/** Eingabe der Stellenanzeige, für alle Prüfungen gemeinsam. */
-export function JdBox({ jd, setJd, t, id }: { jd: string; setJd: (v: string) => void; t: PruefenStrings; id: string }) {
+/** Eingabe der Stellenanzeige, für alle Prüfungen gemeinsam. Mit `docLang`
+ *  darunter der Hinweis, wenn die Anzeige in einer anderen Sprache ist als
+ *  das Dokument (der Abgleich der Begriffe ist wörtlich, 17.11.2026). */
+export function JdBox({ jd, setJd, t, id, docLang, docKind = 'cv' }: {
+  jd: string; setJd: (v: string) => void; t: PruefenStrings; id: string;
+  docLang?: Lang | null; docKind?: 'cv' | 'cover';
+}) {
+  const lf = useMemo(() => jdLangFinding(jd, docLang, docKind), [jd, docLang, docKind]);
   return (
     <div>
       <label className="ck-label" htmlFor={id}>{t.jdLabel}</label>
       <textarea id={id} className="ck-textarea" value={jd} onChange={e => setJd(e.target.value)} rows={7}
         placeholder={t.jdPlaceholder} data-jd />
       <p className="ck-meta">{jd.trim().length < JD_MIN ? t.jdTooShort : null} {t.jdShared}</p>
+      {lf && (
+        <ul className="ck-list" data-jd-lang>
+          <li className="ck-item" data-sev={lf.sev} data-finding={lf.id}>
+            <SevMark sev={lf.sev} />
+            <span>{t.finding[lf.id](lf.args ?? [])}</span>
+          </li>
+        </ul>
+      )}
     </div>
   );
 }
@@ -114,9 +130,11 @@ export function CoverReadView({ report }: { report: CoverReport }) {
 
 // ── Anschreiben: Stellenanzeige ──────────────────────────────────────────
 
-export function CoverJobView({ cl, jd, setJd }: { cl: CoverLetterData; jd: string; setJd: (v: string) => void }) {
+export function CoverJobView({ cl, jd, setJd, lang }: { cl: CoverLetterData; jd: string; setJd: (v: string) => void; lang?: Lang }) {
   const t = PRUEFEN_I18N[useUiLang()];
   const ready = jd.trim().length >= JD_MIN;
+  // Sprache des Anschreibens: die der Fassung, sonst aus dem Text geschätzt.
+  const clLang = useMemo(() => lang ?? guessLang(bodyParagraphs(cl).join(' ')), [lang, cl]);
   const facts = useMemo(() => analyzeJobAd(jd), [jd]);
   // Korrekturen gelten nur für die Erkennung, zu der sie gemacht wurden; eine
   // andere Anzeige (andere Erkennung) setzt sie damit von selbst zurück.
@@ -132,7 +150,7 @@ export function CoverJobView({ cl, jd, setJd }: { cl: CoverLetterData; jd: strin
   const misses = rows.filter(r => !r.cl);
   return (
     <>
-      <JdBox jd={jd} setJd={setJd} t={t} id="ck-jd-cover" />
+      <JdBox jd={jd} setJd={setJd} t={t} id="ck-jd-cover" docLang={clLang} docKind="cover" />
       {ready && (
         <>
           <div className="ck-facts" data-job-facts>
@@ -226,7 +244,7 @@ export function BothView({ cv, cl, cvText, clText, jd, setJd }: {
       <p className="ck-intro">{t.bothIntro}</p>
       <FindingList findings={findings} t={t} />
       <h3 className="ck-h">{t.bothTermsHeading}</h3>
-      <JdBox jd={jd} setJd={setJd} t={t} id="ck-jd-both" />
+      <JdBox jd={jd} setJd={setJd} t={t} id="ck-jd-both" docLang={cvDocLang(cv)} />
       {ready && rows.length > 0 && (
         <>
           <table className="ck-table" data-both-terms>

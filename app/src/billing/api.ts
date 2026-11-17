@@ -10,7 +10,7 @@
  * Kein Schlüssel, keine Zahlungsdaten im Browser: Bezahlt wird auf der Seite
  * von Mollie, der Browser bekommt nur die `checkoutUrl` zurück.
  */
-import { apiErrorFrom, AUTH_CHANGE_EVENT } from '../data/api';
+import { apiErrorFrom, apiHeaders, AUTH_CHANGE_EVENT } from '../data/api';
 import type { AuthUser, Plan } from '../data/api';
 export type { Plan, PlanKind, PlanGrant } from '../data/api';
 
@@ -89,11 +89,13 @@ export interface DeclarationConfirmResult {
   orderNos?: string[];
 }
 
+/* Kopfzeilen wie data/api.ts: Accept-Language trägt die Oberflächensprache
+ * (Mails vor dem Konto, z. B. Registrierung, öffentlicher Widerruf). */
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: apiHeaders(opts.headers as Record<string, string> | undefined),
   });
   if (!r.ok) throw await apiErrorFrom(r);
   return await r.json().catch(() => ({})) as T;

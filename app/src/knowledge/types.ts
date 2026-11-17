@@ -1,11 +1,11 @@
 /** Aufbau der Tipps (knowledge/content/<sprache>.ts). */
 import type { SourceId } from './sources';
-import type { MagazinSlug } from './magazin';
+import type { MagazinEnSlug, MagazinSlug } from './magazin';
 
 export type TipTab = 'cv' | 'letter' | 'countries' | 'checklist' | 'prompts';
 
 export type TipId =
-  | 'profile' | 'impact' | 'skills' | 'gaps' | 'photo' | 'length' | 'filename' | 'ats' | 'ai' | 'more'
+  | 'profile' | 'impact' | 'skills' | 'gaps' | 'photo' | 'abroad' | 'length' | 'filename' | 'ats' | 'ai' | 'more'
   | 'letter-structure' | 'letter-subject' | 'letter-opening' | 'letter-body' | 'letter-closing' | 'letter-ai';
 
 export interface Tip {
@@ -18,6 +18,8 @@ export interface Tip {
   after?: string;
   sources?: SourceId[];
   magazin?: MagazinSlug[];
+  /** Englische Artikel ohne deutsches Gegenstück (magazin.ts, MAGAZIN_EN). */
+  magazinEn?: MagazinEnSlug[];
 }
 
 export interface Prompt { id: string; title: string; prompt: string; note?: string }

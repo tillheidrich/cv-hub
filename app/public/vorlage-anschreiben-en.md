@@ -3,36 +3,36 @@ doc: cover-letter
 lang: en
 ---
 
-## Empfänger
-- Firma: Acme Ltd
-- Ansprechpartner: Ms Smith
-- Adresse: 1 Sample Street, London EC1A 1AA
+## Recipient
+- Company: Example GmbH
+- Contact person: Ms Schneider
+- Address: Musterstraße 1, 20095 Hamburg
 
-## Kopf
-- Ort: Berlin
-- Datum: 10 September 2026
+## Header
+- City: Berlin
+- Date: 21 May 2026
 
-## Betreff
+## Subject
 Application for [Position]
 
-## Anrede
-Dear Ms Smith,
+## Salutation
+Dear Ms Schneider,
 
-## Einstieg
-One or two sentences: why this role, why now. Direct opener, no clichés.
+## Introduction
+One or two sentences: why this role, why now. Get straight to the point.
 
-## Hauptteil
-Three to five sentences: concrete stations from the CV that match the role. Echo bullets from your current position verbatim.
+## Main body
+Three to five sentences: concrete roles from your CV that match the job. Reuse the strongest bullets from your current position.
 
-## Firmenbezug
-Two to three sentences: what convinces you about the company — product, mission, team. Specific, not generic.
+## Why this company
+Two or three sentences: what draws you to the company (product, mission, team). Specific, not generic.
 
 ## Motivation
 Two sentences: what you want to contribute.
 
-## Abschluss
-One sentence: interview invitation.
+## Closing
+One sentence asking for an interview.
 
-## Grußformel
+## Sign-off
 Kind regards
 Your name

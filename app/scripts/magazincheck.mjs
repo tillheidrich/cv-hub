@@ -32,6 +32,17 @@
 //      Herausgeber = Produktname, Aufruf zur App mit Bildschirmfoto,
 //      index.json für die Startseite, alte /ratgeber/-Adressen → 301,
 //      Sync übernimmt „Kategorie:" aus Outline.
+//   9. Englische Ausgabe (17.11.2026): Die Beispiele enthalten zwei englische
+//      Artikel, einer davon Übersetzung eines deutschen (translationKey).
+//      <html lang> passt zum Pfad, hreflang beidseitig mit x-default =
+//      deutsche Fassung und vorhandenen Zielen, og:locale:alternate,
+//      workTranslation/translationOfWork, Sprachwechsel-Hinweis, englische
+//      Übersicht mit Block „Articles in German", Themenseiten mit englischen
+//      Pfaden, eigene 404, index.json mit url/lang/alternates, Sitemap mit
+//      xhtml:link, doppelter translationKey ist ein Fehler, Aufräumen je
+//      Zielordner, ohne englische Artikel ist /en/magazine/ noindex. In 4/5
+//      zusätzlich Auslieferung und Browserprüfung von /en/magazine/; in 6
+//      „Sprache:"/„Übersetzung:" aus Outline und sprachabhängige Querverweise.
 
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, cpSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -117,6 +128,7 @@ description: "Greenhouse, Personio und Roche beschreiben selbst, welche Dateien 
 lang: "de"
 updated: "2026-10-08"
 published: "2026-10-01"
+translationKey: "pdf-oder-word"
 ---
 ${LANG_TEXT}
 
@@ -204,6 +216,47 @@ Der erste Satz nennt die Stelle.
 Ein Satz zum nächsten Schritt reicht.
 `;
 
+/* Englische Ausgabe (17.11.2026): EN_A ist die Übersetzung von ARTIKEL_A
+ * (gleicher translationKey, eigener Slug), EN_B hat kein deutsches
+ * Gegenstück. ARTIKEL_B hat keine englische Fassung und gehört deshalb in
+ * den Block „Articles in German" der englischen Übersicht. */
+const EN_TEXT = `Many guides claim that application portals only read Word files. The vendors themselves say something different, and they even contradict each other. This paragraph is deliberately long so that the check can measure the line length in the reading measure.`;
+const ARTIKEL_EN_A = `---
+title: "PDF or Word? What ATS vendors say themselves"
+slug: "pdf-or-word-ats"
+category: "ats"
+description: "Greenhouse, Personio and Roche describe which files their systems read. An overview with sources and retrieval dates."
+lang: "en"
+updated: "2026-10-09"
+published: "2026-10-02"
+translationKey: "pdf-oder-word"
+---
+${EN_TEXT}
+
+## What Greenhouse supports
+
+Greenhouse accepts .doc, .docx, .pdf, .rtf and .txt according to its [help page](https://support.greenhouse.io/hc/en-us/articles/360052218132-Supported-formats-for-resumes-cover-letters-and-other-candidate-uploads).
+
+## What this means for you
+
+A PDF with a real text layer, and a single-column Word version for portals. See also [applying from abroad](/en/magazine/applying-from-abroad/).
+`;
+
+const ARTIKEL_EN_B = `---
+title: "Applying from abroad: the documents"
+slug: "applying-from-abroad"
+category: "ausland"
+description: "Which documents German employers expect when you apply from abroad, and which translations are usually asked for."
+lang: "en"
+updated: "2026-10-05"
+---
+German employers usually expect a CV, a cover letter and copies of certificates. ${EN_TEXT}
+
+## Recognition
+
+For regulated professions, recognition is required before you can start.
+`;
+
 const ARTIKEL_GEHEIM = `---
 title: "Präpariert"
 slug: "praepariert"
@@ -227,6 +280,8 @@ function schreibeFixtures(ordner, img) {
   mkdirSync(img, { recursive: true });
   writeFileSync(join(ordner, 'pdf-oder-word-ats.md'), ARTIKEL_A);
   writeFileSync(join(ordner, 'anschreiben-aufbauen.md'), ARTIKEL_B);
+  writeFileSync(join(ordner, 'pdf-or-word-ats.md'), ARTIKEL_EN_A);
+  writeFileSync(join(ordner, 'applying-from-abroad.md'), ARTIKEL_EN_B);
   writeFileSync(join(ordner, 'praepariert.md'), ARTIKEL_GEHEIM);
   writeFileSync(join(ordner, 'kaputt.md'), ARTIKEL_KAPUTT);
   writeFileSync(join(img, BILD_NAME), BILD);
@@ -288,15 +343,16 @@ async function starteNodeServer(root) {
   const typen = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.woff2': 'font/woff2', '.png': 'image/png', '.xml': 'application/xml', '.txt': 'text/plain', '.svg': 'image/svg+xml' };
   const server = createServer((req, res) => {
     const pfad = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (pfad === '/magazin') { res.writeHead(301, { Location: '/magazin/' }); return res.end(); }
+    if (pfad === '/magazin' || pfad === '/en/magazine') { res.writeHead(301, { Location: `${pfad}/` }); return res.end(); }
     let datei = join(root, pfad);
-    if (pfad.startsWith('/magazin/')) {
+    const ausgabe = ['/en/magazine/', '/magazin/'].find(b => pfad.startsWith(b));
+    if (ausgabe) {
       if (existsSync(datei) && statSync(datei).isDirectory()) {
         if (!pfad.endsWith('/')) { res.writeHead(301, { Location: `${pfad}/` }); return res.end(); }
         datei = join(datei, 'index.html');
       }
       const h = { 'Content-Security-Policy': csp };
-      if (!existsSync(datei)) { res.writeHead(404, { ...h, 'Content-Type': typen['.html'] }); return res.end(readFileSync(join(root, 'magazin', '404.html'))); }
+      if (!existsSync(datei)) { res.writeHead(404, { ...h, 'Content-Type': typen['.html'] }); return res.end(readFileSync(join(root, ...ausgabe.split('/').filter(Boolean), '404.html'))); }
       res.writeHead(200, { ...h, 'Content-Type': typen[datei.slice(datei.lastIndexOf('.'))] || 'application/octet-stream' });
       return res.end(readFileSync(datei));
     }
@@ -522,7 +578,7 @@ async function main() {
   cpSync(join(APP, 'public', 'robots.txt'), join(out, 'robots.txt'));
   const bau = node('magazin-build.mjs', { MAGAZIN_CONTENT_DIR: inhalt, MAGAZIN_IMG_DIR: img, MAGAZIN_OUT_DIR: out, PUBLIC_BASE_URL: `${BASIS_TEST}/` });
   ok(bau.code === 0, 'Bau läuft durch (Exit 0)', bau.out);
-  ok(/2 Artikel gebaut \(2 Themen, 1 mit FAQ-Block\), 2 übersprungen/.test(bau.out), 'genau zwei Artikel gebaut (zwei Themen, ein FAQ-Block), zwei übersprungen', bau.out);
+  ok(/4 Artikel gebaut \(de 2, en 2; 3 Themen, 1 mit FAQ-Block, 2 mit Sprachfassung\), 2 übersprungen/.test(bau.out), 'genau vier Artikel gebaut (je zwei deutsch und englisch, drei Themen, ein FAQ-Block, ein Übersetzungspaar), zwei übersprungen', bau.out);
   ok(/praepariert\.md GESPERRT/.test(bau.out) && /API-Schlüssel \(cvk_\)/.test(bau.out), 'präparierter Artikel von der Sperrliste zurückgehalten');
   ok(!bau.out.includes('cvk_9f8e7d6c5b4a39281706'), 'Schlüssel erscheint nicht im Log');
   ok(/kaputt\.md übersprungen/.test(bau.out), 'Artikel mit kaputtem Frontmatter übersprungen');
@@ -530,7 +586,8 @@ async function main() {
   ok(/rohes HTML verworfen/.test(bau.out) && /Link entfernt/.test(bau.out), 'rohes HTML und javascript:-Link gemeldet');
 
   abschnitt('3 · Ausgabe statisch');
-  const seiten = ['magazin/index.html', 'magazin/pdf-oder-word-ats/index.html', 'magazin/anschreiben-aufbauen/index.html', 'magazin/thema/ats/index.html', 'magazin/404.html'];
+  const seiten = ['magazin/index.html', 'magazin/pdf-oder-word-ats/index.html', 'magazin/anschreiben-aufbauen/index.html', 'magazin/thema/ats/index.html', 'magazin/404.html',
+    'en/magazine/index.html', 'en/magazine/pdf-or-word-ats/index.html', 'en/magazine/applying-from-abroad/index.html', 'en/magazine/topic/ats/index.html', 'en/magazine/topic/applying-from-abroad/index.html', 'en/magazine/404.html'];
   const hv = new HtmlValidate({ extends: ['html-validate:recommended'], rules: { 'no-trailing-whitespace': 'off', 'long-title': 'off' } });
   for (const s of seiten) {
     const html = readFileSync(join(out, s), 'utf8');
@@ -562,8 +619,9 @@ async function main() {
   ok(css.some(n => /^magazin\.[a-f0-9]{10}\.css$/.test(n)) && css.some(n => /^geist-latin-wght-normal\.[a-f0-9]{10}\.woff2$/.test(n)), 'CSS und Geist mit Inhalts-Hash ausgeliefert');
   const sm = readFileSync(join(out, 'sitemap.xml'), 'utf8');
   const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]).sort();
-  const erwartet = [`${BASIS_TEST}/`, `${BASIS_TEST}/preise`, `${BASIS_TEST}/magazin/`, `${BASIS_TEST}/magazin/thema/ats/`, `${BASIS_TEST}/magazin/thema/bewerbung/`, `${BASIS_TEST}/magazin/anschreiben-aufbauen/`, `${BASIS_TEST}/magazin/pdf-oder-word-ats/`].sort();
-  ok(JSON.stringify(locs) === JSON.stringify(erwartet), 'Sitemap enthält Startseite, /preise, Übersicht, Themen und alle Artikel (und nur die)', locs.join('\n'));
+  const erwartet = [`${BASIS_TEST}/`, `${BASIS_TEST}/preise`, `${BASIS_TEST}/magazin/`, `${BASIS_TEST}/magazin/thema/ats/`, `${BASIS_TEST}/magazin/thema/bewerbung/`, `${BASIS_TEST}/magazin/anschreiben-aufbauen/`, `${BASIS_TEST}/magazin/pdf-oder-word-ats/`,
+    `${BASIS_TEST}/en/magazine/`, `${BASIS_TEST}/en/magazine/topic/ats/`, `${BASIS_TEST}/en/magazine/topic/applying-from-abroad/`, `${BASIS_TEST}/en/magazine/pdf-or-word-ats/`, `${BASIS_TEST}/en/magazine/applying-from-abroad/`].sort();
+  ok(JSON.stringify(locs) === JSON.stringify(erwartet), 'Sitemap enthält Startseite, /preise, beide Übersichten, Themen und alle Artikel beider Sprachen (und nur die)', locs.join('\n'));
 
   abschnitt('8 · Themen, FAQ, Verwandtes, Herausgeber, Aufruf, Index');
   const marke = (await import('../magazin-template/texte.mjs')).MARKE;
@@ -589,7 +647,8 @@ async function main() {
   const uebersicht = readFileSync(join(out, 'magazin', 'index.html'), 'utf8');
   ok(/<nav class="themen"/.test(uebersicht) && uebersicht.includes('href="/magazin/thema/ats/"') && uebersicht.includes('href="/magazin/thema/bewerbung/"'), 'Übersicht mit Themen-Navigation');
   const idx = JSON.parse(readFileSync(join(out, 'magazin', 'index.json'), 'utf8'));
-  ok(idx.articles.length === 2 && idx.articles[0].slug === 'pdf-oder-word-ats' && idx.articles[0].category === 'ats' && idx.articles[0].faq === 2 && idx.articles[0].minutes >= 1 && !!idx.articles[0].categoryName, 'index.json: neueste zuerst, mit Thema, Lesezeit, FAQ-Zahl', JSON.stringify(idx.articles[0]));
+  const idxDe = idx.articles.filter(x => x.lang === 'de');
+  ok(idx.articles.length === 4 && idxDe.length === 2 && idx.articles[0].slug === 'pdf-or-word-ats' && idxDe[0].slug === 'pdf-oder-word-ats' && idxDe[0].category === 'ats' && idxDe[0].faq === 2 && idxDe[0].minutes >= 1 && !!idxDe[0].categoryName, 'index.json: alle Artikel beider Sprachen, neueste zuerst, mit Thema, Lesezeit, FAQ-Zahl', JSON.stringify(idx.articles[0]));
   ok(/<lastmod>2026-10-08<\/lastmod>/.test(sm), 'Sitemap mit lastmod');
   const rb = readFileSync(join(out, 'robots.txt'), 'utf8');
   ok(rb.includes(`Sitemap: ${BASIS_TEST}/sitemap.xml`) && (rb.match(/^Sitemap:/gm) || []).length === 1, 'robots.txt mit genau einer Sitemap-Zeile auf die Basis');
@@ -598,6 +657,118 @@ async function main() {
   mkdirSync(std, { recursive: true });
   const bauStd = node('magazin-build.mjs', { MAGAZIN_CONTENT_DIR: inhalt, MAGAZIN_IMG_DIR: img, MAGAZIN_OUT_DIR: std, PUBLIC_BASE_URL: '' });
   ok(bauStd.code === 0 && readFileSync(join(std, 'magazin', 'anschreiben-aufbauen', 'index.html'), 'utf8').includes(`href="${STANDARD_BASIS}/magazin/anschreiben-aufbauen/"`), 'ohne PUBLIC_BASE_URL: Standardbasis');
+
+  abschnitt('9 · Englische Ausgabe und Sprachfassungen');
+  {
+    const { AUSGABEN, KATEGORIEN: KAT_LIB, leseArtikel: lese } = await import('./magazin-lib.mjs');
+    const { TEXTE, KATEGORIEN: KAT_TPL, themaSlug } = await import('../magazin-template/texte.mjs');
+    ok(Object.keys(AUSGABEN).every(e => TEXTE[e].basis === AUSGABEN[e].basis && TEXTE[e].themaSeg === AUSGABEN[e].themaSeg) && ['fr', 'es'].every(l => TEXTE[l].basis === AUSGABEN.de.basis), 'Pfade der Ausgaben in magazin-lib.mjs und texte.mjs gleich (fr/es in der deutschen)');
+    ok(JSON.stringify(KAT_LIB) === JSON.stringify(KAT_TPL) && KAT_LIB.includes('ausland') && ['de', 'en', 'fr', 'es'].every(l => KAT_LIB.every(k => TEXTE[l].kategorie[k]?.name && TEXTE[l].kategorie[k]?.lede)), 'jedes Thema (auch „ausland") hat Name und Vorspann in allen vier Sprachen');
+    ok(KAT_LIB.every(k => themaSlug(k, 'de') === k) && new Set(KAT_LIB.map(k => themaSlug(k, 'en'))).size === KAT_LIB.length, 'deutsche Themenpfade = Schlüssel (unverändert), englische eindeutig');
+    // Alle erzeugten HTML-Seiten: <html lang> passt zum Pfad.
+    const alleSeiten = [];
+    const sammle = d => { for (const n of readdirSync(d, { withFileTypes: true })) { const p = join(d, n.name); if (n.isDirectory()) sammle(p); else if (n.name.endsWith('.html')) alleSeiten.push(p.slice(out.length + 1)); } };
+    sammle(join(out, 'magazin')); sammle(join(out, 'en', 'magazine'));
+    const falscheSprache = alleSeiten.filter(s => !readFileSync(join(out, s), 'utf8').includes(`<html lang="${s.startsWith('en/') ? 'en' : 'de'}">`));
+    ok(alleSeiten.length === 12 && falscheSprache.length === 0, `<html lang> passt zum Pfad (${alleSeiten.length} Seiten)`, falscheSprache.join('\n'));
+    // hreflang beidseitig, Ziele vorhanden, x-default = deutsche Fassung.
+    const alt = html => [...html.matchAll(/<link rel="alternate" hreflang="([a-z-]+)" href="([^"]+)">/g)].map(m => ({ lang: m[1], href: m[2] }));
+    const canon = html => (/<link rel="canonical" href="([^"]+)">/.exec(html) || [])[1];
+    const dateiZu = url => join(out, ...new URL(url).pathname.split('/').filter(Boolean), 'index.html');
+    const befunde = [];
+    let mitAlt = 0;
+    for (const s of alleSeiten) {
+      const html = readFileSync(join(out, s), 'utf8');
+      const liste = alt(html);
+      if (!liste.length) continue;
+      mitAlt++;
+      const selbst = canon(html);
+      if (!liste.some(x => x.href === selbst)) befunde.push(`${s}: verweist nicht auf sich selbst`);
+      const xd = liste.find(x => x.lang === 'x-default');
+      const de = liste.find(x => x.lang === 'de');
+      if (!xd || !de || xd.href !== de.href) befunde.push(`${s}: x-default fehlt oder ist nicht die deutsche Fassung`);
+      for (const x of liste.filter(y => y.lang !== 'x-default' && y.href !== selbst)) {
+        const ziel = dateiZu(x.href);
+        if (!existsSync(ziel)) { befunde.push(`${s}: Ziel ${x.href} fehlt in dist`); continue; }
+        const zh = readFileSync(ziel, 'utf8');
+        if (!alt(zh).some(y => y.href === selbst)) befunde.push(`${s}: ${x.href} verweist nicht zurück`);
+        if (!zh.includes(`<html lang="${x.lang}">`)) befunde.push(`${s}: ${x.href} hat nicht lang="${x.lang}"`);
+      }
+    }
+    ok(mitAlt >= 6 && befunde.length === 0, `hreflang beidseitig, Ziele vorhanden, x-default deutsch (${mitAlt} Seiten mit Sprachfassung: Artikelpaar, Übersichten, Thema ATS)`, befunde.join('\n'));
+    const deA = readFileSync(join(out, 'magazin', 'pdf-oder-word-ats', 'index.html'), 'utf8');
+    const enA = readFileSync(join(out, 'en', 'magazine', 'pdf-or-word-ats', 'index.html'), 'utf8');
+    const enB = readFileSync(join(out, 'en', 'magazine', 'applying-from-abroad', 'index.html'), 'utf8');
+    const deB = readFileSync(join(out, 'magazin', 'anschreiben-aufbauen', 'index.html'), 'utf8');
+    ok(alt(enA).map(x => `${x.lang} ${x.href}`).join('|') === `en ${BASIS_TEST}/en/magazine/pdf-or-word-ats/|de ${BASIS_TEST}/magazin/pdf-oder-word-ats/|x-default ${BASIS_TEST}/magazin/pdf-oder-word-ats/`, 'englischer Artikel: hreflang en, de, x-default (deutsch)', JSON.stringify(alt(enA)));
+    ok(!alt(enB).length && !alt(deB).length && !/og:locale:alternate/.test(enB + deB), 'Artikel ohne Gegenstück: kein hreflang, kein og:locale:alternate');
+    ok(/<meta property="og:locale" content="en_GB">/.test(enA) && /<meta property="og:locale:alternate" content="de_DE">/.test(enA) && /<meta property="og:locale:alternate" content="en_GB">/.test(deA), 'og:locale und og:locale:alternate an beiden Fassungen');
+    const ldVon = html => (JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)[1])['@graph'] || []).find(x => x['@type'] === 'Article') || {};
+    ok(ldVon(deA).workTranslation?.[0]?.url === `${BASIS_TEST}/en/magazine/pdf-or-word-ats/` && ldVon(deA).workTranslation[0].inLanguage === 'en' && ldVon(enA).translationOfWork?.url === `${BASIS_TEST}/magazin/pdf-oder-word-ats/` && !ldVon(enB).translationOfWork && !ldVon(deB).workTranslation, 'JSON-LD: workTranslation am deutschen, translationOfWork am englischen Artikel, nichts an den übrigen');
+    ok(/<p class="sprachwechsel">Also available in German: <a href="\/magazin\/pdf-oder-word-ats\/" lang="de" hreflang="de">PDF oder Word\? Was ATS-Anbieter selbst sagen<\/a><\/p>/.test(enA) && /<p class="sprachwechsel">Auch auf Englisch: <a href="\/en\/magazine\/pdf-or-word-ats\/" lang="en" hreflang="en">/.test(deA) && !/sprachwechsel/.test(enB), 'Sprachwechsel über dem Artikel, in beide Richtungen, nur bei Paaren');
+    ok(enA.includes(`<link rel="canonical" href="${BASIS_TEST}/en/magazine/pdf-or-word-ats/">`) && deA.includes(`<link rel="canonical" href="${BASIS_TEST}/magazin/pdf-oder-word-ats/">`), 'canonical je Fassung auf die eigene Adresse; deutsche Adresse unverändert');
+    const enLinks = [...enA.matchAll(/<a [^>]*href="(\/[^"]*)"/g)].map(m => m[1]);
+    ok(enLinks.includes('/en/magazine/') && enLinks.includes('/en/magazine/topic/ats/') && enLinks.includes('/en/') && enLinks.includes('/en/#vorlagen') && !enLinks.some(h => /^\/magazin\/(?!pdf-oder-word-ats\/)/.test(h)), 'englischer Artikel: Kopf, Brotkrumen und Thema zeigen auf die englische Ausgabe (einziger Weg ins Deutsche: die Fassung)', enLinks.join(' '));
+    const verwandtEn = (/<section class="verwandt"[\s\S]*?<\/section>/.exec(enA) || [''])[0];
+    ok(verwandtEn.includes('href="/en/magazine/applying-from-abroad/"') && !/href="\/magazin\//.test(verwandtEn), '„Related articles" nur aus der englischen Ausgabe');
+    ok(/href="\/magazin\/assets\/magazin\.[a-f0-9]{10}\.css"/.test(enA) && !existsSync(join(out, 'en', 'magazine', 'assets')), 'englische Seiten nutzen /magazin/assets/ (keine Kopie)');
+    const enU = readFileSync(join(out, 'en', 'magazine', 'index.html'), 'utf8');
+    const block = (/<section class="nur-deutsch"[\s\S]*?<\/section>/.exec(enU) || [''])[0];
+    ok(block.includes('Articles in German') && block.includes('<article class="karte" lang="de">') && block.includes('href="/magazin/anschreiben-aufbauen/" hreflang="de"') && !block.includes('pdf-oder-word-ats'), 'englische Übersicht: Block „Articles in German" mit deutschen Artikeln ohne englische Fassung (lang="de"), ohne übersetzte');
+    const enUeberLd = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(enU)[1])['@graph'].find(x => x['@type'] === 'CollectionPage');
+    ok(enUeberLd.hasPart.length === 2 && enUeberLd.hasPart.every(p => p.url.startsWith(`${BASIS_TEST}/en/magazine/`)) && enUeberLd.inLanguage === 'en', 'englische Übersicht: CollectionPage nur mit den englischen Artikeln');
+    ok(enU.includes('href="/en/magazine/topic/ats/"') && enU.includes('href="/en/magazine/topic/applying-from-abroad/"') && !enU.includes('/en/magazine/topic/applying/"'), 'englische Übersicht: Themen-Navigation mit englischen Pfaden, nur Themen mit Artikeln');
+    const enT = readFileSync(join(out, 'en', 'magazine', 'topic', 'ats', 'index.html'), 'utf8');
+    ok(enT.includes('href="/en/magazine/pdf-or-word-ats/"') && !enT.includes('nur-deutsch') && !enT.includes('href="/magazin/pdf-oder-word-ats/"'), 'englische Themenseite: nur englische Artikel, kein deutscher Block');
+    ok(alt(enT).some(x => x.href === `${BASIS_TEST}/magazin/thema/ats/`) && !alt(readFileSync(join(out, 'en', 'magazine', 'topic', 'applying-from-abroad', 'index.html'), 'utf8')).length, 'Themenseiten: hreflang nur, wenn es das Thema in beiden Ausgaben gibt');
+    const de404 = readFileSync(join(out, 'magazin', '404.html'), 'utf8');
+    ok(de404.includes('<html lang="de">') && de404.includes('href="/magazin/"') && !existsSync(join(out, 'magazin', 'topic')) && !existsSync(join(out, 'en', 'magazine', 'thema')), 'deutsche 404 und Pfade unverändert, keine Themenordner der anderen Ausgabe');
+    const deU = readFileSync(join(out, 'magazin', 'index.html'), 'utf8');
+    ok(!deU.includes('pdf-or-word-ats') && !deU.includes('applying-from-abroad') && !deU.includes('nur-deutsch'), 'deutsche Übersicht ohne englische Artikel');
+    const ix = JSON.parse(readFileSync(join(out, 'magazin', 'index.json'), 'utf8'));
+    const ixEnA = ix.articles.find(x => x.slug === 'pdf-or-word-ats');
+    ok(ix.articles.every(x => typeof x.url === 'string' && x.url.startsWith(x.lang === 'en' ? '/en/magazine/' : '/magazin/') && Array.isArray(x.alternates)) && ixEnA.alternates.length === 1 && ixEnA.alternates[0].url === '/magazin/pdf-oder-word-ats/' && ixEnA.alternates[0].lang === 'de', 'index.json: je Artikel url, lang und alternates', JSON.stringify(ixEnA));
+    ok(Array.isArray(ix.editions) && ix.editions.length === 2 && ix.editions.every(e => e.indexable) && ix.editions.find(e => e.lang === 'en').url === '/en/magazine/', 'index.json: beide Ausgaben mit Pfad und Themen');
+    const smX = readFileSync(join(out, 'sitemap.xml'), 'utf8');
+    const smEintrag = loc => (smX.split('<url>').find(u => u.includes(`<loc>${loc}</loc>`)) || '');
+    ok(/hreflang="de" href="https:\/\/magazin-test\.example\/magazin\/pdf-oder-word-ats\/"/.test(smEintrag(`${BASIS_TEST}/en/magazine/pdf-or-word-ats/`)) && /hreflang="x-default"/.test(smEintrag(`${BASIS_TEST}/magazin/pdf-oder-word-ats/`)) && !/xhtml:link/.test(smEintrag(`${BASIS_TEST}/en/magazine/applying-from-abroad/`)), 'Sitemap: xhtml:link-Alternativen an Paaren, keine an Einzelartikeln');
+
+    // translationKey: gleicher Schlüssel in derselben Sprache ist ein Fehler, ungültiger Wert auch.
+    const dopp = join(TMP, 'doppelt');
+    mkdirSync(dopp, { recursive: true });
+    writeFileSync(join(dopp, 'pdf-oder-word-ats.md'), ARTIKEL_A);
+    writeFileSync(join(dopp, 'pdf-or-word-ats.md'), ARTIKEL_EN_A);
+    writeFileSync(join(dopp, 'zweiter.md'), ARTIKEL_B.replace('slug: "anschreiben-aufbauen"', 'slug: "zweiter"').replace('lang: "de"', 'lang: "de"\ntranslationKey: "pdf-oder-word"'));
+    writeFileSync(join(dopp, 'kaputter-schluessel.md'), ARTIKEL_B.replace('slug: "anschreiben-aufbauen"', 'slug: "kaputter-schluessel"').replace('lang: "de"', 'lang: "de"\ntranslationKey: "Mit Leerzeichen"'));
+    const gelesen = lese(dopp);
+    const fehlerVon = n => gelesen.find(x => x.datei.endsWith(n)).fehler.join(' ');
+    ok(/translationKey "pdf-oder-word" steht in derselben Sprache \(de\) auch in zweiter\.md/.test(fehlerVon('pdf-oder-word-ats.md')) && /auch in pdf-oder-word-ats\.md/.test(fehlerVon('zweiter.md')) && !fehlerVon('pdf-or-word-ats.md'), 'doppelter translationKey in derselben Sprache: Fehler an beiden, nicht an der englischen Fassung', gelesen.map(x => `${x.datei.split('/').pop()}: ${x.fehler.join('; ')}`).join('\n'));
+    ok(/translationKey "Mit Leerzeichen" ist ungültig/.test(fehlerVon('kaputter-schluessel.md')), 'ungültiger translationKey: Fehler');
+    const outD = join(TMP, 'out-doppelt');
+    const bauD = node('magazin-build.mjs', { MAGAZIN_CONTENT_DIR: dopp, MAGAZIN_IMG_DIR: img, MAGAZIN_OUT_DIR: outD, PUBLIC_BASE_URL: BASIS_TEST });
+    ok(bauD.code === 0 && !existsSync(join(outD, 'magazin', 'zweiter')) && existsSync(join(outD, 'en', 'magazine', 'pdf-or-word-ats', 'index.html')) && !/hreflang/.test(readFileSync(join(outD, 'en', 'magazine', 'pdf-or-word-ats', 'index.html'), 'utf8')), 'Bau überspringt die doppelten, die englische Fassung bleibt ohne hreflang', bauD.out);
+
+    // Aufräumen je Zielordner: ein zurückgezogener englischer Artikel verschwindet, assets/ und img/ bleiben.
+    const outR = join(TMP, 'out-aufraeumen');
+    cpSync(out, outR, { recursive: true });
+    const inhaltR = join(TMP, 'inhalt-ohne-en-b');
+    cpSync(inhalt, inhaltR, { recursive: true });
+    rmSync(join(inhaltR, 'applying-from-abroad.md'));
+    const bauR = node('magazin-build.mjs', { MAGAZIN_CONTENT_DIR: inhaltR, MAGAZIN_IMG_DIR: img, MAGAZIN_OUT_DIR: outR, PUBLIC_BASE_URL: BASIS_TEST });
+    ok(bauR.code === 0 && !existsSync(join(outR, 'en', 'magazine', 'applying-from-abroad')) && !existsSync(join(outR, 'en', 'magazine', 'topic', 'applying-from-abroad')) && existsSync(join(outR, 'en', 'magazine', 'pdf-or-word-ats', 'index.html')) && readdirSync(join(outR, 'magazin', 'assets')).length > 0 && existsSync(join(outR, 'magazin', 'img', BILD_NAME)), 'zweiter Bau: zurückgezogener englischer Artikel und leeres Thema weg, assets/ und img/ unangetastet', bauR.out);
+
+    // Ohne englische Artikel: englische Übersicht noindex und nicht in der Sitemap.
+    const inhaltNurDe = join(TMP, 'inhalt-nur-de');
+    mkdirSync(inhaltNurDe, { recursive: true });
+    writeFileSync(join(inhaltNurDe, 'pdf-oder-word-ats.md'), ARTIKEL_A);
+    writeFileSync(join(inhaltNurDe, 'anschreiben-aufbauen.md'), ARTIKEL_B);
+    const outN = join(TMP, 'out-nur-de');
+    const bauN = node('magazin-build.mjs', { MAGAZIN_CONTENT_DIR: inhaltNurDe, MAGAZIN_IMG_DIR: img, MAGAZIN_OUT_DIR: outN, PUBLIC_BASE_URL: BASIS_TEST });
+    const enLeer = existsSync(join(outN, 'en', 'magazine', 'index.html')) ? readFileSync(join(outN, 'en', 'magazine', 'index.html'), 'utf8') : '';
+    const deLeer = readFileSync(join(outN, 'magazin', 'pdf-oder-word-ats', 'index.html'), 'utf8');
+    ok(bauN.code === 0 && /<meta name="robots" content="noindex, follow">/.test(enLeer) && enLeer.includes('Articles in German') && !readFileSync(join(outN, 'sitemap.xml'), 'utf8').includes('/en/magazine/') && existsSync(join(outN, 'en', 'magazine', '404.html')), 'ohne englische Artikel: /en/magazine/ noindex mit deutschem Block, nicht in der Sitemap, 404 vorhanden', bauN.out);
+    ok(!/hreflang/.test(deLeer) && !/sprachwechsel/.test(deLeer) && !/hreflang/.test(readFileSync(join(outN, 'magazin', 'index.html'), 'utf8')), 'translationKey ohne Gegenstück: deutscher Artikel ohne hreflang und Hinweis');
+  }
 
   abschnitt('4 · Auslieferung');
   const server = nginxVorhanden() ? await starteNginx(out) : await starteNodeServer(out);
@@ -625,6 +796,23 @@ async function main() {
     ok(r.status === 200 && (await r.text()).includes('/magazin/'), '/sitemap.xml erreichbar');
     r = await fetch(`${B}/irgendwas`);
     ok((await r.text()).includes('SPA-HUELLE'), 'übrige Adressen weiter über die SPA');
+    // Englische Ausgabe: gleiche Regeln wie /magazin/.
+    r = await fetch(`${B}/en/magazine/pdf-or-word-ats/`, { redirect: 'manual' });
+    const enText = await r.text();
+    ok(r.status === 200 && enText.includes('<html lang="en"') && !enText.includes('SPA-HUELLE'), '/en/magazine/<slug>/ liefert die statische englische Seite');
+    ok((r.headers.get('content-security-policy') || '') === (magazinCsp() || '-'), '/en/magazine/: dieselbe strenge CSP wie /magazin/', r.headers.get('content-security-policy'));
+    ok(/no-cache/.test(r.headers.get('cache-control') || '') || server.art !== 'nginx', '/en/magazine/: HTML ohne Langzeit-Cache');
+    r = await fetch(`${B}/en/magazine/`, { redirect: 'manual' });
+    ok(r.status === 200 && (await r.text()).includes('Articles in German'), '/en/magazine/ liefert die englische Übersicht', String(r.status));
+    r = await fetch(`${B}/en/magazine/does-not-exist/`, { redirect: 'manual' });
+    const en404 = await r.text();
+    ok(r.status === 404 && en404.includes('<html lang="en"') && en404.includes('noindex') && en404.includes('href="/en/magazine/"') && !en404.includes('SPA-HUELLE'), 'unbekannter englischer Artikel → englische 404 (noindex), keine SPA', String(r.status));
+    r = await fetch(`${B}/en/magazine`, { redirect: 'manual' });
+    ok(r.status === 301 && r.headers.get('location') === '/en/magazine/', '/en/magazine → 301 /en/magazine/', `${r.status} ${r.headers.get('location')}`);
+    r = await fetch(`${B}/en/magazine/pdf-or-word-ats`, { redirect: 'manual' });
+    ok(r.status === 301 && r.headers.get('location') === '/en/magazine/pdf-or-word-ats/', '/en/magazine/<slug> → 301 relativ mit Schrägstrich', `${r.status} ${r.headers.get('location')}`);
+    r = await fetch(`${B}/en/magazine/topic/applying-from-abroad/`);
+    ok(r.status === 200, 'englische Themenseite ausgeliefert', String(r.status));
     if (server.art === 'nginx') {
       r = await fetch(`${B}/ratgeber/pdf-oder-word-ats/`, { redirect: 'manual' });
       ok(r.status === 301 && r.headers.get('location') === '/magazin/pdf-oder-word-ats/', 'alte Adresse /ratgeber/<slug>/ → 301 /magazin/<slug>/', `${r.status} ${r.headers.get('location')}`);
@@ -640,8 +828,8 @@ async function main() {
     const browser = await chromium.launch({ executablePath: EXECUTABLE });
     try {
       for (const [w, h] of [[1440, 950], [390, 844]]) {
-        for (const pfad of ['/magazin/', '/magazin/pdf-oder-word-ats/', '/magazin/anschreiben-aufbauen/', '/magazin/thema/ats/', '/magazin/gibt-es-nicht/']) {
-          const page = await browser.newPage({ viewport: { width: w, height: h }, locale: 'de-DE' });
+        for (const pfad of ['/magazin/', '/magazin/pdf-oder-word-ats/', '/magazin/anschreiben-aufbauen/', '/magazin/thema/ats/', '/magazin/gibt-es-nicht/', '/en/magazine/', '/en/magazine/pdf-or-word-ats/', '/en/magazine/topic/applying-from-abroad/', '/en/magazine/does-not-exist/']) {
+          const page = await browser.newPage({ viewport: { width: w, height: h }, locale: pfad.startsWith('/en/') ? 'en-GB' : 'de-DE' });
           const meldungen = [];
           const fremd = [];
           page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) meldungen.push(m.text()); });
@@ -708,8 +896,8 @@ async function main() {
   const doc = (id, urlId, title, text, extra = {}) => ({ id, urlId, title, text, collectionId: COLL, publishedAt: jetzt, updatedAt: jetzt, archivedAt: null, deletedAt: null, language: 'de', template: false, ...extra });
   const docs = {
     liste: [
-      doc('d1', 'Aa11111111', 'ATS: Was Anbieter selbst sagen', `Beschreibung: Was Greenhouse, Personio und Roche selbst über PDF, Word und Spalten schreiben.\n\nErster Absatz.\n\\\n\n![Vorschau](/api/attachments.redirect?id=bild-1)\n\n![Fremd](https://example.org/x.png)\n\n![SVG](/api/attachments.redirect?id=bild-svg)\n\nWeiter mit [Anschreiben](/doc/anschreiben-richtig-aufbauen-Bb22222222#h-einstieg).`),
-      doc('d2', 'Bb22222222', 'Anschreiben richtig aufbauen', 'Kategorie: bewerbung\n\nEin Anschreiben hat vier Teile, und jeder Teil hat genau eine Aufgabe. Fragen an die Impressumsadresse.\n\n## Einstieg\n\nText.', { ohneText: true }),
+      doc('d1', 'Aa11111111', 'ATS: Was Anbieter selbst sagen', `Beschreibung: Was Greenhouse, Personio und Roche selbst über PDF, Word und Spalten schreiben.\n\nErster Absatz.\n\\\n\n![Vorschau](/api/attachments.redirect?id=bild-1)\n\n![Fremd](https://example.org/x.png)\n\n![SVG](/api/attachments.redirect?id=bild-svg)\n\nWeiter mit [Anschreiben](/doc/anschreiben-richtig-aufbauen-Bb22222222#h-einstieg). Auf Englisch: [Cover letters](/doc/cover-letters-the-four-parts-Kk11111111).\n\nSprache: Diese Zeile steht im Text und bleibt.`),
+      doc('d2', 'Bb22222222', 'Anschreiben richtig aufbauen', 'Kategorie: bewerbung\nÜbersetzung: anschreiben-aufbauen\n\nEin Anschreiben hat vier Teile, und jeder Teil hat genau eine Aufgabe. Fragen an die Impressumsadresse.\n\n## Einstieg\n\nText.', { ohneText: true }),
       doc('d3', 'Cc33333333', 'Präpariert mit Schlüssel', 'Zum Testen: cvk_9f8e7d6c5b4a39281706'),
       doc('d4', 'Dd44444444', 'Entwurf', 'Noch nicht fertig.', { publishedAt: null }),
       doc('d5', 'Ee55555555', ANLEITUNG_TITEL, 'Anleitung.'),
@@ -718,6 +906,8 @@ async function main() {
       doc('d8', 'Hh88888888', 'Mit Mollie-Schlüssel', 'test_dHar4XY7LxsDOtmnkVtjNVWXLSlXsM'),
       doc('d9', 'Ii99999999', 'Andere Sammlung', 'Gehört nicht hierher.', { collectionId: 'fremd' }),
       doc('d10', 'Jj10101010', 'Archiviert', 'Alt.', { archivedAt: jetzt }),
+      // Englisch (17.11.2026): Sprache und Übersetzung als Kopfzeilen, Outline-Sprache bleibt de.
+      doc('d11', 'Kk11111111', 'Cover letters: the four parts', 'Description: Opening, link to the job, evidence, closing: how a cover letter is built.\nLanguage: English\nTranslation: anschreiben-aufbauen\nCategory: bewerbung\n\nA cover letter has four parts. See the German [original](/doc/anschreiben-richtig-aufbauen-Bb22222222).'),
     ],
   };
   const outline = outlineAttrappe({ token: TOKEN, collectionId: COLL, docs, fremdPort: () => speicherPort });
@@ -731,7 +921,7 @@ async function main() {
   const s1 = await nodeAsync('magazin-sync.mjs', syncEnv);
   const dateien = readdirSync(sInhalt).sort();
   ok(s1.code === 0, 'Sync läuft durch (Exit 0)', s1.out);
-  ok(JSON.stringify(dateien) === JSON.stringify(['anschreiben-richtig-aufbauen.md', 'ats-was-anbieter-selbst-sagen.md', 'eigener-artikel.md']), 'nur die zwei sauberen, veröffentlichten Dokumente übernommen (+ Repo-Artikel)', dateien.join(', ') + '\n' + s1.out);
+  ok(JSON.stringify(dateien) === JSON.stringify(['anschreiben-richtig-aufbauen.md', 'ats-was-anbieter-selbst-sagen.md', 'cover-letters-the-four-parts.md', 'eigener-artikel.md']), 'nur die drei sauberen, veröffentlichten Dokumente übernommen (+ Repo-Artikel)', dateien.join(', ') + '\n' + s1.out);
   ok(outline.protokoll.authFehlt === 0 && outline.protokoll.collectionFalsch === 0 && outline.protokoll.listen.every(l => l.collectionId === COLL), 'API mit Token und nur mit der Sammlungs-ID abgefragt');
   for (const t of ['Präpariert mit Schlüssel', 'Mit internem Server', 'Mit fremder Mail', 'Mit Mollie-Schlüssel']) ok(s1.out.includes(`„${t}" GESPERRT`), `gesperrt: ${t}`);
   ok(!/cvk_9f8e7d6c5b4a39281706|dHar4XY7LxsDOtmnkVtjNVWXLSlXsM|max@firma-intern/.test(s1.out), 'gesperrte Werte stehen nicht vollständig im Log');
@@ -751,17 +941,28 @@ async function main() {
   ok(d2.meta.category === 'bewerbung' && !/Kategorie:/.test(d2.body), 'Zeile „Kategorie: …" aus Outline → category, aus dem Text entfernt', JSON.stringify(d2.meta));
   ok(!d1.meta.category, 'ohne Kategorie-Zeile kein Thema');
   ok(readFileSync(join(sInhalt, 'eigener-artikel.md'), 'utf8') === eigen, 'Repo-Artikel ohne outlineId unverändert');
+  const d11 = parseFrontmatter(readFileSync(join(sInhalt, 'cover-letters-the-four-parts.md'), 'utf8'));
+  ok(d11.meta.lang === 'en' && d11.meta.translationKey === 'anschreiben-aufbauen' && d11.meta.category === 'bewerbung' && d11.meta.description.startsWith('Opening, link to the job') && !/Language:|Translation:|Category:|Description:/.test(d11.body), 'englisches Dokument: „Language: English", „Translation:", „Category:" → lang en, translationKey, category; Zeilen entfernt', JSON.stringify(d11.meta) + '\n' + d11.body.slice(0, 200));
+  ok(d2.meta.lang === 'de' && d2.meta.translationKey === 'anschreiben-aufbauen' && !/Übersetzung:/.test(d2.body), '„Übersetzung: …" → translationKey am deutschen Dokument, aus dem Text entfernt', JSON.stringify(d2.meta));
+  ok(d11.body.includes('](/magazin/anschreiben-richtig-aufbauen/)') && d1.body.includes('](/en/magazine/cover-letters-the-four-parts/)'), 'Querverweise je nach Sprache des Ziels: /magazin/<slug>/ bzw. /en/magazine/<slug>/', d1.body.slice(-300));
+  ok(d1.meta.lang === 'de' && d1.body.includes('Sprache: Diese Zeile steht im Text und bleibt.'), '„Sprache:" ohne gültigen Wert bleibt Text, Sprache bleibt de');
 
   const s1b = await nodeAsync('magazin-sync.mjs', syncEnv);
-  ok(/2 unverändert/.test(s1b.out) && /0 geschrieben/.test(s1b.out), 'zweiter Lauf ohne Änderung schreibt nichts', s1b.out.split('\n').pop());
+  ok(/3 unverändert/.test(s1b.out) && /0 geschrieben/.test(s1b.out), 'zweiter Lauf ohne Änderung schreibt nichts', s1b.out.split('\n').pop());
 
-  // Von Hand gesetzte Beschreibung bleibt, wenn Outline keine „Beschreibung:"-Zeile hat.
+  // Von Hand gesetzte Beschreibung bleibt, wenn Outline keine „Beschreibung:"-Zeile hat;
+  // ein von Hand ergänzter translationKey ebenso, wenn Outline keine „Übersetzung:"-Zeile hat.
   const d2pfad = join(sInhalt, 'anschreiben-richtig-aufbauen.md');
   writeFileSync(d2pfad, readFileSync(d2pfad, 'utf8').replace(/^description: .*$/m, 'description: "Von Hand gesetzt: vier Teile eines Anschreibens und was in keinen davon gehört."'));
+  const d1pfad = join(sInhalt, 'ats-was-anbieter-selbst-sagen.md');
+  writeFileSync(d1pfad, readFileSync(d1pfad, 'utf8').replace(/^outlineId: (.*)$/m, 'outlineId: $1\ntranslationKey: "von-hand"'));
   docs.liste[1].text += '\n\nNeuer Absatz.';
+  docs.liste[0].text += '\n\nAuch neu.';
   const s1c = await nodeAsync('magazin-sync.mjs', syncEnv);
   const d2b = parseFrontmatter(readFileSync(d2pfad, 'utf8'));
   ok(d2b.body.includes('Neuer Absatz.') && d2b.meta.description.startsWith('Von Hand gesetzt'), 'von Hand gesetzte Beschreibung übersteht den Sync', s1c.out);
+  const d1c = parseFrontmatter(readFileSync(d1pfad, 'utf8'));
+  ok(d1c.body.includes('Auch neu.') && d1c.meta.translationKey === 'von-hand', 'von Hand ergänzter translationKey übersteht den Sync', JSON.stringify(d1c.meta));
 
   docs.liste[0].title = 'ATS: Was die Anbieter sagen (neu)';
   docs.liste.splice(1, 1);

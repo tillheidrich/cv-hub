@@ -7,10 +7,12 @@ import { getTheme, resolvePairing } from '../templates/theme';
 import type { AccentId, PaperId, CVData, CoverLetterData, FontPairingId, Lang, PageFormat, SectionKey } from '../data/types';
 import { metricsFor, type Metrics } from '../templates/metrics';
 import { getPageFormat } from '../data/pageFormats';
-import { exportFilename } from './filename';
+import { exportFilename, exportBasename } from './filename';
 import { stripPlaceholderPhoto, withEmbeddedPhoto } from './photoEmbed';
 import { embedFonts, type EmbeddedFonts } from './fontEmbed';
 import { pdfErrorFrom } from '../data/api';
+import { isPresentWord } from '../data/extraSections';
+import { detectInitialUiLang } from '../ui/i18n';
 
 /** Headless-Chrome PDF service — path-routed on the app domain. Override via VITE_PDF_SERVICE. */
 const PDF_SERVICE: string =
@@ -330,7 +332,9 @@ function checkOverflow() {
   var lead = tip.querySelector('strong');
   if (lead) lead.textContent = ${JSON.stringify(t.over('\u0000'))}.replace('\u0000', over.join(', '));
   var first = lead && lead.nextSibling;
-  if (first) first.textContent = ' Der Überhang wird abgeschnitten. Maßgeblich ist das PDF aus dem Editor — oder dort etwas kürzen. ';
+  /* Der Satz kommt aus TIP[lang] — bis 17.11.2026 stand er hier fest auf
+     Deutsch und überschrieb das übersetzte Band. */
+  if (first) first.textContent = ${JSON.stringify(t.overBody)};
   tip.style.background = '#fef3c7';
   tip.style.color = '#7c2d12';
   var btns = tip.querySelectorAll('button');
@@ -393,10 +397,12 @@ function buildResumeHtml(data: CVData, cfg: ExportRenderConfig, fonts: FontMode 
   // The <title> becomes the default filename when the user prints the HTML
   // via Ctrl/Cmd+P → "Save as PDF". Using the same canonical export filename
   // (without extension) means the printed PDF inherits the good
-  // 'Lebenslauf_Lena-Brandt_2026-06-01_0930' format instead of the prosey
-  // 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
-  const title = exportFilename('lebenslauf', data.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data), (data.labels?.lang ?? 'de') as Lang, fonts);
+  // 'CV_Lena-Brandt_2026-06-01' format (in the document's language) instead
+  // of the prosey 'Lena Brandt – Lebenslauf' the browser would otherwise pick.
+  // Chromium writes the same <title> into the PDF metadata (Title).
+  const lang = (data.labels?.lang ?? 'de') as Lang;
+  const title = exportBasename('lebenslauf', data.personal.name, lang);
+  return wrapDocument(title, body, cfg.pageFormat, personJsonLd(data), lang, fonts);
 }
 
 function coverLetterBody(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig): string {
@@ -409,8 +415,9 @@ function coverLetterBody(cvData: CVData, clData: CoverLetterData, cfg: ExportRen
 
 function buildCoverLetterHtml(cvData: CVData, clData: CoverLetterData, cfg: ExportRenderConfig, fonts: FontMode = 'link'): string {
   const body = coverLetterBody(cvData, clData, cfg);
-  const title = exportFilename('anschreiben', cvData.personal.name, '').replace(/\.$/, '');
-  return wrapDocument(title, body, cfg.pageFormat, undefined, (cvData.labels?.lang ?? 'de') as Lang, fonts);
+  const lang = (cvData.labels?.lang ?? 'de') as Lang;
+  const title = exportBasename('anschreiben', cvData.personal.name, lang);
+  return wrapDocument(title, body, cfg.pageFormat, undefined, lang, fonts);
 }
 
 /** Sichtbarer Text eines Markups, grob — reicht für die Wahl des Zeichensatzes. */
@@ -457,7 +464,7 @@ function personJsonLd(cv: CVData): string {
   if (sameAs.length) person.sameAs = [...new Set(sameAs)];
   const alumni = (cv.education || []).map(e => v(e.institution)).filter(Boolean);
   if (alumni.length) person.alumniOf = [...new Set(alumni)].map(n => ({ '@type': 'EducationalOrganization', name: n }));
-  const jetzt = (cv.experience || []).find(e => !e.hidden && /heute|present|aujourd|actualidad/i.test(v(e.end)));
+  const jetzt = (cv.experience || []).find(e => !e.hidden && (isPresentWord(e.end) || (!v(e.end) && !!v(e.start))));
   if (jetzt && v(jetzt.company)) person.worksFor = { '@type': 'Organization', name: v(jetzt.company) };
   const sprachen = (cv.languages || []).map(l => v(l.language)).filter(Boolean);
   if (sprachen.length) person.knowsLanguage = sprachen;
@@ -493,6 +500,8 @@ export function extractExportText(data: CVData, cfg: ExportRenderConfig): string
  * auftauchen: weiche Trennung, Null-Breite-Leerzeichen und -Verbinder,
  * Wortverbinder, BOM. */
 const INVISIBLE = /[\u00AD\u200B-\u200D\u2060\uFEFF]/g;
+/** Seitentrenner in der Textansicht, in der Sprache des Dokuments. */
+const PAGE_WORD: Record<Lang, string> = { de: 'Seite', en: 'Page', fr: 'Page', es: 'Página' };
 const BLOCK_TAGS = new Set(['DIV', 'P', 'LI', 'UL', 'OL', 'SECTION', 'H1', 'H2', 'H3', 'H4', 'ARTICLE', 'HEADER', 'FOOTER', 'TABLE', 'TR']);
 const BLOCK_DISPLAY = new Set(['block', 'flex', 'grid', 'list-item', 'table', 'table-row']);
 
@@ -515,7 +524,8 @@ const BLOCK_DISPLAY = new Set(['block', 'flex', 'grid', 'list-item', 'table', 't
  * damit die Reihenfolge der PDF-Textebene. Geprüft gegen `pdftotext` in
  * scripts/contactwrapcheck.mjs.
  */
-export function textLikePdf(doc: Document): string {
+export function textLikePdf(doc: Document, lang?: Lang): string {
+  const pageWord = PAGE_WORD[(lang ?? doc.documentElement?.lang) as Lang] ?? PAGE_WORD.de;
   const lines: string[] = [];
   let cur = '';
   const flush = () => {
@@ -536,7 +546,7 @@ export function textLikePdf(doc: Document): string {
     if (block) flush();
   };
   doc.querySelectorAll('.cv-page').forEach((pageEl, i) => {
-    if (i > 0) lines.push('', `--- Seite ${i + 1} ---`, '');
+    if (i > 0) lines.push('', `--- ${pageWord} ${i + 1} ---`, '');
     pageEl.childNodes.forEach(walk);
     flush();
   });
@@ -566,7 +576,7 @@ async function standaloneResumeHtml(data: CVData, cfg: ExportRenderConfig): Prom
 /** Die HTML-Datei steht für sich: Foto und Schriften sind eingebettet, beim
  *  Öffnen wird kein fremder (und auch nicht unser) Server angefragt. */
 export async function exportHtml(data: CVData, cfg: ExportRenderConfig): Promise<void> {
-  download(exportFilename('lebenslauf', data.personal.name, 'html'),
+  download(exportFilename('lebenslauf', data.personal.name, 'html', data.labels?.lang),
     new Blob([await standaloneResumeHtml(data, cfg)], { type: 'text/html;charset=utf-8' }));
 }
 
@@ -574,7 +584,7 @@ export async function exportCoverLetterHtml(cvData: CVData, clData: CoverLetterD
   const cv = await withEmbeddedPhoto(cvData);
   const body = coverLetterBody(cv, clData, cfg);
   const fonts = await embedFonts(body, roughText(body), origin());
-  download(exportFilename('anschreiben', cvData.personal.name, 'html'),
+  download(exportFilename('anschreiben', cvData.personal.name, 'html', cvData.labels?.lang),
     new Blob([buildCoverLetterHtml(cv, clData, cfg, fonts)], { type: 'text/html;charset=utf-8' }));
 }
 
@@ -602,7 +612,7 @@ export async function exportPdf({ data: raw, cfg, isCover, coverLetter, variant 
   const html = isCover && coverLetter
     ? buildCoverLetterHtml(data, coverLetter, cfg)
     : buildResumeHtml(data, cfg);
-  const base = exportFilename(isCover ? 'anschreiben' : 'lebenslauf', data.personal.name, 'pdf');
+  const base = exportFilename(isCover ? 'anschreiben' : 'lebenslauf', data.personal.name, 'pdf', data.labels?.lang);
   const filename = variant === 'ats' ? base.replace(/\.pdf$/, '-ATS.pdf') : base;
 
   const pageFormat = cfg.pageFormat || 'a4';
@@ -622,7 +632,14 @@ export async function exportPdf({ data: raw, cfg, isCover, coverLetter, variant 
   }
   const blob = await resp.blob();
   if (blob.type.indexOf('pdf') === -1 && blob.size < 1000) {
-    throw new Error('Der PDF-Dienst hat kein gültiges PDF geliefert.');
+    // Meldung in der Sprache der Oberfläche — sie steht am Export-Knopf.
+    const msg: Record<Lang, string> = {
+      de: 'Der PDF-Dienst hat kein gültiges PDF geliefert.',
+      en: 'The PDF service did not return a valid PDF.',
+      fr: 'Le service PDF n’a pas renvoyé de PDF valide.',
+      es: 'El servicio de PDF no devolvió un PDF válido.',
+    };
+    throw new Error(msg[detectInitialUiLang()] ?? msg.de);
   }
   download(filenameFromHeader(resp.headers.get('Content-Disposition'), filename), blob);
   return { pages: cfg.pageBlocks?.length || 1, bytes: blob.size };

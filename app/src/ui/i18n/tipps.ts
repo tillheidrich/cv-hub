@@ -17,6 +17,8 @@ export interface TippsStrings {
   before: string; after: string;
   sources: string; checked: (d: string) => string;
   magazin: string; magazinLangNote: string;
+  /** Hinweis an englischen Artikeln in anderer Oberflächensprache. */
+  magazinEnNote: string;
   copy: string; copied: string;
   forYou: string;
   reason: Record<ReasonId, string>;
@@ -24,6 +26,8 @@ export interface TippsStrings {
   done: (n: number, total: number) => string;
   reset: string;
   promptNote: string;
+  /** Zielland in „Länder“ (17.11.2026): steuert die Länderhinweise. */
+  targetLabel: string; targetOther: string; targetNote: string;
 }
 
 const de: TippsStrings = {
@@ -33,14 +37,16 @@ const de: TippsStrings = {
   more: 'Weiterlesen', less: 'Weniger',
   before: 'Vorher', after: 'Nachher',
   sources: 'Belege', checked: d => `geprüft ${d}`,
-  magazin: 'Im Magazin', magazinLangNote: '',
+  magazin: 'Im Magazin', magazinLangNote: '', magazinEnNote: '(auf Englisch)',
   copy: 'Kopieren', copied: 'Kopiert',
   forYou: 'Passt gerade zu deinen Unterlagen',
   reason: {
     'no-profile': 'Dein Lebenslauf hat noch kein Profil.',
     'no-numbers': 'Kein Punkt unter deinen Stationen enthält eine Zahl.',
     'gap': 'Zwischen zwei Stationen liegen mehr als sechs Monate.',
-    'intl-photo': 'Englischer Lebenslauf mit Foto oder Geburtsdatum.',
+    'intl-photo': 'Bewerbung in Großbritannien oder den USA, der Lebenslauf hat aber Foto oder Geburtsdatum.',
+    'intl-unusual': 'Dein Lebenslauf enthält Angaben, die in Deutschland nicht üblich sind:',
+    'abroad-german': 'Englischer Lebenslauf für Deutschland ohne Angabe zu deinen Deutschkenntnissen.',
     'no-skills': 'Noch keine Kenntnisse eingetragen.',
     'cover-open': 'Du arbeitest gerade am Anschreiben.',
     'cover-sample': 'Im Anschreiben steht noch Text aus dem Muster.',
@@ -50,6 +56,7 @@ const de: TippsStrings = {
   done: (k, t) => `${k} von ${t} erledigt`,
   reset: 'Zurücksetzen',
   promptNote: 'Hinweis',
+  targetLabel: 'Wo bewirbst du dich?', targetOther: 'Anderes Land', targetNote: 'Die Hinweise unter „Lebenslauf“ richten sich danach. Gespeichert nur in diesem Browser.',
 };
 
 const en: TippsStrings = {
@@ -59,14 +66,16 @@ const en: TippsStrings = {
   more: 'Read more', less: 'Less',
   before: 'Before', after: 'After',
   sources: 'Sources', checked: d => `checked ${d}`,
-  magazin: 'In the magazine', magazinLangNote: '(in German)',
+  magazin: 'In the magazine', magazinLangNote: '(in German)', magazinEnNote: '',
   copy: 'Copy', copied: 'Copied',
   forYou: 'Relevant to your documents right now',
   reason: {
     'no-profile': 'Your CV does not have a profile yet.',
     'no-numbers': 'None of the points under your roles contains a number.',
     'gap': 'There are more than six months between two roles.',
-    'intl-photo': 'English CV with a photo or date of birth.',
+    'intl-photo': 'You are applying in the UK or the US, and your CV has a photo or date of birth.',
+    'intl-unusual': 'Your CV contains details German CVs leave out:',
+    'abroad-german': 'English CV for Germany without your level of German.',
     'no-skills': 'No skills entered yet.',
     'cover-open': 'You are working on the cover letter.',
     'cover-sample': 'The cover letter still contains sample text.',
@@ -76,6 +85,7 @@ const en: TippsStrings = {
   done: (k, t) => `${k} of ${t} done`,
   reset: 'Reset',
   promptNote: 'Note',
+  targetLabel: 'Where are you applying?', targetOther: 'Another country', targetNote: 'The notes under “CV” follow this choice. Saved in this browser only.',
 };
 
 const fr: TippsStrings = {
@@ -85,14 +95,16 @@ const fr: TippsStrings = {
   more: 'Lire la suite', less: 'Moins',
   before: 'Avant', after: 'Après',
   sources: 'Sources', checked: d => `vérifié ${d}`,
-  magazin: 'Dans le magazine', magazinLangNote: '(en allemand)',
+  magazin: 'Dans le magazine', magazinLangNote: '(en allemand)', magazinEnNote: '(en anglais)',
   copy: 'Copier', copied: 'Copié',
   forYou: 'Utile pour vos documents en ce moment',
   reason: {
     'no-profile': 'Votre CV n’a pas encore de profil.',
     'no-numbers': 'Aucun point sous vos postes ne contient de chiffre.',
     'gap': 'Plus de six mois séparent deux postes.',
-    'intl-photo': 'CV en anglais avec photo ou date de naissance.',
+    'intl-photo': 'Candidature au Royaume-Uni ou aux États-Unis, mais le CV a une photo ou une date de naissance.',
+    'intl-unusual': 'Votre CV contient des informations absentes des CV allemands :',
+    'abroad-german': 'CV en anglais pour l’Allemagne, sans votre niveau d’allemand.',
     'no-skills': 'Aucune compétence saisie pour l’instant.',
     'cover-open': 'Vous travaillez sur la lettre.',
     'cover-sample': 'La lettre contient encore du texte du modèle.',
@@ -102,6 +114,7 @@ const fr: TippsStrings = {
   done: (k, t) => `${k} sur ${t} faits`,
   reset: 'Réinitialiser',
   promptNote: 'Remarque',
+  targetLabel: 'Où postulez-vous ?', targetOther: 'Autre pays', targetNote: 'Les remarques sous « CV » suivent ce choix. Enregistré uniquement dans ce navigateur.',
 };
 
 const es: TippsStrings = {
@@ -111,14 +124,16 @@ const es: TippsStrings = {
   more: 'Seguir leyendo', less: 'Menos',
   before: 'Antes', after: 'Después',
   sources: 'Fuentes', checked: d => `revisado ${d}`,
-  magazin: 'En la revista', magazinLangNote: '(en alemán)',
+  magazin: 'En la revista', magazinLangNote: '(en alemán)', magazinEnNote: '(en inglés)',
   copy: 'Copiar', copied: 'Copiado',
   forYou: 'Útil ahora para tus documentos',
   reason: {
     'no-profile': 'Tu CV aún no tiene perfil.',
     'no-numbers': 'Ningún punto de tus puestos contiene una cifra.',
     'gap': 'Hay más de seis meses entre dos puestos.',
-    'intl-photo': 'CV en inglés con foto o fecha de nacimiento.',
+    'intl-photo': 'Te presentas en el Reino Unido o en EE. UU., pero el CV tiene foto o fecha de nacimiento.',
+    'intl-unusual': 'Tu CV contiene datos que no van en un currículum alemán:',
+    'abroad-german': 'CV en inglés para Alemania sin tu nivel de alemán.',
     'no-skills': 'Aún no hay conocimientos.',
     'cover-open': 'Estás trabajando en la carta.',
     'cover-sample': 'La carta aún contiene texto del modelo.',
@@ -128,6 +143,7 @@ const es: TippsStrings = {
   done: (k, t) => `${k} de ${t} hechos`,
   reset: 'Restablecer',
   promptNote: 'Nota',
+  targetLabel: '¿Dónde te presentas?', targetOther: 'Otro país', targetNote: 'Las notas de «CV» siguen esta elección. Solo se guarda en este navegador.',
 };
 
 export const TIPPS_I18N: Record<UiLang, TippsStrings> = { de, en, fr, es };
